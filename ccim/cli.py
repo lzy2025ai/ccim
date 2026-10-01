@@ -304,6 +304,31 @@ def cmd_handoff(args):
     print(link)
 
 
+def cmd_handback(args):
+    """在当初转出去的那个 Claude Code 对话里运行：把飞书那边聊过的内容整理出来，接回这里。"""
+    sid = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not sid:
+        raise SystemExit("要在当初转到飞书的那个 Claude Code 对话里运行（或者写上对话编号）。")
+    info = handoff.read(sid, os.getcwd())
+    path = os.path.realpath((info or {}).get("cwd") or os.getcwd())
+    entry = registry.get(path)
+    chat_id, rec = handoff.find_branch(path, sid) if entry else (None, None)
+    if not rec:
+        raise SystemExit("这个对话没有转到过飞书。")
+    branch = rec.get("session_id")
+    text, n = handoff.digest(path, branch, rec.get("handoff_time", "")) if branch else ("", 0)
+    if not n:
+        print("转到飞书之后，那边还没有聊过，直接在这里接着聊就行。")
+    else:
+        print(f"转到飞书之后，那边聊了 {n} 轮，内容如下（飞书那边的对话编号 {branch[:8]}）：\n")
+        print(text)
+    try:
+        ch = CHANNELS[entry["channel"]](path, entry, registry.get_secret(entry["app_id"]), {})
+        asyncio.run(ch.send_text(chat_id, "已回到电脑上接着聊了，这边聊过的内容已经带过去。"))
+    except Exception as e:
+        print(f"\n（没能在飞书里发提醒：{e}）")
+
+
 def cmd_logs(args):
     path, _ = _need(args.project)
     log = daemon.log_path(path)
@@ -366,6 +391,9 @@ def main(argv=None):
     s = sub.add_parser("handoff", help="在 Claude Code 的对话里运行：把这个对话转到飞书接着聊")
     s.add_argument("session", nargs="?", help="对话编号，不写就是当前所在的对话")
     s.set_defaults(fn=cmd_handoff)
+    s = sub.add_parser("handback", help="在当初转出去的那个 Claude Code 对话里运行：把飞书那边聊过的内容接回来")
+    s.add_argument("session", nargs="?", help="对话编号，不写就是当前所在的对话")
+    s.set_defaults(fn=cmd_handback)
     s = sub.add_parser("show", help="查看一个项目的详情：状态、模型、思考深度、各个对话")
     s.add_argument("project", nargs="?", help="项目名、机器人名或路径，不写就是当前目录")
     s.set_defaults(fn=cmd_show)

@@ -16,8 +16,11 @@
   不带上转接这一轮；没私聊过就用 open_id 主动发消息拿到 chat_id
   没配对过就地配对：二维码做成网页在浏览器里打开（在 Claude 桌面端里用户看不到命令行输出）；
   正在运行的 ccim 是旧版本（state.json 的 caps 里没有 handoff）时，后台 / 常驻的自动重启，前台的提示用户去终端重启
+  `ccim handback`：handoff 时在飞书聊天的状态里记下 handoff_from / handoff_time；接回来时找到那个分支，
+  按时间戳取转过去之后的内容（fork 出来的对话记录里，复制过来的旧消息保留原时间戳），整理成文字打印，再在飞书里发提醒
 - `skills/feishu-handoff/`：配套 skill，告诉 Agent 什么时候、怎么转接；`.claude-plugin/` 让这个仓库能作为 Claude Code 插件安装。
-  改了 handoff 的行为或提示文字，要同步改 SKILL.md（它引用了几条报错原文）
+  改了 handoff 的行为或提示文字，要同步改 SKILL.md（它引用了几条报错原文）；改了 skill 要升 plugin.json 的 version，
+  已安装的插件才会更新（插件按版本号判断）
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

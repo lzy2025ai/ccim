@@ -1,5 +1,5 @@
 """把渠道收到的消息分给各个聊天的 Claude 会话；谁能用、群里怎么用都在这里判断。"""
-import asyncio, logging, os
+import asyncio, logging, os, time
 
 from . import commands, registry
 from .approval import Approvals
@@ -169,7 +169,9 @@ class Bridge:
         changes = {k: req[k] for k in ("model", "effort") if req.get(k)}
         if changes:
             chat.set(**changes)
-        self.save(chat_id, type="p2p", last_active=registry.now())
+        # 记下从哪个对话、什么时候转过来的，ccim handback 接回去时用
+        self.save(chat_id, type="p2p", last_active=registry.now(), handoff_from=req["session_id"],
+                  handoff_time=time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()))
         if text:
             await self.channel.send_text(chat_id, text)
         log.info("已把对话 %s 转到飞书私聊", req["session_id"][:8])

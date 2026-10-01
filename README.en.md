@@ -78,7 +78,7 @@ In Claude Code, run:
 /plugin install ccim@ccim
 ```
 
-Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it hands the current conversation off. If the project isn't paired yet, a QR code opens in your browser and pairing happens once you scan it. Other agents can read [skills/feishu-handoff/SKILL.md](skills/feishu-handoff/SKILL.md) directly.
+Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it hands the current conversation off; when you're back, say "I'm back" and it brings in what happened in Feishu. If the project isn't paired yet, a QR code opens in your browser and pairing happens once you scan it. Other agents can read [skills/feishu-handoff/SKILL.md](skills/feishu-handoff/SKILL.md) directly.
 
 ## In Feishu
 
@@ -118,6 +118,7 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim list` | All paired projects and whether they're online |
 | `ccim show [project]` | Details for one project: bot, status, model, effort level, conversations |
 | `ccim handoff` | Run inside a Claude Code conversation: move that conversation to your Feishu DM |
+| `ccim handback` | Back at the computer, run in the same conversation: bring in what happened in Feishu |
 | `ccim resume [project] [id]` | Continue a Feishu conversation in your terminal; defaults to the most recent one |
 | `ccim logs [project] [-f]` | Show background logs |
 | `ccim config [project] key=value` | Project settings, see below |
@@ -168,7 +169,7 @@ No. Each paired project uses about 110 MB while running. Each active conversatio
 
 Yes. With the skill installed (step 4 of Quick start), just tell Claude "I'm heading out, move this to Feishu"; without it, ask Claude to run `ccim handoff`. The bot messages you first, with a recap of where you left off — tap the notification on your phone and keep going, with the same model and effort level. A QR code is also shown in the terminal that opens the bot chat directly.
 
-Feishu gets a branch of the conversation: the desktop conversation isn't changed, but it won't see what you say in Feishu either. If the project isn't paired yet, a pairing QR code opens in your browser first; if ccim isn't running, it's started in the background.
+Feishu gets a branch of the conversation. Back at the computer, say "I'm back" in the original conversation (or have Claude run `ccim handback`): it reads what you said in Feishu and which files changed, and carries on from there. If you just keep typing, the desktop conversation won't know what happened in Feishu. If the project isn't paired yet, a pairing QR code opens in your browser first; if ccim isn't running, it's started in the background.
 </details>
 
 <details>

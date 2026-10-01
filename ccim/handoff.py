@@ -1,4 +1,4 @@
-"""把 Claude Code 里正在进行的对话（桌面端、终端都行）转到飞书接着聊。
+"""把 Claude Code 里正在进行的对话（桌面端、终端都行）转到飞书接着聊，以及回到电脑前再接回来。
 
 流程：`ccim handoff` 在那个对话里运行 → 读出对话记录（属于哪个项目、聊到哪、用的什么模型和思考深度）
 → 往项目的状态目录写一个转接请求 → ccim 进程每秒检查一次，把主人的私聊接到这个对话的分支上，
@@ -7,7 +7,7 @@
 运行 handoff 时，那个对话这一轮还没结束（最后一条是还没返回结果的命令调用），把这半截接过去恢复会出错，
 所以只接到「用户说要转过去」之前的最后一条回复为止（resume_session_at）。
 """
-import html, json, os, subprocess, time, uuid
+import calendar, html, json, os, subprocess, time, uuid
 
 from . import registry
 
@@ -150,3 +150,73 @@ margin-top:8vh;color:#1f2329}} h1{{font-size:22px;margin:0 0 8px}} p{{color:#646
         fh.write(page)
     subprocess.run(["open", f], capture_output=True)
     print(f"二维码已在浏览器里打开：{f}\n扫不了的话，在手机飞书里打开：{url}", flush=True)
+
+
+# ---------- 接回来（ccim handback） ----------
+
+def find_branch(path, session_id):
+    """找到从这个对话转出去的飞书聊天：返回 (chat_id, 记录)；没转出去过返回 (None, None)。"""
+    chats = registry.read_state(path).get("chats") or {}
+    hits = [(k, c) for k, c in chats.items() if c.get("handoff_from") == session_id]
+    if not hits:
+        return None, None
+    return max(hits, key=lambda kv: kv[1].get("handoff_time", ""))
+
+
+def digest(path, session_id, since):
+    """飞书分支里 since（UTC ISO）之后的内容，整理成按时间排的文字。返回 (文字, 轮数)。"""
+    from .progress import describe_tool
+    tp = transcript_path(session_id, path)
+    if not tp:
+        return "", 0
+    rows = []
+    with open(tp, encoding="utf-8") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("timestamp", "") > since and not r.get("isSidechain") and r.get("type") in ("user", "assistant"):
+                rows.append(r)
+    turns, files = [], {}
+    for r in rows:
+        when = _local(r.get("timestamp", ""))
+        if _is_prompt(r):
+            turns.append({"when": when, "user": _text(r).strip(), "steps": [], "reply": ""})
+            continue
+        if r.get("type") != "assistant" or not turns:
+            continue
+        for b in (r.get("message") or {}).get("content") or []:
+            if b.get("type") == "tool_use":
+                d = describe_tool(b.get("name", ""), b.get("input"))
+                if d:
+                    turns[-1]["steps"].append(d)
+                fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
+                if fp and b.get("name") in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+                    files[fp] = "新建或重写" if b.get("name") == "Write" else "修改"
+            elif b.get("type") == "text" and b.get("text", "").strip():
+                turns[-1]["reply"] = b["text"].strip()
+    out = []
+    for t in turns:
+        out.append(f"[{t['when']}] 用户：{_cap(t['user'], 1500)}")
+        if t["steps"]:
+            steps = t["steps"] if len(t["steps"]) <= 12 else t["steps"][:5] + [f"……共 {len(t['steps'])} 步……"] + t["steps"][-5:]
+            out.append("  Claude 的操作：" + "；".join(steps))
+        out.append(f"  Claude：{_cap(t['reply'], 3000) or '（没有文字回复）'}")
+        out.append("")
+    if files:
+        out.append("改动过的文件（通过命令改的不在此列，可以再看 git status）：")
+        out += [f"- {p}（{how}）" for p, how in files.items()]
+    return "\n".join(out).strip(), len(turns)
+
+
+def _cap(s, n):
+    return s if len(s) <= n else s[:n] + f"……（后面还有 {len(s) - n} 字）"
+
+
+def _local(ts):
+    try:
+        t = time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")
+        return time.strftime("%m-%d %H:%M", time.localtime(calendar.timegm(t)))
+    except ValueError:
+        return ts[:16]

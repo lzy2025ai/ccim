@@ -11,6 +11,9 @@
   空闲 30 分钟断开，按 session_id 恢复；工作中卡片；`send_file` 工具
 - `ccim/approval.py`：`can_use_tool` → 审批卡片 → 按钮 / 文字 y n / 10 分钟超时
 - `ccim/commands.py`：`/new` `/resume` `/stop` `/status` `/model` `/effort` `/help`，其他斜杠命令原样交给 Claude
+- `ccim/handoff.py`：`ccim handoff`，把 Claude Code 里正在进行的对话（`CLAUDE_CODE_SESSION_ID`）转到飞书私聊。
+  CLI 往项目状态目录写 handoff.json，ccim 进程每秒取一次；用 `resume_session_at` 只接到「用户说要转过去」之前的最后一条回复，
+  不带上转接这一轮；没私聊过就用 open_id 主动发消息拿到 chat_id
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

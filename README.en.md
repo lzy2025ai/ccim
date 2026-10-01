@@ -22,7 +22,7 @@ One bot per project. Send a message from your phone, and Claude gets to work in 
 - ✋ **You approve what matters**: operations that need your sign-off show up as an approval card — one tap to decide.
 - 🧵 **Threads stay out of the way**: start a thread on any message and the replies stay in that thread. Each thread branches off the main conversation.
 - 📎 **Files both ways**: send it images and files; ask it to send back screenshots, videos or results.
-- 🔁 **Move between Feishu and the terminal**: pick up a Feishu conversation in your terminal, or the other way around.
+- 🔁 **Switch between computer and phone**: heading out mid-conversation in Claude Desktop or the terminal? One sentence moves it to Feishu; pick it back up in the terminal when you return.
 - 🛡️ **Answers only to you**: it responds to you alone, and you decide whether others in a group can use it. Secrets live in the macOS Keychain.
 - ♻️ **Always on**: starts at login and recovers from crashes and network loss. Messages are retried on flaky networks, so replies don't get lost.
 
@@ -106,6 +106,7 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim restart [project]` | Restart |
 | `ccim list` | All paired projects and whether they're online |
 | `ccim show [project]` | Details for one project: bot, status, model, effort level, conversations |
+| `ccim handoff` | Run inside a Claude Code conversation: move that conversation to your Feishu DM |
 | `ccim resume [project] [id]` | Continue a Feishu conversation in your terminal; defaults to the most recent one |
 | `ccim logs [project] [-f]` | Show background logs |
 | `ccim config [project] key=value` | Project settings, see below |
@@ -149,6 +150,14 @@ After manual pairing, the terminal shows a claim code. Send that code to the bot
 <summary><b>Will many projects or frequent new conversations eat up resources?</b></summary>
 
 No. Each paired project uses about 110 MB while running. Each active conversation uses about 200 MB, plus any MCP servers you've configured for Claude Code; it's released after 30 minutes of inactivity and picked up again on the next message. `/new` closes the old conversation before starting a new one, so nothing piles up.
+</details>
+
+<details>
+<summary><b>I'm mid-conversation in Claude Desktop and need to head out. Can I continue in Feishu?</b></summary>
+
+Yes. Tell Claude "I'm heading out, move this to Feishu" and have it run `ccim handoff`. The bot messages you first, with a recap of where you left off — tap the notification on your phone and keep going, with the same model and effort level. A QR code is also shown in the terminal that opens the bot chat directly.
+
+Feishu gets a branch of the conversation: the desktop conversation isn't changed, but it won't see what you say in Feishu either. The project must already be paired; if ccim isn't running, it's started in the background.
 </details>
 
 <details>

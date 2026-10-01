@@ -86,6 +86,7 @@ class Chat:
         saved = bridge.saved(chat_id)
         self.session_id = saved.get("session_id")
         self.fork_from = None if self.session_id else fork_from or saved.get("fork_from")
+        self.fork_at = saved.get("fork_at") if self.fork_from and not fork_from else None   # 从那个对话的哪条消息分出来
         # 没单独设置就是 None：不传给 Claude Code，让它按项目、全局设置自己取，和终端里用的一致
         self.model = saved.get("model") or bridge.entry.get("model")
         self.effort = saved.get("effort") or bridge.entry.get("effort")
@@ -139,21 +140,22 @@ class Chat:
             self._forget()
 
     def _forget(self):
-        self.session_id = self.fork_from = None
-        self.b.save(self.chat_id, session_id=None, fork_from=None)
+        self.session_id = self.fork_from = self.fork_at = None
+        self.b.save(self.chat_id, session_id=None, fork_from=None, fork_at=None)
 
-    async def attach(self, session_id):
-        """把这个聊天接到另一个对话（比如终端里开的）上。总是另开分支，那边的对话不受影响。"""
+    async def attach(self, session_id, at=None):
+        """把这个聊天接到另一个对话（比如终端里开的）上。总是另开分支，那边的对话不受影响。
+        at：只接到那个对话里的这条消息为止（桌面端转过来时，去掉还没跑完的那一轮）。"""
         await self.stop()
         if self.worker and not self.worker.done():
-            self.queue.put_nowait((ATTACH, session_id, None))
+            self.queue.put_nowait((ATTACH, (session_id, at), None))
         else:
-            self._attach(session_id)
+            self._attach(session_id, at)
 
-    def _attach(self, session_id):
+    def _attach(self, session_id, at=None):
         self._forget()
-        self.fork_from = session_id
-        self.b.save(self.chat_id, fork_from=session_id)
+        self.fork_from, self.fork_at = session_id, at
+        self.b.save(self.chat_id, fork_from=session_id, fork_at=at)
 
     def effective(self):
         return registry.effective(self.b.path, self.model, self.effort)
@@ -180,7 +182,7 @@ class Chat:
                     continue
                 if prompt is ATTACH:
                     await self._disconnect()
-                    self._attach(reply_to)
+                    self._attach(*reply_to)
                     continue
                 if self.reconnect:
                     await self._disconnect()
@@ -205,7 +207,7 @@ class Chat:
             return
         tries = [(self.session_id, False)] if self.session_id else [(self.fork_from, True)] if self.fork_from else []
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(fork_session=fork,
+            opts = ClaudeAgentOptions(fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
@@ -217,8 +219,8 @@ class Chat:
                 await client.connect()
                 self.client = client
                 if self.fork_from:            # 分支开好了（或者分不出来改开了新对话），都不用再分
-                    self.fork_from = None
-                    self.b.save(self.chat_id, fork_from=None)
+                    self.fork_from = self.fork_at = None
+                    self.b.save(self.chat_id, fork_from=None, fork_at=None)
                 self.b.save(self.chat_id, live=True)   # 给 ccim resume 判断飞书这边是不是还开着
                 return
             except Exception:

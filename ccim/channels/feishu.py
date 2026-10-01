@@ -395,6 +395,14 @@ class Feishu(Channel):
                              .content(json.dumps(self._render(card), ensure_ascii=False)).build()).build())
         await self._call(self.api.im.v1.message.patch, req, retries=(1,))   # 卡片下次刷新还会再更新，少重试
 
+    async def send_to_user(self, user_id, markdown):
+        post = {"zh_cn": {"content": [[{"tag": "md", "text": markdown}]]}}
+        req = (CreateMessageRequest.builder().receive_id_type("open_id")
+               .request_body(CreateMessageRequestBody.builder().receive_id(user_id).msg_type("post")
+                             .content(json.dumps(post, ensure_ascii=False)).uuid(uuid.uuid4().hex).build()).build())
+        r = await self._call(self.api.im.v1.message.create, req)
+        return r.data.chat_id
+
     async def chat_name(self, chat_id):
         try:
             r = await self._call(self.api.im.v1.chat.get, GetChatRequest.builder().chat_id(chat_id).build())

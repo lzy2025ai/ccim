@@ -71,6 +71,10 @@ class Channel:
     async def update_card(self, message_id, card):
         raise NotImplementedError
 
+    async def send_to_user(self, user_id, markdown):
+        """主动私聊某人，返回和他的私聊 chat_id。"""
+        raise NotImplementedError
+
     async def chat_name(self, chat_id):
         return ""
 

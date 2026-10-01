@@ -9,7 +9,7 @@
 """
 import argparse, asyncio, logging, os, re, signal, sys
 
-from . import daemon, registry
+from . import daemon, handoff, registry
 from .channels.feishu import Feishu
 
 CHANNELS = {"feishu": Feishu}
@@ -50,11 +50,22 @@ async def _serve(path, entry, secret, mode):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     try:
+        tick = 0
         while not stop.is_set():
             try:
-                await asyncio.wait_for(stop.wait(), 30)
+                await asyncio.wait_for(stop.wait(), 1)
             except asyncio.TimeoutError:
-                registry.write_state(path, online=channel.connected(), heartbeat=registry.now())
+                tick += 1
+                req = handoff.take(path)      # Claude Code 那边要把对话转过来（ccim handoff）
+                if req:
+                    try:
+                        res = await bridge.handoff(req)
+                    except Exception as e:
+                        log.exception("转接失败")
+                        res = {"ok": False, "error": str(e)}
+                    handoff.done(path, req, **res)
+                if tick % 30 == 0:
+                    registry.write_state(path, online=channel.connected(), heartbeat=registry.now())
     finally:
         log.info("正在退出…")
         await bridge.shutdown()
@@ -252,6 +263,36 @@ def cmd_resume(args):
     os.execv(argv[0], argv)
 
 
+def cmd_handoff(args):
+    """在 Claude Code 的对话里运行：把这个对话转到飞书私聊接着聊。"""
+    sid = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not sid:
+        raise SystemExit("要在 Claude Code 的对话里运行（或者写上对话编号）。")
+    info = handoff.read(sid, os.getcwd())
+    if not info:
+        raise SystemExit(f"找不到对话 {sid[:8]} 的记录。")
+    path = os.path.realpath(info["cwd"] or os.getcwd())
+    entry = registry.get(path)
+    if not entry:
+        raise SystemExit(f"「{os.path.basename(path)}」还没接入飞书。先在终端里进到这个目录运行 ccim，扫码配对。")
+    r = daemon.running(path)
+    if not r:
+        print(f"「{os.path.basename(path)}」的 ccim 没在运行，先在后台启动…")
+        daemon.start_background(path, entry["channel"])
+    effort = os.environ.get("CLAUDE_EFFORT") if not args.session else None
+    res = handoff.request(path, {"session_id": sid, "at": info["at"], "title": info["title"],
+                                 "last_reply": info["last_reply"], "model": info["model"], "effort": effort})
+    if not res.get("ok"):
+        raise SystemExit(f"没转过去：{res.get('error')}")
+    name = entry.get("bot_name") or "机器人"
+    print(f"已转到飞书：「{name}」给你发了一条消息，点开就能接着聊。")
+    print("在电脑上打开飞书，或者用手机扫这个码：")
+    from .channels.feishu import _print_qr
+    link = handoff.open_link(entry)
+    _print_qr(link)
+    print(link)
+
+
 def cmd_logs(args):
     path, _ = _need(args.project)
     log = daemon.log_path(path)
@@ -311,6 +352,9 @@ def main(argv=None):
     s.add_argument("session", nargs="?", help="对话编号，ccim show 里那 8 位就行")
     s.add_argument("--fork", action="store_true", help="另开一个分支，不动飞书里的对话")
     s.set_defaults(fn=cmd_resume)
+    s = sub.add_parser("handoff", help="在 Claude Code 的对话里运行：把这个对话转到飞书接着聊")
+    s.add_argument("session", nargs="?", help="对话编号，不写就是当前所在的对话")
+    s.set_defaults(fn=cmd_handoff)
     s = sub.add_parser("show", help="查看一个项目的详情：状态、模型、思考深度、各个对话")
     s.add_argument("project", nargs="?", help="项目名、机器人名或路径，不写就是当前目录")
     s.set_defaults(fn=cmd_show)

@@ -9,6 +9,11 @@ from .session import Caffeinate, Chat
 log = logging.getLogger("ccim.bridge")
 
 
+def _clip(s, n):
+    s = s.strip()
+    return s if len(s) <= n else s[:n].rstrip() + "…"
+
+
 class Bridge:
     def __init__(self, path, entry):
         self.path, self.entry = path, entry
@@ -140,6 +145,35 @@ class Bridge:
         self.save(chat_id, session_id=None)
         tip = "@我 就能让我干活。" if self.entry.get("group") == "all" else "我只响应主人的 @。"
         await self.channel.send_text(chat_id, f"我是「{self.name}」项目的 Claude。{tip}发 /help 看看能做什么。")
+
+    async def handoff(self, req):
+        """把主人的私聊接到 Claude Code 里正在进行的那个对话上（分支），并主动发消息给主人。"""
+        owner = self.owner()
+        if not owner:
+            return {"ok": False, "error": "机器人还没认主人"}
+        title = req.get("title") or "桌面端的对话"
+        lines = [f"已接上「{title}」，直接在这里接着说。"]
+        if req.get("last_reply"):
+            lines.append("\n**刚才说到**：\n" + _clip(req["last_reply"], 600))
+        text = "\n".join(lines)
+        chats = registry.read_state(self.path).get("chats") or {}
+        p2p = sorted((k for k, c in chats.items() if c.get("type") == "p2p" and "|" not in k),
+                     key=lambda k: chats[k].get("last_active", ""), reverse=True)
+        if p2p:
+            chat_id = p2p[0]
+        else:                                 # 还没私聊过：先主动发一条，顺便拿到私聊的 chat_id
+            chat_id = await self.channel.send_to_user(owner, text)
+            text = None
+        chat = self.chat(chat_id, "p2p")
+        await chat.attach(req["session_id"], req.get("at"))
+        changes = {k: req[k] for k in ("model", "effort") if req.get(k)}
+        if changes:
+            chat.set(**changes)
+        self.save(chat_id, type="p2p", last_active=registry.now())
+        if text:
+            await self.channel.send_text(chat_id, text)
+        log.info("已把对话 %s 转到飞书私聊", req["session_id"][:8])
+        return {"ok": True}
 
     async def shutdown(self):
         for c in list(self.chats.values()):

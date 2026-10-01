@@ -1,0 +1,25 @@
+[project]
+name = "ccim"
+version = "0.1.0"
+description = "在飞书里和本机的 Claude Code 对话"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "lzy2025ai" }]
+requires-python = ">=3.11"
+classifiers = ["Operating System :: MacOS", "Programming Language :: Python :: 3"]
+dependencies = [
+    "claude-agent-sdk>=0.2.163",
+    "lark-oapi>=1.7.3",
+    "qrcode>=7.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/lzy2025ai/ccim"
+
+[project.scripts]
+ccim = "ccim.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

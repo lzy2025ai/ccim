@@ -1,0 +1,14 @@
+{
+  "name": "ccim",
+  "description": "ccim: chat with Claude Code from Feishu / Lark",
+  "owner": {
+    "name": "lzy2025ai"
+  },
+  "plugins": [
+    {
+      "name": "ccim",
+      "source": "./",
+      "description": "Hand off a Claude Code conversation to Feishu / Lark and keep chatting from your phone"
+    }
+  ]
+}

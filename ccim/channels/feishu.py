@@ -87,8 +87,14 @@ def _print_qr(url):
         pass
 
 
-def scan_register(timeout=600):
-    """返回 {app_id, secret, domain, owner_open_id}；扫码失败返回 None。"""
+def show_in_terminal(url):
+    print("\n用飞书手机端扫码，确认后会在你的飞书账号下建好一个机器人：\n")
+    _print_qr(url)
+    print(f"\n扫不了的话，在手机飞书里打开这个链接：\n{url}\n")
+
+
+def scan_register(timeout=600, show=show_in_terminal):
+    """返回 {app_id, secret, domain, owner_open_id}；扫码失败返回 None。show(url) 负责把二维码给用户看。"""
     domain = "feishu"
     init = _post(domain, {"action": "init"})
     if "client_secret" not in (init.get("supported_auth_methods") or []):
@@ -98,9 +104,7 @@ def scan_register(timeout=600):
     code, url = b.get("device_code"), b.get("verification_uri_complete")
     if not code or not url:
         return None
-    print("\n用飞书手机端扫码，确认后会在你的飞书账号下建好一个机器人：\n")
-    _print_qr(url)
-    print(f"\n扫不了的话，在手机飞书里打开这个链接：\n{url}\n")
+    show(url)
     interval = b.get("interval") or 5
     deadline = time.monotonic() + min(b.get("expires_in") or b.get("expire_in") or 600, timeout)
     while time.monotonic() < deadline:
@@ -138,12 +142,15 @@ class Feishu(Channel):
     name = "feishu"
 
     @staticmethod
-    def pair(project_path):
+    def pair(project_path, show=show_in_terminal, interactive=True):
+        """interactive=False（handoff 里配对）时不问问题，扫码失败直接报错。"""
         try:
-            got = scan_register()
+            got = scan_register(show=show)
         except (URLError, OSError, ValueError) as e:
             print(f"连不上飞书的扫码服务：{e}")
             got = None
+        if not got and not interactive:
+            raise SystemExit("没有配对成功。可以在终端里进到项目目录运行 ccim，改用手动填写 App ID 和 App Secret。")
         if not got:
             if input("改用手动填写 App ID 和 App Secret 吗？(y/N)：").strip().lower() != "y":
                 raise SystemExit("没有配对。")

@@ -1,0 +1,10 @@
+{
+  "name": "ccim",
+  "version": "0.1.0",
+  "description": "Hand off a Claude Code conversation to Feishu / Lark and keep chatting from your phone",
+  "author": { "name": "lzy2025ai" },
+  "homepage": "https://github.com/lzy2025ai/ccim",
+  "repository": "https://github.com/lzy2025ai/ccim",
+  "license": "MIT",
+  "keywords": ["feishu", "lark", "handoff", "mobile"]
+}

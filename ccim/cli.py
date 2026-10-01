@@ -13,6 +13,7 @@ from . import daemon, handoff, registry
 from .channels.feishu import Feishu
 
 CHANNELS = {"feishu": Feishu}
+CAPS = ["handoff"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
                "reaction": None}
 
@@ -33,7 +34,8 @@ async def _serve(path, entry, secret, mode):
     bridge = Bridge(path, entry)
     channel = CHANNELS[entry["channel"]](path, entry, secret, bridge.handlers())
     bridge.attach(channel)
-    registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None)
+    registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None,
+                         caps=CAPS)
     try:
         await channel.start()
     except Exception as e:
@@ -84,9 +86,9 @@ def run(path, mode):
     asyncio.run(_serve(path, entry, secret, mode))
 
 
-def pair(path, channel):
+def pair(path, channel, **kw):
     print(f"给「{os.path.basename(path)}」配对一个飞书机器人。")
-    entry = CHANNELS[channel].pair(path)
+    entry = CHANNELS[channel].pair(path, **kw)
     secret = entry.pop("secret")
     registry.set_secret(entry["app_id"], secret)
     entry.update(paired_at=registry.now())
@@ -272,12 +274,21 @@ def cmd_handoff(args):
     if not info:
         raise SystemExit(f"找不到对话 {sid[:8]} 的记录。")
     path = os.path.realpath(info["cwd"] or os.getcwd())
-    entry = registry.get(path)
-    if not entry:
-        raise SystemExit(f"「{os.path.basename(path)}」还没接入飞书。先在终端里进到这个目录运行 ccim，扫码配对。")
+    entry = registry.get(path) or pair(path, "feishu", show=lambda url: handoff.show_qr_page(path, url),
+                                       interactive=False)
+    name = os.path.basename(path)
     r = daemon.running(path)
-    if not r:
-        print(f"「{os.path.basename(path)}」的 ccim 没在运行，先在后台启动…")
+    if r and "handoff" not in (registry.read_state(path).get("caps") or []):
+        if r[1] == "fg":
+            raise SystemExit(f"「{name}」正在一个终端里前台运行，而且是旧版本。先在那个终端按 Ctrl+C 停掉，再转接。")
+        print(f"「{name}」正在运行的 ccim 是旧版本，重启一下…", flush=True)
+        if daemon.is_always(path):
+            daemon.restart_always(path)
+        else:
+            daemon.stop(path)
+            daemon.start_background(path, entry["channel"])
+    elif not r:
+        print(f"「{name}」的 ccim 没在运行，先在后台启动…", flush=True)
         daemon.start_background(path, entry["channel"])
     effort = os.environ.get("CLAUDE_EFFORT") if not args.session else None
     res = handoff.request(path, {"session_id": sid, "at": info["at"], "title": info["title"],

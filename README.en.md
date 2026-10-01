@@ -69,6 +69,17 @@ Starts at login and recovers from crashes and network loss. Closing the terminal
 
 > Upgrade: `uv tool upgrade ccim`
 
+**4. Add the "hand off to Feishu" skill (optional)**
+
+In Claude Code, run:
+
+```
+/plugin marketplace add lzy2025ai/ccim
+/plugin install ccim@ccim
+```
+
+Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it hands the current conversation off. If the project isn't paired yet, a QR code opens in your browser and pairing happens once you scan it. Other agents can read [skills/feishu-handoff/SKILL.md](skills/feishu-handoff/SKILL.md) directly.
+
 ## In Feishu
 
 | You | What happens |
@@ -155,9 +166,9 @@ No. Each paired project uses about 110 MB while running. Each active conversatio
 <details>
 <summary><b>I'm mid-conversation in Claude Desktop and need to head out. Can I continue in Feishu?</b></summary>
 
-Yes. Tell Claude "I'm heading out, move this to Feishu" and have it run `ccim handoff`. The bot messages you first, with a recap of where you left off — tap the notification on your phone and keep going, with the same model and effort level. A QR code is also shown in the terminal that opens the bot chat directly.
+Yes. With the skill installed (step 4 of Quick start), just tell Claude "I'm heading out, move this to Feishu"; without it, ask Claude to run `ccim handoff`. The bot messages you first, with a recap of where you left off — tap the notification on your phone and keep going, with the same model and effort level. A QR code is also shown in the terminal that opens the bot chat directly.
 
-Feishu gets a branch of the conversation: the desktop conversation isn't changed, but it won't see what you say in Feishu either. The project must already be paired; if ccim isn't running, it's started in the background.
+Feishu gets a branch of the conversation: the desktop conversation isn't changed, but it won't see what you say in Feishu either. If the project isn't paired yet, a pairing QR code opens in your browser first; if ccim isn't running, it's started in the background.
 </details>
 
 <details>

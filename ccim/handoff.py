@@ -7,7 +7,7 @@
 运行 handoff 时，那个对话这一轮还没结束（最后一条是还没返回结果的命令调用），把这半截接过去恢复会出错，
 所以只接到「用户说要转过去」之前的最后一条回复为止（resume_session_at）。
 """
-import json, os, time, uuid
+import html, json, os, subprocess, time, uuid
 
 from . import registry
 
@@ -128,3 +128,25 @@ def open_link(entry):
     """手机扫码直接打开和机器人的聊天。"""
     host = "applink.larksuite.com" if entry.get("domain") == "lark" else "applink.feishu.cn"
     return f"https://{host}/client/bot/open?appId={entry['app_id']}"
+
+
+def show_qr_page(path, url):
+    """第一次转接时配对：在浏览器里打开一个带二维码的页面（在 Claude 桌面端里看不到命令行输出）。"""
+    import qrcode
+    import qrcode.image.svg
+    svg = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=12, border=2).to_string(encoding="unicode")
+    name = html.escape(os.path.basename(path))
+    page = f"""<!doctype html><meta charset="utf-8"><title>把「{name}」接入飞书</title>
+<style>body{{font:16px -apple-system,"PingFang SC",sans-serif;display:flex;flex-direction:column;align-items:center;
+margin-top:8vh;color:#1f2329}} h1{{font-size:22px;margin:0 0 8px}} p{{color:#646a73;margin:4px}}
+.qr{{width:300px;margin:24px}} .qr svg{{width:100%;height:auto}} a{{color:#3370ff;font-size:13px}}</style>
+<h1>用飞书扫码，把「{name}」接入飞书</h1>
+<p>确认后会在你的飞书账号下建好一个机器人，然后自动接上刚才的对话。</p>
+<div class="qr">{svg}</div>
+<p>扫完回到 Claude 就行，这个页面可以关掉。</p>
+<p><a href="{html.escape(url)}">扫不了的话，在手机飞书里打开这个链接</a></p>"""
+    f = os.path.join(registry.pdir(path), "pair.html")
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write(page)
+    subprocess.run(["open", f], capture_output=True)
+    print(f"二维码已在浏览器里打开：{f}\n扫不了的话，在手机飞书里打开：{url}", flush=True)

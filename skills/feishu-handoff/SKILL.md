@@ -9,8 +9,9 @@ description: Move the current Claude Code conversation to Feishu / Lark so the u
 
 - `ccim handoff` branches this conversation into the user's direct message with the bot. The bot messages the
   user first with a recap, so their phone gets a notification and they can carry on from there.
-- `ccim handback`, run later in this same conversation, prints everything that happened in Feishu since then,
-  so you can pick up where they left off.
+- Feishu then continues as an independent branch. Whether to bring it back is the user's call: when they send a
+  message here later, the plugin's hook notices new Feishu content and asks you to check with them first.
+  `ccim handback` brings it over.
 
 Both commands read `CLAUDE_CODE_SESSION_ID`. If it isn't set (for example, you're not Claude Code), tell the user
 that only Claude Code conversations can be handed off, and stop.
@@ -34,10 +35,12 @@ ccim needs macOS, Python 3.11+, uv, and a Feishu or Lark account.
 2. Tell the user, in plain words:
    - The bot has sent them a message in Feishu with a recap — open it and keep chatting there.
    - Feishu continues from a branch of this conversation, with the same model and effort level.
-   - When they're back, they should say so here (e.g. "我回来了") so you can bring the Feishu part back.
-     Just typing here without that would continue from before they left, missing what happened in Feishu.
+   - When they're back and send a message here, you'll ask whether to bring over what they said in Feishu.
 
 ## Back: hand back
+
+Do this when the user asks for it ("我回来了", "把飞书那边的接回来"), or when the hook tells you Feishu has new
+content and the user says yes to bringing it over. If they say no, just answer their message and don't bring it up again.
 
 1. Run `ccim handback` in this conversation. It prints each turn from Feishu since the handoff — what the user
    said, what Claude did (files read and edited, commands run) and its reply — then the files that were edited.

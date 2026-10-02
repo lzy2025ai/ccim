@@ -1,6 +1,6 @@
 {
   "name": "ccim",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hand off a Claude Code conversation to Feishu / Lark and keep chatting from your phone",
   "author": { "name": "lzy2025ai" },
   "homepage": "https://github.com/lzy2025ai/ccim",

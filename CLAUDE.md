@@ -17,7 +17,10 @@
   没配对过就地配对：二维码做成网页在浏览器里打开（在 Claude 桌面端里用户看不到命令行输出）；
   正在运行的 ccim 是旧版本（state.json 的 caps 里没有 handoff）时，后台 / 常驻的自动重启，前台的提示用户去终端重启
   `ccim handback`：handoff 时在飞书聊天的状态里记下 handoff_from / handoff_time；接回来时找到那个分支，
-  按时间戳取转过去之后的内容（fork 出来的对话记录里，复制过来的旧消息保留原时间戳），整理成文字打印，再在飞书里发提醒
+  按时间戳取转过去之后的内容（fork 出来的对话记录里，复制过来的旧消息保留原时间戳），整理成文字打印，再在飞书里发提醒。
+  飞书那边是独立分支，带不带回来由用户决定：`ccim/hook.py`（插件 hooks/hooks.json 的 UserPromptSubmit 钩子，命令 ccim-hook）
+  只检测、让 Claude 先问，不自动带。两个进度：synced_to_desktop（handback 才推进）、notified_to_desktop（同一批只问一次）。
+  飞书那边正在回复的一轮（聊天状态里 busy）先不带。钩子每条消息都跑，不能 import 飞书 SDK
 - `skills/feishu-handoff/`：配套 skill，告诉 Agent 什么时候、怎么转接；`.claude-plugin/` 让这个仓库能作为 Claude Code 插件安装。
   改了 handoff 的行为或提示文字，要同步改 SKILL.md（它引用了几条报错原文）；改了 skill 要升 plugin.json 的 version，
   已安装的插件才会更新（插件按版本号判断）

@@ -315,13 +315,16 @@ def cmd_handback(args):
     chat_id, rec = handoff.find_branch(path, sid) if entry else (None, None)
     if not rec:
         raise SystemExit("这个对话没有转到过飞书。")
-    branch = rec.get("session_id")
-    text, n = handoff.digest(path, branch, rec.get("handoff_time", "")) if branch else ("", 0)
-    if not n:
-        print("转到飞书之后，那边还没有聊过，直接在这里接着聊就行。")
-    else:
-        print(f"转到飞书之后，那边聊了 {n} 轮，内容如下（飞书那边的对话编号 {branch[:8]}）：\n")
-        print(text)
+    ts, pending = handoff.pull_feishu(path, sid)
+    if ts:
+        print(f"飞书那边有 {len(ts)} 轮还没带过来，内容如下：\n")
+        print(handoff.render(ts))
+    elif not pending:
+        print("飞书那边没有新内容，直接在这里接着聊就行。")
+    if pending:
+        print(("\n" if ts else "") + "飞书那边还有一轮正在回复，等它答完再运行一次 ccim handback 带过来。")
+    if not ts:
+        return
     try:
         ch = CHANNELS[entry["channel"]](path, entry, registry.get_secret(entry["app_id"]), {})
         asyncio.run(ch.send_text(chat_id, "已回到电脑上接着聊了，这边聊过的内容已经带过去。"))

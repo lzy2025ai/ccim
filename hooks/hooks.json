@@ -1,0 +1,12 @@
+{
+  "description": "转到飞书之后，回到这个对话发消息时，发现飞书那边有新内容就先问用户要不要带过来",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v ccim-hook >/dev/null 2>&1 && ccim-hook || true", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

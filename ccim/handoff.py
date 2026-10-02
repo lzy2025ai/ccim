@@ -152,7 +152,13 @@ margin-top:8vh;color:#1f2329}} h1{{font-size:22px;margin:0 0 8px}} p{{color:#646
     print(f"二维码已在浏览器里打开：{f}\n扫不了的话，在手机飞书里打开：{url}", flush=True)
 
 
-# ---------- 接回来（ccim handback） ----------
+# ---------- 接回来（ccim handback、桌面端钩子） ----------
+#
+# 转过去之后，飞书那边是一个独立的分支，要不要把它的内容带回桌面端由用户决定：
+# 钩子只检测、让 Claude 先问用户，用户同意了才运行 ccim handback 带过来。飞书聊天的状态里记两个进度：
+#   synced_to_desktop：飞书那边哪个时间点之前的内容已经带给了桌面端（handback 才推进）
+#   notified_to_desktop：哪个时间点之前的新内容已经问过用户（同一批只问一次）
+# 起点都是 handoff_time。那边还没回复完的那一轮先不带，进度停在它之前，下次再带。
 
 def find_branch(path, session_id):
     """找到从这个对话转出去的飞书聊天：返回 (chat_id, 记录)；没转出去过返回 (None, None)。"""
@@ -163,51 +169,93 @@ def find_branch(path, session_id):
     return max(hits, key=lambda kv: kv[1].get("handoff_time", ""))
 
 
-def digest(path, session_id, since):
-    """飞书分支里 since（UTC ISO）之后的内容，整理成按时间排的文字。返回 (文字, 轮数)。"""
+def turns(path, session_id, since):
+    """对话记录里 since（UTC ISO）之后的各轮：[{when, user, steps, reply, files, last_ts}]。"""
     from .progress import describe_tool
     tp = transcript_path(session_id, path)
-    if not tp:
-        return "", 0
-    rows = []
+    if not tp or not since:
+        return []
+    out = []
     with open(tp, encoding="utf-8") as f:
         for line in f:
             try:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("timestamp", "") > since and not r.get("isSidechain") and r.get("type") in ("user", "assistant"):
-                rows.append(r)
-    turns, files = [], {}
-    for r in rows:
-        when = _local(r.get("timestamp", ""))
-        if _is_prompt(r):
-            turns.append({"when": when, "user": _text(r).strip(), "steps": [], "reply": ""})
-            continue
-        if r.get("type") != "assistant" or not turns:
-            continue
-        for b in (r.get("message") or {}).get("content") or []:
-            if b.get("type") == "tool_use":
-                d = describe_tool(b.get("name", ""), b.get("input"))
-                if d:
-                    turns[-1]["steps"].append(d)
-                fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
-                if fp and b.get("name") in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
-                    files[fp] = "新建或重写" if b.get("name") == "Write" else "修改"
-            elif b.get("type") == "text" and b.get("text", "").strip():
-                turns[-1]["reply"] = b["text"].strip()
-    out = []
-    for t in turns:
+            ts = r.get("timestamp", "")
+            if ts <= since or r.get("isSidechain") or r.get("type") not in ("user", "assistant"):
+                continue
+            if _is_prompt(r):
+                out.append({"when": _local(ts), "user": _text(r).strip(), "steps": [], "reply": "", "files": {}, "last_ts": ts})
+                continue
+            if r.get("type") != "assistant" or not out:
+                continue
+            t = out[-1]
+            t["last_ts"] = ts
+            for b in (r.get("message") or {}).get("content") or []:
+                if b.get("type") == "tool_use":
+                    d = describe_tool(b.get("name", ""), b.get("input"))
+                    if d:
+                        t["steps"].append(d)
+                    inp = b.get("input") or {}
+                    fp = inp.get("file_path") or inp.get("notebook_path")
+                    if fp and b.get("name") in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+                        t["files"][fp] = "新建或重写" if b.get("name") == "Write" else "修改"
+                elif b.get("type") == "text" and b.get("text", "").strip():
+                    t["reply"] = b["text"].strip()
+    return out
+
+
+def render(ts):
+    out, files = [], {}
+    for t in ts:
         out.append(f"[{t['when']}] 用户：{_cap(t['user'], 1500)}")
         if t["steps"]:
             steps = t["steps"] if len(t["steps"]) <= 12 else t["steps"][:5] + [f"……共 {len(t['steps'])} 步……"] + t["steps"][-5:]
             out.append("  Claude 的操作：" + "；".join(steps))
         out.append(f"  Claude：{_cap(t['reply'], 3000) or '（没有文字回复）'}")
         out.append("")
+        files.update(t["files"])
     if files:
         out.append("改动过的文件（通过命令改的不在此列，可以再看 git status）：")
         out += [f"- {p}（{how}）" for p, how in files.items()]
-    return "\n".join(out).strip(), len(turns)
+    return "\n".join(out).strip()
+
+
+def _mark(path, chat_id, marker, ts):
+    chats = registry.read_state(path).get("chats") or {}
+    chats.setdefault(chat_id, {})[marker] = ts
+    registry.write_state(path, chats=chats)
+
+
+def peek_feishu(path, desktop_sid, since_marker="synced_to_desktop"):
+    """飞书那边 since_marker 之后、已经答完的各轮。返回 (chat_id, 各轮, 是否还有一轮正在回复)。"""
+    from . import daemon
+    chat_id, rec = find_branch(path, desktop_sid)
+    if not rec or not rec.get("session_id"):
+        return None, [], False
+    since = max(rec.get("synced_to_desktop") or "", rec.get(since_marker) or "") or rec.get("handoff_time")
+    ts = turns(path, rec["session_id"], since)
+    pending = bool(ts) and bool(rec.get("busy") and daemon.running(path))
+    return chat_id, (ts[:-1] if pending else ts), pending
+
+
+def pull_feishu(path, desktop_sid):
+    """ccim handback：取飞书那边还没带过来的内容，并推进进度。返回 (各轮, 是否还有一轮正在回复)。"""
+    chat_id, ts, pending = peek_feishu(path, desktop_sid)
+    if ts:
+        _mark(path, chat_id, "synced_to_desktop", ts[-1]["last_ts"])
+    return ts, pending
+
+
+def notify_feishu(path, desktop_sid):
+    """桌面端钩子：飞书那边有没有还没问过用户的新内容。问过的记下来，同一批不再问。
+    有新内容时返回所有还没带过来的各轮（handback 会带过来的就是这些），没有返回 []；以及是否还有一轮正在回复。"""
+    chat_id, new, pending = peek_feishu(path, desktop_sid, "notified_to_desktop")
+    if not new:
+        return [], pending
+    _mark(path, chat_id, "notified_to_desktop", new[-1]["last_ts"])
+    return peek_feishu(path, desktop_sid)[1], pending
 
 
 def _cap(s, n):

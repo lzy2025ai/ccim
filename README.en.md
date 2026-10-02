@@ -169,7 +169,7 @@ No. Each paired project uses about 110 MB while running. Each active conversatio
 
 Yes. With the skill installed (step 4 of Quick start), just tell Claude "I'm heading out, move this to Feishu"; without it, ask Claude to run `ccim handoff`. The bot messages you first, with a recap of where you left off — tap the notification on your phone and keep going, with the same model and effort level. A QR code is also shown in the terminal that opens the bot chat directly.
 
-Feishu gets a branch of the conversation. Back at the computer, say "I'm back" in the original conversation (or have Claude run `ccim handback`): it reads what you said in Feishu and which files changed, and carries on from there. If you just keep typing, the desktop conversation won't know what happened in Feishu. If the project isn't paired yet, a pairing QR code opens in your browser first; if ccim isn't running, it's started in the background.
+Feishu gets an independent branch of the conversation, and it's your call whether to bring it back. When you send a message in the original conversation and Feishu has new content, Claude first asks whether to bring it over (this reminder comes with the plugin). Say yes and it reads what you said in Feishu and which files changed, then carries on; say no and you just keep chatting — it won't ask again about the same content. You can also just say "I'm back", or ask Claude to run `ccim handback`. If the project isn't paired yet, a pairing QR code opens in your browser first; if ccim isn't running, it's started in the background.
 </details>
 
 <details>

@@ -1,6 +1,6 @@
 [project]
 name = "ccim"
-version = "0.2.0"
+version = "0.3.0"
 description = "在飞书里和本机的 Claude Code 对话"
 readme = "README.md"
 license = "MIT"
@@ -19,6 +19,7 @@ Homepage = "https://github.com/lzy2025ai/ccim"
 
 [project.scripts]
 ccim = "ccim.cli:main"
+ccim-hook = "ccim.hook:main"
 
 [build-system]
 requires = ["hatchling"]

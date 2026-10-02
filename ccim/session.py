@@ -239,6 +239,13 @@ class Chat:
                 log.debug("断开出错", exc_info=True)
 
     async def _turn(self, prompt, reply_to):
+        self.b.save(self.chat_id, busy=True)  # 桌面端同步飞书内容时，据此跳过还没答完的这一轮
+        try:
+            await self._turn_inner(prompt, reply_to)
+        finally:
+            self.b.save(self.chat_id, busy=False)
+
+    async def _turn_inner(self, prompt, reply_to):
         t = self.turn = Turn()
         ticker = asyncio.create_task(self._tick(t, reply_to))
         result, error = None, None

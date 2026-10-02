@@ -99,6 +99,7 @@ ccim start --always
 | `/new` | 开始新对话 |
 | `/resume [编号]` | 不写编号：列出这个项目最近的对话，终端里开的也在；写编号：接上那个对话 |
 | `/stop` | 停下正在做的事，清空排队 |
+| `/restart` | 安全重启这个机器人，回来后告诉你结果（只有主人能用） |
 | `/status` | 当前状态、模型、思考深度 |
 | `/model 名字` | 换模型：`opus` `sonnet` `haiku` `fable`，或完整模型名 |
 | `/effort 等级` | 思考深度：`low` `medium` `high` `xhigh` `max` |
@@ -115,6 +116,8 @@ ccim start --always
 | `ccim start --always [项目]` | 常驻：开机自启，意外退出约 30 秒后自动重启 |
 | `ccim stop [项目]` | 关停；常驻的同时取消常驻 |
 | `ccim restart [项目]` | 重启 |
+| `ccim restart --safe [项目]` | 安全重启：新版本起不来就用稳定版顶上，结果发到飞书 |
+| `ccim promote` | 开发 ccim 时用：把当前代码装成新的稳定版，逐个升级跑稳定版的项目，起不来的退回上一版 |
 | `ccim list` | 所有已配对的项目和在线状态 |
 | `ccim show [项目]` | 一个项目的详情：机器人、状态、模型、思考深度、各个对话 |
 | `ccim handoff` | 在 Claude Code 的对话里运行：把这个对话转到飞书私聊接着聊 |
@@ -133,6 +136,7 @@ ccim config group=all          # 群里所有人 @ 都响应（默认 owner：�
 ccim config model=sonnet       # 这个项目的默认模型
 ccim config effort=high        # 这个项目的默认思考深度
 ccim config reaction=THUMBSUP  # 收到消息时加的表情（默认 OnIt）
+ccim config runtime=dev        # 跑开发中的代码（默认：装过稳定版就跑稳定版）
 ccim config                    # 查看当前设置
 ```
 

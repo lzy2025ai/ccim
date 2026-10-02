@@ -99,6 +99,7 @@ Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it 
 | `/new` | Start a new conversation |
 | `/resume [id]` | Without an id: list this project's recent conversations, including ones started in the terminal. With an id: continue that conversation |
 | `/stop` | Stop the current task and clear the queue |
+| `/restart` | Safely restart this bot and report back (owner only) |
 | `/status` | Current status, model and effort level |
 | `/model name` | Switch model: `opus` `sonnet` `haiku` `fable`, or a full model name |
 | `/effort level` | Effort level: `low` `medium` `high` `xhigh` `max` |
@@ -115,6 +116,8 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim start --always [project]` | Keep it running: starts at login, restarts about 30 seconds after an unexpected exit |
 | `ccim stop [project]` | Stop it (and turn off `--always`) |
 | `ccim restart [project]` | Restart |
+| `ccim restart --safe [project]` | Safe restart: if the new version won't start, the stable version takes over; the result is sent to Feishu |
+| `ccim promote` | For ccim development: install the current code as the new stable version and upgrade projects on stable one by one, rolling back any that won't start |
 | `ccim list` | All paired projects and whether they're online |
 | `ccim show [project]` | Details for one project: bot, status, model, effort level, conversations |
 | `ccim handoff` | Run inside a Claude Code conversation: move that conversation to your Feishu DM |
@@ -133,6 +136,7 @@ ccim config group=all          # respond to everyone's @mentions in groups (defa
 ccim config model=sonnet       # default model for this project
 ccim config effort=high        # default effort level for this project
 ccim config reaction=THUMBSUP  # reaction added to incoming messages (default OnIt)
+ccim config runtime=dev        # run the code under development (default: stable, once one is installed)
 ccim config                    # show current settings
 ```
 

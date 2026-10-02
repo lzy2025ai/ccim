@@ -24,6 +24,11 @@
 - `skills/feishu-handoff/`：配套 skill，告诉 Agent 什么时候、怎么转接；`.claude-plugin/` 让这个仓库能作为 Claude Code 插件安装。
   改了 handoff 的行为或提示文字，要同步改 SKILL.md（它引用了几条报错原文）；改了 skill 要升 plugin.json 的 version，
   已安装的插件才会更新（插件按版本号判断）
+- `ccim/runtime.py`：稳定版 / 开发版、安全重启、`ccim promote`。稳定版在 `~/.ccim/stable/<版本>/`（独立 venv，从某次提交装），
+  `channel.json` 记 current / previous；项目的 `runtime`（dev / stable）、`stable_version`（钉版本）在登记表里。
+  启动命令带 `-P`，否则在 ccim 代码目录里跑稳定版会导入目录里的开发代码。安全重启由独立进程做（优先用稳定版跑），
+  新版本 60 秒内没连上或很快退出就用稳定版顶上（state 里 fallback=True），结果主动私聊主人。
+  venv 的 python 是指向系统 python 的软链，判断属于哪个环境要看目录（`_env`），不能 realpath python 本身
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示
@@ -53,6 +58,13 @@
 - 先发回答再收尾卡片，卡片接口卡住不拖累回答
 - 长连接：lark 自己断线重连；整个客户端退出了，启动成功过的话等 10 秒重建
 - 环境里设了 `PYTHONDONTWRITEBYTECODE` 时，lark-oapi 一万多个文件每次启动都要重新编译（十几秒），所以安装时加 `--compile-bytecode`
+
+## 开发流程（和用户约好的）
+
+- ccim 自己的测试机器人（项目 ccim）跑开发版；其他项目跑稳定版。你很可能就运行在 ccim 测试机器人里。
+- 改完想让用户在飞书里体验：先提交，再 `ccim restart --safe ccim`，然后回复用户（重启会断掉当前这一轮，默认 15 秒后才重启，
+  留时间把回复发出去）。新版本起不来会自动用稳定版顶上，飞书里会收到通知，回来接着修。
+- 用户说验收通过，再 `ccim promote` 升级其他项目；不要直接 `ccim restart` 别的项目到开发版。
 
 ## 约定
 

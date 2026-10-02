@@ -29,6 +29,8 @@
   启动命令带 `-P`，否则在 ccim 代码目录里跑稳定版会导入目录里的开发代码。安全重启由独立进程做（优先用稳定版跑），
   新版本 60 秒内没连上或很快退出就用稳定版顶上（state 里 fallback=True），结果主动私聊主人。
   venv 的 python 是指向系统 python 的软链，判断属于哪个环境要看目录（`_env`），不能 realpath python 本身
+- `ccim/usage.py`：`/usage` 中文版。额度来自 SDK 的 RateLimitEvent（raw 里的 unifiedWindows），每轮对话记到 `~/.ccim/rate.json`；
+  明细是临时会话跑 Claude Code 自带 /usage 再按句式翻译。新会话没发过请求时 /usage 不带额度，所以缓存旧了先用 haiku 问一句
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

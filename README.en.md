@@ -100,7 +100,8 @@ Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it 
 | `/resume [id]` | Without an id: list this project's recent conversations, including ones started in the terminal. With an id: continue that conversation |
 | `/stop` | Stop the current task and clear the queue |
 | `/restart` | Safely restart this bot and report back (owner only) |
-| `/status` | Current status, model and effort level |
+| `/status` | Current status, model, effort level and quota |
+| `/usage` | 5-hour and weekly quota left, plus a usage breakdown (in Chinese) |
 | `/model name` | Switch model: `opus` `sonnet` `haiku` `fable`, or a full model name |
 | `/effort level` | Effort level: `low` `medium` `high` `xhigh` `max` |
 | `/help` | Help |

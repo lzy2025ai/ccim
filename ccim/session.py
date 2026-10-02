@@ -5,10 +5,10 @@
 """
 import asyncio, logging, os, shutil, subprocess, sys, time, uuid
 
-from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, ResultMessage, StreamEvent,
-                              TextBlock, ToolUseBlock, create_sdk_mcp_server, tool)
+from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage,
+                              StreamEvent, TextBlock, ToolUseBlock, create_sdk_mcp_server, tool)
 
-from . import registry
+from . import registry, usage
 from .progress import clock, describe_tool, short
 
 log = logging.getLogger("ccim.session")
@@ -255,7 +255,12 @@ class Chat:
             if not self.stopping:
                 await self.client.query(prompt)
                 async for m in self.client.receive_response():
-                    if isinstance(m, StreamEvent):
+                    if isinstance(m, RateLimitEvent):
+                        try:
+                            usage.record(m.rate_limit_info)
+                        except Exception:
+                            log.debug("记录额度失败", exc_info=True)
+                    elif isinstance(m, StreamEvent):
                         ev = m.event or {}
                         if ev.get("type") == "content_block_delta" and (ev.get("delta") or {}).get("type") == "text_delta":
                             t.live += ev["delta"].get("text", "")

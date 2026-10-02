@@ -17,6 +17,7 @@ HELP = """\
 /stop　停下正在做的事
 /restart　重启这个机器人（升级到新代码时用）
 /status　当前状态
+/usage　额度和用量：5 小时、每周还剩多少
 /model 名字　换模型：opus、sonnet、haiku、fable
 /effort 等级　思考深度：low、medium、high、xhigh、max
 /help　显示这段说明
@@ -34,6 +35,11 @@ def _setting(chat):
     m, e, m_set, e_set = chat.effective()
     follow = "（跟随 Claude Code 设置）" if not (m_set or e_set) else ""
     return f"**模型**：{_model_name(m)}　**思考深度**：{e}{follow}"
+
+
+def _quota():
+    from . import usage
+    return usage.short_status()
 
 
 def _title(info):
@@ -86,6 +92,9 @@ async def handle(bridge, chat, text, reply_to, sender=None):
             from . import runtime
             await say("好，马上重启，大约半分钟后回来告诉你结果。新版本起不来的话，会先用稳定版顶上。")
             runtime.schedule_restart(bridge.path, delay=3, target=arg.lower() if arg.lower() in ("dev", "stable") else None)
+    elif cmd == "/usage":
+        from . import usage
+        await say(await usage.report(bridge.path))
     elif cmd == "/stop":
         await say("正在停下。" if await chat.stop() else "现在没有在做的事。")
     elif cmd == "/status":
@@ -98,6 +107,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         lines = [f"**项目**：{bridge.name}",
                  f"**状态**：{state}" + (f"，还有 {waiting} 条排队" if waiting else ""),
                  _setting(chat),
+                 *([f"**额度**：{q}"] if (q := _quota()) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
     elif cmd == "/model":

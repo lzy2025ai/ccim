@@ -6,7 +6,7 @@
 运行方式：fg 前台；bg 后台（脱离终端，进程没了就没了）；
 always 常驻：交给 macOS 的 launchd 托管，登录后自动启动，崩溃或启动失败（比如开机时还没联网）30 秒后自动重启。
 """
-import os, plistlib, signal, subprocess, sys, time
+import os, plistlib, signal, subprocess, time
 
 from . import registry
 
@@ -35,15 +35,20 @@ def log_path(path):
     return os.path.join(registry.pdir(path), "ccim.log")
 
 
-def _argv(path, channel, mode):
-    return [sys.executable, "-m", "ccim.cli", "run", path, "--channel", channel, "--mode", mode]
+def _argv(path, channel, mode, python=None):
+    """python：用哪个环境跑（稳定版 / 开发版），不写就按项目设置。
+    -P：不把当前目录加进 import 路径，不然在 ccim 代码目录里跑稳定版，导入的会是目录里的开发代码。"""
+    if not python:
+        from . import runtime
+        python = runtime.which(path)[0]
+    return [python, "-P", "-m", "ccim.cli", "run", path, "--channel", channel, "--mode", mode]
 
 
-def start_background(path, channel):
+def start_background(path, channel, python=None):
     """脱离终端在后台跑：关掉终端、关掉 Claude 桌面版都不影响。"""
     log = open(log_path(path), "ab")
     started = registry.now()
-    proc = subprocess.Popen(_argv(path, channel, "bg"), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+    proc = subprocess.Popen(_argv(path, channel, "bg", python), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                             start_new_session=True, cwd=path)
     return _wait_online(path, started, exited=lambda: proc.poll() is not None)
 
@@ -84,14 +89,14 @@ def _domain():
     return f"gui/{os.getuid()}"
 
 
-def start_always(path, channel):
+def start_always(path, channel, python=None):
     """写 LaunchAgent 并加载：登录后自动启动，异常退出 30 秒后重启；ccim stop 才真正停。"""
     home = os.path.expanduser("~")
     env_path = ":".join([os.path.join(home, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin",
                          "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
     plist = {
         "Label": label(path),
-        "ProgramArguments": _argv(path, channel, "always"),
+        "ProgramArguments": _argv(path, channel, "always", python),
         "WorkingDirectory": path,
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},   # 正常退出（ccim stop）不拉起，崩溃、启动失败才拉起
@@ -116,12 +121,6 @@ def start_always(path, channel):
         # 启动失败时 launchd 会每 30 秒重试；这里不撤销，让它在网络恢复后自己连上
         print("（系统会每 30 秒自动重试；不想要了就 ccim stop）")
         raise
-
-
-def restart_always(path):
-    started = registry.now()
-    _launchctl("kickstart", "-k", f"{_domain()}/{label(path)}")
-    return _wait_online(path, started, exited=lambda: False)
 
 
 def _stop_always(path):

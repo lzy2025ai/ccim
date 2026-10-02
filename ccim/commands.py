@@ -15,6 +15,7 @@ HELP = """\
 /new　开始新对话
 /resume　接上这个项目里的其他对话（包括在终端里开的）
 /stop　停下正在做的事
+/restart　重启这个机器人（升级到新代码时用）
 /status　当前状态
 /model 名字　换模型：opus、sonnet、haiku、fable
 /effort 等级　思考深度：low、medium、high、xhigh、max
@@ -65,7 +66,7 @@ async def _resume(bridge, chat, arg, say):
         await say(f"已接上「{_title(hits[0])}」，之前的内容都在，接着说就行。原来那边的对话不受影响。")
 
 
-async def handle(bridge, chat, text, reply_to):
+async def handle(bridge, chat, text, reply_to, sender=None):
     """处理了就返回 True；不认识的命令返回 False，交给 Claude。"""
     cmd, _, arg = text.partition(" ")
     cmd, arg = cmd.lower(), arg.strip()
@@ -78,6 +79,13 @@ async def handle(bridge, chat, text, reply_to):
         await say("已开始新对话。")
     elif cmd == "/resume":
         await _resume(bridge, chat, arg, say)
+    elif cmd == "/restart":
+        if sender != bridge.owner():
+            await say("只有主人能重启。")
+        else:
+            from . import runtime
+            await say("好，马上重启，大约半分钟后回来告诉你结果。新版本起不来的话，会先用稳定版顶上。")
+            runtime.schedule_restart(bridge.path, delay=3, target=arg.lower() if arg.lower() in ("dev", "stable") else None)
     elif cmd == "/stop":
         await say("正在停下。" if await chat.stop() else "现在没有在做的事。")
     elif cmd == "/status":

@@ -9,13 +9,13 @@
 """
 import argparse, asyncio, logging, os, re, signal, sys
 
-from . import daemon, handoff, registry
+from . import daemon, handoff, registry, runtime
 from .channels.feishu import Feishu
 
 CHANNELS = {"feishu": Feishu}
-CAPS = ["handoff"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
+CAPS = ["handoff", "safe-restart"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
-               "reaction": None}
+               "reaction": None, "runtime": ("dev", "stable")}
 
 
 # ---------- 运行 ----------
@@ -35,7 +35,7 @@ async def _serve(path, entry, secret, mode):
     channel = CHANNELS[entry["channel"]](path, entry, secret, bridge.handlers())
     bridge.attach(channel)
     registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None,
-                         caps=CAPS)
+                         caps=CAPS, python=sys.executable)
     try:
         await channel.start()
     except Exception as e:
@@ -161,8 +161,13 @@ def cmd_stop(args):
 
 def cmd_restart(args):
     path, entry = _need(args.project)
+    if args.safe:
+        runtime.schedule_restart(path, delay=args.delay)
+        print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，结果发到飞书。")
+        return
     if daemon.is_always(path):
-        pid = daemon.restart_always(path)
+        daemon.stop(path)
+        pid = daemon.start_always(path, entry["channel"])
         print(f"「{os.path.basename(path)}」已重启，继续常驻（进程 {pid}）。")
         return
     daemon.stop(path)
@@ -175,17 +180,20 @@ def cmd_list(args):
     if not data:
         print("还没有配对过的项目。在项目目录里运行 ccim 开始。")
         return
-    rows = [("项目", "渠道", "机器人", "状态", "路径")]
+    rows = [("项目", "渠道", "机器人", "状态", "版本", "路径")]
     for path, e in sorted(data.items()):
         r = daemon.running(path)
+        s = registry.read_state(path)
         how = {"bg": "（后台）", "always": "（常驻）"}.get(r[1], "（前台）") if r else ""
-        state = ("在线" if registry.read_state(path).get("online") else "连接中") + how if r else (
+        state = ("在线" if s.get("online") else "连接中") + how if r else (
             "离线（等待自动重启）" if daemon.is_always(path) else "离线")
-        rows.append((os.path.basename(path), e.get("channel", ""), e.get("bot_name") or e.get("app_id", ""), state, path))
+        ver = (runtime.describe(s.get("python")) + ("（顶替中）" if s.get("fallback") else "")) if r else ""
+        rows.append((os.path.basename(path), e.get("channel", ""), e.get("bot_name") or e.get("app_id", ""), state,
+                     ver, path))
     width = lambda s: sum(2 if ord(c) > 0x2e80 else 1 for c in s)
-    cols = [max(width(r[i]) for r in rows) for i in range(4)]
+    cols = [max(width(r[i]) for r in rows) for i in range(5)]
     for r in rows:
-        print("  ".join(r[i] + " " * (cols[i] - width(r[i])) for i in range(4)) + "  " + r[4])
+        print("  ".join(r[i] + " " * (cols[i] - width(r[i])) for i in range(5)) + "  " + r[5])
 
 
 def cmd_show(args):
@@ -204,6 +212,8 @@ def cmd_show(args):
         ("路径", path),
         ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{ {'feishu': '飞书'}.get(e.get('channel'), e.get('channel')) }）"),
         ("状态", status),
+        ("版本", (runtime.describe(s.get("python")) + ("（新版本没起来，暂时顶替）" if s.get("fallback") else "")
+                  if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
         ("群聊", "所有人 @ 都响应" if e.get("group") == "all" else "只响应主人"),
         ("模型", default_model + ("" if m_set else follow)),
         ("思考深度", default_effort + ("" if e_set else follow)),
@@ -283,7 +293,8 @@ def cmd_handoff(args):
             raise SystemExit(f"「{name}」正在一个终端里前台运行，而且是旧版本。先在那个终端按 Ctrl+C 停掉，再转接。")
         print(f"「{name}」正在运行的 ccim 是旧版本，重启一下…", flush=True)
         if daemon.is_always(path):
-            daemon.restart_always(path)
+            daemon.stop(path)
+            daemon.start_always(path, entry["channel"])
         else:
             daemon.stop(path)
             daemon.start_background(path, entry["channel"])
@@ -330,6 +341,19 @@ def cmd_handback(args):
         asyncio.run(ch.send_text(chat_id, "已回到电脑上接着聊了，这边聊过的内容已经带过去。"))
     except Exception as e:
         print(f"\n（没能在飞书里发提醒：{e}）")
+
+
+def cmd_safe_restart_run(args):
+    ok, _ = runtime.safe_restart(os.path.realpath(args.path), delay=args.delay, target=args.target)
+    sys.exit(0 if ok else 1)
+
+
+def cmd_promote(args):
+    label, results = runtime.promote()
+    for line in results:
+        print(line)
+    if not results:
+        print("没有跑稳定版的项目。")
 
 
 def cmd_logs(args):
@@ -384,6 +408,9 @@ def main(argv=None):
         s.add_argument("project", nargs="?", help="项目名或路径，不写就是当前目录")
         if name == "start":
             s.add_argument("--always", action="store_true", help="常驻：开机登录后自动启动，意外退出自动重启")
+        if name == "restart":
+            s.add_argument("--safe", action="store_true", help="另起进程重启，新版本起不来就用稳定版顶上，结果发到飞书")
+            s.add_argument("--delay", type=int, default=15, help="几秒后重启（默认 15，留时间把当前回复发出去）")
         s.set_defaults(fn=fn)
     sub.add_parser("list", help="所有已配对项目").set_defaults(fn=cmd_list)
     s = sub.add_parser("resume", help="在终端里接着飞书里的对话聊（不写编号就接最近聊过的）")
@@ -408,6 +435,13 @@ def main(argv=None):
     s = sub.add_parser("config", help="项目设置：group=owner|all model=名字 effort=等级")
     s.add_argument("items", nargs="*")
     s.set_defaults(fn=cmd_config)
+    s = sub.add_parser("promote", help="验收通过后：把当前代码装成稳定版，逐个升级跑稳定版的项目")
+    s.set_defaults(fn=cmd_promote)
+    s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程
+    s.add_argument("path")
+    s.add_argument("--delay", type=float, default=0)
+    s.add_argument("--target", choices=("dev", "stable"))
+    s.set_defaults(fn=cmd_safe_restart_run)
     s = sub.add_parser("run")                 # 内部用：后台进程的入口
     s.add_argument("path")
     s.add_argument("--channel", default="feishu")

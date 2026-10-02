@@ -115,7 +115,7 @@ class Bridge:
             if await self.approvals.answer_by_text(addr, text):
                 return
         if text.startswith("/") and not paths:
-            if await commands.handle(self, chat, text, reply_to):
+            if await commands.handle(self, chat, text, reply_to, inc.sender_id):
                 return
         prompt = text
         if new_topic and inc.root_id and inc.root_id != inc.message_id:

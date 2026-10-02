@@ -1,6 +1,6 @@
 [project]
 name = "ccim"
-version = "0.3.0"
+version = "0.4.0"
 description = "在飞书里和本机的 Claude Code 对话"
 readme = "README.md"
 license = "MIT"

@@ -78,11 +78,16 @@ def which(path, entry=None, force=None):
     return p, "开发版"
 
 
+def _env(python):
+    """python 属于哪个环境（目录）。venv 里的 python 是指向系统 python 的软链，不能直接 realpath 比较。"""
+    return os.path.realpath(os.path.dirname(python))
+
+
 def describe(python):
     """正在运行的那个 python 是哪个版本，给 ccim show、list 用。"""
     if not python:
         return ""
-    real = os.path.realpath(python)
+    real = _env(python)
     if real.startswith(os.path.realpath(_stable()) + os.sep):
         return "稳定版 " + os.path.relpath(real, os.path.realpath(_stable())).split(os.sep)[0]
     return "开发版"
@@ -127,7 +132,7 @@ def safe_restart(path, delay=0, target=None, notify=True):
     except SystemExit as e:
         err = str(e).split("\n")[0]
         fallback = stable_python(entry.get("stable_version")) or stable_python()
-        if not fallback or os.path.realpath(fallback) == os.path.realpath(py):
+        if not fallback or _env(fallback) == _env(py):
             msg = f"「{name}」重启失败，也没有别的版本可以顶上：{err}"
             _tell(path, entry, msg, notify)
             return False, msg
@@ -139,7 +144,7 @@ def safe_restart(path, delay=0, target=None, notify=True):
             _tell(path, entry, msg, notify)
             return False, msg
         registry.write_state(path, fallback=True)
-        msg = f"「{name}」{desc}没起来，先用{describe(fallback)}顶上了。\n报错：{err}"
+        msg = f"「{name}」{desc}没起来，先用{describe(fallback)} 顶上了。\n报错：{err}"
         _tell(path, entry, msg, notify)
         return False, msg
 
@@ -169,8 +174,10 @@ def build_stable():
         raise SystemExit("要在 ccim 的代码目录（开发版）里运行。")
     if _git("status", "--porcelain").stdout.strip():
         raise SystemExit("代码还有没提交的改动，先提交再升级。")
-    from importlib.metadata import version
-    label = f"{version('ccim')}-{_git('rev-parse', '--short', 'HEAD').stdout.strip()}"
+    import tomllib                            # 开发版装好后元数据不会跟着改，版本号直接读 pyproject
+    with open(os.path.join(SRC, "pyproject.toml"), "rb") as f:
+        ver = tomllib.load(f)["project"]["version"]
+    label = f"{ver}-{_git('rev-parse', '--short', 'HEAD').stdout.strip()}"
     dest = os.path.join(_stable(), label)
     if not stable_python(label):
         _rm(dest)

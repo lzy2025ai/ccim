@@ -381,17 +381,18 @@ class Feishu(Channel):
     @staticmethod
     def _render(card):
         colors = {"blue": "blue", "green": "green", "orange": "orange", "red": "red", "grey": "grey"}
-        els = [{"tag": "markdown", "content": card.get("body") or " "}]
+        els = [{"tag": "markdown", "content": card["body"]}] if card.get("body") or not card.get("note") else []
         if card.get("buttons"):
             els.append({"tag": "action", "actions": [
                 {"tag": "button", "text": {"tag": "plain_text", "content": b["text"]},
                  "type": b.get("style", "default"), "value": b.get("value", {})} for b in card["buttons"]]})
         if card.get("note"):
             els.append({"tag": "note", "elements": [{"tag": "plain_text", "content": card["note"]}]})
-        return {"config": {"wide_screen_mode": True, "update_multi": True},
-                "header": {"title": {"tag": "plain_text", "content": card.get("title", "")},
-                           "template": colors.get(card.get("color"), "blue")},
-                "elements": els}
+        out = {"config": {"wide_screen_mode": True, "update_multi": True}, "elements": els}
+        if card.get("title"):                 # 没标题就不要标题栏，只剩一行小字
+            out["header"] = {"title": {"tag": "plain_text", "content": card["title"]},
+                             "template": colors.get(card.get("color"), "blue")}
+        return out
 
     async def send_card(self, chat_id, card, reply_to=None):
         return await self._send(chat_id, "interactive", self._render(card), reply_to)

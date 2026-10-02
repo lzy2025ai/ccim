@@ -3,6 +3,7 @@
 卡片用和渠道无关的写法描述，由各渠道自己渲染：
     {"title": "工作中 · 0:23", "color": "blue|green|orange|red|grey", "body": "markdown 正文",
      "buttons": [{"text": "允许", "style": "primary|danger|default", "value": {...}}], "note": "灰色小字"}
+没有 title 时不要标题栏；只有 note 时就是一行小字。
 """
 from dataclasses import dataclass, field
 

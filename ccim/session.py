@@ -295,11 +295,8 @@ class Chat:
             await self._deliver(answer, reply_to)
         if t.card_id and (t.steps or self.stopping or error):
             await self._safe_update(t.card_id, t.card(title, color))
-        elif t.card_id:                       # 纯文字回答：卡片只是等待时的过渡，回答发出后撤回
-            try:
-                await self.b.channel.delete_message(t.card_id)
-            except Exception:
-                await self._safe_update(t.card_id, t.card(title, color))
+        elif t.card_id:                       # 纯文字回答：卡片收成一行小字（撤回的话飞书会留「撤回了一条消息」，像出了错）
+            await self._safe_update(t.card_id, {"note": f"已回复 · 用时 {clock(time.monotonic() - t.start)}"})
         if answer:
             log.info("→ 回复 %d 字，用时 %.1f 秒（启动会话 %.1f 秒）%s", len(answer or ""), time.monotonic() - t.start,
                      (t.ready or t.start) - t.start, f"，{len(t.steps)} 步" if t.steps else "")

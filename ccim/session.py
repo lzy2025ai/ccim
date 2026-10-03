@@ -65,6 +65,8 @@ class Turn:
         self.start = time.monotonic()
         self.ready = None                     # Claude 连上的时刻
         self.unseen = []                      # 插进来、Claude 可能还没看到的消息 [(内容, reply_to)]
+        self.on_end = []                      # 这一轮结束时要做的事（收掉补充卡片上的按钮）
+        self.follow_through = False           # 「立即发送」打断了这一轮：Claude Code 会接着处理排着的补充，要读到那一轮结束
         self.steps = []
         self.text = ""                        # 最近一段写完的文字
         self.live = ""                        # 正在写的文字（流式）
@@ -129,6 +131,17 @@ class Chat:
         t.unseen.append((prompt, reply_to))
         t.steps.append("收到补充：" + short(prompt, 40))
         return True
+
+    async def send_now(self, prompt, reply_to=None, message_id=None):
+        """「立即发送」：停下手头的，先处理这条补充。
+        补充已经交给 Claude Code、但 Claude 还没看到时，打断后它会自己接着处理，不能再发一遍（会做两次）；
+        Claude 已经看到了，就打断后重新发一次。"""
+        t = self.turn
+        if t and any(p == prompt for p, _ in t.unseen):
+            t.follow_through = True
+            await self._interrupt()
+        else:
+            await self.interrupt_with(prompt, reply_to, message_id)
 
     async def interrupt_with(self, prompt, reply_to=None, message_id=None):
         """停掉正在做的这一轮，马上处理这条；排着队的其他消息保留。"""
@@ -276,6 +289,8 @@ class Chat:
             await self._turn_inner(prompt, reply_to)
         finally:
             self.b.save(self.chat_id, busy=False)
+            for fn in (self.turn.on_end if self.turn else []):
+                fn()
 
     async def _turn_inner(self, prompt, reply_to):
         t = self.turn = Turn()
@@ -301,7 +316,8 @@ class Chat:
                     if grace and not isinstance(m, RateLimitEvent):
                         grace, t.unseen = False, []   # Claude 接着处理补充了，读到下一轮结束
                     if isinstance(m, UserMessage):
-                        if isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content):
+                        if (isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content)
+                                and not t.follow_through):    # 打断时那条「已中断」的工具结果不算
                             t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
                     elif isinstance(m, RateLimitEvent):
                         try:
@@ -330,6 +346,12 @@ class Chat:
                             error = m.result or "; ".join(m.errors or []) or m.subtype
                         else:
                             result = f"{result}\n\n{m.result}" if result and m.result else (m.result or result)
+                        log.debug("[%s] 一轮结束 %s，待看补充 %d 条，立即发送 %s，停止中 %s", self.chat_id[-6:], m.subtype,
+                                  len(t.unseen), t.follow_through, self.stopping)
+                        if t.follow_through and t.unseen:
+                            t.follow_through, self.stopping, result, error = False, False, None, None
+                            grace = True              # 被打断的这一轮不算，接着读 Claude 处理补充的那一轮
+                            continue
                         if t.unseen and not self.stopping:
                             grace = True
                             continue

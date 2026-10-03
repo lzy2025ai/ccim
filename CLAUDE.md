@@ -9,9 +9,12 @@
 - `ccim/session.py`：`Chat` = 一个对话地址对应一个 Claude 会话。worker 协程独占 `ClaudeSDKClient`（连接、提问、断开都在里面做，
   跨协程断开会出 anyio 的错，所以 /new、/resume 是往队列里放 RESET / ATTACH 信号，由 worker 自己处理）；
   空闲 30 分钟断开，按 session_id 恢复；工作中卡片；`send_file` 工具
-- 任务进行中又来消息（bridge `_ask_followup`）：卡片三选一。「补充给它」= 在这一轮里再 `client.query`，实测 Claude Code 会在下一个
-  工具结果时一起交给模型、并进同一轮结果；补充来得晚（最后一个工具结果之后）时，这一轮结束后再等 INJECT_GRACE 秒，
-  Claude 接着处理就读到下一个结果为止，没处理就排到队首重跑，不会丢。「打断」= interrupt 后把这条放队首，其余排队保留
+- 任务进行中又来消息（bridge `_ask_followup`）：直接补充（在这一轮里再 `client.query`，和 Claude Code 自己的做法一样），
+  卡片上一个「立即发送」。实测：补充会在下一个工具结果时一起交给模型，进同一轮结果；来得晚（最后一个工具结果之后）时，
+  这一轮结束后再等 INJECT_GRACE 秒，Claude 接着处理就读到下一个结果，没处理就排到队首重跑。
+  「立即发送」（`Chat.send_now`）：Claude 还没看到补充时只打断、不重发（Claude Code 打断后会自己接着处理排着的输入，
+  重发会做两次、后面的回复全错位），并且打断产生的「已中断」工具结果不能当成「已看到」；已经看到了就打断后重发一次。
+  那一轮结束后按钮收掉（`Turn.on_end`），免得再点重做
 - `ccim/approval.py`：`can_use_tool` → 审批卡片 → 按钮 / 文字 y n / 10 分钟超时
 - `ccim/commands.py`：`/new` `/resume` `/stop` `/status` `/model` `/effort` `/help`，其他斜杠命令原样交给 Claude
 - `ccim/handoff.py`：`ccim handoff`，把 Claude Code 里正在进行的对话（`CLAUDE_CODE_SESSION_ID`）转到飞书私聊。

@@ -174,7 +174,8 @@ class Feishu(Channel):
         self.loop = None
         self.ws = None
         self.thread_error = None
-        self.seen = {}                        # 飞书可能重复推送同一条消息，按消息 id 去重
+        self.seen = {}
+        self.thread_roots = {}                # 话题 id → 话题第一条消息 id；往话题里主动发消息要回复它                        # 飞书可能重复推送同一条消息，按消息 id 去重
 
     # ----- 长连接 -----
 
@@ -269,6 +270,8 @@ class Feishu(Channel):
         if not bot_id and msg.mentions:       # 没拿到机器人自己的 id 时退一步：群里机器人只收得到 @ 它的消息
             mentioned = True
         text, files = self._parse(msg.message_type, content, msg.mentions or [], bot_id)
+        if msg.thread_id and msg.root_id:
+            self.thread_roots[msg.thread_id] = msg.root_id
         inc = Incoming(chat_id=msg.chat_id, chat_type=msg.chat_type, sender_id=sender.sender_id.open_id,
                        message_id=msg.message_id, text=text, mentioned_bot=mentioned,
                        files=files, kind=msg.message_type, thread_id=msg.thread_id, root_id=msg.root_id)
@@ -358,6 +361,9 @@ class Feishu(Channel):
         """addr 带话题时：有 reply_to 就回复进话题，没有就直接发到话题里。
         uid：飞书按它去重（一小时内），同一条消息重发时传同一个 uid，就不会收到两条。"""
         chat_id, thread_id = parse_address(addr)
+        if thread_id and not reply_to:
+            # 飞书不接受直接往话题里发消息（receive_id_type=thread_id 会报字段校验失败），改成回复话题里的第一条
+            reply_to = self.thread_roots.get(thread_id)
         content = json.dumps(content, ensure_ascii=False)
         uid = uid or uuid.uuid4().hex
         if reply_to:

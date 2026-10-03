@@ -6,8 +6,8 @@
 import asyncio, logging, os, shutil, subprocess, sys, time, uuid
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage,
-                              StreamEvent, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage, create_sdk_mcp_server,
-                              tool)
+                              StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
+                              create_sdk_mcp_server, tool)
 
 from . import registry, usage
 from .progress import clock, describe_tool, short
@@ -21,6 +21,7 @@ SHOW_STEPS = 6
 RESET = object()
 ATTACH = object()
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
+STRAY_WAIT = 30           # 收到一个什么都没说的「一轮结束」（比如接上对话时补的后台任务通知那一轮）后，再等多久用户这一轮的结果
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
 # 优先用本机装的 claude，和终端里的版本、登录一致；找不到再用 SDK 自带的
@@ -303,16 +304,26 @@ class Chat:
                 await self.client.query(prompt)
                 it = self.client.receive_messages().__aiter__()
                 grace = False                 # 这一轮已结束、正在等 Claude 处理来得太晚的补充
+                stray = False                 # 收到的「一轮结束」不是这一轮的，接着等
                 while True:
+                    wait = INJECT_GRACE if grace else STRAY_WAIT if stray else None
                     try:
-                        m = await (asyncio.wait_for(it.__anext__(), INJECT_GRACE) if grace else it.__anext__())
+                        m = await (asyncio.wait_for(it.__anext__(), wait) if wait else it.__anext__())
                     except StopAsyncIteration:
                         break
                     except asyncio.TimeoutError:
-                        for p, r in t.unseen:     # Claude 没接着处理：照常排到最前面
-                            self._push_front((p, r, None))
-                        t.unseen = []
+                        if grace:
+                            for p, r in t.unseen:     # Claude 没接着处理：照常排到最前面
+                                self._push_front((p, r, None))
+                            t.unseen = []
                         break
+                    if stray and not isinstance(m, RateLimitEvent):
+                        stray = False
+                    if isinstance(m, SystemMessage) and m.subtype == "init":
+                        sid = (m.data or {}).get("session_id")
+                        if sid and sid != self.session_id:  # 一开始就记下，第一轮就被打断也能接上
+                            self.session_id = sid
+                            self.b.save(self.chat_id, session_id=sid)
                     if grace and not isinstance(m, RateLimitEvent):
                         grace, t.unseen = False, []   # Claude 接着处理补充了，读到下一轮结束
                     if isinstance(m, UserMessage):
@@ -348,6 +359,12 @@ class Chat:
                             result = f"{result}\n\n{m.result}" if result and m.result else (m.result or result)
                         log.debug("[%s] 一轮结束 %s，待看补充 %d 条，立即发送 %s，停止中 %s", self.chat_id[-6:], m.subtype,
                                   len(t.unseen), t.follow_through, self.stopping)
+                        said = (m.result or t.text or "").strip()
+                        if (not self.stopping and not m.is_error and not t.steps and not t.unseen
+                                and said in ("", "No response requested.")):
+                            # 接上对话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空；用户这一轮还在后面
+                            result, t.text, stray = None, "", True
+                            continue
                         if t.follow_through and t.unseen:
                             t.follow_through, self.stopping, result, error = False, False, None, None
                             grace = True              # 被打断的这一轮不算，接着读 Claude 处理补充的那一轮

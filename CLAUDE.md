@@ -15,6 +15,8 @@
   「立即发送」（`Chat.send_now`）：Claude 还没看到补充时只打断、不重发（Claude Code 打断后会自己接着处理排着的输入，
   重发会做两次、后面的回复全错位），并且打断产生的「已中断」工具结果不能当成「已看到」；已经看到了就打断后重发一次。
   那一轮结束后按钮收掉（`Turn.on_end`），免得再点重做
+- 一轮的结束不能只看第一个 `ResultMessage`：接上会话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空，
+  要接着读（`STRAY_WAIT`）。session_id 在 `SystemMessage(init)` 时就存，第一轮被打断也能接上。见 docs/排查-2026-10-03-*.md
 - `ccim/approval.py`：`can_use_tool` → 审批卡片 → 按钮 / 文字 y n / 10 分钟超时
 - `ccim/commands.py`：`/new` `/resume` `/stop` `/status` `/model` `/effort` `/help`，其他斜杠命令原样交给 Claude
 - `ccim/handoff.py`：`ccim handoff`，把 Claude Code 里正在进行的对话（`CLAUDE_CODE_SESSION_ID`）转到飞书私聊。

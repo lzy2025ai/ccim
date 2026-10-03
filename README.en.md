@@ -86,6 +86,7 @@ Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it 
 |---|---|
 | Send a direct message | An "OnIt" reaction appears on your message to show it was received. Your DM is one long-running conversation that survives restarts |
 | Ask it to do something | A "Working" card shows the latest steps live; it turns green when done, and the answer arrives as a separate message |
+| Send another message while it's still working | A card asks what to do: add it to the current task (it sees it at the next step) / interrupt and do this instead / do it afterwards. No choice in 60 seconds means add it to the current task |
 | Hit an operation that needs approval | An approval card appears: Allow / Allow for this session / Deny — or just reply `y` or `n`. Unanswered after 10 minutes counts as Deny |
 | Send an image or file | Saved to the project's `.ccim/inbox/`, where Claude can read it |
 | "Send me the cover image" | It sends images, videos or files into the chat (images up to 10 MB, files up to 30 MB) |

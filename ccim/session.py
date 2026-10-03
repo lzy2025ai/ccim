@@ -6,7 +6,8 @@
 import asyncio, logging, os, shutil, subprocess, sys, time, uuid
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage,
-                              StreamEvent, TextBlock, ToolUseBlock, create_sdk_mcp_server, tool)
+                              StreamEvent, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage, create_sdk_mcp_server,
+                              tool)
 
 from . import registry, usage
 from .progress import clock, describe_tool, short
@@ -20,6 +21,7 @@ SHOW_STEPS = 6
 RESET = object()
 ATTACH = object()
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
+INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
 # 优先用本机装的 claude，和终端里的版本、登录一致；找不到再用 SDK 自带的
 CLI = shutil.which("claude") or next((p for p in map(os.path.expanduser, ["~/.local/bin/claude", "~/.claude/local/claude",
@@ -62,6 +64,7 @@ class Turn:
     def __init__(self):
         self.start = time.monotonic()
         self.ready = None                     # Claude 连上的时刻
+        self.unseen = []                      # 插进来、Claude 可能还没看到的消息 [(内容, reply_to)]
         self.steps = []
         self.text = ""                        # 最近一段写完的文字
         self.live = ""                        # 正在写的文字（流式）
@@ -113,10 +116,39 @@ class Chat:
     def busy(self):
         return self.turn is not None
 
+    async def inject(self, prompt, reply_to=None):
+        """把消息交给正在做的这一轮：Claude 下一步就会看到。这一轮没在跑就返回 False，由调用方照常排队。"""
+        t = self.turn
+        if not t or not t.ready or not self.client or self.stopping:
+            return False
+        try:
+            await self.client.query(prompt)
+        except Exception:
+            log.warning("补充消息没交给 Claude", exc_info=True)
+            return False
+        t.unseen.append((prompt, reply_to))
+        t.steps.append("收到补充：" + short(prompt, 40))
+        return True
+
+    async def interrupt_with(self, prompt, reply_to=None, message_id=None):
+        """停掉正在做的这一轮，马上处理这条；排着队的其他消息保留。"""
+        react = asyncio.create_task(self.b.channel.add_reaction(message_id)) if message_id else None
+        self._push_front((prompt, reply_to, react))
+        await self._interrupt()
+
+    def _push_front(self, item):
+        self.queue.put_nowait(item)
+        self.queue._queue.rotate(1)           # 刚放进去的挪到最前面
+        if not self.worker or self.worker.done():
+            self.worker = asyncio.create_task(self._work())
+
     async def stop(self):
         while not self.queue.empty():
             _, _, react = self.queue.get_nowait()
             asyncio.create_task(self._unreact(react))
+        return await self._interrupt()
+
+    async def _interrupt(self):
         if not self.turn:
             return False
         self.stopping = True
@@ -254,8 +286,24 @@ class Chat:
             t.ready = time.monotonic()
             if not self.stopping:
                 await self.client.query(prompt)
-                async for m in self.client.receive_response():
-                    if isinstance(m, RateLimitEvent):
+                it = self.client.receive_messages().__aiter__()
+                grace = False                 # 这一轮已结束、正在等 Claude 处理来得太晚的补充
+                while True:
+                    try:
+                        m = await (asyncio.wait_for(it.__anext__(), INJECT_GRACE) if grace else it.__anext__())
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.TimeoutError:
+                        for p, r in t.unseen:     # Claude 没接着处理：照常排到最前面
+                            self._push_front((p, r, None))
+                        t.unseen = []
+                        break
+                    if grace and not isinstance(m, RateLimitEvent):
+                        grace, t.unseen = False, []   # Claude 接着处理补充了，读到下一轮结束
+                    if isinstance(m, UserMessage):
+                        if isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content):
+                            t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
+                    elif isinstance(m, RateLimitEvent):
                         try:
                             usage.record(m.rate_limit_info)
                         except Exception:
@@ -281,7 +329,11 @@ class Chat:
                         if m.is_error and not self.stopping:
                             error = m.result or "; ".join(m.errors or []) or m.subtype
                         else:
-                            result = m.result
+                            result = f"{result}\n\n{m.result}" if result and m.result else (m.result or result)
+                        if t.unseen and not self.stopping:
+                            grace = True
+                            continue
+                        break
         finally:
             ticker.cancel()
         if self.stopping:

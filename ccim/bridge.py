@@ -1,12 +1,14 @@
 """把渠道收到的消息分给各个聊天的 Claude 会话；谁能用、群里怎么用都在这里判断。"""
-import asyncio, logging, os, time
+import asyncio, logging, os, time, uuid
 
 from . import commands, registry
 from .approval import Approvals
 from .channels.base import address
+from .progress import clock
 from .session import Caffeinate, Chat
 
 log = logging.getLogger("ccim.bridge")
+FOLLOWUP_WAIT = 60
 
 
 def _clip(s, n):
@@ -22,6 +24,7 @@ class Bridge:
         self.approvals = None
         self.chats = {}
         self.background = set()               # 后台补发等任务，留着引用免得被回收
+        self.followups = {}                   # 任务进行中追加的消息，等用户选怎么处理：id → dict
         self.caffeinate = Caffeinate()
         self.inbox = os.path.join(path, ".ccim", "inbox")
 
@@ -124,12 +127,83 @@ class Bridge:
                 prompt = f"（用户针对下面这条消息开了一个话题，接下来在话题里讨论它）\n「{root[:800]}」\n\n{prompt}"
         if paths:
             prompt += ("\n\n" if prompt else "") + "用户发来了文件，已保存到：\n" + "\n".join(paths)
+        if chat.busy:
+            await self._ask_followup(chat, addr, prompt, text, reply_to, inc)
+            return
         ahead = chat.submit(prompt, reply_to, inc.message_id)
         if ahead > 0:
             await self.channel.send_text(addr, f"收到，前面还有 {ahead} 条在处理，轮到它再开始。", reply_to)
 
+    # ----- 任务进行中又来了一条：问用户补充、打断还是排队 -----
+
+    async def _ask_followup(self, chat, addr, prompt, text, reply_to, inc):
+        fid = uuid.uuid4().hex[:10]
+        t = chat.turn
+        steps = f"已做 {len(t.steps)} 步，" if t.steps else ""
+        quote = _clip(text or "（文件）", 120)
+        btn = lambda label, style, choice: {"text": label, "style": style,
+                                            "value": {"ccim": "followup", "id": fid, "choice": choice}}
+        card = {"title": "前面的任务还在做", "color": "blue",
+                "body": f"{steps}用时 {clock(time.monotonic() - t.start)}。这条消息怎么处理？\n\n> {quote}",
+                "buttons": [btn("补充给它", "primary", "inject"), btn("打断，改做这条", "danger", "interrupt"),
+                            btn("做完再说", "default", "queue")],
+                "note": f"{FOLLOWUP_WAIT} 秒不选就补充给它"}
+        f = {"chat": chat, "prompt": prompt, "quote": quote, "reply_to": reply_to, "message_id": inc.message_id,
+             "sender": inc.sender_id, "card_id": None}
+        self.followups[fid] = f
+        try:
+            f["card_id"] = await self.channel.send_card(addr, card, reply_to)
+        except Exception:
+            log.warning("发送选择卡片失败，直接补充给正在做的任务", exc_info=True)
+        f["timer"] = self._bg(self._followup_timeout(fid))
+
+    async def _followup_timeout(self, fid):
+        await asyncio.sleep(FOLLOWUP_WAIT)
+        f = self.followups.get(fid)
+        if f:
+            card = self._resolve_followup(fid, "inject", auto=True)
+            if card and f.get("card_id"):
+                try:
+                    await self.channel.update_card(f["card_id"], card)
+                except Exception:
+                    log.warning("更新选择卡片失败", exc_info=True)
+
+    def _resolve_followup(self, fid, choice, auto=False):
+        """返回更新后的卡片；真正的处理放到后台做（按钮回调要在 2.5 秒内返回）。"""
+        f = self.followups.pop(fid, None)
+        if not f:
+            return None
+        if not auto and f.get("timer"):
+            f["timer"].cancel()
+        chat, prompt, reply_to, mid = f["chat"], f["prompt"], f["reply_to"], f["message_id"]
+
+        async def run():
+            if choice == "inject":
+                if not await chat.inject(prompt, reply_to):
+                    chat.submit(prompt, reply_to, mid)    # 前面的刚好做完了：照常处理
+            elif choice == "interrupt":
+                await chat.interrupt_with(prompt, reply_to, mid)
+            else:
+                chat.submit(prompt, reply_to, mid)
+        self._bg(run())
+        title = {"inject": "已补充给正在做的任务" if not auto else "没选，已补充给正在做的任务",
+                 "interrupt": "已打断，改做这条", "queue": "排在后面，前面做完就处理"}[choice]
+        return {"title": title, "color": "grey", "body": f"> {f['quote']}"}
+
+    def _bg(self, coro):
+        task = asyncio.create_task(coro)
+        self.background.add(task)
+        task.add_done_callback(self.background.discard)
+        return task
+
     async def on_action(self, act):
         v = act.value or {}
+        if v.get("ccim") == "followup":
+            f = self.followups.get(v.get("id"))
+            if f and act.operator_id not in (self.owner(), f["sender"]):
+                return None, "只有发这条消息的人能选"
+            card = self._resolve_followup(v.get("id"), v.get("choice"))
+            return (card, None) if card else (None, "这条已经处理过了")
         if v.get("ccim") != "approve":
             return None, None
         if act.operator_id != self.owner():

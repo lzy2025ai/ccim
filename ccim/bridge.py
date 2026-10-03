@@ -4,9 +4,11 @@ import asyncio, logging, os, time, uuid
 from . import commands, registry
 from .approval import Approvals
 from .channels.base import address
+from .progress import clock
 from .session import Caffeinate, Chat
 
 log = logging.getLogger("ccim.bridge")
+FOLLOWUP_WAIT = 60
 
 
 def _clip(s, n):
@@ -132,47 +134,61 @@ class Bridge:
         if ahead > 0:
             await self.channel.send_text(addr, f"收到，前面还有 {ahead} 条在处理，轮到它再开始。", reply_to)
 
-    # ----- 任务进行中又来了一条：直接补充给它，卡片上给一个「立即发送」（停下手头的，先做这条） -----
+    # ----- 任务进行中又来了一条：问用户补充、打断还是排队 -----
 
     async def _ask_followup(self, chat, addr, prompt, text, reply_to, inc):
-        t = chat.turn
-        if not await chat.inject(prompt, reply_to):
-            chat.submit(prompt, reply_to, inc.message_id)     # 前面的刚好做完：照常处理
-            return
         fid = uuid.uuid4().hex[:10]
-        f = {"chat": chat, "turn": t, "prompt": prompt, "quote": _clip(text or "（文件）", 120), "reply_to": reply_to,
-             "message_id": inc.message_id, "sender": inc.sender_id, "card_id": None}
+        t = chat.turn
+        steps = f"已做 {len(t.steps)} 步，" if t.steps else ""
+        quote = _clip(text or "（文件）", 120)
+        btn = lambda label, style, choice: {"text": label, "style": style,
+                                            "value": {"ccim": "followup", "id": fid, "choice": choice}}
+        card = {"title": "前面的任务还在做", "color": "blue",
+                "body": f"{steps}用时 {clock(time.monotonic() - t.start)}。这条消息怎么处理？\n\n> {quote}",
+                "buttons": [btn("补充给它", "primary", "inject"), btn("打断，改做这条", "danger", "interrupt"),
+                            btn("做完再说", "default", "queue")],
+                "note": f"{FOLLOWUP_WAIT} 秒不选就补充给它"}
+        f = {"chat": chat, "prompt": prompt, "quote": quote, "reply_to": reply_to, "message_id": inc.message_id,
+             "sender": inc.sender_id, "card_id": None}
         self.followups[fid] = f
-        card = {"title": "已补充给正在做的任务", "color": "blue",
-                "body": f"它做完当前这一步就会看到。\n\n> {f['quote']}",
-                "buttons": [{"text": "立即发送", "style": "primary", "value": {"ccim": "followup", "id": fid}}],
-                "note": "立即发送会停下手头的，先处理这条"}
         try:
             f["card_id"] = await self.channel.send_card(addr, card, reply_to)
         except Exception:
-            log.warning("发送补充卡片失败", exc_info=True)
-        t.on_end.append(lambda: self._bg(self._followup_done(fid)))
+            log.warning("发送选择卡片失败，直接补充给正在做的任务", exc_info=True)
+        f["timer"] = self._bg(self._followup_timeout(fid))
 
-    def _followup_card(self, f, title):
-        return {"title": title, "color": "grey", "body": f"> {f['quote']}"}
+    async def _followup_timeout(self, fid):
+        await asyncio.sleep(FOLLOWUP_WAIT)
+        f = self.followups.get(fid)
+        if f:
+            card = self._resolve_followup(fid, "inject", auto=True)
+            if card and f.get("card_id"):
+                try:
+                    await self.channel.update_card(f["card_id"], card)
+                except Exception:
+                    log.warning("更新选择卡片失败", exc_info=True)
 
-    async def _followup_done(self, fid):
-        """那一轮做完了：去掉按钮，免得再点又重做一遍。"""
-        f = self.followups.pop(fid, None)
-        if f and f.get("card_id"):
-            try:
-                await self.channel.update_card(f["card_id"], self._followup_card(f, "已补充给任务"))
-            except Exception:
-                log.warning("更新补充卡片失败", exc_info=True)
-
-    def _send_now(self, fid):
+    def _resolve_followup(self, fid, choice, auto=False):
+        """返回更新后的卡片；真正的处理放到后台做（按钮回调要在 2.5 秒内返回）。"""
         f = self.followups.pop(fid, None)
         if not f:
             return None
-        if f["chat"].turn is not f["turn"]:          # 那一轮已经结束，它已经看到这条了
-            return self._followup_card(f, "已补充给任务")
-        self._bg(f["chat"].send_now(f["prompt"], f["reply_to"], f["message_id"]))
-        return self._followup_card(f, "已停下手头的，正在处理这条")
+        if not auto and f.get("timer"):
+            f["timer"].cancel()
+        chat, prompt, reply_to, mid = f["chat"], f["prompt"], f["reply_to"], f["message_id"]
+
+        async def run():
+            if choice == "inject":
+                if not await chat.inject(prompt, reply_to):
+                    chat.submit(prompt, reply_to, mid)    # 前面的刚好做完了：照常处理
+            elif choice == "interrupt":
+                await chat.interrupt_with(prompt, reply_to, mid)
+            else:
+                chat.submit(prompt, reply_to, mid)
+        self._bg(run())
+        title = {"inject": "已补充给正在做的任务" if not auto else "没选，已补充给正在做的任务",
+                 "interrupt": "已打断，改做这条", "queue": "排在后面，前面做完就处理"}[choice]
+        return {"title": title, "color": "grey", "body": f"> {f['quote']}"}
 
     def _bg(self, coro):
         task = asyncio.create_task(coro)
@@ -186,7 +202,7 @@ class Bridge:
             f = self.followups.get(v.get("id"))
             if f and act.operator_id not in (self.owner(), f["sender"]):
                 return None, "只有发这条消息的人能选"
-            card = self._send_now(v.get("id"))
+            card = self._resolve_followup(v.get("id"), v.get("choice"))
             return (card, None) if card else (None, "这条已经处理过了")
         if v.get("ccim") != "approve":
             return None, None

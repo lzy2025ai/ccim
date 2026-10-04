@@ -122,7 +122,7 @@ class CodexChat(Chat):
     async def _turn_inner(self, prompt, reply_to):
         t = self.turn = Turn()
         ticker = asyncio.create_task(self._tick(t, reply_to))
-        result, error = None, None
+        result, error, last_error = None, None, None
         try:
             exe = find_codex()
             if not exe:
@@ -167,12 +167,21 @@ class CodexChat(Chat):
                             t.steps.append(d)
                 elif kind == "turn.completed":
                     result = t.text
-                elif kind in ("turn.failed", "error"):
+                elif kind == "error":
+                    # 不一定是失败：网络断了 Codex 会自己重连（「Reconnecting... 2/5」），之后照样回答。先记下，最后没有回答才算出错
+                    last_error = ev.get("message") or last_error
+                    if "Reconnecting" in (ev.get("message") or "") and "网络不稳，重连中" not in t.steps:
+                        t.steps.append("网络不稳，重连中")
+                elif kind == "turn.failed":
                     msg = (ev.get("error") or {}).get("message") if isinstance(ev.get("error"), dict) else ev.get("message")
                     if not self.stopping:
-                        error = msg or "Codex 出错了"
+                        error = msg or last_error or "Codex 出错了"
             await self.proc.wait()
             stderr = (await err_task).decode("utf-8", "replace")
+            if not result and t.text and not error:
+                result = t.text                   # 没等到 turn.completed 也有回答：照发
+            if not result and not error and not self.stopping and last_error:
+                error = last_error
             if self.proc.returncode not in (0, None) and not result and not error and not self.stopping:
                 lines = [l for l in stderr.splitlines() if l.strip() and "failed to refresh available models" not in l]
                 error = short(lines[-1] if lines else f"Codex 异常退出（{self.proc.returncode}）", 300)

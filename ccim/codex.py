@@ -27,6 +27,7 @@ NOTE = """\
 - 没有交互式提问框，有问题直接在回复里问。
 
 """
+RECONNECT = "网络不稳，重连中"
 SEND_RE = re.compile(r"^\s*\[发送文件\]\s*(.+?)\s*$", re.M)
 
 
@@ -170,8 +171,8 @@ class CodexChat(Chat):
                 elif kind == "error":
                     # 不一定是失败：网络断了 Codex 会自己重连（「Reconnecting... 2/5」），之后照样回答。先记下，最后没有回答才算出错
                     last_error = ev.get("message") or last_error
-                    if "Reconnecting" in (ev.get("message") or "") and "网络不稳，重连中" not in t.steps:
-                        t.steps.append("网络不稳，重连中")
+                    if "Reconnecting" in (ev.get("message") or "") and RECONNECT not in t.steps:
+                        t.steps.append(RECONNECT)
                 elif kind == "turn.failed":
                     msg = (ev.get("error") or {}).get("message") if isinstance(ev.get("error"), dict) else ev.get("message")
                     if not self.stopping:
@@ -188,6 +189,8 @@ class CodexChat(Chat):
         finally:
             ticker.cancel()
             self.proc = None
+        if result and not error:
+            t.steps = [s for s in t.steps if s != RECONNECT]   # 已经回答了，重连只是过程，不留在卡片上
         if result:
             result = await self._send_files(result)
         await self._finish(t, result, error, reply_to)

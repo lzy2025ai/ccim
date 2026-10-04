@@ -25,6 +25,21 @@ HELP = """\
 也可以发图片和文件给我。"""
 
 
+CODEX_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"]
+CODEX_HELP = """\
+**直接发消息**就是在「{name}」项目里和 Codex 对话。它干活时再发的消息，会等手头这件做完再处理。
+
+/new　开始新对话
+/stop　停下正在做的事
+/restart　重启这个机器人
+/status　当前状态
+/model 名字　换模型
+/effort 等级　思考深度：minimal、low、medium、high、xhigh
+/help　显示这段说明
+
+也可以发图片和文件给我。"""
+
+
 def _model_name(m):
     return {"claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-4-5-20251001": "haiku",
             "claude-fable-5-1": "fable"}.get(m, m)
@@ -33,7 +48,8 @@ def _model_name(m):
 def _setting(chat):
     """「模型 · 思考深度」，没单独设置的标明跟随 Claude Code 设置。"""
     m, e, m_set, e_set = chat.effective()
-    follow = "（跟随 Claude Code 设置）" if not (m_set or e_set) else ""
+    who = "Codex" if getattr(chat, "agent", None) == "codex" else "Claude Code"
+    follow = f"（跟随 {who} 设置）" if not (m_set or e_set) else ""
     return f"**模型**：{_model_name(m)}　**思考深度**：{e}{follow}"
 
 
@@ -78,8 +94,12 @@ async def handle(bridge, chat, text, reply_to, sender=None):
     cmd, arg = cmd.lower(), arg.strip()
     say = lambda s: bridge.channel.send_text(chat.chat_id, s, reply_to)
 
+    codex = getattr(chat, "agent", None) == "codex"
+    if codex and cmd in ("/resume", "/usage"):
+        await say("这个项目用的是 Codex，没有这个功能。")
+        return True
     if cmd == "/help":
-        await say(HELP.format(name=bridge.name))
+        await say(HELP.format(name=bridge.name) if not codex else CODEX_HELP.format(name=bridge.name))
     elif cmd == "/new":
         await chat.reset()
         await say("已开始新对话。")
@@ -104,12 +124,20 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         else:
             state = "空闲"
         waiting = sum(1 for item in chat.queue._queue if isinstance(item[0], str))
-        lines = [f"**项目**：{bridge.name}",
+        lines = [f"**项目**：{bridge.name}" + ("（Codex）" if codex else ""),
                  f"**状态**：{state}" + (f"，还有 {waiting} 条排队" if waiting else ""),
                  _setting(chat),
-                 *([f"**额度**：{q}"] if (q := _quota()) else []),
+                 *([f"**额度**：{q}"] if not codex and (q := _quota()) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
+    elif cmd == "/model" and codex:
+        if not arg:
+            await say(f"现在用的是 {chat.effective()[0]}。要换的话发 /model 加模型名。")
+        elif not re.fullmatch(r"[A-Za-z0-9._\-]+", arg):
+            await say("模型名不对。")
+        else:
+            chat.set(model=arg)
+            await say(f"好，接下来用 {arg}。")
     elif cmd == "/model":
         if not arg:
             await say(f"现在用的是 {_model_name(chat.effective()[0])}。可选：{'、'.join(MODELS)}，或者完整的模型名。")
@@ -119,8 +147,9 @@ async def handle(bridge, chat, text, reply_to, sender=None):
             chat.set(model=arg.lower() if arg.lower() in MODELS else arg)
             await say(f"好，接下来用 {_model_name(chat.model)}。")
     elif cmd == "/effort":
-        if arg.lower() not in EFFORTS:
-            await say(f"现在是 {chat.effective()[1]}。可选：{'、'.join(EFFORTS)}")
+        levels = CODEX_EFFORTS if codex else EFFORTS
+        if arg.lower() not in levels:
+            await say(f"现在是 {chat.effective()[1]}。可选：{'、'.join(levels)}")
         else:
             chat.set(effort=arg.lower())
             await say(f"好，思考深度改成 {chat.effort}。")

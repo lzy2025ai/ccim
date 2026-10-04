@@ -139,10 +139,20 @@ ccim config model=sonnet       # default model for this project
 ccim config effort=high        # default effort level for this project
 ccim config reaction=THUMBSUP  # reaction added to incoming messages (default OnIt)
 ccim config runtime=dev        # run the code under development (default: stable, once one is installed)
+ccim config agent=codex        # use Codex for this project instead (default: claude)
 ccim config                    # show current settings
 ```
 
 If you don't set a model or effort level, ccim follows Claude Code's own settings (the project's `.claude/settings*.json`, then `~/.claude/settings.json`) — the same ones your terminal uses. `/model` and `/effort` in a chat only apply to that chat. Run `ccim restart` after changing settings.
+
+## Using Codex
+
+After `ccim config agent=codex`, the project talks to Codex in Feishu (requires the ChatGPT desktop app or the Codex CLI, logged in).
+It works much like Claude Code, with a few differences:
+
+- Messages sent while it's working wait until the current task is done (Codex doesn't take mid-task additions); use `/stop` to stop
+- Model, effort level and permissions follow Codex's own settings (`~/.codex/config.toml`); project instructions go in `AGENTS.md`
+- No `/resume`, `/usage`, or handoff from the desktop
 
 ## Security
 

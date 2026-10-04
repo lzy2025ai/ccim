@@ -45,7 +45,11 @@ class Bridge:
     def chat(self, addr, chat_type, fork_from=None):
         c = self.chats.get(addr)
         if not c:
-            c = self.chats[addr] = Chat(self, addr, chat_type, fork_from)
+            cls = Chat
+            if self.entry.get("agent") == "codex":
+                from .codex import CodexChat
+                cls = CodexChat
+            c = self.chats[addr] = cls(self, addr, chat_type, fork_from)
             if chat_type == "group" and not self.saved(addr).get("name"):
                 task = asyncio.create_task(self._remember_name(addr))   # 群名给 ccim show 用
                 self.background.add(task)
@@ -136,7 +140,9 @@ class Bridge:
     async def _ask_followup(self, chat, addr, prompt, text, reply_to, inc):
         t = chat.turn
         if not await chat.inject(prompt, reply_to):
-            chat.submit(prompt, reply_to, inc.message_id)     # 前面的刚好做完：照常处理
+            ahead = chat.submit(prompt, reply_to, inc.message_id)  # 前面的刚好做完，或者助手不接受中途补充：照常排队
+            if ahead > 0:
+                await self.channel.send_text(addr, "收到，手头这件做完就处理这条。", reply_to)
             return
         react = asyncio.create_task(self.channel.add_reaction(inc.message_id))   # 表示收到了，这一轮做完去掉
         t.on_end.append(lambda: self._bg(chat._unreact(react)))

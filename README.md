@@ -139,10 +139,20 @@ ccim config model=sonnet       # 这个项目的默认模型
 ccim config effort=high        # 这个项目的默认思考深度
 ccim config reaction=THUMBSUP  # 收到消息时加的表情（默认 OnIt）
 ccim config runtime=dev        # 跑开发中的代码（默认：装过稳定版就跑稳定版）
+ccim config agent=codex        # 这个项目改用 Codex（默认 claude）
 ccim config                    # 查看当前设置
 ```
 
 模型和思考深度不设的话，跟随 Claude Code 自己的设置（项目的 `.claude/settings*.json`，其次是 `~/.claude/settings.json`），和你在终端里用的一致。聊天里用 `/model`、`/effort` 改的只对那个聊天生效。改完设置要 `ccim restart` 才生效。
+
+## 用 Codex
+
+`ccim config agent=codex` 后，这个项目在飞书里对话的就是 Codex（需要装 ChatGPT 桌面版或 Codex 命令行，并已登录）。
+体验和 Claude Code 基本一样，几处不同：
+
+- 它干活时再发的消息，会等手头这件做完再处理（Codex 不接受中途补充）；想停下用 `/stop`
+- 模型、思考深度、权限跟随 Codex 自己的设置（`~/.codex/config.toml`），项目说明写在 `AGENTS.md`
+- 没有 `/resume`、`/usage`，也不能从桌面端转过来（handoff）
 
 ## 安全
 

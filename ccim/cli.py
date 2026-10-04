@@ -15,7 +15,7 @@ from .channels.feishu import Feishu
 CHANNELS = {"feishu": Feishu}
 CAPS = ["handoff", "safe-restart"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
-               "reaction": None, "runtime": ("dev", "stable")}
+               "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
 
 
 # ---------- 运行 ----------
@@ -188,12 +188,19 @@ def cmd_list(args):
         state = ("在线" if s.get("online") else "连接中") + how if r else (
             "离线（等待自动重启）" if daemon.is_always(path) else "离线")
         ver = (runtime.describe(s.get("python")) + ("（顶替中）" if s.get("fallback") else "")) if r else ""
-        rows.append((os.path.basename(path), e.get("channel", ""), e.get("bot_name") or e.get("app_id", ""), state,
+        rows.append((os.path.basename(path), e.get("channel", ""),
+                     (e.get("bot_name") or e.get("app_id", "")) + ("（Codex）" if e.get("agent") == "codex" else ""), state,
                      ver, path))
     width = lambda s: sum(2 if ord(c) > 0x2e80 else 1 for c in s)
     cols = [max(width(r[i]) for r in rows) for i in range(5)]
     for r in rows:
         print("  ".join(r[i] + " " * (cols[i] - width(r[i])) for i in range(5)) + "  " + r[5])
+
+
+def _codex_effective(path, model=None, effort=None):
+    from .codex import defaults
+    m, e = defaults(path)
+    return model or m or "默认", effort or e or "默认", bool(model), bool(effort)
 
 
 def cmd_show(args):
@@ -205,12 +212,15 @@ def cmd_show(args):
         status = f"{'在线' if s.get('online') else '连接中'}（{how}，进程 {r[0]}，{s.get('started', '')} 启动）"
     else:
         status = "离线（等待自动重启）" if daemon.is_always(path) else "离线"
-    default_model, default_effort, m_set, e_set = registry.effective(path, e.get("model"), e.get("effort"))
-    follow = "（跟随 Claude Code 设置）"
+    codex = e.get("agent") == "codex"
+    eff = _codex_effective if codex else registry.effective
+    default_model, default_effort, m_set, e_set = eff(path, e.get("model"), e.get("effort"))
+    follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
     rows = [
         ("项目", os.path.basename(path)),
         ("路径", path),
         ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{ {'feishu': '飞书'}.get(e.get('channel'), e.get('channel')) }）"),
+        ("助手", "Codex" if codex else "Claude Code"),
         ("状态", status),
         ("版本", (runtime.describe(s.get("python")) + ("（新版本没起来，暂时顶替）" if s.get("fallback") else "")
                   if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
@@ -237,7 +247,7 @@ def cmd_show(args):
     for key, c in sorted(chats.items(), key=lambda kv: kv[1].get("last_active", ""), reverse=True):
         kind = kinds.get(c.get("type"), "聊天") + ("·话题" if "|" in key else "")
         title = f"{kind}「{c['name']}」" if c.get("name") else kind
-        model, effort, _, _ = registry.effective(path, c.get("model") or e.get("model"), c.get("effort") or e.get("effort"))
+        model, effort, _, _ = eff(path, c.get("model") or e.get("model"), c.get("effort") or e.get("effort"))
         custom = "（本聊天单独设置）" if c.get("model") or c.get("effort") else ""
         sid = (c.get("session_id") or "")[:8] or "新对话"
         lines.append((title, f"{model} · {effort}{custom}", sid, c.get("last_active") or "—"))

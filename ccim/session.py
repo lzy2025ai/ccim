@@ -371,6 +371,10 @@ class Chat:
                         break
         finally:
             ticker.cancel()
+        await self._finish(t, result, error, reply_to)
+
+    async def _finish(self, t, result, error, reply_to):
+        """这一轮结束：先发回答，再收尾工作中卡片。Claude Code 和 Codex 共用。"""
         if self.stopping:
             title, color = "已停止", "grey"
         elif error:

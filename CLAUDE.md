@@ -16,6 +16,10 @@
   否则它的回答会落到下一条消息头上；打断产生的「已中断」工具结果不能当成「已看到」
 - 一轮的结束不能只看第一个 `ResultMessage`：接上会话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空，
   要接着读（`STRAY_WAIT`）。session_id 在 `SystemMessage(init)` 时就存，第一轮被打断也能接上。见 docs/排查-2026-10-03-*.md
+- `ccim/codex.py`：`CodexChat`（继承 `Chat`，项目 `agent=codex` 时 bridge 用它）。一轮 = 一次 `codex exec --json`（接着聊加 `resume <thread_id>`），
+  标准输入必须关掉否则一直等。只换了「怎么和助手说话」：`_turn_inner` / `_interrupt`（SIGINT）/ `inject`（恒 False，exec 不接受中途补充，
+  `codex queue` 放进去它也看不到）；进度卡片、排队、发回答（`Chat._finish`）都复用。发文件靠回复里的「[发送文件] 路径」行。
+  codex 优先用 ChatGPT.app 自带的（不依赖 Node，后台进程里也能跑），模型等跟随 ~/.codex/config.toml
 - `ccim/approval.py`：`can_use_tool` → 审批卡片 → 按钮 / 文字 y n / 10 分钟超时
 - `ccim/commands.py`：`/new` `/resume` `/stop` `/status` `/model` `/effort` `/help`，其他斜杠命令原样交给 Claude
 - `ccim/handoff.py`：`ccim handoff`，把 Claude Code 里正在进行的对话（`CLAUDE_CODE_SESSION_ID`）转到飞书私聊。

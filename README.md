@@ -147,7 +147,9 @@ ccim config                    # 查看当前设置
 
 ## 用 Codex
 
-`ccim config agent=codex` 后，这个项目在飞书里对话的就是 Codex（需要装 ChatGPT 桌面版或 Codex 命令行，并已登录）。
+第一次接入时用 `ccim --agent codex` 或 `ccim start --always --agent codex`，这个项目在飞书里对话的就是 Codex
+（需要装 ChatGPT 桌面版或 Codex 命令行，并已登录）。已经接入的项目用 `ccim restart --agent codex` 切过去，
+`--agent claude` 切回来；两边的对话分开记，切回来接着原来的聊。也可以 `ccim config agent=codex` 后再重启。
 体验和 Claude Code 基本一样，几处不同：
 
 - 它干活时再发的消息，会等手头这件做完再处理（Codex 不接受中途补充）；想停下用 `/stop`

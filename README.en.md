@@ -147,7 +147,9 @@ If you don't set a model or effort level, ccim follows Claude Code's own setting
 
 ## Using Codex
 
-After `ccim config agent=codex`, the project talks to Codex in Feishu (requires the ChatGPT desktop app or the Codex CLI, logged in).
+Pair with `ccim --agent codex` (or `ccim start --always --agent codex`) and the project talks to Codex in Feishu
+(requires the ChatGPT desktop app or the Codex CLI, logged in). Switch an existing project with `ccim restart --agent codex`,
+and back with `--agent claude`; each keeps its own conversations, so switching back picks up where you left off.
 It works much like Claude Code, with a few differences:
 
 - Messages sent while it's working wait until the current task is done (Codex doesn't take mid-task additions); use `/stop` to stop

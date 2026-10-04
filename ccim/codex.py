@@ -84,6 +84,7 @@ def describe(item):
 
 class CodexChat(Chat):
     agent = "codex"
+    SID_KEY = "codex_session_id"
 
     def __init__(self, bridge, chat_id, chat_type, fork_from=None):
         super().__init__(bridge, chat_id, chat_type, None)   # Codex 不支持从别的对话分支出来
@@ -152,7 +153,7 @@ class CodexChat(Chat):
                 if kind == "thread.started" and ev.get("thread_id"):
                     if ev["thread_id"] != self.session_id:
                         self.session_id = ev["thread_id"]
-                        self.b.save(self.chat_id, session_id=self.session_id)
+                        self.b.save(self.chat_id, **{self.SID_KEY: self.session_id})
                 elif kind == "item.started":
                     d = describe(item)
                     if d:

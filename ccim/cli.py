@@ -111,9 +111,28 @@ def _need(project, single_ok=False):
     return path, entry
 
 
+AGENT_NAMES = {"claude": "Claude Code", "codex": "Codex"}
+
+
+def _apply_agent(path, agent):
+    """--agent：换这个项目用的助手。返回是否换了。两边的对话分开记，切回来还能接着原来的聊。"""
+    entry = registry.get(path)
+    if not agent or (entry.get("agent") or "claude") == agent:
+        return False
+    registry.update(path, agent=None if agent == "claude" else agent)
+    print(f"「{os.path.basename(path)}」改用 {AGENT_NAMES[agent]}。")
+    desc = runtime.which(path, registry.get(path))[1]
+    if agent == "codex" and desc.startswith("稳定版 ") and desc.split()[1] < "0.8":
+        print(f"它跑的{desc}还不支持 Codex，先改用开发版运行。")
+        registry.update(path, runtime="dev")
+    return True
+
+
 def cmd_default(args):
     path = os.path.realpath(os.getcwd())
     entry = registry.get(path) or pair(path, args.channel)
+    _apply_agent(path, args.agent)
+    entry = registry.get(path)
     if entry["channel"] != args.channel:
         raise SystemExit(f"这个项目配对的是 {entry['channel']}。")
     r = daemon.running(path)
@@ -131,6 +150,11 @@ def cmd_start(args):
     path, entry = _need(args.project)
     name = os.path.basename(path)
     r = daemon.running(path)
+    if _apply_agent(path, args.agent) and r:      # 换了助手：正在运行的要重启才生效
+        if r[1] == "fg":
+            raise SystemExit(f"「{name}」正在另一个终端前台运行，先在那里按 Ctrl+C 停掉，再运行一次。")
+        daemon.stop(path)
+        r = None
     if args.always:
         if daemon.is_always(path) and r:
             print(f"「{name}」已经是常驻的了（进程 {r[0]}）。")
@@ -161,6 +185,7 @@ def cmd_stop(args):
 
 def cmd_restart(args):
     path, entry = _need(args.project)
+    _apply_agent(path, args.agent)
     if args.safe:
         runtime.schedule_restart(path, delay=args.delay)
         print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，结果发到飞书。")
@@ -249,7 +274,7 @@ def cmd_show(args):
         title = f"{kind}「{c['name']}」" if c.get("name") else kind
         model, effort, _, _ = eff(path, c.get("model") or e.get("model"), c.get("effort") or e.get("effort"))
         custom = "（本聊天单独设置）" if c.get("model") or c.get("effort") else ""
-        sid = (c.get("session_id") or "")[:8] or "新对话"
+        sid = (c.get("codex_session_id" if codex else "session_id") or "")[:8] or "新对话"
         lines.append((title, f"{model} · {effort}{custom}", sid, c.get("last_active") or "—"))
     w = [max(width(l[i]) for l in lines) for i in range(3)]
     for l in lines:
@@ -264,6 +289,8 @@ def cmd_resume(args):
     if project and not prefix and re.fullmatch(r"[0-9a-f]{4,}(-[0-9a-f-]*)?", project) and not registry.find(project)[1]:
         project, prefix = None, project               # 只写了对话编号
     path, e = _need(project, single_ok=True)
+    if e.get("agent") == "codex":
+        raise SystemExit("这个项目用的是 Codex，在终端里用 codex resume 接着聊。")
     chats = registry.read_state(path).get("chats") or {}
     found = [(k, c) for k, c in chats.items() if c.get("session_id") and c["session_id"].startswith(prefix or "")]
     if not found:
@@ -411,6 +438,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="ccim", description="把本机 Claude Code 接到飞书。")
     p.add_argument("--feishu", dest="channel", action="store_const", const="feishu", default="feishu",
                    help="用飞书（默认）")
+    p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
     sub = p.add_subparsers(dest="cmd")
     for name, fn, help_ in [("start", cmd_start, "后台运行"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
                             ("restart", cmd_restart, "重启"), ("unpair", cmd_unpair, "解除配对")]:
@@ -418,6 +446,8 @@ def main(argv=None):
         s.add_argument("project", nargs="?", help="项目名或路径，不写就是当前目录")
         if name == "start":
             s.add_argument("--always", action="store_true", help="常驻：开机登录后自动启动，意外退出自动重启")
+        if name in ("start", "restart"):
+            s.add_argument("--agent", choices=("claude", "codex"), help="换用哪个助手：claude 或 codex")
         if name == "restart":
             s.add_argument("--safe", action="store_true", help="另起进程重启，新版本起不来就用稳定版顶上，结果发到飞书")
             s.add_argument("--delay", type=int, default=15, help="几秒后重启（默认 15，留时间把当前回复发出去）")

@@ -86,11 +86,13 @@ class Turn:
 
 
 class Chat:
+    agent = "claude"
+    SID_KEY = "session_id"                    # 状态文件里存对话编号的键；Codex 用自己的，切换助手时两边的对话互不干扰
     def __init__(self, bridge, chat_id, chat_type, fork_from=None):
         """chat_id 是对话地址（话题是「群|话题」）。fork_from：话题第一次开口时，从主对话的这个会话分出来。"""
         self.b, self.chat_id, self.chat_type = bridge, chat_id, chat_type
         saved = bridge.saved(chat_id)
-        self.session_id = saved.get("session_id")
+        self.session_id = saved.get(self.SID_KEY)
         self.fork_from = None if self.session_id else fork_from or saved.get("fork_from")
         self.fork_at = saved.get("fork_at") if self.fork_from and not fork_from else None   # 从那个对话的哪条消息分出来
         # 没单独设置就是 None：不传给 Claude Code，让它按项目、全局设置自己取，和终端里用的一致
@@ -176,7 +178,7 @@ class Chat:
 
     def _forget(self):
         self.session_id = self.fork_from = self.fork_at = None
-        self.b.save(self.chat_id, session_id=None, fork_from=None, fork_at=None)
+        self.b.save(self.chat_id, fork_from=None, fork_at=None, **{self.SID_KEY: None})
 
     async def attach(self, session_id, at=None):
         """把这个聊天接到另一个对话（比如终端里开的）上。总是另开分支，那边的对话不受影响。
@@ -312,7 +314,7 @@ class Chat:
                         sid = (m.data or {}).get("session_id")
                         if sid and sid != self.session_id:  # 一开始就记下，第一轮就被打断也能接上
                             self.session_id = sid
-                            self.b.save(self.chat_id, session_id=sid)
+                            self.b.save(self.chat_id, **{self.SID_KEY: sid})
                     if grace and not isinstance(m, RateLimitEvent):
                         grace, t.unseen = False, []   # Claude 接着处理补充了，读到下一轮结束
                         if t.drain == "wait":
@@ -347,7 +349,7 @@ class Chat:
                     elif isinstance(m, ResultMessage):
                         if m.session_id and m.session_id != self.session_id:
                             self.session_id = m.session_id
-                            self.b.save(self.chat_id, session_id=m.session_id)
+                            self.b.save(self.chat_id, **{self.SID_KEY: m.session_id})
                         if m.is_error and not self.stopping:
                             error = m.result or "; ".join(m.errors or []) or m.subtype
                         else:

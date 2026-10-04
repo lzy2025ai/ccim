@@ -135,7 +135,7 @@ class CodexChat(Chat):
                 args += ["-c", f"model_reasoning_effort={self.effort}"]
             for p in re.findall(r"^(/\S+)$", prompt, re.M):   # 用户发来的图片直接给 Codex 看
                 if p.lower().endswith(IMAGE_EXT) and os.path.isfile(p):
-                    args += ["-i", p]
+                    args.append(f"--image={p}")   # 不能写成「-i 路径」：-i 能接多个文件，会把后面的消息也当成图片吞掉
             if self.session_id:
                 args += ["resume", self.session_id, prompt]
             else:

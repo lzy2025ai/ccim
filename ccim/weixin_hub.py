@@ -7,7 +7,7 @@ daemon、安全重启、ccim start / stop / logs 都把这个目录当成「项�
 各项目在微信里的会话记录存在这个号的 state.json 的 chats[项目路径]：飞书进程也在写项目自己的 state.json，
 两个进程写同一个文件会互相覆盖。当前项目记在这个号的 state.json 的 current。
 """
-import logging, os, re, shutil
+import logging, os, re, shutil, time
 
 from . import daemon, registry
 
@@ -15,6 +15,7 @@ log = logging.getLogger("ccim.weixin")
 
 SETTINGS = ("model", "effort", "agent")
 SWITCH = ("/项目", "/project")
+PICK_WINDOW = 300          # 发出项目列表后，这么多秒内直接回序号（或项目名）就是切换
 
 
 def hub_path(name):
@@ -175,6 +176,7 @@ class Hub:
         self.channel = None
         self.bridges = {}
         self.current = registry.read_state(home).get("current")
+        self.picking = {}                     # 聊天 → 发出项目列表的时间
 
     def handlers(self):
         async def noop(*a):
@@ -227,9 +229,22 @@ class Hub:
         if cmd.lower() in SWITCH and not inc.files:
             await self._switch(inc.chat_id, arg.strip(), projects)
             return
+        shown = self.picking.pop(inc.chat_id, 0)
+        if shown and time.monotonic() - shown < PICK_WINDOW and not inc.files and self._pick(text, projects, exact=True):
+            await self._switch(inc.chat_id, text, projects)   # 刚看了项目列表，直接回了序号或项目名
+            return
         if self.current not in dict(projects):
             self._set_current(projects[0][0])
         await self.bridge(self.current, dict(projects)[self.current]).on_message(inc)
+
+    @staticmethod
+    def _pick(arg, projects, exact=False):
+        """按序号或名字找项目。exact：只认序号和完整的项目名（用户回的可能是别的话）。"""
+        arg = arg.strip()
+        if arg.isdigit():
+            return [projects[int(arg) - 1]] if 0 < int(arg) <= len(projects) else []
+        hits = [x for x in projects if os.path.basename(x[0]) == arg]
+        return hits if hits or exact else [x for x in projects if arg.lower() in os.path.basename(x[0]).lower()]
 
     def _busy(self, path):
         b = self.bridges.get(path)
@@ -240,15 +255,14 @@ class Hub:
         if not arg:
             if self.current not in dict(projects):
                 self._set_current(projects[0][0])
-            lines = ["项目（发 /项目 名字 或序号切换）："]
+            self.picking[chat_id] = time.monotonic()
+            lines = ["项目（回复序号切换）："]
             for i, (p, _) in enumerate(projects, 1):
                 tags = [t for t, on in (("当前", p == self.current), ("干活中", self._busy(p))) if on]
                 lines.append(f"{i}. {os.path.basename(p)}" + (f"（{'，'.join(tags)}）" if tags else ""))
             await say("\n".join(lines))
             return
-        hits = ([projects[int(arg) - 1]] if arg.isdigit() and 0 < int(arg) <= len(projects) else
-                [x for x in projects if os.path.basename(x[0]) == arg] or
-                [x for x in projects if arg.lower() in os.path.basename(x[0]).lower()])
+        hits = self._pick(arg, projects)
         if len(hits) != 1:
             await say(("有好几个项目都对得上：" if hits else "没有这个项目。现在有：") +
                       "、".join(os.path.basename(p) for p, _ in (hits or projects)))

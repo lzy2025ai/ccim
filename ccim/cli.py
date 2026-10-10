@@ -158,13 +158,17 @@ def _apply_agent(path, agent):
 
 
 def add_weixin(path, name, agent):
-    """ccim --weixin [名字]：把这个目录加进微信号（没登录过就先扫码登录）。"""
+    """ccim --weixin：扫码，扫的哪个微信就加到哪个（已经登录过的不会重复登录）。
+    ccim --weixin 名字：不扫码，直接加到这个已登录的微信号；还没有这个名字就扫码登录一个新的。"""
     from . import weixin_hub
-    hub, e = weixin_hub.find(name)
+    hub, e = weixin_hub.find(name) if name else (None, None)
     if not hub:
-        if name or not weixin_hub.hubs():
-            print("先登录微信。" if not name else f"还没有叫「{name}」的微信号，扫码登录一个。")
-            hub, e = weixin_hub.login(name)
+        if name:
+            print(f"还没有叫「{name}」的微信号，扫码登录一个。")
+        hub, e, existed, changed = weixin_hub.login(name)
+        if existed and changed and daemon.running(hub):   # 换了登录凭证，后台进程手里的旧凭证可能用不了了
+            print("重启一下这个微信，用上新的登录…", flush=True)
+            daemon.stop(hub)
     pname = os.path.basename(path)
     already = path in (e.get("projects") or {})
     weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent)
@@ -172,6 +176,11 @@ def add_weixin(path, name, agent):
     n = len(registry.get(hub).get("projects") or {})
     print(f"「{pname}」{'本来就在' if already else '已加到'}微信「{e['bot_name']}」里。" +
           ("直接在微信里给它发消息就行。" if n == 1 else f"在微信里发 /项目 {pname} 切过去。"))
+    if n > 1 and not already:
+        try:
+            asyncio.run(send_once(hub, registry.get(hub), f"新加了项目「{pname}」，发 /项目 {pname} 切过去。"))
+        except BaseException as err:
+            print(f"（没能在微信里提醒：{err}）")
 
 
 def cmd_default(args):
@@ -482,7 +491,7 @@ def cmd_weixin(args):
     from . import weixin_hub
     act, name = args.action, args.name
     if act == "login":
-        hub, e = weixin_hub.login(name)
+        hub, e, _, _ = weixin_hub.login(name)
         if daemon.running(hub):               # 重新登录换了 token，要重启才用上
             daemon.stop(hub)
         if e.get("projects"):

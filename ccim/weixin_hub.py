@@ -47,7 +47,8 @@ def _new_name():
 
 
 def login(name=None, show=None):
-    """扫码登录一个微信号。扫的是已经登录过的微信（同一个人）就更新它的登录，项目都还在。返回 (路径, 条目)。"""
+    """扫码登录一个微信号。扫的是已经登录过的微信（同一个人）就更新它的登录，项目都还在。
+    返回 (路径, 条目, 是不是已经登录过的号, 登录凭证变了没有)。"""
     from .channels.weixin import scan_login, show_in_terminal
     if name and not re.fullmatch(r"[^/\\\s]{1,20}", name):
         raise SystemExit("名字不能带空格和斜杠，20 个字以内。")
@@ -57,12 +58,16 @@ def login(name=None, show=None):
     old = next(((p, e) for p, e in hubs() if e.get("owner_open_id") == got["user_id"]), None)
     if old:
         path, e = old
+        try:
+            changed = registry.get_secret(e["app_id"]) != got["token"] or e.get("app_id") != got["account_id"]
+        except SystemExit:
+            changed = True
         if e.get("app_id") != got["account_id"]:
             registry.del_secret(e["app_id"])
         registry.set_secret(got["account_id"], got["token"])
         e = registry.update(path, app_id=got["account_id"], base_url=got["base_url"], paired_at=registry.now())
-        print(f"\n这个微信之前登录过（「{e['bot_name']}」），已更新登录，原来的项目都还在。")
-        return path, e
+        print(f"\n这是已经登录过的微信「{e['bot_name']}」。")
+        return path, e, True, changed
     name = name or _new_name()
     if find(name)[0]:
         raise SystemExit(f"已经有一个叫「{name}」的微信号了，换个名字。")
@@ -78,7 +83,7 @@ def login(name=None, show=None):
          "owner_open_id": got["user_id"], "projects": {}, "paired_at": registry.now()}
     registry.put(path, e)
     print(f"\n已登录微信「{name}」。")
-    return path, registry.get(path)
+    return path, registry.get(path), False, True
 
 
 def rename(old, new):

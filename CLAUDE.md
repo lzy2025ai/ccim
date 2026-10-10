@@ -62,7 +62,8 @@
   每个号一个进程（`Hub`），每个项目一个 Bridge，`/项目` 切换；不是当前项目的回答加「【项目名】」（`ProjectChannel`）。
   各项目在微信里的会话记录存在这个号的 state.json（`HubStore`），不和飞书进程抢项目的 state.json。
   `registry.all_chats(path)` 汇总一个项目在各渠道的对话（show、resume、/resume、查看工具用）。
-  再扫同一个微信（按 ilink_user_id 认）是重新登录，项目保留。0.9.0 的「项目直接接微信」在任意命令时自动迁移
+  `ccim --weixin` 总是扫码，扫的哪个微信就加到哪个；`ccim --weixin 名字` 不扫码直接加（和用户约好的）。
+  再扫同一个微信（按 ilink_user_id 认）是重新登录，项目保留；登录凭证变了要重启这个号的进程。0.9.0 的「项目直接接微信」在任意命令时自动迁移
 - 查看其他对话：私聊里给 Claude 两个只读工具 `list_chats` / `read_chat`（session.py `_look_around`），在 allowed_tools 里免审批；
   群聊不给（群里别人会借它看主人的私聊）。Codex 没有
 - 渠道按需导入（`channels.load`），用微信的进程不加载飞书 SDK

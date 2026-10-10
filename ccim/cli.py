@@ -174,10 +174,19 @@ def add_weixin(path, name, agent):
     pname = os.path.basename(path)
     already = path in (e.get("projects") or {})
     weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent)
+    switched = False
+    if changed and not already:
+        # 重新扫过码，发不了提醒：直接切到新项目，用户在微信里发下一条消息时先告诉他
+        old = registry.read_state(hub).get("current")
+        if old and old != path and os.path.realpath(old) in (registry.get(hub).get("projects") or {}):
+            back = os.path.basename(old)
+            registry.write_state(hub, current=path, notice=f"已切到新加的项目「{pname}」，要回到「{back}」发 /项目 {back}")
+            switched = True
     weixin_hub.ensure_running(hub)
     n = len(registry.get(hub).get("projects") or {})
     print(f"「{pname}」{'本来就在' if already else '已加到'}微信「{e['bot_name']}」里。" +
-          ("直接在微信里给它发消息就行。" if n == 1 else f"在微信里发 /项目 {pname} 切过去。"))
+          ("微信里已经切到它，直接发消息就行。" if switched else "直接在微信里给它发消息就行。" if n == 1
+           else f"在微信里发 /项目 {pname} 切过去。"))
     # 刚重新扫过码的话不发：换了登录后，用户在微信里发消息之前，机器人主动发的消息微信会丢掉
     if n > 1 and not already and not changed:
         try:
@@ -188,8 +197,11 @@ def add_weixin(path, name, agent):
 
 def cmd_default(args):
     path = os.path.realpath(os.getcwd())
-    if path in (os.path.realpath(os.path.expanduser("~")), "/"):
-        raise SystemExit("这里是用户主目录（或根目录），先 cd 到项目目录再运行。")
+    if path == "/":
+        raise SystemExit("这里是根目录，先 cd 到项目目录再运行。")
+    if path == os.path.realpath(os.path.expanduser("~")) and not (registry.get(path) or _weixin_only(path)):
+        if input("这里是用户主目录，Claude 能读写你所有的文件。确定要接入吗？(y/N)：").strip().lower() != "y":
+            raise SystemExit("没有接入。要接某个项目的话，先 cd 到项目目录再运行。")
     if args.weixin is not None:
         return add_weixin(path, args.weixin or None, args.agent)
     entry = registry.get(path) or pair(path, args.channel or "feishu")

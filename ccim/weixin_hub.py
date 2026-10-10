@@ -230,7 +230,7 @@ class Hub:
 
     def _set_current(self, path):
         self.current = path
-        registry.write_state(self.home, current=path)
+        registry.write_state(self.home, current=path, notice=None)   # 用户自己切过了，之前的切换提示不用再说
 
     async def on_message(self, inc):
         if inc.sender_id != self.entry.get("owner_open_id"):
@@ -257,6 +257,10 @@ class Hub:
             return
         if self.current not in dict(projects):
             self._set_current(projects[0][0])
+        notice = registry.read_state(self.home).get("notice")
+        if notice:                                    # ccim --weixin 重新扫码时切了项目，先告诉用户
+            registry.write_state(self.home, notice=None)
+            await self.channel.send_text(inc.chat_id, notice)
         await self.bridge(self.current, dict(projects)[self.current]).on_message(inc)
 
     @staticmethod

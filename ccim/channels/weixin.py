@@ -35,7 +35,7 @@ TICKET_TTL = 600           # 「正在输入」要用的 typing_ticket 缓存多
 ITEM_TEXT, ITEM_IMAGE, ITEM_VOICE, ITEM_FILE, ITEM_VIDEO = 1, 2, 3, 4, 5
 MEDIA_IMAGE, MEDIA_VIDEO, MEDIA_FILE = 1, 2, 3
 MSG_USER, MSG_BOT = 1, 2
-EXPIRED_TIP = "微信登录已失效，要重新扫码：ccim unpair 后再运行 ccim --weixin"
+EXPIRED_TIP = "微信登录已失效，运行 ccim weixin login 重新扫码（登录了好几个微信号时写上名字）"
 
 
 # ---------- 扫码登录 ----------

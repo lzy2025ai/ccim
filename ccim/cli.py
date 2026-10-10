@@ -166,9 +166,11 @@ def add_weixin(path, name, agent):
         if name:
             print(f"还没有叫「{name}」的微信号，扫码登录一个。")
         hub, e, existed, changed = weixin_hub.login(name)
-        if existed and changed and daemon.running(hub):   # 换了登录凭证，后台进程手里的旧凭证可能用不了了
+        if existed and changed and daemon.running(hub):   # 重新扫码后旧的登录凭证马上失效，后台进程要换上新的
             print("重启一下这个微信，用上新的登录…", flush=True)
             daemon.stop(hub)
+    else:
+        changed = False
     pname = os.path.basename(path)
     already = path in (e.get("projects") or {})
     weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent)
@@ -176,7 +178,8 @@ def add_weixin(path, name, agent):
     n = len(registry.get(hub).get("projects") or {})
     print(f"「{pname}」{'本来就在' if already else '已加到'}微信「{e['bot_name']}」里。" +
           ("直接在微信里给它发消息就行。" if n == 1 else f"在微信里发 /项目 {pname} 切过去。"))
-    if n > 1 and not already:
+    # 刚重新扫过码的话不发：换了登录后，用户在微信里发消息之前，机器人主动发的消息微信会丢掉
+    if n > 1 and not already and not changed:
         try:
             asyncio.run(send_once(hub, registry.get(hub), f"新加了项目「{pname}」，发 /项目 {pname} 切过去。"))
         except BaseException as err:
@@ -185,6 +188,8 @@ def add_weixin(path, name, agent):
 
 def cmd_default(args):
     path = os.path.realpath(os.getcwd())
+    if path in (os.path.realpath(os.path.expanduser("~")), "/"):
+        raise SystemExit("这里是用户主目录（或根目录），先 cd 到项目目录再运行。")
     if args.weixin is not None:
         return add_weixin(path, args.weixin or None, args.agent)
     entry = registry.get(path) or pair(path, args.channel or "feishu")

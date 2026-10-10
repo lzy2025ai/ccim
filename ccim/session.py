@@ -18,6 +18,7 @@ IDLE = 30 * 60
 REFRESH = 2.5               # 工作中卡片的刷新间隔（秒）
 CARD_AFTER = 4              # 没有工具调用的简单问答，Claude 连上后超过这么多秒才出工作中卡片
 SHOW_STEPS = 6
+TYPING_EVERY = 5            # 没有卡片的渠道（微信）每隔几秒续一次「正在输入」
 RESET = object()
 ATTACH = object()
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
@@ -29,8 +30,8 @@ CLI = shutil.which("claude") or next((p for p in map(os.path.expanduser, ["~/.lo
                                      "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]) if os.path.exists(p)), None)
 
 APPEND = """\
-你正在通过飞书和用户对话（ccim 把这个项目目录接到了飞书）。用户多半在手机上看回复：
-- 回答简洁，用飞书能显示的 Markdown（标题、加粗、列表、代码块、链接），不要用表格和 HTML。
+你正在通过{label}和用户对话（ccim 把这个项目目录接到了{label}）。用户多半在手机上看回复：
+- 回答简洁，{style}
 - 需要把图片、视频、文件交给用户时，调用 mcp__ccim__send_file 工具发到聊天里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里，需要时用 Read 查看。
 - 没有交互式提问框，有问题直接在回复里问。"""
@@ -249,7 +250,7 @@ class Chat:
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": APPEND}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -383,6 +384,8 @@ class Chat:
             title, color = "出错", "red"
         else:
             title, color = "完成", "green"
+        if not self.b.channel.cards:
+            await self.b.channel.typing(self.chat_id, False)
         # 先发回答再收尾卡片：卡片接口卡住时不能拖住回答
         answer = None if error or self.stopping else result or t.text
         if error:
@@ -400,6 +403,10 @@ class Chat:
                      (t.ready or t.start) - t.start, f"，{len(t.steps)} 步" if t.steps else "")
 
     async def _tick(self, t, reply_to):
+        if not self.b.channel.cards:          # 消息发出去改不了的渠道：干活时只显示「正在输入」
+            while True:
+                await self.b.channel.typing(self.chat_id, True)
+                await asyncio.sleep(TYPING_EVERY)
         while True:
             await asyncio.sleep(0.5 if not t.card_id else REFRESH)
             if not t.card_id:
@@ -467,7 +474,7 @@ class Chat:
     def _tools(self):
         chat = self
 
-        @tool("send_file", "把本机的图片、视频或文件发到当前飞书聊天里。path 用绝对路径，或相对项目目录的路径。",
+        @tool("send_file", "把本机的图片、视频或文件发到当前聊天里。path 用绝对路径，或相对项目目录的路径。",
               {"path": str})
         async def send_file(args):
             path = os.path.realpath(os.path.join(chat.b.path, os.path.expanduser(args.get("path", ""))))
@@ -482,6 +489,10 @@ class Chat:
             return {"content": [{"type": "text", "text": f"已发送 {os.path.basename(path)}"}]}
 
         return create_sdk_mcp_server("ccim", tools=[send_file])
+
+
+def prompt_note(text, channel):
+    return text.format(label=channel.label or "聊天软件", style=channel.style or "排版简单，不要用表格和 HTML。")
 
 
 def _err(text):

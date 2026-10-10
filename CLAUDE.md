@@ -53,6 +53,12 @@
   lark-oapi 长连接跑在单独线程（它用模块级事件循环，要换成线程自己的），事件用 run_coroutine_threadsafe 交回主循环；
   按钮回调必须同步返回，所以 on_action 在主循环里算好新卡片，回调里等最多 2.5 秒
 
+- `ccim/channels/weixin.py`：个人微信，微信官方 ClawBot 接口（iLink，没有公开文档，做法参考 hermes-agent 的 weixin 接入）。
+  扫码登录拿 bot_token（存钥匙串），扫码的人就是主人；长轮询 getupdates 收消息，游标和每个人的 context_token
+  存在项目状态目录的 weixin.json（游标丢了会重放旧消息，回复要带 context_token）。只有私聊；消息发出去改不了，
+  所以 `cards=False`：工作中卡片换成每 5 秒续一次「正在输入」，审批卡片当文字发、回复 y / n。图片文件走微信 CDN，AES-128-ECB。
+  登录失效（-14）时 `channel.error` 写进 state，ccim list / show 显示。渠道按需导入（`channels.load`），用微信的项目不加载飞书 SDK
+
 ## 设计取舍
 
 - **权限用 auto 模式**。实测过：auto 模式下普通操作（包括 rm）直接放行，auto 判定要拦的直接拒绝，都不走 `can_use_tool`；

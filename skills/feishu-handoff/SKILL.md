@@ -5,7 +5,8 @@ description: Move the current Claude Code conversation to Feishu / Lark so the u
 
 # Hand off to Feishu / Lark, and bring it back
 
-[ccim](https://github.com/lzy2025ai/ccim) connects a project directory to a Feishu / Lark bot.
+[ccim](https://github.com/lzy2025ai/ccim) connects a project directory to a Feishu / Lark bot (or a WeChat ClawBot; if the
+project is connected to WeChat, the handoff goes there instead and works the same way).
 
 - `ccim handoff` branches this conversation into the user's direct message with the bot. The bot messages the
   user first with a recap, so their phone gets a notification and they can carry on from there.
@@ -59,5 +60,5 @@ Relay the message ccim prints; it says what to do. Common cases:
   `ccim start --always` afterwards, so future updates can restart it automatically.
 - **"没有配对成功"**: the QR code wasn't scanned in time or was declined. Run `ccim handoff` again for a new code,
   or have the user pair manually in a terminal by running `ccim` in the project directory.
-- **"这个对话没有转到过飞书"** (from `handback`): nothing to bring back. If they were chatting with the bot without a
+- **"这个对话没有转到过飞书或微信"** (from `handback`): nothing to bring back. If they were chatting with the bot without a
   handoff, they can continue that chat in a terminal with `ccim resume`.

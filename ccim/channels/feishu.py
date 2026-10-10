@@ -20,7 +20,7 @@ from lark_oapi.api.im.v1 import (CreateFileRequest, CreateFileRequestBody, Creat
 from lark_oapi.event.callback.model.p2_card_action_trigger import (CallBackCard, CallBackToast,
                                                                     P2CardActionTriggerResponse)
 
-from .base import CardAction, Channel, Incoming, parse_address
+from .base import CardAction, Channel, Incoming, parse_address, split_text as _split
 
 log = logging.getLogger("ccim.feishu")
 
@@ -140,6 +140,8 @@ def _manual():
 
 class Feishu(Channel):
     name = "feishu"
+    label = "飞书"
+    style = "用飞书能显示的 Markdown（标题、加粗、列表、代码块、链接），不要用表格和 HTML。"
 
     @staticmethod
     def pair(project_path, show=show_in_terminal, interactive=True):
@@ -504,29 +506,4 @@ def short_err(e):
 
 
 def split_text(s, limit=TEXT_LIMIT):
-    """按段落拆长消息，尽量不把代码块拆开。"""
-    if len(s) <= limit:
-        return [s]
-    out, cur = [], ""
-    for para in s.split("\n"):
-        while len(para) > limit:
-            if cur:
-                out.append(cur)
-                cur = ""
-            out.append(para[:limit])
-            para = para[limit:]
-        if len(cur) + len(para) + 1 > limit:
-            out.append(cur)
-            cur = para
-        else:
-            cur = f"{cur}\n{para}" if cur else para
-    if cur:
-        out.append(cur)
-    # 被拆断的代码块：前一段补上结尾、后一段补上开头
-    fixed, open_fence = [], False
-    for part in out:
-        if open_fence:
-            part = "```\n" + part
-        open_fence = part.count("```") % 2 == 1
-        fixed.append(part + ("\n```" if open_fence else ""))
-    return fixed
+    return _split(s, limit)

@@ -34,15 +34,16 @@ def main():
         return                        # 钩子出错不能挡住用户发消息
     if not ts:
         return                        # 只有正在回复的一轮时先不问，等它答完
+    label = {"weixin": "微信"}.get((registry.get(path) or {}).get("channel"), "飞书")
     last = ts[-1]
     recent = " ".join(last["user"].split())[:60]
-    context = (f"这个对话之前转到过飞书。飞书那边是一个独立的分支，又聊了 {len(ts)} 轮，还没带到这里"
+    context = (f"这个对话之前转到过{label}。{label}那边是一个独立的分支，又聊了 {len(ts)} 轮，还没带到这里"
                f"（最近一轮 {last['when']}：「{recent}」）。用户不一定想把它带过来。"
-               "回答用户这条消息之前，先用一句话问用户要不要把飞书那边的内容带过来："
+               f"回答用户这条消息之前，先用一句话问用户要不要把{label}那边的内容带过来："
                "要的话运行 ccim handback，读完它的输出再接着聊；不要的话就照常回答，不用再提。")
     if pending:
-        context += "另外，飞书那边还有一轮正在回复。"
-    print(json.dumps({"systemMessage": f"飞书那边有 {len(ts)} 轮新对话还没带过来",
+        context += f"另外，{label}那边还有一轮正在回复。"
+    print(json.dumps({"systemMessage": f"{label}那边有 {len(ts)} 轮新对话还没带过来",
                       "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context}},
                      ensure_ascii=False))
 

@@ -74,7 +74,7 @@ async def _resume(bridge, chat, arg, say):
         lines = ["**最近的对话**（发 /resume 编号 接上）："]
         for x in sessions[:8]:
             when = time.strftime("%m-%d %H:%M", time.localtime(x.last_modified / 1000))
-            where = "飞书" if x.session_id in feishu else "终端"
+            where = bridge.channel.label if x.session_id in feishu else "终端"
             lines.append(f"`{x.session_id[:8]}`　{_title(x)}　{when} · {where}")
         await say("\n".join(lines))
         return

@@ -201,7 +201,7 @@ class Bridge:
                   handoff_time=time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()))
         if text:
             await self.channel.send_text(chat_id, text)
-        log.info("已把对话 %s 转到飞书私聊", req["session_id"][:8])
+        log.info("已把对话 %s 转到%s私聊", req["session_id"][:8], self.channel.label)
         return {"ok": True}
 
     async def shutdown(self):

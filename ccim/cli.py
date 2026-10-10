@@ -10,9 +10,8 @@
 import argparse, asyncio, logging, os, re, signal, sys
 
 from . import daemon, handoff, registry, runtime
-from .channels.feishu import Feishu
+from .channels import NAMES, load, send_once
 
-CHANNELS = {"feishu": Feishu}
 CAPS = ["handoff", "safe-restart"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
                "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
@@ -32,7 +31,7 @@ async def _serve(path, entry, secret, mode):
     from .bridge import Bridge
     log = logging.getLogger("ccim")
     bridge = Bridge(path, entry)
-    channel = CHANNELS[entry["channel"]](path, entry, secret, bridge.handlers())
+    channel = load(entry["channel"])(path, entry, secret, bridge.handlers())
     bridge.attach(channel)
     registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None,
                          caps=CAPS, python=sys.executable)
@@ -43,7 +42,11 @@ async def _serve(path, entry, secret, mode):
         raise SystemExit(f"启动失败：{e}")
     registry.write_state(path, online=True, heartbeat=registry.now())
     name = entry.get("bot_name") or "机器人"
-    log.info("已连上飞书：在飞书里找「%s」发消息就行%s", name, "。按 Ctrl+C 退出。" if mode == "fg" else "。")
+    end = "。按 Ctrl+C 退出。" if mode == "fg" else "。"
+    if channel.cards:
+        log.info("已连上%s：在%s里找「%s」发消息就行%s", channel.label, channel.label, name, end)
+    else:
+        log.info("已连上%s：在%s里给它发消息就行%s", channel.label, channel.label, end)
     if entry.get("claim_code"):
         log.info("先在飞书里私聊「%s」，发送 %s 认领这个机器人。", name, entry["claim_code"])
 
@@ -67,10 +70,12 @@ async def _serve(path, entry, secret, mode):
                         res = {"ok": False, "error": str(e)}
                     handoff.done(path, req, **res)
                 if tick % 30 == 0:
-                    registry.write_state(path, online=channel.connected(), heartbeat=registry.now())
+                    registry.write_state(path, online=channel.connected(), heartbeat=registry.now(),
+                                         error=channel.error, **({"error_at": registry.now()} if channel.error else {}))
     finally:
         log.info("正在退出…")
         await bridge.shutdown()
+        await channel.stop()
         registry.write_state(path, online=False, pid=None)
 
 
@@ -87,8 +92,8 @@ def run(path, mode):
 
 
 def pair(path, channel, **kw):
-    print(f"给「{os.path.basename(path)}」配对一个飞书机器人。")
-    entry = CHANNELS[channel].pair(path, **kw)
+    print(f"把「{os.path.basename(path)}」接入{NAMES[channel]}。")
+    entry = load(channel).pair(path, **kw)
     secret = entry.pop("secret")
     registry.set_secret(entry["app_id"], secret)
     entry.update(paired_at=registry.now())
@@ -130,11 +135,11 @@ def _apply_agent(path, agent):
 
 def cmd_default(args):
     path = os.path.realpath(os.getcwd())
-    entry = registry.get(path) or pair(path, args.channel)
+    entry = registry.get(path) or pair(path, args.channel or "feishu")
     _apply_agent(path, args.agent)
     entry = registry.get(path)
-    if entry["channel"] != args.channel:
-        raise SystemExit(f"这个项目配对的是 {entry['channel']}。")
+    if args.channel and entry["channel"] != args.channel:
+        raise SystemExit(f"这个项目接的是{NAMES[entry['channel']]}。要换成{NAMES[args.channel]}，先 ccim unpair。")
     r = daemon.running(path)
     if r:
         where = {"bg": "后台", "always": "后台常驻"}.get(r[1], "另一个终端")
@@ -188,7 +193,8 @@ def cmd_restart(args):
     _apply_agent(path, args.agent)
     if args.safe:
         runtime.schedule_restart(path, delay=args.delay)
-        print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，结果发到飞书。")
+        print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，"
+              f"结果发到{NAMES[entry['channel']]}。")
         return
     if daemon.is_always(path):
         daemon.stop(path)
@@ -213,7 +219,9 @@ def cmd_list(args):
         state = ("在线" if s.get("online") else "连接中") + how if r else (
             "离线（等待自动重启）" if daemon.is_always(path) else "离线")
         ver = (runtime.describe(s.get("python")) + ("（顶替中）" if s.get("fallback") else "")) if r else ""
-        rows.append((os.path.basename(path), e.get("channel", ""),
+        if r and s.get("error"):
+            state = "出错：" + s["error"]
+        rows.append((os.path.basename(path), NAMES.get(e.get("channel"), e.get("channel", "")),
                      (e.get("bot_name") or e.get("app_id", "")) + ("（Codex）" if e.get("agent") == "codex" else ""), state,
                      ver, path))
     width = lambda s: sum(2 if ord(c) > 0x2e80 else 1 for c in s)
@@ -233,7 +241,9 @@ def cmd_show(args):
     s = registry.read_state(path)
     r = daemon.running(path)
     how = {"bg": "后台", "always": "常驻"}.get(r[1], "前台") if r else ""
-    if r:
+    if r and s.get("error"):
+        status = f"出错：{s['error']}（{how}，进程 {r[0]}）"
+    elif r:
         status = f"{'在线' if s.get('online') else '连接中'}（{how}，进程 {r[0]}，{s.get('started', '')} 启动）"
     else:
         status = "离线（等待自动重启）" if daemon.is_always(path) else "离线"
@@ -241,22 +251,23 @@ def cmd_show(args):
     eff = _codex_effective if codex else registry.effective
     default_model, default_effort, m_set, e_set = eff(path, e.get("model"), e.get("effort"))
     follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
+    weixin = e.get("channel") == "weixin"
     rows = [
         ("项目", os.path.basename(path)),
         ("路径", path),
-        ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{ {'feishu': '飞书'}.get(e.get('channel'), e.get('channel')) }）"),
+        ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{NAMES.get(e.get('channel'), e.get('channel'))}）"),
         ("助手", "Codex" if codex else "Claude Code"),
         ("状态", status),
         ("版本", (runtime.describe(s.get("python")) + ("（新版本没起来，暂时顶替）" if s.get("fallback") else "")
                   if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
-        ("群聊", "所有人 @ 都响应" if e.get("group") == "all" else "只响应主人"),
+        *([] if weixin else [("群聊", "所有人 @ 都响应" if e.get("group") == "all" else "只响应主人")]),
         ("模型", default_model + ("" if m_set else follow)),
         ("思考深度", default_effort + ("" if e_set else follow)),
-        ("收到消息表情", e.get("reaction") or "OnIt（默认）"),
+        *([] if weixin else [("收到消息表情", e.get("reaction") or "OnIt（默认）")]),
         ("配对时间", e.get("paired_at", "")),
     ]
     if e.get("claim_code"):
-        rows.append(("待认领", f"在飞书里私聊机器人发送 {e['claim_code']}"))
+        rows.append(("待认领", f"在{NAMES[e['channel']]}里私聊机器人发送 {e['claim_code']}"))
     width = lambda t: sum(2 if ord(c) > 0x2e80 else 1 for c in t)
     pad = max(width(k) for k, _ in rows)
     for k, v in rows:
@@ -304,7 +315,7 @@ def cmd_resume(args):
     claude = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
     argv = [claude, "--resume", sid] + (["--fork-session"] if live or args.fork else [])
     if live:
-        print("这个对话在飞书那边还开着，终端里接着聊会另开一个分支：之前的内容都在，之后两边各聊各的。")
+        print(f"这个对话在{NAMES.get(e.get('channel'), '飞书')}那边还开着，终端里接着聊会另开一个分支：之前的内容都在，之后两边各聊各的。")
     print(f"在「{os.path.basename(path)}」里接着对话 {sid[:8]}…")
     os.chdir(path)
     for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
@@ -344,7 +355,10 @@ def cmd_handoff(args):
     if not res.get("ok"):
         raise SystemExit(f"没转过去：{res.get('error')}")
     name = entry.get("bot_name") or "机器人"
-    print(f"已转到飞书：「{name}」给你发了一条消息，点开就能接着聊。")
+    label = NAMES[entry["channel"]]
+    print(f"已转到{label}：「{name}」给你发了一条消息，点开就能接着聊。")
+    if entry["channel"] != "feishu":
+        return
     print("在电脑上打开飞书，或者用手机扫这个码：")
     from .channels.feishu import _print_qr
     link = handoff.open_link(entry)
@@ -356,28 +370,29 @@ def cmd_handback(args):
     """在当初转出去的那个 Claude Code 对话里运行：把飞书那边聊过的内容整理出来，接回这里。"""
     sid = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not sid:
-        raise SystemExit("要在当初转到飞书的那个 Claude Code 对话里运行（或者写上对话编号）。")
+        raise SystemExit("要在当初转出去的那个 Claude Code 对话里运行（或者写上对话编号）。")
     info = handoff.read(sid, os.getcwd())
     path = os.path.realpath((info or {}).get("cwd") or os.getcwd())
     entry = registry.get(path)
     chat_id, rec = handoff.find_branch(path, sid) if entry else (None, None)
     if not rec:
-        raise SystemExit("这个对话没有转到过飞书。")
+        raise SystemExit("这个对话没有转到过飞书或微信。")
+    label = NAMES[entry["channel"]]
     ts, pending = handoff.pull_feishu(path, sid)
     if ts:
-        print(f"飞书那边有 {len(ts)} 轮还没带过来，内容如下：\n")
+        print(f"{label}那边有 {len(ts)} 轮还没带过来，内容如下：\n")
         print(handoff.render(ts))
     elif not pending:
-        print("飞书那边没有新内容，直接在这里接着聊就行。")
+        print(f"{label}那边没有新内容，直接在这里接着聊就行。")
     if pending:
-        print(("\n" if ts else "") + "飞书那边还有一轮正在回复，等它答完再运行一次 ccim handback 带过来。")
+        print(("\n" if ts else "") + f"{label}那边还有一轮正在回复，等它答完再运行一次 ccim handback 带过来。")
     if not ts:
         return
     try:
-        ch = CHANNELS[entry["channel"]](path, entry, registry.get_secret(entry["app_id"]), {})
-        asyncio.run(ch.send_text(chat_id, "已回到电脑上接着聊了，这边聊过的内容已经带过去。"))
+        asyncio.run(send_once(path, entry, "已回到电脑上接着聊了，这边聊过的内容已经带过去。", chat_id))
     except Exception as e:
-        print(f"\n（没能在飞书里发提醒：{e}）")
+        print(f"\n（没能在{label}里发提醒：{e}）")
+
 
 
 def cmd_safe_restart_run(args):
@@ -431,13 +446,13 @@ def cmd_unpair(args):
     daemon.stop(path)
     registry.del_secret(entry["app_id"])
     registry.remove(path)
-    print("已解除。飞书里的那个机器人应用还在，不再需要的话去飞书开放平台删掉。")
+    print("已解除。" + ("飞书里的那个机器人应用还在，不再需要的话去飞书开放平台删掉。" if entry["channel"] == "feishu" else ""))
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="ccim", description="把本机 Claude Code 接到飞书。")
-    p.add_argument("--feishu", dest="channel", action="store_const", const="feishu", default="feishu",
-                   help="用飞书（默认）")
+    p = argparse.ArgumentParser(prog="ccim", description="把本机 Claude Code 接到飞书或微信。")
+    p.add_argument("--feishu", dest="channel", action="store_const", const="feishu", help="用飞书（默认）")
+    p.add_argument("--weixin", dest="channel", action="store_const", const="weixin", help="用个人微信")
     p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
     sub = p.add_subparsers(dest="cmd")
     for name, fn, help_ in [("start", cmd_start, "后台运行"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
@@ -449,19 +464,19 @@ def main(argv=None):
         if name in ("start", "restart"):
             s.add_argument("--agent", choices=("claude", "codex"), help="换用哪个助手：claude 或 codex")
         if name == "restart":
-            s.add_argument("--safe", action="store_true", help="另起进程重启，新版本起不来就用稳定版顶上，结果发到飞书")
+            s.add_argument("--safe", action="store_true", help="另起进程重启，新版本起不来就用稳定版顶上，结果私聊告诉你")
             s.add_argument("--delay", type=int, default=15, help="几秒后重启（默认 15，留时间把当前回复发出去）")
         s.set_defaults(fn=fn)
     sub.add_parser("list", help="所有已配对项目").set_defaults(fn=cmd_list)
-    s = sub.add_parser("resume", help="在终端里接着飞书里的对话聊（不写编号就接最近聊过的）")
+    s = sub.add_parser("resume", help="在终端里接着飞书 / 微信里的对话聊（不写编号就接最近聊过的）")
     s.add_argument("project", nargs="?", help="项目名、机器人名或路径；也可以直接写对话编号")
     s.add_argument("session", nargs="?", help="对话编号，ccim show 里那 8 位就行")
-    s.add_argument("--fork", action="store_true", help="另开一个分支，不动飞书里的对话")
+    s.add_argument("--fork", action="store_true", help="另开一个分支，不动飞书 / 微信里的对话")
     s.set_defaults(fn=cmd_resume)
-    s = sub.add_parser("handoff", help="在 Claude Code 的对话里运行：把这个对话转到飞书接着聊")
+    s = sub.add_parser("handoff", help="在 Claude Code 的对话里运行：把这个对话转到飞书 / 微信接着聊")
     s.add_argument("session", nargs="?", help="对话编号，不写就是当前所在的对话")
     s.set_defaults(fn=cmd_handoff)
-    s = sub.add_parser("handback", help="在当初转出去的那个 Claude Code 对话里运行：把飞书那边聊过的内容接回来")
+    s = sub.add_parser("handback", help="在当初转出去的那个 Claude Code 对话里运行：把飞书 / 微信那边聊过的内容接回来")
     s.add_argument("session", nargs="?", help="对话编号，不写就是当前所在的对话")
     s.set_defaults(fn=cmd_handback)
     s = sub.add_parser("show", help="查看一个项目的详情：状态、模型、思考深度、各个对话")

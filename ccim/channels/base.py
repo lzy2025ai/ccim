@@ -1,4 +1,4 @@
-"""IM 渠道的通用接口。飞书、以后的微信、企业微信各实现一个子类。
+"""IM 渠道的通用接口。飞书、微信各实现一个子类。
 
 卡片用和渠道无关的写法描述，由各渠道自己渲染：
     {"title": "工作中 · 0:23", "color": "blue|green|orange|red|grey", "body": "markdown 正文",
@@ -42,6 +42,10 @@ class CardAction:
 
 class Channel:
     name = ""
+    label = ""                 # 给用户看的渠道名：飞书、微信
+    cards = True               # 能发可以改的卡片；不能的（微信）干活时只显示「正在输入」，审批改成文字
+    style = ""                 # 告诉 Claude 这个渠道里回答该怎么排版
+    error = None               # 连不上的原因（比如登录失效），ccim list / show 里显示
 
     @staticmethod
     def pair(project_path):
@@ -100,6 +104,38 @@ class Channel:
     async def remove_reaction(self, message_id, reaction_id):
         pass
 
+    async def typing(self, chat_id, on):
+        """显示 / 取消「正在输入」，cards=False 的渠道用它代替工作中卡片。"""
+
     def connected(self):
         return True
+
+
+def split_text(s, limit):
+    """按段落拆长消息，尽量不把代码块拆开。"""
+    if len(s) <= limit:
+        return [s]
+    out, cur = [], ""
+    for para in s.split("\n"):
+        while len(para) > limit:
+            if cur:
+                out.append(cur)
+                cur = ""
+            out.append(para[:limit])
+            para = para[limit:]
+        if len(cur) + len(para) + 1 > limit:
+            out.append(cur)
+            cur = para
+        else:
+            cur = f"{cur}\n{para}" if cur else para
+    if cur:
+        out.append(cur)
+    # 被拆断的代码块：前一段补上结尾、后一段补上开头
+    fixed, open_fence = [], False
+    for part in out:
+        if open_fence:
+            part = "```\n" + part
+        open_fence = part.count("```") % 2 == 1
+        fixed.append(part + ("\n```" if open_fence else ""))
+    return fixed
 

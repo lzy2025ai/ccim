@@ -154,12 +154,11 @@ def _tell(path, entry, text, notify):
     if not notify or not entry or not entry.get("owner_open_id"):
         return
     import asyncio
-    from .channels.feishu import Feishu
+    from .channels import NAMES, send_once
     try:
-        ch = Feishu(path, entry, registry.get_secret(entry["app_id"]), {})
-        asyncio.run(ch.send_to_user(entry["owner_open_id"], text))
+        asyncio.run(send_once(path, entry, text))
     except BaseException as e:                # get_secret 失败是 SystemExit
-        print(f"（没能在飞书里通知：{e}）", flush=True)
+        print(f"（没能在{NAMES.get(entry.get('channel'), '飞书')}里通知：{e}）", flush=True)
 
 
 # ---------- 验收后升级 ----------
@@ -190,7 +189,7 @@ def build_stable():
             if r.returncode != 0:
                 _rm(dest)
                 raise SystemExit(f"装稳定版失败：{(r.stderr or r.stdout).strip()[-500:]}")
-    r = subprocess.run([os.path.join(dest, "bin", "python"), "-P", "-c", "import ccim.cli, ccim.channels.feishu"],
+    r = subprocess.run([os.path.join(dest, "bin", "python"), "-P", "-c", "import ccim.cli, ccim.channels.feishu, ccim.channels.weixin"],
                        capture_output=True, text=True, cwd="/")
     if r.returncode != 0:
         raise SystemExit(f"新稳定版有问题，没有启用：{r.stderr.strip()[-500:]}")

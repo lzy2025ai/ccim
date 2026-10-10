@@ -12,7 +12,7 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 import asyncio, glob, json, logging, os, re, signal, time, tomllib
 
 from .progress import short
-from .session import Chat, Turn
+from .session import Chat, Turn, prompt_note
 
 log = logging.getLogger("ccim.codex")
 
@@ -20,8 +20,8 @@ EFFORTS = ["minimal", "low", "medium", "high", "xhigh"]
 LINE_LIMIT = 64 * 1024 * 1024
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 NOTE = """\
-（以下是 ccim 的说明，不用回复这一段）你正在通过飞书和用户对话，用户多半在手机上看回复：
-- 回答简洁，用飞书能显示的 Markdown（标题、加粗、列表、代码块、链接），不要用表格和 HTML。
+（以下是 ccim 的说明，不用回复这一段）你正在通过{label}和用户对话，用户多半在手机上看回复：
+- 回答简洁，{style}
 - 需要把图片、视频、文件交给用户时，在回复里单独一行写：[发送文件] 文件的绝对路径（一行一个），ccim 会把它发到聊天里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里。
 - 没有交互式提问框，有问题直接在回复里问。
@@ -139,7 +139,7 @@ class CodexChat(Chat):
             if self.session_id:
                 args += ["resume", self.session_id, prompt]
             else:
-                args.append(NOTE + prompt)
+                args.append(prompt_note(NOTE, self.b.channel) + prompt)
             self.proc = await asyncio.create_subprocess_exec(
                 *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True)

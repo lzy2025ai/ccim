@@ -67,6 +67,11 @@ def login(name=None, show=None):
     if find(name)[0]:
         raise SystemExit(f"已经有一个叫「{name}」的微信号了，换个名字。")
     path = hub_path(name)
+    taken = registry.all_projects()
+    for i in range(2, 100):                       # 目录名不跟着改名，改过名的号可能还占着这个目录
+        if path not in taken:
+            break
+        path = hub_path(f"{name}-{i}")
     os.makedirs(path, exist_ok=True)
     registry.set_secret(got["account_id"], got["token"])
     e = {"channel": "weixin", "kind": "weixin", "bot_name": name, "app_id": got["account_id"], "base_url": got["base_url"],
@@ -74,6 +79,18 @@ def login(name=None, show=None):
     registry.put(path, e)
     print(f"\n已登录微信「{name}」。")
     return path, registry.get(path)
+
+
+def rename(old, new):
+    """只改名字；目录不动（daemon、开机自启、状态文件都按目录登记）。"""
+    hub, e = find(old)
+    if not hub:
+        raise SystemExit(f"没有叫「{old}」的微信号。")
+    if not re.fullmatch(r"[^/\\\s]{1,20}", new):
+        raise SystemExit("名字不能带空格和斜杠，20 个字以内。")
+    if find(new)[0]:
+        raise SystemExit(f"已经有一个叫「{new}」的微信号了。")
+    registry.update(hub, bot_name=new)
 
 
 def add_project(hub, path, **settings):

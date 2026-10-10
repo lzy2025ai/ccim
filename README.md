@@ -186,6 +186,7 @@ ccim --weixin          # 第一次会让你用微信扫码登录；之后再加�
 ccim weixin login 工作号     # 再登录一个微信号，起个名字
 ccim --weixin 工作号         # 把当前目录加到这个号
 ccim weixin                  # 看看登录了哪些号、各管哪些项目
+ccim weixin rename 旧名 新名  # 给微信号改名
 ccim weixin remove [项目]    # 把项目移出微信（--from 名字 只从某个号移出）
 ccim weixin logout 名字      # 退出一个微信号
 ```

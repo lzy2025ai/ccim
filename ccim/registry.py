@@ -91,7 +91,7 @@ def find(name_or_path):
     p = os.path.realpath(os.path.expanduser(name_or_path))
     if p in data:
         return p, data[p]
-    hits = [(k, v) for k, v in data.items() if os.path.basename(k) == name_or_path]
+    hits = [(k, v) for k, v in data.items() if os.path.basename(k) == name_or_path and v.get("kind") != "weixin"]
     if not hits:
         hits = [(k, v) for k, v in data.items() if v.get("bot_name") == name_or_path]
     if len(hits) == 1:

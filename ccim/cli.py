@@ -500,6 +500,12 @@ def cmd_weixin(args):
             weixin_hub.remove_project(h, path)
             print(f"已把「{os.path.basename(path)}」移出微信「{e['bot_name']}」。")
         return
+    if act == "rename":
+        if not name or not args.new:
+            raise SystemExit("用法：ccim weixin rename 现在的名字 新名字")
+        weixin_hub.rename(name, args.new)
+        print(f"已改名：「{name}」→「{args.new}」。")
+        return
     if act == "logout":
         hub, e = weixin_hub.find(name)
         if not hub:
@@ -603,9 +609,11 @@ def parser():
     s = sub.add_parser("show", help="查看一个项目的详情：状态、模型、思考深度、各个对话")
     s.add_argument("project", nargs="?", help="项目名、机器人名或路径，不写就是当前目录")
     s.set_defaults(fn=cmd_show)
-    s = sub.add_parser("weixin", help="微信号：不写参数是查看；login [名字] 登录；remove [项目] 移出项目；logout 名字 退出")
-    s.add_argument("action", nargs="?", choices=("login", "remove", "logout"))
-    s.add_argument("name", nargs="?", help="login / logout 写微信号的名字，remove 写项目")
+    s = sub.add_parser("weixin", help="微信号：不写参数是查看；login [名字] 登录；rename 名字 新名字 改名；"
+                                      "remove [项目] 移出项目；logout 名字 退出")
+    s.add_argument("action", nargs="?", choices=("login", "rename", "remove", "logout"))
+    s.add_argument("name", nargs="?", help="login / rename / logout 写微信号的名字，remove 写项目")
+    s.add_argument("new", nargs="?", help="rename 的新名字")
     s.add_argument("--from", dest="account", help="remove 时只从这个微信号移出")
     s.set_defaults(fn=cmd_weixin)
     s = sub.add_parser("logs", help="查看后台日志")

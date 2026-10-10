@@ -72,10 +72,16 @@ def which(path, entry=None, force=None):
     if rt == "stable":
         v = entry.get("stable_version") or _channel().get("current")
         p = stable_python(v)
-        if p:
+        if p and (entry.get("kind") != "weixin" or _has(p, "weixin_hub.py")):   # 微信号要 0.10 以后的稳定版
             return p, f"稳定版 {v}"
     p = dev_python() or sys.executable
     return p, "开发版"
+
+
+def _has(python, module):
+    import glob
+    return bool(glob.glob(os.path.join(os.path.dirname(os.path.dirname(python)), "lib", "python*", "site-packages", "ccim",
+                                       module)))
 
 
 def _env(python):
@@ -189,7 +195,7 @@ def build_stable():
             if r.returncode != 0:
                 _rm(dest)
                 raise SystemExit(f"装稳定版失败：{(r.stderr or r.stdout).strip()[-500:]}")
-    r = subprocess.run([os.path.join(dest, "bin", "python"), "-P", "-c", "import ccim.cli, ccim.channels.feishu, ccim.channels.weixin"],
+    r = subprocess.run([os.path.join(dest, "bin", "python"), "-P", "-c", "import ccim.cli, ccim.channels.feishu, ccim.channels.weixin, ccim.weixin_hub"],
                        capture_output=True, text=True, cwd="/")
     if r.returncode != 0:
         raise SystemExit(f"新稳定版有问题，没有启用：{r.stderr.strip()[-500:]}")

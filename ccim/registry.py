@@ -144,6 +144,21 @@ def write_state(path, **changes):
     return s
 
 
+def all_chats(path):
+    """这个项目在各个渠道里的对话：[(在哪, 地址, 记录)]。飞书的记在项目自己的状态里，
+    微信的记在各个微信号的状态里（一个微信号管好几个项目）。"""
+    path = os.path.realpath(path)
+    entry = get(path) or {}
+    where = {"feishu": "飞书"}.get(entry.get("channel"), "飞书")
+    out = [(where, k, c) for k, c in (read_state(path).get("chats") or {}).items()]
+    for hub, e in all_projects().items():
+        if e.get("kind") == "weixin" and path in (e.get("projects") or {}):
+            chats = (read_state(hub).get("chats") or {}).get(path) or {}
+            where = "微信" if e.get("bot_name") == "微信" else f"微信「{e.get('bot_name')}」"
+            out += [(where, k, c) for k, c in chats.items()]
+    return out
+
+
 # ---------- Claude Code 自己的设置 ----------
 
 ALIASES = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5", "haiku": "claude-haiku-4-5-20251001",

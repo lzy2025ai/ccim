@@ -65,7 +65,7 @@ def _title(info):
 
 async def _resume(bridge, chat, arg, say):
     sessions = await asyncio.to_thread(list_sessions, directory=bridge.path)
-    feishu = {c.get("session_id") for c in (registry.read_state(bridge.path).get("chats") or {}).values()}
+    where_of = {c.get("session_id"): where for where, _, c in registry.all_chats(bridge.path)}
     sessions = [x for x in sessions if x.session_id != chat.session_id]
     if not arg:
         if not sessions:
@@ -74,7 +74,7 @@ async def _resume(bridge, chat, arg, say):
         lines = ["**最近的对话**（发 /resume 编号 接上）："]
         for x in sessions[:8]:
             when = time.strftime("%m-%d %H:%M", time.localtime(x.last_modified / 1000))
-            where = bridge.channel.label if x.session_id in feishu else "终端"
+            where = where_of.get(x.session_id, "终端")
             lines.append(f"`{x.session_id[:8]}`　{_title(x)}　{when} · {where}")
         await say("\n".join(lines))
         return
@@ -99,7 +99,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         await say("这个项目用的是 Codex，没有这个功能。")
         return True
     if cmd == "/help":
-        await say(HELP.format(name=bridge.name) if not codex else CODEX_HELP.format(name=bridge.name))
+        await say((HELP if not codex else CODEX_HELP).format(name=bridge.name) + bridge.help_extra)
     elif cmd == "/new":
         await chat.reset()
         await say("已开始新对话。")
@@ -111,7 +111,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         else:
             from . import runtime
             await say("好，马上重启，大约半分钟后回来告诉你结果。新版本起不来的话，会先用稳定版顶上。")
-            runtime.schedule_restart(bridge.path, delay=3, target=arg.lower() if arg.lower() in ("dev", "stable") else None)
+            runtime.schedule_restart(bridge.home, delay=3, target=arg.lower() if arg.lower() in ("dev", "stable") else None)
     elif cmd == "/usage":
         from . import usage
         await say(await usage.report(bridge.path))

@@ -30,7 +30,11 @@ def _logging(mode):
 async def _serve(path, entry, secret, mode):
     from .bridge import Bridge
     log = logging.getLogger("ccim")
-    bridge = Bridge(path, entry)
+    if entry.get("kind") == "weixin":
+        from .weixin_hub import Hub
+        bridge = Hub(path, entry)
+    else:
+        bridge = Bridge(path, entry)
     channel = load(entry["channel"])(path, entry, secret, bridge.handlers())
     bridge.attach(channel)
     registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None,
@@ -104,11 +108,31 @@ def pair(path, channel, **kw):
 
 # ---------- 子命令 ----------
 
-def _need(project, single_ok=False):
+def _weixin_only(project):
+    """只接了微信的项目（登记在微信号下面，没有自己的登记）：返回路径，不是返回 None。"""
+    from . import weixin_hub
+    all_ = {p for _, e in weixin_hub.hubs() for p in (e.get("projects") or {})}
+    p = os.path.realpath(os.path.expanduser(project or os.getcwd()))
+    if p in all_:
+        return p
+    hits = [x for x in all_ if os.path.basename(x) == project]
+    return hits[0] if project and len(hits) == 1 else None
+
+
+def _need(project, single_ok=False, weixin_ok=False):
+    """weixin_ok：只接了微信的项目也行，这时返回的条目是空的。"""
     path, entry = registry.find(project)
     data = registry.all_projects()
     if not entry and project is None and single_ok and len(data) == 1:   # 只配对过一个项目时，不写也能找到
         path, entry = next(iter(data.items()))
+    if not entry and _weixin_only(project):
+        from . import weixin_hub
+        path = _weixin_only(project)
+        if weixin_ok:
+            return path, {}
+        names = "、".join(e.get("bot_name") for _, e in weixin_hub.hubs_of(path))
+        raise SystemExit(f"「{os.path.basename(path)}」只接了微信，由微信「{names}」负责：开关、重启、看日志用 ccim start / stop / "
+                         f"restart / logs 加上微信号的名字。")
     if not entry:
         if project:
             raise SystemExit(f"找不到「{project}」。用 ccim list 看看已配对的项目。")
@@ -133,13 +157,30 @@ def _apply_agent(path, agent):
     return True
 
 
+def add_weixin(path, name, agent):
+    """ccim --weixin [名字]：把这个目录加进微信号（没登录过就先扫码登录）。"""
+    from . import weixin_hub
+    hub, e = weixin_hub.find(name)
+    if not hub:
+        if name or not weixin_hub.hubs():
+            print("先登录微信。" if not name else f"还没有叫「{name}」的微信号，扫码登录一个。")
+            hub, e = weixin_hub.login(name)
+    pname = os.path.basename(path)
+    already = path in (e.get("projects") or {})
+    weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent)
+    weixin_hub.ensure_running(hub)
+    n = len(registry.get(hub).get("projects") or {})
+    print(f"「{pname}」{'本来就在' if already else '已加到'}微信「{e['bot_name']}」里。" +
+          ("直接在微信里给它发消息就行。" if n == 1 else f"在微信里发 /项目 {pname} 切过去。"))
+
+
 def cmd_default(args):
     path = os.path.realpath(os.getcwd())
+    if args.weixin is not None:
+        return add_weixin(path, args.weixin or None, args.agent)
     entry = registry.get(path) or pair(path, args.channel or "feishu")
     _apply_agent(path, args.agent)
     entry = registry.get(path)
-    if args.channel and entry["channel"] != args.channel:
-        raise SystemExit(f"这个项目接的是{NAMES[entry['channel']]}。要换成{NAMES[args.channel]}，先 ccim unpair。")
     r = daemon.running(path)
     if r:
         where = {"bg": "后台", "always": "后台常驻"}.get(r[1], "另一个终端")
@@ -206,28 +247,37 @@ def cmd_restart(args):
     print(f"「{os.path.basename(path)}」已重启，在后台运行（进程 {pid}）。")
 
 
+def _state_text(path):
+    r = daemon.running(path)
+    s = registry.read_state(path)
+    if r and s.get("error"):
+        return "出错：" + s["error"], s, r
+    how = {"bg": "（后台）", "always": "（常驻）"}.get(r[1], "（前台）") if r else ""
+    state = ("在线" if s.get("online") else "连接中") + how if r else (
+        "离线（等待自动重启）" if daemon.is_always(path) else "离线")
+    return state, s, r
+
+
 def cmd_list(args):
     data = registry.all_projects()
     if not data:
         print("还没有配对过的项目。在项目目录里运行 ccim 开始。")
         return
     rows = [("项目", "渠道", "机器人", "状态", "版本", "路径")]
-    for path, e in sorted(data.items()):
-        r = daemon.running(path)
-        s = registry.read_state(path)
-        how = {"bg": "（后台）", "always": "（常驻）"}.get(r[1], "（前台）") if r else ""
-        state = ("在线" if s.get("online") else "连接中") + how if r else (
-            "离线（等待自动重启）" if daemon.is_always(path) else "离线")
+    for path, e in sorted(data.items(), key=lambda kv: (kv[1].get("kind") == "weixin", kv[0])):
+        state, s, r = _state_text(path)
         ver = (runtime.describe(s.get("python")) + ("（顶替中）" if s.get("fallback") else "")) if r else ""
-        if r and s.get("error"):
-            state = "出错：" + s["error"]
+        if e.get("kind") == "weixin":
+            names = "、".join(os.path.basename(p) for p in e.get("projects") or {}) or "（还没有项目）"
+            rows.append((names, "微信", e.get("bot_name", ""), state, ver, ""))
+            continue
         rows.append((os.path.basename(path), NAMES.get(e.get("channel"), e.get("channel", "")),
                      (e.get("bot_name") or e.get("app_id", "")) + ("（Codex）" if e.get("agent") == "codex" else ""), state,
                      ver, path))
     width = lambda s: sum(2 if ord(c) > 0x2e80 else 1 for c in s)
     cols = [max(width(r[i]) for r in rows) for i in range(5)]
     for r in rows:
-        print("  ".join(r[i] + " " * (cols[i] - width(r[i])) for i in range(5)) + "  " + r[5])
+        print(("  ".join(r[i] + " " * (cols[i] - width(r[i])) for i in range(5)) + "  " + r[5]).rstrip())
 
 
 def _codex_effective(path, model=None, effort=None):
@@ -236,54 +286,72 @@ def _codex_effective(path, model=None, effort=None):
     return model or m or "默认", effort or e or "默认", bool(model), bool(effort)
 
 
-def cmd_show(args):
-    path, e = _need(args.project, single_ok=True)
-    s = registry.read_state(path)
-    r = daemon.running(path)
-    how = {"bg": "后台", "always": "常驻"}.get(r[1], "前台") if r else ""
-    if r and s.get("error"):
-        status = f"出错：{s['error']}（{how}，进程 {r[0]}）"
-    elif r:
-        status = f"{'在线' if s.get('online') else '连接中'}（{how}，进程 {r[0]}，{s.get('started', '')} 启动）"
-    else:
-        status = "离线（等待自动重启）" if daemon.is_always(path) else "离线"
-    codex = e.get("agent") == "codex"
-    eff = _codex_effective if codex else registry.effective
-    default_model, default_effort, m_set, e_set = eff(path, e.get("model"), e.get("effort"))
-    follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
-    weixin = e.get("channel") == "weixin"
-    rows = [
-        ("项目", os.path.basename(path)),
-        ("路径", path),
-        ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{NAMES.get(e.get('channel'), e.get('channel'))}）"),
-        ("助手", "Codex" if codex else "Claude Code"),
-        ("状态", status),
-        ("版本", (runtime.describe(s.get("python")) + ("（新版本没起来，暂时顶替）" if s.get("fallback") else "")
-                  if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
-        *([] if weixin else [("群聊", "所有人 @ 都响应" if e.get("group") == "all" else "只响应主人")]),
-        ("模型", default_model + ("" if m_set else follow)),
-        ("思考深度", default_effort + ("" if e_set else follow)),
-        *([] if weixin else [("收到消息表情", e.get("reaction") or "OnIt（默认）")]),
-        ("配对时间", e.get("paired_at", "")),
-    ]
-    if e.get("claim_code"):
-        rows.append(("待认领", f"在{NAMES[e['channel']]}里私聊机器人发送 {e['claim_code']}"))
+def _print_rows(rows):
     width = lambda t: sum(2 if ord(c) > 0x2e80 else 1 for c in t)
     pad = max(width(k) for k, _ in rows)
     for k, v in rows:
         print(f"{k}{' ' * (pad - width(k))}  {v}")
 
-    chats = s.get("chats") or {}
+
+def _show_hub(path, e):
+    state, s, r = _state_text(path)
+    cur = s.get("current")
+    projects = list(e.get("projects") or {})
+    _print_rows([
+        ("微信号", e.get("bot_name", "")),
+        ("状态", state + (f"，进程 {r[0]}，{s.get('started', '')} 启动" if r else "")),
+        ("版本", (runtime.describe(s.get("python")) if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
+        ("项目", "、".join(os.path.basename(p) + ("（当前）" if p == cur else "") for p in projects) or "还没有，到项目目录里运行 ccim --weixin"),
+        ("登录时间", e.get("paired_at", "")),
+    ])
+
+
+def cmd_show(args):
+    from . import weixin_hub
+    path, e = _need(args.project, single_ok=True, weixin_ok=True)
+    if e.get("kind") == "weixin":
+        return _show_hub(path, e)
+    hubs = weixin_hub.hubs_of(path)
+    settings = {k: v for _, h in hubs[:1] for k, v in ((h.get("projects") or {}).get(path) or {}).items()} if not e else e
+    codex = settings.get("agent") == "codex"
+    eff = _codex_effective if codex else registry.effective
+    default_model, default_effort, m_set, e_set = eff(path, settings.get("model"), settings.get("effort"))
+    follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
+    rows = [("项目", os.path.basename(path)), ("路径", path)]
+    if e:
+        state, s, r = _state_text(path)
+        rows += [
+            ("机器人", f"{e.get('bot_name') or e.get('app_id')}（{NAMES.get(e.get('channel'), e.get('channel'))}）"),
+            ("状态", state + (f"，进程 {r[0]}，{s.get('started', '')} 启动" if r else "")),
+            ("版本", (runtime.describe(s.get("python")) + ("（新版本没起来，暂时顶替）" if s.get("fallback") else "")
+                      if r else "") + f"　设置：{runtime.which(path, e)[1]}"),
+            ("群聊", "所有人 @ 都响应" if e.get("group") == "all" else "只响应主人"),
+        ]
+    if hubs:
+        rows.append(("微信", "、".join(f"「{h.get('bot_name')}」（{_state_text(hp)[0]}）" for hp, h in hubs)))
+    rows += [
+        ("助手", "Codex" if codex else "Claude Code"),
+        ("模型", default_model + ("" if m_set else follow)),
+        ("思考深度", default_effort + ("" if e_set else follow)),
+    ]
+    if e:
+        rows += [("收到消息表情", e.get("reaction") or "OnIt（默认）"), ("配对时间", e.get("paired_at", ""))]
+    if e.get("claim_code"):
+        rows.append(("待认领", f"在{NAMES[e['channel']]}里私聊机器人发送 {e['claim_code']}"))
+    _print_rows(rows)
+
+    chats = registry.all_chats(path)
     if not chats:
         print("\n还没有聊过天。")
         return
     print(f"\n对话（{len(chats)} 个）")
+    width = lambda t: sum(2 if ord(c) > 0x2e80 else 1 for c in t)
     kinds = {"p2p": "私聊", "group": "群聊"}
     lines = []
-    for key, c in sorted(chats.items(), key=lambda kv: kv[1].get("last_active", ""), reverse=True):
-        kind = kinds.get(c.get("type"), "聊天") + ("·话题" if "|" in key else "")
+    for where, key, c in sorted(chats, key=lambda x: x[2].get("last_active", ""), reverse=True):
+        kind = where + kinds.get(c.get("type"), "聊天") + ("·话题" if "|" in key else "")
         title = f"{kind}「{c['name']}」" if c.get("name") else kind
-        model, effort, _, _ = eff(path, c.get("model") or e.get("model"), c.get("effort") or e.get("effort"))
+        model, effort, _, _ = eff(path, c.get("model") or settings.get("model"), c.get("effort") or settings.get("effort"))
         custom = "（本聊天单独设置）" if c.get("model") or c.get("effort") else ""
         sid = (c.get("codex_session_id" if codex else "session_id") or "")[:8] or "新对话"
         lines.append((title, f"{model} · {effort}{custom}", sid, c.get("last_active") or "—"))
@@ -299,23 +367,23 @@ def cmd_resume(args):
     project, prefix = args.project, args.session
     if project and not prefix and re.fullmatch(r"[0-9a-f]{4,}(-[0-9a-f-]*)?", project) and not registry.find(project)[1]:
         project, prefix = None, project               # 只写了对话编号
-    path, e = _need(project, single_ok=True)
+    path, e = _need(project, single_ok=True, weixin_ok=True)
     if e.get("agent") == "codex":
         raise SystemExit("这个项目用的是 Codex，在终端里用 codex resume 接着聊。")
-    chats = registry.read_state(path).get("chats") or {}
-    found = [(k, c) for k, c in chats.items() if c.get("session_id") and c["session_id"].startswith(prefix or "")]
+    found = [(w, c) for w, _, c in registry.all_chats(path)
+             if c.get("session_id") and c["session_id"].startswith(prefix or "")]
     if not found:
         raise SystemExit(f"找不到编号以 {prefix} 开头的对话。用 ccim show 看看有哪些。" if prefix
                          else "这个项目还没有对话。")
     if prefix and len(found) > 1:
         raise SystemExit(f"编号 {prefix} 对应了 {len(found)} 个对话，多写几位。")
-    key, chat = max(found, key=lambda kv: kv[1].get("last_active", ""))   # 没写编号就接最近聊过的
+    where, chat = max(found, key=lambda kv: kv[1].get("last_active", ""))   # 没写编号就接最近聊过的
     sid = chat["session_id"]
-    live = bool(chat.get("live") and daemon.running(path))
+    live = bool(chat.get("live"))
     claude = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
     argv = [claude, "--resume", sid] + (["--fork-session"] if live or args.fork else [])
     if live:
-        print(f"这个对话在{NAMES.get(e.get('channel'), '飞书')}那边还开着，终端里接着聊会另开一个分支：之前的内容都在，之后两边各聊各的。")
+        print(f"这个对话在{where}那边还开着，终端里接着聊会另开一个分支：之前的内容都在，之后两边各聊各的。")
     print(f"在「{os.path.basename(path)}」里接着对话 {sid[:8]}…")
     os.chdir(path)
     for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
@@ -332,6 +400,8 @@ def cmd_handoff(args):
     if not info:
         raise SystemExit(f"找不到对话 {sid[:8]} 的记录。")
     path = os.path.realpath(info["cwd"] or os.getcwd())
+    if not registry.get(path) and _weixin_only(path):
+        raise SystemExit("这个项目只接了微信，还不能从这里转过去。可以在微信里发 /resume 接上这个对话。")
     entry = registry.get(path) or pair(path, "feishu", show=lambda url: handoff.show_qr_page(path, url),
                                        interactive=False)
     name = os.path.basename(path)
@@ -408,6 +478,52 @@ def cmd_promote(args):
         print("没有跑稳定版的项目。")
 
 
+def cmd_weixin(args):
+    from . import weixin_hub
+    act, name = args.action, args.name
+    if act == "login":
+        hub, e = weixin_hub.login(name)
+        if daemon.running(hub):               # 重新登录换了 token，要重启才用上
+            daemon.stop(hub)
+        if e.get("projects"):
+            weixin_hub.ensure_running(hub)
+            print(f"微信「{e['bot_name']}」已在后台常驻。")
+        else:
+            print("到项目目录里运行 ccim --weixin，把项目加进来。")
+        return
+    if act == "remove":
+        path = _weixin_only(name) or os.path.realpath(os.path.expanduser(name or os.getcwd()))
+        hubs = [(h, e) for h, e in weixin_hub.hubs_of(path) if not args.account or e.get("bot_name") == args.account]
+        if not hubs:
+            raise SystemExit(f"「{os.path.basename(path)}」不在{'微信「' + args.account + '」' if args.account else '任何微信号'}里。")
+        for h, e in hubs:
+            weixin_hub.remove_project(h, path)
+            print(f"已把「{os.path.basename(path)}」移出微信「{e['bot_name']}」。")
+        return
+    if act == "logout":
+        hub, e = weixin_hub.find(name)
+        if not hub:
+            raise SystemExit(f"没有叫「{name}」的微信号。" if name else "还没有登录微信。")
+        if input(f"退出微信「{e['bot_name']}」？它管的项目在微信里就用不了了。(y/N)：").strip().lower() != "y":
+            return
+        daemon.stop(hub)
+        registry.del_secret(e["app_id"])
+        registry.remove(hub)
+        print("已退出。")
+        return
+    hs = weixin_hub.hubs()
+    if not hs:
+        print("还没有登录微信。到项目目录里运行 ccim --weixin，扫码登录并把项目加进来。")
+        return
+    for hub, e in hs:
+        cur = registry.read_state(hub).get("current")
+        print(f"微信「{e.get('bot_name')}」　{_state_text(hub)[0]}")
+        for p in e.get("projects") or {}:
+            print(f"  {os.path.basename(p)}{'（当前）' if p == cur else ''}　{p}")
+        if not e.get("projects"):
+            print("  还没有项目")
+
+
 def cmd_logs(args):
     path, _ = _need(args.project)
     log = daemon.log_path(path)
@@ -423,6 +539,8 @@ def cmd_config(args):
     if items and "=" not in items[0]:
         project = items.pop(0)
     path, entry = _need(project)
+    if entry.get("kind") == "weixin":
+        raise SystemExit("微信号没有这些设置。")
     if not items:
         print(f"group={entry.get('group', 'owner')}  model={entry.get('model', '默认')}  effort={entry.get('effort', '默认')}"
               f"  reaction={entry.get('reaction', '默认')}")
@@ -441,6 +559,8 @@ def cmd_config(args):
 
 def cmd_unpair(args):
     path, entry = _need(args.project)
+    if entry.get("kind") == "weixin":
+        raise SystemExit(f"退出微信号用 ccim weixin logout {entry.get('bot_name')}。")
     if input(f"解除「{os.path.basename(path)}」和机器人「{entry.get('bot_name') or entry['app_id']}」的配对？(y/N)：").strip().lower() != "y":
         return
     daemon.stop(path)
@@ -449,10 +569,11 @@ def cmd_unpair(args):
     print("已解除。" + ("飞书里的那个机器人应用还在，不再需要的话去飞书开放平台删掉。" if entry["channel"] == "feishu" else ""))
 
 
-def main(argv=None):
+def parser():
     p = argparse.ArgumentParser(prog="ccim", description="把本机 Claude Code 接到飞书或微信。")
     p.add_argument("--feishu", dest="channel", action="store_const", const="feishu", help="用飞书（默认）")
-    p.add_argument("--weixin", dest="channel", action="store_const", const="weixin", help="用个人微信")
+    p.add_argument("--weixin", nargs="?", const="", metavar="微信号",
+                   help="把当前目录加进微信（登录了好几个微信号时写上名字）")
     p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
     sub = p.add_subparsers(dest="cmd")
     for name, fn, help_ in [("start", cmd_start, "后台运行"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
@@ -482,6 +603,11 @@ def main(argv=None):
     s = sub.add_parser("show", help="查看一个项目的详情：状态、模型、思考深度、各个对话")
     s.add_argument("project", nargs="?", help="项目名、机器人名或路径，不写就是当前目录")
     s.set_defaults(fn=cmd_show)
+    s = sub.add_parser("weixin", help="微信号：不写参数是查看；login [名字] 登录；remove [项目] 移出项目；logout 名字 退出")
+    s.add_argument("action", nargs="?", choices=("login", "remove", "logout"))
+    s.add_argument("name", nargs="?", help="login / logout 写微信号的名字，remove 写项目")
+    s.add_argument("--from", dest="account", help="remove 时只从这个微信号移出")
+    s.set_defaults(fn=cmd_weixin)
     s = sub.add_parser("logs", help="查看后台日志")
     s.add_argument("project", nargs="?")
     s.add_argument("-f", "--follow", action="store_true", help="持续输出")
@@ -502,7 +628,14 @@ def main(argv=None):
     s.add_argument("--channel", default="feishu")
     s.add_argument("--mode", default="fg")
     s.set_defaults(fn=cmd_run)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run):
+        from . import weixin_hub
+        weixin_hub.migrate()
     try:
         (getattr(args, "fn", None) or cmd_default)(args)
     except KeyboardInterrupt:

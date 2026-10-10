@@ -14,9 +14,27 @@ def _clip(s, n):
     return s if len(s) <= n else s[:n].rstrip() + "…"
 
 
+class ProjectStore:
+    """各聊天的会话记录存在哪：默认是项目自己的 state.json 的 chats。"""
+
+    def __init__(self, path):
+        self.path = path
+
+    def read(self):
+        return registry.read_state(self.path).get("chats") or {}
+
+    def write(self, chats):
+        registry.write_state(self.path, chats=chats)
+
+
 class Bridge:
-    def __init__(self, path, entry):
+    def __init__(self, path, entry, store=None, home=None):
+        """store：会话记录存哪（微信一个进程管好几个项目，记在微信号自己的状态里）。
+        home：这个 ccim 进程登记的路径，/restart 重启的就是它；默认就是项目目录。"""
         self.path, self.entry = path, entry
+        self.store = store or ProjectStore(path)
+        self.home = home or path
+        self.help_extra = ""                  # /help 末尾补充的说明（微信的 /项目）
         self.name = os.path.basename(path)
         self.channel = None
         self.approvals = None
@@ -35,12 +53,12 @@ class Bridge:
     # ----- 每个聊天的会话记录，存在 state.json 的 chats 里 -----
 
     def saved(self, chat_id):
-        return (registry.read_state(self.path).get("chats") or {}).get(chat_id, {})
+        return self.store.read().get(chat_id, {})
 
     def save(self, chat_id, **changes):
-        chats = registry.read_state(self.path).get("chats") or {}
+        chats = self.store.read()
         chats.setdefault(chat_id, {}).update(changes)
-        registry.write_state(self.path, chats=chats)
+        self.store.write(chats)
 
     def chat(self, addr, chat_type, fork_from=None):
         c = self.chats.get(addr)
@@ -183,7 +201,7 @@ class Bridge:
         if req.get("last_reply"):
             lines.append("\n**刚才说到**：\n" + _clip(req["last_reply"], 600))
         text = "\n".join(lines)
-        chats = registry.read_state(self.path).get("chats") or {}
+        chats = self.store.read()
         p2p = sorted((k for k, c in chats.items() if c.get("type") == "p2p" and "|" not in k),
                      key=lambda k: chats[k].get("last_active", ""), reverse=True)
         if p2p:

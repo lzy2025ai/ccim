@@ -111,7 +111,11 @@ def start_always(path, channel, python=None):
     with open(plist_path(path), "wb") as f:
         plistlib.dump(plist, f)
     started = registry.now()
-    r = _launchctl("bootstrap", _domain(), plist_path(path))
+    for _ in range(10):                       # 刚撤掉的同名服务系统还没清理完时会报 Input/output error，等一下再试
+        r = _launchctl("bootstrap", _domain(), plist_path(path))
+        if r.returncode == 0:
+            break
+        time.sleep(1)
     if r.returncode != 0:
         os.remove(plist_path(path))
         raise SystemExit(f"交给系统托管失败：{(r.stderr or r.stdout).strip()}")

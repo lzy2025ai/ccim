@@ -30,7 +30,9 @@ Requirements: macOS, Python 3.11+, [uv](https://docs.astral.sh/uv/), Claude Code
    - **Which project directory.** Run the commands from inside it. Don't use the home directory or `/` unless the
      user explicitly wants that (the home directory needs `--yes`, and gives the assistant access to all their files).
    - **Feishu or WeChat.**
-   - **Claude Code or Codex.** Claude Code is the default; add `--agent codex` for Codex.
+   - **Claude Code or Codex.** Claude Code is the default; add `--agent codex` for Codex. For Codex, first check it's
+     there: `ls /Applications/ChatGPT.app` or `command -v codex`. If neither exists, tell the user to install the
+     ChatGPT desktop app (or the Codex CLI) and log in; otherwise the first message will fail.
 
 ## Feishu / Lark
 
@@ -44,7 +46,9 @@ ccim start --always            # add --agent codex for Codex
   the user's browser. Run the command so it can wait that long (e.g. in the background), and tell the user to scan
   the QR code that just opened in their browser. Scanning creates a bot under their Feishu account.
 - After pairing it keeps running in the background, starts at login and restarts itself if it crashes. The command
-  returns once it's online.
+  returns once it's online; the last line says 「已常驻」. While it waits for the scan, check its output or `ccim list`
+  (the project appears once the scan succeeds).
+- Already paired and want to switch to Codex (or back)? `ccim restart <project> --agent codex` (`--agent claude`).
 - Don't run bare `ccim` for the user: it runs in the foreground and never returns. That's meant for someone
   watching their own terminal.
 
@@ -57,12 +61,27 @@ cd <project>
 ccim --weixin                  # add --agent codex for Codex
 ```
 
-- This always shows a QR code (in the browser when not run in a terminal) and waits for the user to scan it with
-  WeChat. **Whichever WeChat account scans it, the project is added to that account.** Scanning an account that's
-  already logged in doesn't log in again; it just adds the project, and the chat switches to the new project.
-- To add a project to an account that's already logged in without scanning: `ccim --weixin <account name>`
-  (`ccim weixin` lists the names; the first account is called 「微信」). The chat stays on its current project and
-  the user gets a reminder in WeChat.
+- This always shows a QR code (in the browser when not run in a terminal) and waits up to about 8 minutes for the
+  user to scan it with WeChat; an expired code is replaced automatically. Run it so it can wait (e.g. in the
+  background). **Whichever WeChat account scans it, the project is added to that account.** Scanning an account
+  that's already logged in doesn't log in again; it just adds the project, and the chat switches to the new project.
+  The last line says 「已加到微信「名字」里」.
+- `ccim --weixin <name>`:
+  - If an account with that name is logged in: adds the project to it **without scanning**. The chat stays on its
+    current project and the user gets a reminder in WeChat.
+  - If there's no account with that name: shows a QR code and logs in a **new** account under that name, then adds
+    the project — one command does both. Tell the user which phone to scan with ("用你的工作微信扫"). If they scan
+    with an account that's already logged in, ccim refuses and adds nothing (「扫码的是已经登录过的微信」);
+    run the same command again and have them scan with the other WeChat.
+- New accounts without a name are called 「微信」, then 「微信2」, 「微信3」…
+- `ccim weixin` lists the accounts, e.g.:
+
+  ```
+  微信「微信」　在线（常驻）
+    blog（当前）　/Users/me/work/blog
+  微信「工作号」　在线（常驻）
+    report　/Users/me/work/report
+  ```
 - Each WeChat account runs in the background permanently; nothing else to start.
 
 Then tell the user: in WeChat, open the 「微信ClawBot」 chat and send a message. `/项目` lists the projects,
@@ -72,7 +91,7 @@ More WeChat commands:
 
 | Task | Command |
 |---|---|
-| Log in another WeChat account | `ccim weixin login <name>` |
+| Log in another WeChat account, no project yet | `ccim weixin login <name>` |
 | Rename an account | `ccim weixin rename <old> <new>` |
 | Remove a project from WeChat | `ccim weixin remove <project>` (`--from <name>` for one account only) |
 | Log out an account | `ccim weixin logout <name>` |

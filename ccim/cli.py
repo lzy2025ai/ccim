@@ -169,6 +169,11 @@ def add_weixin(path, name, agent):
         if existed and changed and daemon.running(hub):   # 重新扫码后旧的登录凭证马上失效，后台进程要换上新的
             print("重启一下这个微信，用上新的登录…", flush=True)
             daemon.stop(hub)
+        if name and existed and e.get("bot_name") != name:   # 想登录新的号，却拿已经登录过的微信扫了
+            if e.get("projects"):
+                weixin_hub.ensure_running(hub)
+            raise SystemExit(f"扫码的是已经登录过的微信「{e['bot_name']}」，不是新的微信，「{os.path.basename(path)}」没有加进去。\n"
+                             f"要登录「{name}」，用另一个微信扫码：ccim --weixin {name}")
     else:
         changed = False
     pname = os.path.basename(path)
@@ -520,14 +525,18 @@ def cmd_weixin(args):
     from . import weixin_hub
     act, name = args.action, args.name
     if act == "login":
-        hub, e, _, _ = weixin_hub.login(name)
+        hub, e, existed, _ = weixin_hub.login(name)
         if daemon.running(hub):               # 重新登录换了 token，要重启才用上
             daemon.stop(hub)
         if e.get("projects"):
             weixin_hub.ensure_running(hub)
+        if name and existed and e.get("bot_name") != name:
+            raise SystemExit(f"扫码的是已经登录过的微信「{e['bot_name']}」（顺便更新了它的登录），不是新的微信。"
+                             f"要登录「{name}」，用另一个微信扫码。")
+        if e.get("projects"):
             print(f"微信「{e['bot_name']}」已在后台常驻。")
         else:
-            print("到项目目录里运行 ccim --weixin，把项目加进来。")
+            print(f"到项目目录里运行 ccim --weixin {e['bot_name']}，把项目加进来。")
         return
     if act == "remove":
         path = _weixin_only(name) or os.path.realpath(os.path.expanduser(name or os.getcwd()))

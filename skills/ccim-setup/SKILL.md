@@ -32,7 +32,8 @@ Requirements: macOS, Python 3.11+, [uv](https://docs.astral.sh/uv/), Claude Code
    - **Feishu or WeChat.**
    - **Claude Code or Codex.** Claude Code is the default; add `--agent codex` for Codex. For Codex, first check it's
      there: `ls /Applications/ChatGPT.app` or `command -v codex`. If neither exists, tell the user to install the
-     ChatGPT desktop app (or the Codex CLI) and log in; otherwise the first message will fail.
+     ChatGPT desktop app (or the Codex CLI) and log in. Being installed isn't enough: ask the user whether they're
+     logged in (with the CLI you can check `codex login status`); otherwise the first message will fail.
 
 ## Feishu / Lark
 
@@ -46,8 +47,8 @@ ccim start --always            # add --agent codex for Codex
   the user's browser. Run the command so it can wait that long (e.g. in the background), and tell the user to scan
   the QR code that just opened in their browser. Scanning creates a bot under their Feishu account.
 - After pairing it keeps running in the background, starts at login and restarts itself if it crashes. The command
-  returns once it's online; the last line says 「已常驻」. While it waits for the scan, check its output or `ccim list`
-  (the project appears once the scan succeeds).
+  returns once it's online; the last line says 「已常驻」. While it waits for the scan, poll `ccim list` every few seconds
+  (the project appears once the scan succeeds) rather than relying on reading the running command's output.
 - Already paired and want to switch to Codex (or back)? `ccim restart <project> --agent codex` (`--agent claude`).
 - Don't run bare `ccim` for the user: it runs in the foreground and never returns. That's meant for someone
   watching their own terminal.
@@ -65,7 +66,8 @@ ccim --weixin                  # add --agent codex for Codex
   user to scan it with WeChat; an expired code is replaced automatically. Run it so it can wait (e.g. in the
   background). **Whichever WeChat account scans it, the project is added to that account.** Scanning an account
   that's already logged in doesn't log in again; it just adds the project, and the chat switches to the new project.
-  The last line says 「已加到微信「名字」里」.
+  The last line says 「已加到微信「名字」里」 (or 「本来就在…」 if the project was already there). While it waits,
+  poll `ccim weixin`: the project shows up under an account once the scan succeeds.
 - `ccim --weixin <name>`:
   - If an account with that name is logged in: adds the project to it **without scanning**. The chat stays on its
     current project and the user gets a reminder in WeChat.
@@ -78,7 +80,8 @@ ccim --weixin                  # add --agent codex for Codex
 
   ```
   微信「微信」　在线（常驻）
-    blog（当前）　/Users/me/work/blog
+    shop（当前）　/Users/me/work/shop
+    blog　/Users/me/work/blog
   微信「工作号」　在线（常驻）
     report　/Users/me/work/report
   ```

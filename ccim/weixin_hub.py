@@ -298,6 +298,17 @@ class Hub:
         busy = "它还在干活，做完会把结果发过来。" if self._busy(path) else "接着说就行。"
         await say(f"已切到「{os.path.basename(path)}」，{busy}")
 
+    def ask(self, req):
+        """ccim ask 派到这个微信号里某个项目的任务：发到主人和这个号的私聊。"""
+        projects = dict(self.projects())
+        path = req.get("project")
+        if path not in projects:
+            from . import asks
+            asks.mark(self.home, req["id"], state="error", error="这个项目不在这个微信号里")
+            return
+        b = self.bridge(path, projects[path])
+        return b.ask(req, (self.entry.get("owner_open_id"), "p2p"))
+
     async def shutdown(self):
         for b in list(self.bridges.values()):
             await b.shutdown()

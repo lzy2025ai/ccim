@@ -67,6 +67,20 @@ class Caffeinate:
             self.proc = None
 
 
+class Task(str):
+    """agent 用 ccim ask 派的任务。当成普通消息排队、处理（交给 Claude 的就是这段文字），
+    这一轮结束时把 (状态 ok / error / stopped, 回答) 交给 future。"""
+
+    def __new__(cls, text):
+        o = super().__new__(cls, text)
+        o.future = asyncio.get_running_loop().create_future()
+        return o
+
+    def finish(self, state, answer=""):
+        if not self.future.done():
+            self.future.set_result((state, answer or ""))
+
+
 class Turn:
     def __init__(self):
         self.start = time.monotonic()
@@ -110,6 +124,7 @@ class Chat:
         self.turn = None
         self.stopping = False
         self.reconnect = False
+        self.outcome = None                   # 这一轮的结果 (状态, 回答)，交给 ccim ask 派的任务
 
     # ----- 对外 -----
 
@@ -155,7 +170,9 @@ class Chat:
 
     async def stop(self):
         while not self.queue.empty():
-            _, _, react = self.queue.get_nowait()
+            prompt, _, react = self.queue.get_nowait()
+            if isinstance(prompt, Task):
+                prompt.finish("stopped")
             asyncio.create_task(self._unreact(react))
         return await self._interrupt()
 
@@ -231,14 +248,18 @@ class Chat:
                     await self._disconnect()
                     self.reconnect = False
                 self.stopping = False
+                self.outcome = None
                 self.b.caffeinate.acquire()
                 try:
                     await self._turn(prompt, reply_to)
                 except Exception as e:
                     log.exception("[%s] 这一轮出错", self.chat_id[-6:])
+                    self.outcome = ("error", str(e) or type(e).__name__)
                     await self._disconnect()
                     await self._safe_text(f"出错了：{short(str(e) or type(e).__name__, 300)}", reply_to)
                 finally:
+                    if isinstance(prompt, Task):
+                        prompt.finish(*(self.outcome or ("stopped", "")))
                     self.turn = None
                     self.b.caffeinate.release()
                     await self._unreact(react)
@@ -394,6 +415,7 @@ class Chat:
             await self.b.channel.typing(self.chat_id, False)
         # 先发回答再收尾卡片：卡片接口卡住时不能拖住回答
         answer = None if error or self.stopping else result or t.text
+        self.outcome = ("stopped", "") if self.stopping else ("error", error) if error else ("ok", answer or "")
         if error:
             await self._safe_text(f"出错了：{short(error, 500)}", reply_to)
         elif self.stopping and not t.card_id:

@@ -1,7 +1,7 @@
 """把渠道收到的消息分给各个聊天的 Claude 会话；谁能用、群里怎么用都在这里判断。"""
 import asyncio, logging, os, time
 
-from . import commands, registry
+from . import asks, commands, registry
 from .approval import Approvals
 from .channels.base import address
 from .session import Caffeinate, Chat
@@ -221,6 +221,56 @@ class Bridge:
             await self.channel.send_text(chat_id, text)
         log.info("已把对话 %s 转到%s私聊", req["session_id"][:8], self.channel.label)
         return {"ok": True}
+
+    # ----- agent 派的任务（ccim ask） -----
+
+    def ask(self, req, target=None):
+        """收下一个任务：在对应的聊天里发出来、排进队列，做完写结果。马上返回，不等做完。
+        target：(对话地址, 类型)，不写就按请求里的 to 找。"""
+        return self._bg(self._ask(req, target))
+
+    async def _ask(self, req, target):
+        tid = req["id"]
+        try:
+            addr, chat_type = target or await self._ask_target(req.get("to"))
+            await self.run_task(addr, chat_type, req)
+        except Exception as e:
+            log.warning("任务 %s 没接下：%s", tid, e)
+            asks.mark(self.home, tid, state="error", error=str(e))
+
+    async def _ask_target(self, to):
+        """--to 指的是哪个对话：不写就是主人的私聊；也可以写群名、对话编号（ccim show 里的）。"""
+        chats = self.store.read()
+        if not to or to in ("私聊", "p2p"):
+            p2p = sorted((k for k, c in chats.items() if c.get("type") == "p2p" and "|" not in k),
+                         key=lambda k: chats[k].get("last_active", ""), reverse=True)
+            if p2p:
+                return p2p[0], "p2p"
+            if not self.owner():
+                raise ValueError("机器人还没认主人")
+            return None, "p2p"                # 还没私聊过：发任务时顺便开启私聊
+        hits = [k for k, c in chats.items() if c.get("name") == to or k == to] or \
+               [k for k, c in chats.items() if len(to) >= 4 and any((c.get(x) or "").startswith(to)
+                                                                    for x in ("session_id", "codex_session_id"))]
+        if len(hits) != 1:
+            names = "、".join(c.get("name") or k for k, c in chats.items() if c.get("type") == "group") or "没有"
+            raise ValueError(("有好几个对话都对得上" if hits else f"找不到「{to}」这个对话") + f"。群聊：{names}")
+        return hits[0], chats[hits[0]].get("type") or "p2p"
+
+    async def run_task(self, addr, chat_type, req):
+        from .session import Task
+        who = req.get("from") or "Agent"
+        task = Task(f"[{who} 派的任务] {req['task']}")
+        if addr:                              # 聊天里的人也看得到派了什么
+            await self.channel.send_text(addr, _clip(task, 1500))
+        else:
+            addr = await self.channel.send_to_user(self.owner(), _clip(task, 1500))
+        chat = self.chat(addr, chat_type)
+        ahead = chat.submit(task)
+        asks.mark(self.home, req["id"], state="queued", chat=addr, ahead=ahead)
+        log.info("← [%s 派的任务] %s", who, req["task"][:80])
+        state, answer = await task.future
+        asks.done(self.home, req["id"], state, answer)
 
     async def shutdown(self):
         for c in list(self.chats.values()):

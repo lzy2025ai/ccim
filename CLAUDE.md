@@ -46,6 +46,10 @@
   venv 的 python 是指向系统 python 的软链，判断属于哪个环境要看目录（`_env`），不能 realpath python 本身
 - `ccim/usage.py`：`/usage` 中文版。额度来自 SDK 的 RateLimitEvent（raw 里的 unifiedWindows），每轮对话记到 `~/.ccim/rate.json`；
   明细是临时会话跑 Claude Code 自带 /usage 再按句式翻译。新会话没发过请求时 /usage 不带额度，所以缓存旧了先用 haiku 问一句
+- `ccim/asks.py` + `ccim ask`：agent 派任务。和 handoff 一样走状态目录（ccim 进程登记的那个：飞书是项目，微信是微信号）里的
+  asks/<编号>.json，进程每秒取；`Bridge.ask` 在聊天里发「[谁 派的任务] …」、按普通消息排队（不插进正在做的一轮，
+  因为要单独拿结果）。任务是 `session.Task`（str 子类，带 future），`Chat._finish` 记下 outcome，`_work` 结束时交给它；
+  /stop 清队列时也会结束。命令行等结果时看 status 里的进程号，进程没了就不再等。退出码 0 / 2 / 3 / 4 / 1
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

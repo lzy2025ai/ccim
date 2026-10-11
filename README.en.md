@@ -129,6 +129,7 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim handoff` | Run inside a Claude Code conversation: move that conversation to your Feishu DM |
 | `ccim handback` | Back at the computer, run in the same conversation: bring in what happened in Feishu |
 | `ccim resume [project] [id]` | Continue a Feishu conversation in your terminal; defaults to the most recent one |
+| `ccim ask project "task"` | For agents: give the project's Claude / Codex a task and print the answer when done; see below |
 | `ccim logs [project] [-f]` | Show background logs |
 | `ccim config [project] key=value` | Project settings, see below |
 | `ccim unpair [project]` | Unpair |
@@ -201,6 +202,23 @@ ccim weixin logout name       # log out an account
 
 Each account runs in the background permanently; use `ccim start / stop / restart / logs <account name>`. If a login
 expires, `ccim list` shows it; run `ccim weixin login <name>` to scan again — its projects stay.
+
+## Letting agents assign tasks
+
+Another agent (e.g. Hermes) can give tasks to the Claude Code / Codex in a project through ccim. The task goes into
+that project's Feishu or WeChat conversation, starting with 「[who 派的任务]」; progress, approvals and the answer show
+up just like your own messages, so you can follow and steer it from your phone. The answer goes back to the agent.
+
+```bash
+ccim ask project "task" --from Hermes      # to your private chat with the bot; waits and prints the answer
+ccim ask project "task" --to 产品群         # to a group (its name, or a conversation id from ccim show)
+ccim ask project "task" --to 微信           # to WeChat (with several WeChat accounts, use the account name)
+ccim ask project - < task.txt               # read the task from stdin
+ccim ask project "task" --no-wait           # print a task id and return; later: ccim ask --result <id>
+```
+
+Exit codes: 0 done, 2 error, 3 stopped (e.g. someone sent /stop in the chat), 4 not finished yet, 1 not sent (the project
+isn't running, etc.). If the conversation is busy, the task waits in line. Local only.
 
 ## Security
 

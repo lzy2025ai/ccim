@@ -105,6 +105,27 @@ More WeChat commands:
 - `ccim show <project>` shows the bot, the assistant, the model, and the conversations.
 - Ask the user to send a message from their phone.
 
+## Giving a project's Claude / Codex a task
+
+Once a project is connected and running, you (an agent) can hand its Claude Code / Codex a task through ccim. The task
+appears in the user's chat (prefixed 「[<from> 派的任务]」), so they can watch and approve on their phone, and the answer
+comes back to you:
+
+```bash
+ccim ask <project> "<task>" --from <your name>     # waits, prints the answer to stdout
+ccim ask <project> - --from <your name> < task.txt  # long tasks: read from stdin
+ccim ask <project> "<task>" --no-wait               # prints a task id; then: ccim ask --result <id>
+```
+
+- Where it goes: the user's private chat with the project's Feishu bot by default. `--to <group name>` sends it to a
+  Feishu group the bot is in (names and ids are in `ccim show <project>`); `--to 微信` (or a WeChat account name) sends
+  it to WeChat.
+- Exit codes: 0 done (answer on stdout), 2 the assistant hit an error, 3 stopped (someone sent /stop), 4 not finished
+  (`--result` or `--timeout`), 1 couldn't send (not running, unknown project or conversation; the message says why).
+- Tasks can take a long time (tens of minutes). Either run it in the background and wait, or use `--no-wait` and poll
+  `ccim ask --result <id>`. If the conversation is busy, the task waits in line.
+- "正在运行的 ccim 是旧版本": run `ccim restart <name>` once, then retry.
+
 ## When something goes wrong
 
 Relay what ccim prints; it says what to do. Common cases:

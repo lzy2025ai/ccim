@@ -7,12 +7,12 @@
     ccim config [项目] 键=值     group=owner|all、model=、effort=
     ccim unpair [项目]          解除配对
 """
-import argparse, asyncio, logging, os, re, signal, sys
+import argparse, asyncio, logging, os, re, signal, sys, time
 
-from . import daemon, handoff, registry, runtime
+from . import asks, daemon, handoff, registry, runtime
 from .channels import NAMES, load, send_once
 
-CAPS = ["handoff", "safe-restart"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
+CAPS = ["handoff", "safe-restart", "ask"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
                "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
 
@@ -65,6 +65,8 @@ async def _serve(path, entry, secret, mode):
                 await asyncio.wait_for(stop.wait(), 1)
             except asyncio.TimeoutError:
                 tick += 1
+                for task in asks.take(path):  # agent 派的任务（ccim ask）
+                    bridge.ask(task)
                 req = handoff.take(path)      # Claude Code 那边要把对话转过来（ccim handoff）
                 if req:
                     try:
@@ -577,6 +579,101 @@ def cmd_weixin(args):
             print("  还没有项目")
 
 
+ASK_CODES = {"ok": 0, "error": 2, "stopped": 3}
+
+
+def _ask_home(path, e, to):
+    """这个任务交给哪个 ccim 进程：返回 (进程登记的路径, 微信号的话是它的条目)。"""
+    from . import weixin_hub
+    hubs = weixin_hub.hubs_of(path)
+    named = [(h, x) for h, x in hubs if to and x.get("bot_name") == to]
+    if named:
+        return named[0]
+    if to in ("微信", "weixin") or (not e and hubs):
+        if len(hubs) == 1:
+            return hubs[0]
+        if not hubs:
+            raise SystemExit(f"「{os.path.basename(path)}」没有接微信。")
+        raise SystemExit(f"「{os.path.basename(path)}」在好几个微信号里：{'、'.join(x.get('bot_name') for _, x in hubs)}。"
+                         f"用 --to 写上微信号的名字。")
+    return path, None
+
+
+def _print_result(res):
+    if res["state"] == "ok":
+        print(res.get("answer") or "")
+    elif res["state"] == "stopped":
+        print("任务被停下了，没有做完。", file=sys.stderr)
+    else:
+        print(f"任务出错：{res.get('answer') or '未知错误'}", file=sys.stderr)
+    sys.exit(ASK_CODES.get(res["state"], 2))
+
+
+def _wait_result(home, tid, timeout=0):
+    """等任务做完。ccim 进程没了（关停、重启）就不再等。"""
+    st = None
+    deadline = time.monotonic() + timeout if timeout else None
+    while True:
+        res = asks.result(home, tid)
+        if res:
+            _print_result(res)
+        st = asks.status(home, tid) or st
+        if st and st.get("pid") and not daemon._is_ccim(st["pid"]):
+            raise SystemExit("ccim 在任务做完之前退出了（关停或重启），这个任务没有做完。")
+        if deadline and time.monotonic() > deadline:
+            print(f"还没做完。之后用 ccim ask --result {tid} 取结果。", file=sys.stderr)
+            sys.exit(4)
+        time.sleep(1)
+
+
+def cmd_ask(args):
+    if args.result:
+        d = asks.find(args.result)
+        if not d:
+            raise SystemExit(f"找不到任务 {args.result}。")
+        res = asks.read_in(d, args.result, "result")
+        if res:
+            _print_result(res)
+        st = asks.read_in(d, args.result, "status") or {}
+        if st.get("state") == "error":
+            raise SystemExit(f"任务没接下：{st.get('error')}")
+        if st.get("pid") and not daemon._is_ccim(st["pid"]):
+            raise SystemExit("ccim 在任务做完之前退出了（关停或重启），这个任务没有做完。")
+        print("还没做完。", file=sys.stderr)
+        sys.exit(4)
+    if not args.project or args.task is None:
+        raise SystemExit('用法：ccim ask 项目 "任务"（任务写 - 就从标准输入读）')
+    task = sys.stdin.read() if args.task == "-" else args.task
+    if not task.strip():
+        raise SystemExit("任务是空的。")
+    path, e = _need(args.project, weixin_ok=True)
+    home, hub = _ask_home(path, e, args.to)
+    name = f"微信「{hub.get('bot_name')}」" if hub else f"「{os.path.basename(path)}」"
+    r = daemon.running(home)
+    if not r:
+        raise SystemExit(f"{name}的 ccim 没在运行，先 ccim start {hub.get('bot_name') if hub else os.path.basename(path)}。")
+    if "ask" not in (registry.read_state(home).get("caps") or []):
+        raise SystemExit(f"{name}正在运行的 ccim 是旧版本，不能派任务。先 ccim restart "
+                         f"{hub.get('bot_name') if hub else os.path.basename(path)}。")
+    tid = asks.submit(home, {"project": path, "task": task.strip(), "to": None if hub else args.to,
+                             "from": args.who})
+    for _ in range(60):                       # 等 ccim 接下（它每秒看一次）
+        st = asks.status(home, tid)
+        if st:
+            break
+        time.sleep(0.25)
+    else:
+        raise SystemExit("ccim 没有响应。")
+    if st.get("state") == "error":
+        raise SystemExit(f"任务没接下：{st.get('error')}")
+    if args.no_wait:
+        print(tid)
+        return
+    if st.get("ahead"):
+        print(f"前面还有 {st['ahead']} 条在处理，排着队。", file=sys.stderr)
+    _wait_result(home, tid, args.timeout)
+
+
 def cmd_logs(args):
     path, _ = _need(args.project)
     log = daemon.log_path(path)
@@ -666,6 +763,15 @@ def parser():
     s.add_argument("new", nargs="?", help="rename 的新名字")
     s.add_argument("--from", dest="account", help="remove 时只从这个微信号移出")
     s.set_defaults(fn=cmd_weixin)
+    s = sub.add_parser("ask", help="给项目里的 Claude Code / Codex 派任务，做完把回答打印出来（给 agent 用）")
+    s.add_argument("project", nargs="?", help="项目名或路径")
+    s.add_argument("task", nargs="?", help="任务内容；写 - 就从标准输入读")
+    s.add_argument("--to", help="发到哪个对话：不写是你的私聊；可以写群名、对话编号，或者微信号的名字（微信）")
+    s.add_argument("--from", dest="who", default="Agent", help="派任务的是谁，聊天里会显示（默认 Agent）")
+    s.add_argument("--no-wait", action="store_true", help="不等做完，打印任务编号就返回")
+    s.add_argument("--timeout", type=float, default=0, help="最多等几秒，不写就一直等")
+    s.add_argument("--result", metavar="任务编号", help="取之前 --no-wait 派的任务的结果")
+    s.set_defaults(fn=cmd_ask)
     s = sub.add_parser("logs", help="查看后台日志")
     s.add_argument("project", nargs="?")
     s.add_argument("-f", "--follow", action="store_true", help="持续输出")

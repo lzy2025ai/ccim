@@ -128,6 +128,7 @@ ccim start --always
 | `ccim handoff` | 在 Claude Code 的对话里运行：把这个对话转到飞书私聊接着聊 |
 | `ccim handback` | 回到电脑前，在同一个对话里运行：把飞书那边聊过的内容接回来 |
 | `ccim resume [项目] [编号]` | 在终端里接着飞书里的对话聊；不写编号就接最近的 |
+| `ccim ask 项目 "任务"` | 给 agent 用：把任务派给这个项目的 Claude / Codex，做完把回答打印出来，见下文 |
 | `ccim logs [项目] [-f]` | 查看后台日志 |
 | `ccim config [项目] 键=值` | 项目设置，见下文 |
 | `ccim unpair [项目]` | 解除配对 |
@@ -198,6 +199,22 @@ ccim weixin logout 名字      # 退出一个微信号
 ```
 
 每个微信号在后台常驻，开关、重启、看日志用 `ccim start / stop / restart / logs 名字`。登录失效时 `ccim list` 里会显示，运行 `ccim weixin login 名字` 重新扫码，原来的项目都还在。
+
+## 让 agent 派任务
+
+别的 agent（比如 Hermes）可以通过 ccim 给项目里的 Claude Code / Codex 派活。任务发进这个项目在飞书或微信里的对话，
+开头带「[谁 派的任务]」，进度、审批、回答都和你自己发的消息一样，你在手机上看得到、管得着；做完回答交回给 agent。
+
+```bash
+ccim ask 项目 "任务内容" --from Hermes          # 发到你和机器人的私聊，等做完把回答打印出来
+ccim ask 项目 "任务内容" --to 产品群             # 发到某个群（群名，或 ccim show 里的对话编号）
+ccim ask 项目 "任务内容" --to 微信               # 发到微信（登录了好几个微信号时写微信号的名字）
+ccim ask 项目 - < 任务.txt                       # 任务从标准输入读
+ccim ask 项目 "任务内容" --no-wait              # 不等，打印任务编号；之后 ccim ask --result 编号 取结果
+```
+
+退出码：0 做完了，2 出错，3 被停下（比如有人在聊天里发了 /stop），4 还没做完，1 没派出去（项目没在运行等）。
+那个对话正在干活时，任务排队等着。只能在本机用。
 
 ## 安全
 

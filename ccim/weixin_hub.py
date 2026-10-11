@@ -49,10 +49,10 @@ def _new_name():
 def login(name=None, show=None):
     """扫码登录一个微信号。扫的是已经登录过的微信（同一个人）就更新它的登录，项目都还在。
     返回 (路径, 条目, 是不是已经登录过的号, 登录凭证变了没有)。"""
-    from .channels.weixin import scan_login, show_in_terminal
+    from .channels.weixin import scan_login, show_qr
     if name and not re.fullmatch(r"[^/\\\s]{1,20}", name):
         raise SystemExit("名字不能带空格和斜杠，20 个字以内。")
-    got = scan_login(show=show or show_in_terminal)
+    got = scan_login(show=show or show_qr)
     if not got:
         raise SystemExit("没有登录成功。")
     old = next(((p, e) for p, e in hubs() if e.get("owner_open_id") == got["user_id"]), None)

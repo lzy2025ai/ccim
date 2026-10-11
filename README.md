@@ -69,6 +69,9 @@ ccim start --always
 
 > 升级：`uv tool upgrade ccim`
 
+> 也可以直接让 agent 帮你接：把这个仓库或下面的插件交给 Claude Code、Codex 等，说「把这个项目接到飞书 / 微信」，
+> 它会按 [skills/ccim-setup/SKILL.md](skills/ccim-setup/SKILL.md) 操作，二维码会在浏览器里弹出来。
+
 **4. 装上「转到飞书」skill（可选）**
 
 在 Claude Code 里运行：

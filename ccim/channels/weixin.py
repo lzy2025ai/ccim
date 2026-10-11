@@ -63,7 +63,12 @@ def show_in_terminal(url):
     print(f"\n扫不了的话，在手机微信里打开这个链接：\n{url}\n")
 
 
-def scan_login(show=show_in_terminal, timeout=480):
+def show_qr(url):
+    from .. import qrpage
+    qrpage.show(url, show_in_terminal, "用微信扫码登录", "扫码确认后，就能在微信里和电脑上的 Claude Code / Codex 对话。", "微信")
+
+
+def scan_login(show=show_qr, timeout=480):
     """返回 {account_id, token, base_url, user_id}；没扫成返回 None。user_id 是扫码的人，就是主人。"""
     qr = _get(BASE, "ilink/bot/get_bot_qrcode?bot_type=3")
     code, url = qr.get("qrcode"), qr.get("qrcode_img_content")
@@ -153,17 +158,6 @@ class Weixin(Channel):
     cards = False
     style = ("微信不显示 Markdown，用纯文字和换行组织内容：不要用标题、加粗、表格、代码块围栏，"
              "列表用「1.」「-」开头，链接直接写网址。")
-
-    @staticmethod
-    def pair(project_path, show=show_in_terminal, interactive=True):
-        try:
-            got = scan_login(show=show)
-        except (OSError, ValueError) as e:
-            raise SystemExit(f"连不上微信的扫码服务：{e}")
-        if not got:
-            raise SystemExit("没有配对成功。")
-        return {"channel": "weixin", "app_id": got["account_id"], "base_url": got["base_url"], "bot_name": "微信 ClawBot",
-                "owner_open_id": got["user_id"], "group": "owner", "secret": got["token"]}
 
     def __init__(self, project_path, entry, secret, handlers):
         super().__init__(project_path, entry, secret, handlers)

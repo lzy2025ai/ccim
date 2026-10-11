@@ -5,7 +5,7 @@
 收消息、按钮回调：lark-oapi 的长连接客户端，不需要公网地址。它跑在自己的线程和事件循环里，
 收到的事件转交到 ccim 主循环处理。
 """
-import asyncio, io, json, logging, os, re, secrets, threading, time, uuid
+import asyncio, io, json, logging, os, re, secrets, sys, threading, time, uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -93,7 +93,12 @@ def show_in_terminal(url):
     print(f"\n扫不了的话，在手机飞书里打开这个链接：\n{url}\n")
 
 
-def scan_register(timeout=600, show=show_in_terminal):
+def show_qr(url):
+    from .. import qrpage
+    qrpage.show(url, show_in_terminal, "用飞书扫码，建一个飞书机器人", "确认后会在你的飞书账号下建好一个机器人。", "飞书")
+
+
+def scan_register(timeout=600, show=show_qr):
     """返回 {app_id, secret, domain, owner_open_id}；扫码失败返回 None。show(url) 负责把二维码给用户看。"""
     domain = "feishu"
     init = _post(domain, {"action": "init"})
@@ -144,8 +149,10 @@ class Feishu(Channel):
     style = "用飞书能显示的 Markdown（标题、加粗、列表、代码块、链接），不要用表格和 HTML。"
 
     @staticmethod
-    def pair(project_path, show=show_in_terminal, interactive=True):
-        """interactive=False（handoff 里配对）时不问问题，扫码失败直接报错。"""
+    def pair(project_path, show=show_qr, interactive=None):
+        """interactive=False（handoff 里、不在终端里运行时）不问问题，扫码失败直接报错。"""
+        if interactive is None:
+            interactive = sys.stdin.isatty()
         try:
             got = scan_register(show=show)
         except (URLError, OSError, ValueError) as e:

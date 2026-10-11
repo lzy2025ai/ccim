@@ -1,6 +1,6 @@
 {
   "name": "ccim",
-  "description": "ccim: chat with Claude Code from Feishu / Lark",
+  "description": "ccim: chat with Claude Code or Codex from Feishu / Lark or WeChat",
   "owner": {
     "name": "lzy2025ai"
   },
@@ -8,7 +8,7 @@
     {
       "name": "ccim",
       "source": "./",
-      "description": "Hand off a Claude Code conversation to Feishu / Lark and keep chatting from your phone"
+      "description": "Connect Claude Code or Codex to Feishu / Lark or WeChat, and hand off a conversation to your phone"
     }
   ]
 }

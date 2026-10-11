@@ -195,13 +195,21 @@ def add_weixin(path, name, agent):
             print(f"（没能在微信里提醒：{err}）")
 
 
-def cmd_default(args):
-    path = os.path.realpath(os.getcwd())
+def _check_dir(path, yes):
+    """接入前看看这个目录合不合适：根目录不行；主目录要确认（--yes 跳过；不在终端里又没加 --yes 就不接）。"""
     if path == "/":
         raise SystemExit("这里是根目录，先 cd 到项目目录再运行。")
-    if path == os.path.realpath(os.path.expanduser("~")) and not (registry.get(path) or _weixin_only(path)):
-        if input("这里是用户主目录，Claude 能读写你所有的文件。确定要接入吗？(y/N)：").strip().lower() != "y":
-            raise SystemExit("没有接入。要接某个项目的话，先 cd 到项目目录再运行。")
+    if path != os.path.realpath(os.path.expanduser("~")) or registry.get(path) or _weixin_only(path) or yes:
+        return
+    if not sys.stdin.isatty():
+        raise SystemExit("这里是用户主目录，Claude 能读写你所有的文件。确定要接入的话加上 --yes；接某个项目的话先 cd 到项目目录。")
+    if input("这里是用户主目录，Claude 能读写你所有的文件。确定要接入吗？(y/N)：").strip().lower() != "y":
+        raise SystemExit("没有接入。要接某个项目的话，先 cd 到项目目录再运行。")
+
+
+def cmd_default(args):
+    path = os.path.realpath(os.getcwd())
+    _check_dir(path, args.yes)
     if args.weixin is not None:
         return add_weixin(path, args.weixin or None, args.agent)
     entry = registry.get(path) or pair(path, args.channel or "feishu")
@@ -219,6 +227,10 @@ def cmd_run(args):
 
 
 def cmd_start(args):
+    if args.project is None and not registry.find(None)[1] and not _weixin_only(None):
+        path = os.path.realpath(os.getcwd())     # 还没配对：先扫码配对，配好直接后台运行
+        _check_dir(path, args.yes)
+        pair(path, "feishu")
     path, entry = _need(args.project)
     name = os.path.basename(path)
     r = daemon.running(path)
@@ -607,8 +619,9 @@ def parser():
     p.add_argument("--weixin", nargs="?", const="", metavar="微信号",
                    help="把当前目录加进微信（登录了好几个微信号时写上名字）")
     p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
+    p.add_argument("--yes", "-y", action="store_true", help="不问确认（比如在用户主目录接入）")
     sub = p.add_subparsers(dest="cmd")
-    for name, fn, help_ in [("start", cmd_start, "后台运行"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
+    for name, fn, help_ in [("start", cmd_start, "后台运行（没配对过就先扫码配对）"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
                             ("restart", cmd_restart, "重启"), ("unpair", cmd_unpair, "解除配对")]:
         s = sub.add_parser(name, help=help_)
         s.add_argument("project", nargs="?", help="项目名或路径，不写就是当前目录")
@@ -616,6 +629,8 @@ def parser():
             s.add_argument("--always", action="store_true", help="常驻：开机登录后自动启动，意外退出自动重启")
         if name in ("start", "restart"):
             s.add_argument("--agent", choices=("claude", "codex"), help="换用哪个助手：claude 或 codex")
+        if name == "start":
+            s.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS, help="不问确认（比如在用户主目录接入）")
         if name == "restart":
             s.add_argument("--safe", action="store_true", help="另起进程重启，新版本起不来就用稳定版顶上，结果私聊告诉你")
             s.add_argument("--delay", type=int, default=15, help="几秒后重启（默认 15，留时间把当前回复发出去）")

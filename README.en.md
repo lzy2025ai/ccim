@@ -69,6 +69,10 @@ Starts at login and recovers from crashes and network loss. Closing the terminal
 
 > Upgrade: `uv tool upgrade ccim`
 
+> Or let an agent do it: give this repo (or the plugin below) to Claude Code, Codex or another agent and say "connect
+> this project to Feishu / WeChat". It follows [skills/ccim-setup/SKILL.md](skills/ccim-setup/SKILL.md), and the QR code
+> opens in your browser.
+
 **4. Add the "hand off to Feishu" skill (optional)**
 
 In Claude Code, run:
@@ -155,6 +159,48 @@ It works much like Claude Code, with a few differences:
 - Messages sent while it's working wait until the current task is done (Codex doesn't take mid-task additions); use `/stop` to stop
 - Model, effort level and permissions follow Codex's own settings (`~/.codex/config.toml`); project instructions go in `AGENTS.md`
 - No `/resume`, `/usage`, or handoff from the desktop
+
+## Using WeChat
+
+ccim also works with personal WeChat, through WeChat's official ClawBot. A WeChat account can only have one bot,
+so **one WeChat account serves several projects** and you switch between them in the chat.
+
+```bash
+cd your-project
+ccim --weixin          # scan with WeChat: the project goes to whichever WeChat account scans it
+```
+
+Scanning with an account that's already logged in doesn't log in again; it adds the project and the chat switches to
+it (you're told when you send your next message). To skip scanning, name the account: `ccim --weixin 微信` (the first
+account is called 「微信」). The current project stays, and you get a reminder in WeChat.
+
+In WeChat:
+
+| What you do | What happens |
+|---|---|
+| Send a message | It goes to the current project. While it works you see "typing…"; the answer arrives when it's done |
+| `/项目` | Lists the projects, which one is current and which are busy |
+| Reply with a number (or `/项目 name`) | Switches to that project. Each project has its own conversation |
+| A project you switched away from finishes | Its answer still arrives, prefixed with 「【project name】」 |
+| An operation needs approval | You get a message describing it; reply `y` to allow, `n` to deny |
+| "What did I discuss in Feishu?" | Claude looks at this project's other conversations (Feishu, other WeChat accounts, terminal), read-only |
+
+Private chat only (the bot can't join groups), and answers are plain text. A directory can be connected to Feishu and
+WeChat at the same time; each is a separate conversation.
+
+**Several WeChat accounts:**
+
+```bash
+ccim weixin login work        # log in another account and name it (no project added)
+ccim --weixin work            # add the current directory to it without scanning
+ccim weixin                   # accounts and their projects
+ccim weixin rename old new    # rename an account
+ccim weixin remove [project]  # remove a project (--from name: only from that account)
+ccim weixin logout name       # log out an account
+```
+
+Each account runs in the background permanently; use `ccim start / stop / restart / logs <account name>`. If a login
+expires, `ccim list` shows it; run `ccim weixin login <name>` to scan again — its projects stay.
 
 ## Security
 

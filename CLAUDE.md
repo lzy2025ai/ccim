@@ -33,6 +33,9 @@
   飞书那边是独立分支，带不带回来由用户决定：`ccim/hook.py`（插件 hooks/hooks.json 的 UserPromptSubmit 钩子，命令 ccim-hook）
   只检测、让 Claude 先问，不自动带。两个进度：synced_to_desktop（handback 才推进）、notified_to_desktop（同一批只问一次）。
   飞书那边正在回复的一轮（聊天状态里 busy）先不带。钩子每条消息都跑，不能 import 飞书 SDK
+- `skills/ccim-setup/`：教 agent 帮用户接入飞书 / 微信（AGENTS.md 指向它）。改了接入流程、命令或报错文字要同步改它，并升 plugin.json 的 version。
+  agent 跑命令时不在终端里：二维码走 `qrpage.show`（不在终端就在浏览器里打开），需要确认的地方要有 `--yes`，不能卡在 input 上；
+  `ccim` 本身保持前台运行（用户要的），agent 用 `ccim start --always`（没配对会先配对）或 `ccim --weixin`
 - `skills/feishu-handoff/`：配套 skill，告诉 Agent 什么时候、怎么转接；`.claude-plugin/` 让这个仓库能作为 Claude Code 插件安装。
   改了 handoff 的行为或提示文字，要同步改 SKILL.md（它引用了几条报错原文）；改了 skill 要升 plugin.json 的 version，
   已安装的插件才会更新（插件按版本号判断）

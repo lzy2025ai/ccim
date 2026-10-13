@@ -53,8 +53,10 @@ def _setting(chat):
     return f"**模型**：{_model_name(m)}　**思考深度**：{e}{follow}"
 
 
-def _quota():
+async def _quota(path):
     from . import usage
+    if usage.stale():                         # 缓存只在对话跑过一轮时更新，旧了先刷新
+        await usage.refresh(path)
     return usage.short_status()
 
 
@@ -127,7 +129,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         lines = [f"**项目**：{bridge.name}" + ("（Codex）" if codex else ""),
                  f"**状态**：{state}" + (f"，还有 {waiting} 条排队" if waiting else ""),
                  _setting(chat),
-                 *([f"**额度**：{q}"] if not codex and (q := _quota()) else []),
+                 *([f"**额度**：{q}"] if not codex and (q := await _quota(bridge.path)) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
     elif cmd == "/model" and codex:

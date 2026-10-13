@@ -63,14 +63,56 @@ def limit_lines(data=None):
 
 
 def short_status():
-    """给 /status 用的一行：「5 小时已用 5% · 每周已用 14%」。"""
+    """给 /status 用的一行：「5 小时已用 5% · 每周已用 14%」。数据旧了注明是什么时候的；过了重置时间的不显示旧数字。"""
     data = cached()
     if not data:
         return None
     w = data.get("windows") or {}
-    parts = [f"{label}已用 {round(w[k]['utilization'] * 100)}%" for k, label in
-             (("five_hour", "5 小时"), ("seven_day", "每周")) if (w.get(k) or {}).get("utilization") is not None]
+    now = time.time()
+    parts = []
+    for k, label in (("five_hour", "5 小时"), ("seven_day", "每周")):
+        x = w.get(k) or {}
+        if x.get("utilization") is None:
+            continue
+        if x.get("resetsAt") and x["resetsAt"] < now:
+            parts.append(f"{label}已在 {_when(x['resetsAt'])} 重置")
+        else:
+            parts.append(f"{label}已用 {round(x['utilization'] * 100)}%")
+    age = now - data.get("at", 0)
+    if parts and age > STALE:
+        parts[-1] += f"（{_ago(age)}的数据）"
     return " · ".join(parts) or None
+
+
+STALE = 600                # 额度数据超过这么多秒就算旧了，查之前先刷新
+
+
+def _ago(sec):
+    return f"{int(sec // 60)} 分钟前" if sec < 3600 else f"{int(sec // 3600)} 小时前" if sec < 86400 else f"{int(sec // 86400)} 天前"
+
+
+def stale():
+    data = cached()
+    return not data or time.time() - data.get("at", 0) > STALE
+
+
+async def refresh(path, timeout=30):
+    """额度要在会话里发过请求才拿得到：用最便宜的模型问一句最短的话，收下 RateLimitEvent。"""
+    import asyncio
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent
+    from .session import CLI
+
+    async def ask():
+        opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku")
+        async with ClaudeSDKClient(options=opts) as c:
+            await c.query("只回答：好")
+            async for m in c.receive_response():
+                if isinstance(m, RateLimitEvent):
+                    record(m.rate_limit_info)
+    try:
+        await asyncio.wait_for(ask(), timeout)
+    except Exception:
+        pass
 
 
 # ---------- 明细翻译 ----------
@@ -130,12 +172,11 @@ async def report(path):
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage
     from .session import CLI
     raw = ""
-    data = cached()
-    stale = not data or time.time() - data.get("at", 0) > 600
+    old = stale()
     try:
         opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku")
         async with ClaudeSDKClient(options=opts) as c:
-            if stale:                         # 额度要发过请求才拿得到：用最便宜的模型问一句最短的
+            if old:                           # 额度要发过请求才拿得到：用最便宜的模型问一句最短的
                 await c.query("只回答：好")
                 async for m in c.receive_response():
                     if isinstance(m, RateLimitEvent):
@@ -147,7 +188,7 @@ async def report(path):
     except Exception:
         pass
     data = cached()
-    fresh = data and time.time() - data.get("at", 0) < 600
+    fresh = data and time.time() - data.get("at", 0) < STALE
     limits = (limit_lines(data) if fresh else []) or _limits_from_raw(raw) or limit_lines(data)
     lines = limits or ["额度暂时查不到，聊一句之后再发 /usage 试试。"]
     detail = translate(raw)

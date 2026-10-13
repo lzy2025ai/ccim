@@ -144,6 +144,27 @@ def write_state(path, **changes):
     return s
 
 
+def global_config():
+    """ccim config --global 设的全局默认（模型、思考深度），所有用 Claude Code 的项目都用；项目自己设了的以项目为准。"""
+    try:
+        with open(os.path.join(HOME, "config.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def set_global(**changes):
+    with _locked():
+        c = global_config()
+        c.update(changes)
+        c = {k: v for k, v in c.items() if v}
+        fd, tmp = tempfile.mkstemp(dir=HOME, prefix=".config.", suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(c, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, os.path.join(HOME, "config.json"))
+        return c
+
+
 def all_chats(path):
     """这个项目在各个渠道里的对话：[(在哪, 地址, 记录)]。飞书的记在项目自己的状态里，
     微信的记在各个微信号的状态里（一个微信号管好几个项目）。"""

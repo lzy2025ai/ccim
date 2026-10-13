@@ -83,6 +83,8 @@
   只有少数必须由人拍板的操作才会弹审批卡片。
 - **模型和思考深度默认不传**，交给 Claude Code 按项目、全局设置自己取，这样飞书和终端里打开同一个对话用的是同一套。
   思考深度不记在对话记录里，是每次启动会话时传的，写死默认值会让两边不一致。
+  用户自己设了才传，优先级：聊天里 /model /effort（state 的 chats）> 项目 `ccim config`（登记表）> `ccim config --global`
+  （~/.ccim/config.json，只管 Claude Code 项目，Codex 的模型名和档位不一样）> 不传。`Chat.default` / `Chat.follow`（/model 默认）
 - **对话地址**：普通聊天是 chat_id；话题是「chat_id|thread_id」，往这个地址发的消息都进话题。
   话题第一次开口时 fork 主对话的会话（`fork_session`），所以记得之前的内容，之后互不影响。
 - **接别处的对话时 fork**：飞书里 `/resume` 一律 fork；`ccim resume` 在飞书那边还开着这个对话时 fork。避免两个进程同时往一个对话里写。

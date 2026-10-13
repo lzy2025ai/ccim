@@ -13,7 +13,9 @@ from . import asks, daemon, handoff, registry, runtime
 from .channels import NAMES, load, send_once
 
 CAPS = ["handoff", "safe-restart", "ask"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
-CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": ("low", "medium", "high", "xhigh", "max"),
+EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")   # minimal 只有 Codex 有
+GLOBAL_KEYS = ("model", "effort")
+CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": EFFORTS,
                "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
 
 
@@ -159,7 +161,7 @@ def _apply_agent(path, agent):
     return True
 
 
-def add_weixin(path, name, agent):
+def add_weixin(path, name, agent, model=None, effort=None):
     """ccim --weixin：扫码，扫的哪个微信就加到哪个（已经登录过的不会重复登录）。
     ccim --weixin 名字：不扫码，直接加到这个已登录的微信号；还没有这个名字就扫码登录一个新的。"""
     from . import weixin_hub
@@ -180,7 +182,7 @@ def add_weixin(path, name, agent):
         changed = False
     pname = os.path.basename(path)
     already = path in (e.get("projects") or {})
-    weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent)
+    weixin_hub.add_project(hub, path, agent=None if agent == "claude" else agent, model=model, effort=effort)
     switched = False
     if changed and not already:
         # 重新扫过码，发不了提醒：直接切到新项目，用户在微信里发下一条消息时先告诉他
@@ -218,9 +220,10 @@ def cmd_default(args):
     path = os.path.realpath(os.getcwd())
     _check_dir(path, args.yes)
     if args.weixin is not None:
-        return add_weixin(path, args.weixin or None, args.agent)
+        return add_weixin(path, args.weixin or None, args.agent, args.model, args.effort)
     entry = registry.get(path) or pair(path, args.channel or "feishu")
     _apply_agent(path, args.agent)
+    _apply_settings(path, args)
     entry = registry.get(path)
     r = daemon.running(path)
     if r:
@@ -233,6 +236,17 @@ def cmd_run(args):
     run(os.path.realpath(args.path), args.mode)
 
 
+def _apply_settings(path, args):
+    """--model / --effort：等于先 ccim config 再启动。返回是否改了。"""
+    changes = {k: getattr(args, k, None) for k in GLOBAL_KEYS if getattr(args, k, None)}
+    entry = registry.get(path)
+    if not changes or all(entry.get(k) == v for k, v in changes.items()):
+        return False
+    registry.update(path, **changes)
+    print(f"「{os.path.basename(path)}」默认用 " + "、".join(f"{k}={v}" for k, v in changes.items()) + "。")
+    return True
+
+
 def cmd_start(args):
     if args.project is None and not registry.find(None)[1] and not _weixin_only(None):
         path = os.path.realpath(os.getcwd())     # 还没配对：先扫码配对，配好直接后台运行
@@ -241,7 +255,8 @@ def cmd_start(args):
     path, entry = _need(args.project)
     name = os.path.basename(path)
     r = daemon.running(path)
-    if _apply_agent(path, args.agent) and r:      # 换了助手：正在运行的要重启才生效
+    changed = _apply_settings(path, args) if entry.get("kind") != "weixin" else False
+    if (_apply_agent(path, args.agent) or changed) and r:      # 换了助手、模型：正在运行的要重启才生效
         if r[1] == "fg":
             raise SystemExit(f"「{name}」正在另一个终端前台运行，先在那里按 Ctrl+C 停掉，再运行一次。")
         daemon.stop(path)
@@ -277,6 +292,8 @@ def cmd_stop(args):
 def cmd_restart(args):
     path, entry = _need(args.project)
     _apply_agent(path, args.agent)
+    if entry.get("kind") != "weixin":
+        _apply_settings(path, args)
     if args.safe:
         runtime.schedule_restart(path, delay=args.delay)
         print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，"
@@ -360,6 +377,8 @@ def cmd_show(args):
     settings = {k: v for _, h in hubs[:1] for k, v in ((h.get("projects") or {}).get(path) or {}).items()} if not e else e
     codex = settings.get("agent") == "codex"
     eff = _codex_effective if codex else registry.effective
+    g = {} if codex else registry.global_config()   # 全局设置只管 Claude Code 项目
+    settings = dict(settings, model=settings.get("model") or g.get("model"), effort=settings.get("effort") or g.get("effort"))
     default_model, default_effort, m_set, e_set = eff(path, settings.get("model"), settings.get("effort"))
     follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
     rows = [("项目", os.path.basename(path)), ("路径", path)]
@@ -683,8 +702,31 @@ def cmd_logs(args):
     os.execvp("tail", ["tail", "-n", str(args.n)] + (["-f"] if args.follow else []) + [log])
 
 
+def _parse_settings(items, keys):
+    changes = {}
+    for it in items:
+        k, _, v = it.partition("=")
+        if k not in keys:
+            raise SystemExit(f"不认识 {k}，可以设置：{'、'.join(keys)}")
+        if CONFIG_KEYS.get(k) and v and v not in CONFIG_KEYS[k]:
+            raise SystemExit(f"{k} 只能是：{' / '.join(CONFIG_KEYS[k])}")
+        changes[k] = v or None
+    return changes
+
+
 def cmd_config(args):
     items = list(args.items)
+    if args.globally:
+        if not items:
+            g = registry.global_config()
+            print(f"全局：model={g.get('model', '跟随 Claude Code')}  effort={g.get('effort', '跟随 Claude Code')}")
+            return
+        registry.set_global(**_parse_settings(items, GLOBAL_KEYS))
+        running = [os.path.basename(p) if e.get("kind") != "weixin" else e.get("bot_name")
+                   for p, e in registry.all_projects().items() if daemon.running(p)]
+        print("已保存。没单独设置的 Claude Code 项目都用它" +
+              (f"；正在运行的要重启才生效：{'、'.join(running)}" if running else "。"))
+        return
     project = None
     if items and "=" not in items[0]:
         project = items.pop(0)
@@ -692,18 +734,13 @@ def cmd_config(args):
     if entry.get("kind") == "weixin":
         raise SystemExit("微信号没有这些设置。")
     if not items:
-        print(f"group={entry.get('group', 'owner')}  model={entry.get('model', '默认')}  effort={entry.get('effort', '默认')}"
+        g = registry.global_config() if entry.get("agent") != "codex" else {}
+        show = lambda k: entry.get(k) or (f"{g[k]}（全局）" if g.get(k) else "跟随 " + ("Codex" if entry.get("agent") == "codex"
+                                                                                      else "Claude Code"))
+        print(f"group={entry.get('group', 'owner')}  model={show('model')}  effort={show('effort')}"
               f"  reaction={entry.get('reaction', '默认')}")
         return
-    changes = {}
-    for it in items:
-        k, _, v = it.partition("=")
-        if k not in CONFIG_KEYS:
-            raise SystemExit(f"不认识 {k}，可以设置：{'、'.join(CONFIG_KEYS)}")
-        if CONFIG_KEYS[k] and v not in CONFIG_KEYS[k]:
-            raise SystemExit(f"{k} 只能是：{' / '.join(CONFIG_KEYS[k])}")
-        changes[k] = v or None
-    registry.update(path, **changes)
+    registry.update(path, **_parse_settings(items, CONFIG_KEYS))
     print("已保存。" + ("正在运行的要重启才生效：ccim restart " + os.path.basename(path) if daemon.running(path) else ""))
 
 
@@ -726,6 +763,8 @@ def parser():
                    help="把当前目录加进微信（登录了好几个微信号时写上名字）")
     p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
     p.add_argument("--yes", "-y", action="store_true", help="不问确认（比如在用户主目录接入）")
+    p.add_argument("--model", help="这个项目默认用的模型，等于 ccim config model=…")
+    p.add_argument("--effort", choices=EFFORTS, help="这个项目默认的思考深度，等于 ccim config effort=…")
     sub = p.add_subparsers(dest="cmd")
     for name, fn, help_ in [("start", cmd_start, "后台运行（没配对过就先扫码配对）"), ("stop", cmd_stop, "关停（常驻的同时取消常驻）"),
                             ("restart", cmd_restart, "重启"), ("unpair", cmd_unpair, "解除配对")]:
@@ -735,6 +774,9 @@ def parser():
             s.add_argument("--always", action="store_true", help="常驻：开机登录后自动启动，意外退出自动重启")
         if name in ("start", "restart"):
             s.add_argument("--agent", choices=("claude", "codex"), help="换用哪个助手：claude 或 codex")
+            s.add_argument("--model", default=argparse.SUPPRESS, help="这个项目默认用的模型，等于 ccim config model=…")
+            s.add_argument("--effort", choices=EFFORTS, default=argparse.SUPPRESS,
+                           help="这个项目默认的思考深度，等于 ccim config effort=…")
         if name == "start":
             s.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS, help="不问确认（比如在用户主目录接入）")
         if name == "restart":
@@ -777,8 +819,9 @@ def parser():
     s.add_argument("-f", "--follow", action="store_true", help="持续输出")
     s.add_argument("-n", type=int, default=60)
     s.set_defaults(fn=cmd_logs)
-    s = sub.add_parser("config", help="项目设置：group=owner|all model=名字 effort=等级")
+    s = sub.add_parser("config", help="项目设置：group=owner|all model=名字 effort=等级；--global 设所有项目的默认模型、思考深度")
     s.add_argument("items", nargs="*")
+    s.add_argument("--global", dest="globally", action="store_true", help="设全局默认（model、effort），所有项目都用")
     s.set_defaults(fn=cmd_config)
     s = sub.add_parser("promote", help="验收通过后：把当前代码装成稳定版，逐个升级跑稳定版的项目")
     s.set_defaults(fn=cmd_promote)

@@ -148,7 +148,20 @@ ccim config agent=codex        # use Codex for this project instead (default: cl
 ccim config                    # show current settings
 ```
 
-If you don't set a model or effort level, ccim follows Claude Code's own settings (the project's `.claude/settings*.json`, then `~/.claude/settings.json`) — the same ones your terminal uses. `/model` and `/effort` in a chat only apply to that chat. Run `ccim restart` after changing settings.
+You can also pass them when starting: `ccim start --model sonnet --effort high` (same as `ccim config` and then start).
+
+To use the same settings for every project, set a global default once:
+
+```bash
+ccim config --global model=sonnet effort=high   # global default (Claude Code projects only)
+ccim config --global model= effort=             # clear
+ccim config --global                            # show
+```
+
+Precedence: `/model` and `/effort` in a chat (that chat only) > the project's `ccim config` > `ccim config --global` >
+Claude Code's own settings (the project's `.claude/settings*.json`, then `~/.claude/settings.json` — the same ones your
+terminal uses). Send `/model default` or `/effort default` in a chat to go back to the defaults. Run `ccim restart` after
+changing settings.
 
 ## Using Codex
 

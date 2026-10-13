@@ -116,8 +116,8 @@ class Chat:
         self.fork_from = None if self.session_id else fork_from or saved.get("fork_from")
         self.fork_at = saved.get("fork_at") if self.fork_from and not fork_from else None   # 从那个对话的哪条消息分出来
         # 没单独设置就是 None：不传给 Claude Code，让它按项目、全局设置自己取，和终端里用的一致
-        self.model = saved.get("model") or bridge.entry.get("model")
-        self.effort = saved.get("effort") or bridge.entry.get("effort")
+        self.model = saved.get("model") or self.default("model")
+        self.effort = saved.get("effort") or self.default("effort")
         self.queue = asyncio.Queue()
         self.worker = None
         self.client = None
@@ -219,6 +219,16 @@ class Chat:
 
     def effective(self):
         return registry.effective(self.b.path, self.model, self.effort)
+
+    def default(self, key):
+        """没在这个聊天里单独设置时用什么：项目的 config > 全局 config（只管 Claude Code）> 不传，交给 Claude Code 自己取。"""
+        g = registry.global_config() if self.agent == "claude" else {}
+        return self.b.entry.get(key) or g.get(key)
+
+    def follow(self, key):
+        """/model 默认、/effort 默认：这个聊天不再单独设置，回到跟随项目 / 全局 / Claude Code。"""
+        self.set(**{key: None})
+        setattr(self, key, self.default(key))
 
     def set(self, **kw):
         for k, v in kw.items():

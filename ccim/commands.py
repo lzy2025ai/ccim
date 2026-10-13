@@ -18,8 +18,8 @@ HELP = """\
 /restart　重启这个机器人（升级到新代码时用）
 /status　当前状态
 /usage　额度和用量：5 小时、每周还剩多少
-/model 名字　换模型：opus、sonnet、haiku、fable
-/effort 等级　思考深度：low、medium、high、xhigh、max
+/model 名字　换模型：opus、sonnet、haiku、fable；/model 默认 回到默认
+/effort 等级　思考深度：low、medium、high、xhigh、max；/effort 默认 回到默认
 /help　显示这段说明
 
 也可以发图片和文件给我。"""
@@ -33,8 +33,8 @@ CODEX_HELP = """\
 /stop　停下正在做的事
 /restart　重启这个机器人
 /status　当前状态
-/model 名字　换模型
-/effort 等级　思考深度：minimal、low、medium、high、xhigh
+/model 名字　换模型；/model 默认 回到默认
+/effort 等级　思考深度：minimal、low、medium、high、xhigh；/effort 默认 回到默认
 /help　显示这段说明
 
 也可以发图片和文件给我。"""
@@ -132,6 +132,12 @@ async def handle(bridge, chat, text, reply_to, sender=None):
                  *([f"**额度**：{q}"] if not codex and (q := await _quota(bridge.path)) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
+    elif cmd in ("/model", "/effort") and arg.lower() in ("默认", "default"):
+        key = "model" if cmd == "/model" else "effort"
+        chat.follow(key)
+        m, e, _, _ = chat.effective()
+        await say(f"好，这个聊天不再单独设置，{'模型' if key == 'model' else '思考深度'}回到默认：" +
+                  (_model_name(m) if key == "model" else e) + "。")
     elif cmd == "/model" and codex:
         if not arg:
             await say(f"现在用的是 {chat.effective()[0]}。要换的话发 /model 加模型名。")

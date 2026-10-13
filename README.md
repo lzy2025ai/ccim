@@ -147,7 +147,19 @@ ccim config agent=codex        # 这个项目改用 Codex（默认 claude）
 ccim config                    # 查看当前设置
 ```
 
-模型和思考深度不设的话，跟随 Claude Code 自己的设置（项目的 `.claude/settings*.json`，其次是 `~/.claude/settings.json`），和你在终端里用的一致。聊天里用 `/model`、`/effort` 改的只对那个聊天生效。改完设置要 `ccim restart` 才生效。
+模型和思考深度也可以启动时直接带上：`ccim start --model sonnet --effort high`，等于先 `ccim config` 再启动。
+
+想让所有项目都用同一套，设全局默认，配一次以后启动的项目都用它：
+
+```bash
+ccim config --global model=sonnet effort=high   # 全局默认（只管用 Claude Code 的项目）
+ccim config --global model= effort=             # 清掉
+ccim config --global                            # 查看
+```
+
+谁优先：聊天里用 `/model`、`/effort` 改的（只对那个聊天）> 项目的 `ccim config` > 全局的 `ccim config --global` >
+Claude Code 自己的设置（项目的 `.claude/settings*.json`，其次是 `~/.claude/settings.json`，和你在终端里用的一致）。
+聊天里发 `/model 默认`、`/effort 默认` 回到跟随项目和全局设置。改完设置要 `ccim restart` 才生效。
 
 ## 用 Codex
 

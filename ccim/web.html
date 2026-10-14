@@ -261,6 +261,20 @@ body{overflow:hidden}
 @media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
 @media (max-width:760px){.app{grid-template-columns:1fr}.rail,.list{display:none}}
 /* ---------- 正式版补充 ---------- */
+.answer{min-width:0;overflow-wrap:anywhere}
+.answer table{display:block;max-width:100%;overflow-x:auto}
+.answer pre{max-width:100%;white-space:pre}
+.answer code{overflow-wrap:anywhere}
+.compare{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)) !important}
+.compare .col{min-width:0}
+/* 中间那栏列表可以收起 */
+.app.list-off{grid-template-columns:76px 1fr}
+.app.list-off .list{display:none}
+.fold{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--muted)}
+.fold:hover{background:var(--sunk);color:var(--ink)}
+.fold svg{width:16px;height:16px}
+.rail .unfold{display:none;margin-top:6px}
+.app.list-off .rail .unfold{display:grid}
 .answer h1,.answer h2,.answer h3{font:600 16px/1.4 var(--song);margin:14px 0 6px}
 .answer ul,.answer ol{margin:0 0 10px;padding-left:22px}
 .answer li{margin:2px 0}
@@ -290,7 +304,7 @@ body{overflow:hidden}
 .chip,.seg button,.btn,.tag{white-space:nowrap}
 .box .bar{flex-wrap:wrap;row-gap:4px}
 .chat-head .meta .path{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.rail a{width:52px}}
+@media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
 .retry{color:var(--bad);font-size:13px}
 
 </style>
@@ -300,6 +314,7 @@ body{overflow:hidden}
 <div class="app">
   <nav class="rail" aria-label="主导航">
     <div class="brand">ccim</div>
+    <button class="fold unfold" aria-label="展开列表" title="展开列表" onclick="toggleList(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/></svg></button>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/projects" data-nav="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
@@ -328,6 +343,7 @@ const ICON = {
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
+  fold:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
@@ -537,7 +553,7 @@ function renderChatList(){
   const rows = S.chats.filter(c => !chatFilter || (c.title + (c.agent_name || "")).toLowerCase().includes(chatFilter));
   const groups = ["今天", "更早"];
   $("#list").innerHTML = `
-    <div class="list-head"><h1>对话</h1><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
+    <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="chatFilter=this.value.toLowerCase();renderChatList();this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.length ? groups.map(g => {
       const items = rows.filter(c => group(c.last_active) === g);
@@ -808,7 +824,7 @@ let agentFilter = "", agentTab = "overview", agentDraftFrom = null;
 function renderAgentList(){
   const rows = S.agents.filter(a => !agentFilter || a.name.toLowerCase().includes(agentFilter));
   $("#list").innerHTML = `
-    <div class="list-head"><h1>Agent</h1><a class="btn primary" href="#/agents/new" style="text-decoration:none">${ICON.plus}新建</a></div>
+    <div class="list-head"><h1>Agent</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/agents/new" style="text-decoration:none">${ICON.plus}新建</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索 Agent" aria-label="搜索 Agent" value="${esc(agentFilter)}" oninput="agentFilter=this.value.toLowerCase();renderAgentList();this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.map(a => {
       const st = a.busy ? `<span class="working"><span class="spin"></span>${esc(a.doing || "干活中")}</span>` : `<span class="sub">${BASE[a.base || "claude"]}</span>`;
@@ -935,7 +951,7 @@ function renderAgentForm(){
 
 // ================= 设置 =================
 function renderSettingsList(){
-  $("#list").innerHTML = `<div class="list-head"><h1>设置</h1></div><div class="scroll">
+  $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item on" href="#/settings" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a></div>`;
 }
 const gs = {};
@@ -967,7 +983,7 @@ function memberLine(p){
 function renderProjectList(){
   const rows = S.projects || [];
   $("#list").innerHTML = `
-    <div class="list-head"><h1>项目</h1><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
+    <div class="list-head"><h1>项目</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
     <div class="scroll">${rows.length ? rows.map(p => `<a class="item ${current.id === p.id ? "on" : ""}" href="#/projects/${encodeURIComponent(p.id)}" style="text-decoration:none;color:inherit">
         ${pmark(p)}<span class="t"><span class="title">${esc(p.name)}</span>${p.busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${esc(memberLine(p))}</span>`}</span>
         <span class="when">${when(p.last_active)}</span></a>`).join("") : `<p class="muted" style="padding:10px">还没有项目。</p>`}</div>`;
@@ -1251,8 +1267,14 @@ function confirmBox(title, text, okLabel){
   });
 }
 
+function toggleList(on){
+  document.querySelector(".app").classList.toggle("list-off", !on);
+  try { localStorage.setItem("ccim.listOff", on ? "" : "1"); } catch {}
+}
+
 // ================= 启动 =================
 (async () => {
+  try { if (localStorage.getItem("ccim.listOff")) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
   connectEvents();
   if (!location.hash) history.replaceState(null, "", "#/chats/new");

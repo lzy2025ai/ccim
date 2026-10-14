@@ -168,6 +168,9 @@ body{overflow:hidden}
 .select svg{width:14px;height:14px;color:var(--muted);flex:none}
 
 /* ---------- 项目 ---------- */
+.pmark{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 16px var(--song);
+  color:var(--ink-2);background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.item.on .pmark{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
 .stack{display:flex;flex:none}
 .stack .seal{box-shadow:0 0 0 2px var(--paper),inset 0 0 0 2px rgba(255,255,255,.18)}
 .stack .seal+.seal{margin-left:-9px}
@@ -748,6 +751,11 @@ let projects = [
 ];
 const projOf = id => projects.find(p => p.id === id);
 
+function pmark(p){ return `<span class="pmark" aria-hidden="true">${esc([...p.name.replace(/[\s\d\-_.]/g, "")][0] || "项")}</span>`; }
+function memberLine(p){
+  const names = p.members.map(m => agentOf(m).name);
+  return names.length ? names.slice(0, 3).join("、") + (names.length > 3 ? ` 等 ${names.length} 个` : "") : "还没有 Agent";
+}
 function renderProjectList(){
   $("#list").innerHTML = `
     <div class="list-head"><h1>项目</h1><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
@@ -755,8 +763,8 @@ function renderProjectList(){
     <div class="scroll">${projects.map(p => {
       const busy = p.feed.some(f => f.type === "reply" && (f.state === "working" || f.state === "queued"));
       return `<a class="item ${current.id === p.id ? "on" : ""}" href="#/projects/${p.id}" style="text-decoration:none;color:inherit">
-        <span class="stack">${p.members.slice(0, 3).map(m => seal(agentOf(m), "sm", false)).join("")}</span>
-        <span class="t"><span class="title">${esc(p.name)}</span>${busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${p.members.length} 个 Agent</span>`}</span>
+        ${pmark(p)}
+        <span class="t"><span class="title">${esc(p.name)}</span>${busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${esc(memberLine(p))}</span>`}</span>
         <span class="when">${p.last}</span></a>`;
     }).join("")}</div>`;
 }
@@ -815,7 +823,7 @@ function renderProject(id){
   }
   $("#main").innerHTML = `
     <div class="chat-head">
-      <span class="stack lg">${p.members.slice(0, 4).map(m => seal(agentOf(m), "", false)).join("")}</span>
+      ${pmark(p)}
       <div class="grow"><div class="name">${esc(p.name)}</div>
         <div class="meta">${p.dir ? `<span class="path">${esc(p.dir)}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，各 Agent 在自己的工作区里干活</span>`}</div></div>
       <button class="btn" onclick="showMembers=!showMembers;renderProject('${p.id}')">成员 ${p.members.length}</button>

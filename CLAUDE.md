@@ -63,6 +63,13 @@
     网页里接着聊 = 新网页对话 fork（Codex 用 `codex exec fork`），原来那个照常列出
   - `ccim/web.py`：原控制台的渠道管理（启动停止、日志、断开、扫码接入 Job）被平台接口复用；接入成功后 `agents.link`
   - `ccim/web.html`：单页，原型在 docs/prototype/。界面不用浏览器原生控件（下拉、确认框都是自己画的）
+- `ccim/projects.py`：项目（群聊，#8）。项目存平台 state.json 的 projects（只在主循环里改）；消息流记录 web/project-<编号>.jsonl
+  （task、reply，reply 同一个 id 会被更新，`Logs.read` 按 MERGED 合并）。每个 Agent 在每个项目里一个网页对话 p-<项目>-<Agent>
+  （meta 里 project / cwd，平台对话列表里不显示），派活 = 往这个对话里放 `session.Task`，同一 Agent 自然排队、Agent 之间看不到彼此。
+  对比且项目目录是 git 仓库：每人 `git worktree`（~/.ccim/worktrees/，分支 ccim/<任务>-<Agent>）+ 新对话 p-…-<任务>，
+  做完自动提交到分支；「用这个」= squash 合并进项目目录当前分支记成一次提交，项目目录有没提交的改动时拒绝，冲突就 reset 回去。
+  回答还没出来时状态是 queued，网页按「这个对话正在干活、而且是它最早没做完的一件」显示成干活中；平台重启后没做完的显示 lost
+- 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；

@@ -167,6 +167,41 @@ body{overflow:hidden}
 .select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
 .select svg{width:14px;height:14px;color:var(--muted);flex:none}
 
+/* ---------- 项目 ---------- */
+.pmark{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 16px var(--song);
+  color:var(--ink-2);background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.item.on .pmark{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.stack{display:flex;flex:none}
+.stack .seal{box-shadow:0 0 0 2px var(--paper),inset 0 0 0 2px rgba(255,255,255,.18)}
+.stack .seal+.seal{margin-left:-9px}
+.stack.lg .seal{width:34px;height:34px}
+.item .stack{width:58px}
+.at{display:inline-flex;align-items:center;gap:3px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:0 6px;font-size:13px;white-space:nowrap}
+.at button{color:var(--qing);font-size:11px;opacity:.7}
+.bubble .at{background:#fff}
+.meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
+.quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
+.quote.in-box{margin:8px 10px 0}
+.quote .icon-btn{margin-left:auto;width:22px;height:22px;flex:none}
+.rcpt{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;min-height:24px}
+.from-row .status{margin-left:6px}
+.acts-row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.compare .col{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.compare .col.chosen{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.branch{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--ink-2);margin-bottom:8px}
+.proj-body{flex:1;min-height:0;display:flex}
+.proj-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.proj-main .msg,.proj-main .composer{max-width:860px}
+.members{width:280px;flex:none;border-left:1px solid var(--line);padding:16px;overflow:auto;background:var(--paper)}
+.mem{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mem .title,.mem .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mem .sub{font-size:12px;color:var(--muted)}
+.danger-link{color:var(--bad)}
+
+.diff .d-add{color:#9FE6A0}.diff .d-del{color:#F2A49B}.diff .d-hunk{color:#8FB8E8}
+.acts-row a.link{text-decoration:underline;text-underline-offset:3px}
+
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
 .dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
@@ -266,6 +301,7 @@ body{overflow:hidden}
   <nav class="rail" aria-label="主导航">
     <div class="brand">ccim</div>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a href="#/projects" data-nav="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
@@ -291,6 +327,7 @@ const ICON = {
   chev:'<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
+  branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
@@ -449,6 +486,13 @@ function connectEvents(){
   const es = new EventSource("/api/events");
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
+    if (proj && ev.type === "project" && ev.project === proj.id){
+      clearTimeout(window._pt); window._pt = setTimeout(() => { if (proj) openProject(proj.id, true); }, 300);
+    }
+    if (proj && ev.type === "progress" && proj.feed.some(r => r.chat === ev.chat)){
+      if (ev.state === "working") proj.progress[ev.chat] = ev; else delete proj.progress[ev.chat];
+      redrawProjThread();
+    }
     if (detail && ev.chat === detail.id){
       if (ev.type === "progress"){
         detail.progress = ev.state === "working" ? ev : null;
@@ -473,13 +517,16 @@ function route(){
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   closePop();
   renderList();
-  if (current.view === "agents") { current.id === "new" ? renderAgentForm(null) : current.id ? renderAgent(current.id) : renderAgentEmpty(); }
+  if (current.view !== "projects") proj = null;
+  if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectEmpty(); }
+  else if (current.view === "agents") { current.id === "new" ? renderAgentForm(null) : current.id ? renderAgent(current.id) : renderAgentEmpty(); }
   else if (current.view === "settings") renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
 function renderList(){
   if (current.view === "agents") renderAgentList();
+  else if (current.view === "projects") renderProjectList();
   else if (current.view === "settings") renderSettingsList();
   else renderChatList();
 }
@@ -557,7 +604,7 @@ function recHtml(r){
 function liveHtml(){
   const p = detail.progress; if (!p) return "";
   const last = p.steps[p.steps.length - 1];
-  const head = `<span class="spin"></span>${last ? "正在" + esc(last.replace(/^(运行|读|改|搜索|查找|写)[：:]?\s*/, (m, v) => v + "：")) : "思考中"}`;
+  const head = `<span class="spin"></span>${p.retry ? `网络不稳，正在重试（第 ${p.retry} 次）` : last ? "正在" + esc(last.replace(/^(运行|读|改|搜索|查找|写)[：:]?\s*/, (m, v) => v + "：")) : "思考中"}`;
   return `<div class="msg">${fromRow()}${p.steps.length ? stepsHtml(p.steps, true, head) : `<div class="steps"><button>${head}</button></div>`}
     ${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>`;
 }
@@ -906,6 +953,282 @@ function renderSettings(){
       <button class="btn primary" onclick="saveGlobal()">保存</button></div></div>`;
 }
 async function saveGlobal(){ await act(() => api("/api/global", gs), "已保存，新开的对话开始用"); await loadState(); }
+
+
+// ================= 项目（群聊） =================
+let proj = null;                  // 当前打开的项目
+let rcpt = [], compareMode = true, quote = null, showMembers = false;
+const projSummary = id => (S.projects || []).find(p => p.id === id);
+function pmark(p){ return `<span class="pmark" aria-hidden="true">${esc([...(p.name || "").replace(/[\s\d\-_.]/g, "")][0] || "项")}</span>`; }
+function memberLine(p){
+  const names = (p.members || []).map(m => (agentOf(m) || {}).name).filter(Boolean);
+  return names.length ? names.slice(0, 3).join("、") + (names.length > 3 ? ` 等 ${names.length} 个` : "") : "还没有 Agent";
+}
+function renderProjectList(){
+  const rows = S.projects || [];
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>项目</h1><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
+    <div class="scroll">${rows.length ? rows.map(p => `<a class="item ${current.id === p.id ? "on" : ""}" href="#/projects/${encodeURIComponent(p.id)}" style="text-decoration:none;color:inherit">
+        ${pmark(p)}<span class="t"><span class="title">${esc(p.name)}</span>${p.busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${esc(memberLine(p))}</span>`}</span>
+        <span class="when">${when(p.last_active)}</span></a>`).join("") : `<p class="muted" style="padding:10px">还没有项目。</p>`}</div>`;
+}
+function renderProjectEmpty(){
+  proj = null;
+  $("#main").innerHTML = `<div class="empty"><h2>项目</h2><p>把几个 Agent 拉进一个项目，在里面 @ 它们派活；同一件事也可以交给几个 Agent 各做一份，对比结果。</p>
+    <button class="btn primary" onclick="newProject()">${ICON.plus}新建项目</button></div>`;
+}
+async function openProject(id, keepInput){
+  try { proj = await api(`/api/project?id=${encodeURIComponent(id)}`); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个项目</h2><p>${esc(e.message)}</p></div>`; return; }
+  const v = keepInput && $("#input") ? $("#input").value : "";
+  rcpt = rcpt.filter(r => proj.members.includes(r));
+  drawProject();
+  if (v) $("#input").value = v;
+}
+function chipsOf(ids){ return ids.map(id => `<span class="at">@${esc((agentOf(id) || {name: "已删除的 Agent"}).name)}</span>`).join(" "); }
+function liveOf(r){
+  // 排队中的回答：它所在的对话正在干活、而且它是那个对话里最早没做完的一件，就是正在做的这件
+  if (r.state !== "queued") return null;
+  const p = proj.progress[r.chat]; if (!p) return null;
+  const first = proj.feed.find(x => x.type === "reply" && x.chat === r.chat && x.state === "queued");
+  return first && first.id === r.id ? p : null;
+}
+function stateLabel(r, live){
+  if (live) return `<span class="status busy"><i></i>干活中</span>`;
+  return {done: `<span class="status on"><i></i>完成${r.elapsed ? `，用时 ${fmtSec(r.elapsed)}` : ""}</span>`,
+          queued: `<span class="status"><i></i>排队中，前面的做完就开始</span>`,
+          error: `<span class="status err"><i></i>出错了</span>`, stopped: `<span class="status"><i></i>停下了</span>`,
+          lost: `<span class="status"><i></i>没做完（ccim 重启过）</span>`}[r.state] || "";
+}
+function fmtSec(s){ s = Math.round(s || 0); return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, "0")} 秒`; }
+function replyBody(r, live){
+  if (live){
+    const last = live.steps[live.steps.length - 1];
+    const head = `<span class="spin"></span>${live.retry ? `网络不稳，正在重试（第 ${live.retry} 次）` : last ? "正在" + esc(last) : "思考中"}`;
+    return (live.steps.length ? stepsHtml(live.steps, true, head) : `<div class="steps"><button>${head}</button></div>`) + (live.text ? `<div class="answer cursor">${md(live.text)}</div>` : "");
+  }
+  return stepsHtml(r.steps) + (r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>` : "");
+}
+function replyActs(r, live){
+  const a = agentOf(r.agent);
+  if (live || r.state === "queued") return `<div class="acts-row"><button class="link danger-link" onclick="stopReply(${q(r.chat)})">停下</button></div>`;
+  if (r.state !== "done") return `<div class="acts-row"><a class="link" href="#/chats/${encodeURIComponent(r.chat)}">单独聊</a></div>`;
+  return `<div class="acts-row"><button class="link" onclick="forward(${q(r.task)},${q(r.agent)})">转给…</button><a class="link" href="#/chats/${encodeURIComponent(r.chat)}">单独聊</a></div>`;
+}
+function taskHtml(t){
+  const qa = t.quote ? agentOf(t.quote.agent) : null;
+  return `<div class="msg me"><div style="max-width:80%">
+      ${t.quote ? `<div class="quote">${seal(qa, "sm", false)}<span>${esc(t.quote.text.replace(/\s+/g, " ").slice(0, 120))}</span></div>` : ""}
+      <div class="bubble">${chipsOf(t.to)} ${esc(t.text)}</div>
+      <div class="meta-r">${t.compare ? `<span class="tag">各做一份，对比结果</span>` : ""}<span>${whenTs(t.at)}</span></div></div></div>`;
+}
+function replyHtml(r){
+  const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOf(r);
+  return `<div class="msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${stateLabel(r, live)}</div>
+    ${replyBody(r, live)}${replyActs(r, live)}</div>`;
+}
+function compareHtml(t, rs){
+  return `<div class="msg"><div class="compare">${rs.map(r => {
+    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOf(r);
+    const merge = r.state === "done" && r.branch ? (r.chosen ? `<span class="status on"><i></i>已用这个，改动合并进项目目录了</span>`
+      : `<button class="btn" onclick="showDiff(${q(r.task)},${q(r.agent)})">看改动</button><button class="btn primary" onclick="choose(${q(r.task)},${q(r.agent)})">用这个</button>`) : "";
+    return `<div class="col ${r.chosen ? "chosen" : ""}"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span></div>
+      <div style="margin:-2px 0 8px">${stateLabel(r, live)}</div>
+      ${r.branch ? `<div class="branch">${ICON.branch}${esc(r.branch)}${r.changed ? `<span class="muted">　${esc(r.changed)}</span>` : ""}</div>` : ""}
+      ${replyBody(r, live)}
+      ${merge ? `<div class="acts-row">${merge}</div>` : ""}${replyActs(r, live)}</div>`; }).join("")}</div></div>`;
+}
+function projThread(){
+  const p = proj;
+  const tasks = p.feed.filter(f => f.type === "task");
+  let html = tasks.length ? "" : `<div class="empty" style="margin-top:12vh"><h2>${esc(p.name)}</h2><p>${p.members.length ? "输入 @ 选一个或几个 Agent，写上要做的事，就派出去了。" : "先在右上角「成员」里拉几个 Agent 进来。"}</p></div>`;
+  for (const t of tasks){
+    html += taskHtml(t);
+    const rs = p.feed.filter(x => x.type === "reply" && x.task === t.id);
+    html += t.compare ? compareHtml(t, rs) : rs.map(replyHtml).join("");
+  }
+  return html;
+}
+function redrawProjThread(){
+  const t = $("#thread"); if (!t || !proj) return;
+  const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+  t.innerHTML = projThread();
+  if (near) t.scrollTop = t.scrollHeight;
+}
+function whenTs(sec){
+  if (!sec) return "";
+  const d = new Date(sec * 1000), pad = n => String(n).padStart(2, "0");
+  return when(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`);
+}
+function drawProject(){
+  const p = proj;
+  const html = projThread();
+  const multi = rcpt.length > 1;
+  const hint = multi ? (compareMode ? (p.git ? "每个 Agent 在自己的分支上做同一件事，互不影响，做完并排对比，挑一个合并。"
+                                               : p.dir ? "这个目录没用 git 管理，各做一份时它们会在同一个目录里改，可能互相覆盖。" : "每个 Agent 在自己的工作区里各做一份，做完并排对比。")
+                                    : "几个 Agent 在同一个目录里一起做，各自负责的部分写清楚，免得改到一起。")
+             : "Enter 派出去，Shift + Enter 换行";
+  $("#main").innerHTML = `
+    <div class="chat-head">${pmark(p)}
+      <div class="grow"><div class="name">${esc(p.name)}</div>
+        <div class="meta">${p.dir ? `<span class="path">${esc(tilde(p.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，各 Agent 在自己的工作区里干活</span>`}</div></div>
+      <button class="btn" onclick="showMembers=!showMembers;drawProject()">成员 ${p.members.length}</button>
+      <button class="icon-btn" aria-label="更多" onclick="projectMenu(event)">${ICON.more}</button>
+    </div>
+    <div class="proj-body">
+      <div class="proj-main">
+        <div class="thread" id="thread">${html}</div>
+        <div class="composer">
+          <div class="box" id="box">
+            ${quote ? `<div class="quote in-box">${seal(agentOf(quote.agent), "sm", false)}<span>${esc(quote.text.replace(/\s+/g, " ").slice(0, 120))}</span><button class="icon-btn" aria-label="去掉引用" onclick="quote=null;drawProject()">${ICON.x}</button></div>` : ""}
+            <div class="rcpt" id="rcpt"></div>
+            <textarea id="input" rows="2" placeholder="输入 @ 选 Agent，再写要做的事" aria-label="派活"></textarea>
+            <div class="bar">
+              <button class="chip" id="atchip" onclick="atMenu(event)">@ 选 Agent${ICON.down}</button>
+              ${multi ? `<span class="seg mini"><button class="${!compareMode ? "on" : ""}" onclick="compareMode=false;drawProject()">一起做</button><button class="${compareMode ? "on" : ""}" onclick="compareMode=true;drawProject()">各做一份，对比</button></span>` : ""}
+              <button class="send" aria-label="派出去" onclick="dispatch()">${ICON.up}</button>
+            </div>
+          </div>
+          <div class="hint">${esc(hint)}</div>
+        </div>
+      </div>
+      ${showMembers ? membersPanel(p) : ""}
+    </div>`;
+  drawRcpt();
+  const t = $("#thread"); t.scrollTop = t.scrollHeight;
+  const i = $("#input");
+  i.addEventListener("keydown", e => {
+    if (e.key === "@" && !e.isComposing) setTimeout(() => atMenu({currentTarget: $("#atchip"), stopPropagation(){}}), 0);
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); dispatch(); }
+  });
+}
+function drawRcpt(){
+  const box = $("#rcpt"); if (!box) return;
+  box.innerHTML = rcpt.length ? rcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="rcpt=rcpt.filter(x=>x!==${q(r)});drawProject()">${ICON.x}</button></span>`).join("")
+                              : `<span class="muted" style="font-size:12px">先 @ 选派给谁</span>`;
+}
+function membersPanel(p){
+  const others = S.agents.filter(a => !p.members.includes(a.id));
+  return `<aside class="members"><div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font:600 15px var(--song)">成员</b><button class="icon-btn" aria-label="收起" onclick="showMembers=false;drawProject()">${ICON.x}</button></div>
+    ${p.members.map(m => { const a = agentOf(m); if (!a) return ""; return `<div class="mem">${seal(a)}<span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${a.busy ? esc(a.doing || "干活中") : BASE[a.base || "claude"]}</span></span>
+      <button class="link danger-link" onclick="removeMember(${q(m)})">移出</button></div>`; }).join("") || `<p class="muted">还没有成员。</p>`}
+    <div class="row" style="margin-top:12px">
+      ${others.length ? `<button class="btn" onclick="addMemberMenu(event)">${ICON.plus}拉人</button>` : ""}
+      <button class="btn" onclick="quickAgent()">${ICON.plus}新建 Agent</button></div></aside>`;
+}
+function atMenu(e){
+  const p = proj;
+  if (!p.members.length) { toast("先在「成员」里拉几个 Agent 进来"); showMembers = true; drawProject(); return; }
+  const pp = pop(e, `<div class="sec">派给谁（可以多选）</div>`
+    + `<button onclick="rcpt=[...proj.members];closePop();drawProject()"><span><div>所有人</div><div class="desc">${p.members.length} 个 Agent</div></span></button>`
+    + p.members.map(m => { const a = agentOf(m); if (!a) return "";
+      return `<button data-m="${esc(m)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${rcpt.includes(m) ? `<span class="ck">✓</span>` : ""}</button>`; }).join("")
+    + `<button onclick="closePop();quickAgent()">${ICON.plus}新建一个 Agent 拉进来</button>`);
+  pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+    const m = b.dataset.m;
+    rcpt = rcpt.includes(m) ? rcpt.filter(x => x !== m) : [...rcpt, m];
+    const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
+    drawRcpt();
+  });
+  const done = () => { removeEventListener("click", done); if (proj && proj.id === p.id) { const v = $("#input")?.value; drawProject(); if (v) $("#input").value = v; $("#input").focus(); } };
+  setTimeout(() => addEventListener("click", done, {once: true}), 0);
+}
+async function dispatch(){
+  const v = $("#input").value.trim();
+  if (!rcpt.length) return toast("先 @ 选派给谁");
+  if (!v) return $("#input").focus();
+  const body = {id: proj.id, text: v, to: rcpt, compare: rcpt.length > 1 && compareMode, quote: quote ? {task: quote.task, agent: quote.agent} : null};
+  $("#input").value = "";
+  await act(() => api("/api/project/dispatch", body));
+  rcpt = []; quote = null; await openProject(proj.id); loadState();
+}
+async function stopReply(chat){ await act(() => api("/api/project/stop", {chat}), "正在停下"); }
+function forward(tid, aid){
+  const r = proj.feed.find(x => x.type === "reply" && x.task === tid && x.agent === aid);
+  quote = {task: tid, agent: aid, text: r.text || ""};
+  rcpt = []; drawProject(); toast("选一个 Agent，写上要它接着做什么");
+  setTimeout(() => atMenu({currentTarget: $("#atchip"), stopPropagation(){}}), 50);
+}
+async function showDiff(tid, aid){
+  const d = await act(() => api(`/api/project/diff?id=${encodeURIComponent(proj.id)}&task=${encodeURIComponent(tid)}&agent=${encodeURIComponent(aid)}`));
+  const lines = (d.diff || "没有改文件。").split("\n").map(l => `<span class="${l.startsWith("+") && !l.startsWith("+++") ? "d-add" : l.startsWith("-") && !l.startsWith("---") ? "d-del" : l.startsWith("@@") ? "d-hunk" : ""}">${esc(l)}</span>`).join("\n");
+  dialog(`「${(agentOf(aid) || {}).name}」的改动`, `<div class="logs diff">${lines}${d.cut ? "\n…（太长了，后面没显示）" : ""}</div>`,
+    `<button class="btn" onclick="closeDialog()">关闭</button><button class="btn primary" onclick="closeDialog();choose(${q(tid)},${q(aid)})">用这个</button>`);
+}
+async function choose(tid, aid){
+  const a = agentOf(aid) || {name: ""};
+  if (!await confirmBox(`用「${a.name}」的改动？`, "把它的改动合并进项目目录，记成一次提交。其他人的分支先留着。", "合并")) return;
+  await act(() => api("/api/project/choose", {id: proj.id, task: tid, agent: aid}), "已合并进项目目录");
+  openProject(proj.id);
+}
+async function removeMember(m){ await act(() => api("/api/project/member", {id: proj.id, remove: m}), "已移出"); rcpt = rcpt.filter(x => x !== m); await loadState(); openProject(proj.id); }
+function addMemberMenu(e){
+  const pp = pop(e, `<div class="sec">拉进项目</div>` + S.agents.filter(a => !proj.members.includes(a.id)).map(a =>
+    `<button data-a="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
+  pp.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
+    closePop(); await act(() => api("/api/project/member", {id: proj.id, add: b.dataset.a}), "已拉进来"); await loadState(); openProject(proj.id);
+  });
+}
+function quickAgent(){
+  closePop();
+  let base = "claude";
+  dialog(`新建 Agent，拉进「${proj.name}」`, `<div class="form">
+      <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">
+      <label for="q-role">角色说明</label><textarea id="q-role" class="textarea" placeholder="它负责什么、有什么要求"></textarea>
+      <label>底座</label><div class="seg" id="q-base"><button class="on" data-b="claude">Claude Code</button><button data-b="codex" ${S.codex ? "" : "disabled"}>Codex</button></div>
+    </div><p class="muted" style="font-size:13px;margin:14px 0 0">头像、默认模型这些以后可以在 Agent 页再改。</p>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="q-ok">新建并拉进来</button>`);
+  document.querySelectorAll("#q-base button").forEach(b => b.onclick = () => { base = b.dataset.b; document.querySelectorAll("#q-base button").forEach(x => x.classList.toggle("on", x === b)); });
+  $("#q-name").focus();
+  $("#q-ok").onclick = async () => {
+    const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
+    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name)}}));
+    await act(() => api("/api/project/member", {id: proj.id, add: id}));
+    closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`);
+  };
+}
+function newProject(){
+  const picked = new Set();
+  let dir = "";
+  const draw = () => {
+    const name = $("#np-name") ? $("#np-name").value : "";
+    dialog("新建项目", `<div class="form">
+      <label for="np-name">名字</label><input id="np-name" class="input" placeholder="比如：官网改版" value="${esc(name)}">
+      <label>工作目录</label><div><div class="row"><input id="np-dir" class="input" style="flex:1" placeholder="不填也行" value="${esc(tilde(dir))}"><button class="btn" id="np-pick">${ICON.folder}选择…</button></div>
+        <div class="help">填了的话，拉进来的 Agent 都在这个目录里干活；不填就各在各的工作区。</div></div>
+      <label>拉哪些 Agent</label><div class="picks" style="margin:0">${S.agents.map(a => `<button class="pick ${picked.has(a.id) ? "on" : ""}" data-id="${esc(a.id)}">${seal(a, "", false)}<span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base || "claude"]}</div></span></button>`).join("")}</div>
+    </div>`, `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="np-ok">新建项目</button>`);
+    document.querySelectorAll(".scrim .pick").forEach(b => b.onclick = () => { dir = $("#np-dir").value; picked.has(b.dataset.id) ? picked.delete(b.dataset.id) : picked.add(b.dataset.id); draw(); });
+    $("#np-pick").onclick = () => chooseFolder(p => { dir = p; $("#np-dir").value = tilde(p); });
+    $("#np-ok").onclick = async () => {
+      const n = $("#np-name").value.trim(); if (!n) { toast("先给项目起个名字"); return; }
+      const d = $("#np-dir").value.trim().replace(/^~/, S.home);
+      const {id} = await act(() => api("/api/project/save", {name: n, dir: d, members: [...picked]}));
+      closeDialog(); await loadState(); location.hash = `#/projects/${encodeURIComponent(id)}`;
+    };
+  };
+  draw(); $("#np-name").focus();
+}
+function projectMenu(e){
+  pop(e, `<button onclick="closePop();editProject()">改名字和工作目录</button><button onclick="closePop();deleteProject()">删除这个项目</button>`, true);
+}
+function editProject(){
+  let dir = proj.dir || "";
+  dialog("项目设置", `<div class="form">
+      <label for="ep-name">名字</label><input id="ep-name" class="input" value="${esc(proj.name)}">
+      <label>工作目录</label><div><div class="row"><input id="ep-dir" class="input" style="flex:1" placeholder="不填也行" value="${esc(tilde(dir))}"><button class="btn" id="ep-pick">${ICON.folder}选择…</button></div>
+        <div class="help">改了以后，之后派的活在新目录里做。</div></div></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="ep-ok">保存</button>`);
+  $("#ep-pick").onclick = () => chooseFolder(p => { $("#ep-dir").value = tilde(p); });
+  $("#ep-ok").onclick = async () => {
+    await act(() => api("/api/project/save", {id: proj.id, name: $("#ep-name").value, dir: $("#ep-dir").value.trim().replace(/^~/, S.home), members: proj.members}), "已保存");
+    closeDialog(); await loadState(); openProject(proj.id);
+  };
+}
+async function deleteProject(){
+  if (!await confirmBox(`删除「${proj.name}」？`, "项目和里面的消息会删掉；Agent、工作目录里的文件、各自的分支不受影响。", "删除")) return;
+  await act(() => api("/api/project/delete", {id: proj.id}), "已删除"); proj = null; await loadState(); location.hash = "#/projects";
+}
 
 // ================= 对话框 =================
 function dialog(title, body, foot){

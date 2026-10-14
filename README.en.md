@@ -98,6 +98,10 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   leaves the original untouched.
 - **Agents**: long-lived agents with a name, role description, base (Claude Code / Codex), default model and an optional
   working folder. Existing projects were turned into agents automatically. Chat with them or connect them to Feishu / WeChat.
+- **Projects**: put several agents in a project and @ them like in a group chat. Tasks for the same agent run one after
+  another, different agents work in parallel, and each agent only sees its own tasks. Send the same task to several agents
+  to compare: in a git repo each one works on its own branch, and you pick one result to merge. Forward an answer to another
+  agent, or create a new agent right in the project.
 - **Settings**: default model and effort level for Claude Code and for Codex.
 
 ## In Feishu

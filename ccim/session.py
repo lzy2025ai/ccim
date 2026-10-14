@@ -93,11 +93,14 @@ class Turn:
         self.live = ""                        # 正在写的文字（流式）
         self.card_id = None
         self.shown = None
+        self.retry = None                     # 连不上 Claude 时第几次重试（api_retry），连上了就清掉
 
     def card(self, title, color):
         hidden = len(self.steps) - SHOW_STEPS
         lines = ([f"…前面还有 {hidden} 步"] if hidden > 0 else []) + [f"· {s}" for s in self.steps[-SHOW_STEPS:]]
         writing = self.live or self.text
+        if self.retry and color == "blue":
+            lines.append(f"网络不稳，正在重试（第 {self.retry} 次）")
         if writing and color == "blue":
             tail = " ".join(writing.split())
             lines.append("💬 " + (tail if len(tail) <= 160 else "…" + tail[-159:]))
@@ -353,6 +356,10 @@ class Chat:
                         break
                     if stray and not isinstance(m, RateLimitEvent):
                         stray = False
+                    if isinstance(m, SystemMessage) and m.subtype == "api_retry":
+                        t.retry = (m.data or {}).get("attempt") or 1
+                    elif not isinstance(m, RateLimitEvent):
+                        t.retry = None
                     if isinstance(m, SystemMessage) and m.subtype == "init":
                         sid = (m.data or {}).get("session_id")
                         if sid and sid != self.session_id:  # 一开始就记下，第一轮就被打断也能接上
@@ -457,7 +464,7 @@ class Chat:
                 self.b.save(self.chat_id, steps=steps)
 
     def _snap(self, t, state="working"):
-        return {"state": state, "steps": list(t.steps), "text": t.live or t.text or "",
+        return {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "retry": t.retry,
                 "elapsed": round(time.monotonic() - t.start, 1)}
 
     async def _tick(self, t, reply_to):
@@ -465,7 +472,7 @@ class Chat:
             last = None
             while True:
                 snap = self._snap(t)
-                key = (len(snap["steps"]), snap["text"])
+                key = (len(snap["steps"]), snap["text"], snap["retry"])
                 if key != last:
                     last = key
                     try:

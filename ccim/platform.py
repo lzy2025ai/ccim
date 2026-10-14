@@ -27,6 +27,7 @@ PORT = 8977
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 UPLOAD_LIMIT = 100 * 1024 * 1024
+MERGED = ("card", "reply")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
 def home():
@@ -105,10 +106,11 @@ class Logs:
                         r = json.loads(line)
                     except ValueError:
                         continue
-                    if r.get("type") == "card" and r.get("id") in pos:
-                        out[pos[r["id"]]] = dict(r, at=out[pos[r["id"]]]["at"])
+                    if r.get("type") in MERGED and r.get("id") in pos:
+                        old = out[pos[r["id"]]]
+                        out[pos[r["id"]]] = {**old, **r, "at": old["at"]}
                         continue
-                    if r.get("type") == "card":
+                    if r.get("type") in MERGED:
                         pos[r["id"]] = len(out)
                     out.append(r)
         except OSError:
@@ -228,6 +230,8 @@ class Platform:
         self.store = Store(home)
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
         self.background = set()
+        from .projects import Projects
+        self.projects = Projects(self)
 
     def handlers(self):
         return {"platform": self}
@@ -254,7 +258,9 @@ class Platform:
             a = agents.get(m["agent"])
             if not a:
                 raise Problem("这个对话的 Agent 已经删掉了。")
-            key, path = a["id"], agents.cwd(a)
+            path = m.get("cwd") or agents.cwd(a)         # 项目里的对话在项目目录（对比时在它自己的副本）里干活
+            key = a["id"] if path == agents.cwd(a) else f"{a['id']}@{path}"
+            os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
                      "effort": a.get("effort"), "role": a.get("role")}
             name = a["name"]
@@ -374,7 +380,8 @@ class Platform:
         t = m.get("temp") or {}
         return {"id": cid, "title": m.get("title") or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
-                "dir": (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")), "source": "网页",
+                "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
+                "source": f"项目「{m.get('title')}」" if m.get("project") else "网页", "project": m.get("project"),
                 "origin_source": m.get("source"),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
@@ -392,7 +399,7 @@ class Platform:
         return v
 
     def chat_list(self):
-        rows = [self.chat_view(cid) for cid in self.chats()] + self.external_chats()
+        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project")] + self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
 
@@ -517,6 +524,7 @@ def _defaults(base, path):
 
 def _handler(pf):
     from . import web as console
+    from . import projects as projects_mod
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "ccim"
@@ -550,7 +558,7 @@ def _handler(pf):
                 return
             try:
                 self._send(200, fn() or {})
-            except (Problem, console.Problem, ValueError) as e:
+            except (Problem, console.Problem, projects_mod.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -574,6 +582,8 @@ def _handler(pf):
                 "/api/state": lambda: state(pf),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
+                "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
+                "/api/project/diff": lambda: pf.call(pf.projects.diff, q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -600,6 +610,12 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
+                "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
+                "/api/project/delete": lambda: pf.call(pf.projects.delete, b("id")),
+                "/api/project/member": lambda: pf.call(pf.projects.member, b("id"), b("add"), b("remove")),
+                "/api/project/dispatch": lambda: pf.run(pf.projects.dispatch(b("id"), b("text"), b("to"), b("compare"), b("quote")), 60),
+                "/api/project/choose": lambda: pf.call(pf.projects.choose, b("id"), b("task"), b("agent")),
+                "/api/project/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("chat")))},
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
                 "/api/channel/start": lambda: console.start(b("proc")),
@@ -735,6 +751,7 @@ def state(pf):
     from . import web as console
     g = registry.global_config()
     return {"agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
+            "projects": pf.projects.summary(),
             "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                       "codex": _defaults("codex", os.path.expanduser("~"))},
             "codex": console._codex(), "home": os.path.expanduser("~")}
@@ -767,6 +784,8 @@ def delete_agent(pf, aid):
         raise Problem("它还在干活，先停下再删。")
     for kind, proc, path in agents.linked_paths(aid):
         console.disconnect(path, kind, proc)
+    for pid in list(pf.projects.all()):       # 从它在的项目里移出
+        pf.call(pf.projects.member, pid, None, aid)
     agents.remove(aid)
     return {}
 

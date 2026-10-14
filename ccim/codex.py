@@ -12,7 +12,7 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 import asyncio, glob, json, logging, os, re, signal, time, tomllib
 
 from .progress import short
-from .session import Chat, Turn, prompt_note
+from .session import Chat, Turn, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
 
@@ -139,7 +139,7 @@ class CodexChat(Chat):
             if self.session_id:
                 args += ["resume", self.session_id, prompt]
             else:
-                args.append(prompt_note(NOTE, self.b.channel) + prompt)
+                args.append(prompt_note(NOTE, self.b.channel) + role_note(self.b.entry).lstrip() + "\n\n" * bool(role_note(self.b.entry)) + prompt)
             self.proc = await asyncio.create_subprocess_exec(
                 *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True)

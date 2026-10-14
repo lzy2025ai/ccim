@@ -15,8 +15,8 @@ from .channels import NAMES, load, send_once
 
 CAPS = ["handoff", "safe-restart", "ask"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")   # minimal 只有 Codex 有
-GLOBAL_KEYS = ("model", "effort")
-CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": EFFORTS,
+GLOBAL_KEYS = ("model", "effort", "codex_model", "codex_effort")
+CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": EFFORTS, "codex_model": None, "codex_effort": EFFORTS,
                "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
 
 
@@ -154,6 +154,8 @@ def _apply_agent(path, agent):
     if not agent or (entry.get("agent") or "claude") == agent:
         return False
     registry.update(path, agent=None if agent == "claude" else agent)
+    from . import agents
+    agents.absorb(path, agent=agent)
     print(f"「{os.path.basename(path)}」改用 {AGENT_NAMES[agent]}。")
     desc = runtime.which(path, registry.get(path))[1]
     if agent == "codex" and desc.startswith("稳定版 ") and desc.split()[1] < "0.8":
@@ -244,6 +246,8 @@ def _apply_settings(path, args):
     if not changes or all(entry.get(k) == v for k, v in changes.items()):
         return False
     registry.update(path, **changes)
+    from . import agents
+    agents.absorb(path, **changes)
     print(f"「{os.path.basename(path)}」默认用 " + "、".join(f"{k}={v}" for k, v in changes.items()) + "。")
     return True
 
@@ -378,8 +382,9 @@ def cmd_show(args):
     settings = {k: v for _, h in hubs[:1] for k, v in ((h.get("projects") or {}).get(path) or {}).items()} if not e else e
     codex = settings.get("agent") == "codex"
     eff = _codex_effective if codex else registry.effective
-    g = {} if codex else registry.global_config()   # 全局设置只管 Claude Code 项目
-    settings = dict(settings, model=settings.get("model") or g.get("model"), effort=settings.get("effort") or g.get("effort"))
+    g = registry.global_config()
+    px = "codex_" if codex else ""                 # 全局默认 Claude Code、Codex 各一套
+    settings = dict(settings, model=settings.get("model") or g.get(px + "model"), effort=settings.get("effort") or g.get(px + "effort"))
     default_model, default_effort, m_set, e_set = eff(path, settings.get("model"), settings.get("effort"))
     follow = "（跟随 Codex 设置）" if codex else "（跟随 Claude Code 设置）"
     rows = [("项目", os.path.basename(path)), ("路径", path)]
@@ -720,12 +725,13 @@ def cmd_config(args):
     if args.globally:
         if not items:
             g = registry.global_config()
-            print(f"全局：model={g.get('model', '跟随 Claude Code')}  effort={g.get('effort', '跟随 Claude Code')}")
+            print(f"Claude Code：model={g.get('model', '跟随 Claude Code')}  effort={g.get('effort', '跟随 Claude Code')}")
+            print(f"Codex：codex_model={g.get('codex_model', '跟随 Codex')}  codex_effort={g.get('codex_effort', '跟随 Codex')}")
             return
         registry.set_global(**_parse_settings(items, GLOBAL_KEYS))
         running = [os.path.basename(p) if e.get("kind") != "weixin" else e.get("bot_name")
                    for p, e in registry.all_projects().items() if daemon.running(p)]
-        print("已保存。没单独设置的 Claude Code 项目都用它" +
+        print("已保存。没单独设置的项目都用它" +
               (f"；正在运行的要重启才生效：{'、'.join(running)}" if running else "。"))
         return
     project = None
@@ -741,7 +747,10 @@ def cmd_config(args):
         print(f"group={entry.get('group', 'owner')}  model={show('model')}  effort={show('effort')}"
               f"  reaction={entry.get('reaction', '默认')}")
         return
-    registry.update(path, **_parse_settings(items, CONFIG_KEYS))
+    changes = _parse_settings(items, CONFIG_KEYS)
+    registry.update(path, **changes)
+    from . import agents
+    agents.absorb(path, **changes)
     print("已保存。" + ("正在运行的要重启才生效：ccim restart " + os.path.basename(path) if daemon.running(path) else ""))
 
 
@@ -851,8 +860,9 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run):
-        from . import weixin_hub
+        from . import agents, weixin_hub
         weixin_hub.migrate()
+        agents.migrate()                      # 以前的「项目」变成 Agent
     try:
         (getattr(args, "fn", None) or cmd_default)(args)
     except KeyboardInterrupt:

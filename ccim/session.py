@@ -221,9 +221,9 @@ class Chat:
         return registry.effective(self.b.path, self.model, self.effort)
 
     def default(self, key):
-        """没在这个聊天里单独设置时用什么：项目的 config > 全局 config（只管 Claude Code）> 不传，交给 Claude Code 自己取。"""
-        g = registry.global_config() if self.agent == "claude" else {}
-        return self.b.entry.get(key) or g.get(key)
+        """没在这个聊天里单独设置时用什么：Agent / 项目的设置 > 全局默认（Claude Code、Codex 各一套）> 不传，交给它们自己取。"""
+        g = registry.global_config()
+        return self.b.entry.get(key) or g.get(key if self.agent == "claude" else f"codex_{key}")
 
     def follow(self, key):
         """/model 默认、/effort 默认：这个聊天不再单独设置，回到跟随项目 / 全局 / Claude Code。"""
@@ -287,7 +287,7 @@ class Chat:
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat"],   # 只读，不用每次批准
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND if self.chat_type == "p2p" else "")}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND if self.chat_type == "p2p" else "") + role_note(self.b.entry)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -588,6 +588,12 @@ def _look_around(chat):
         return {"content": [{"type": "text", "text": head + text}]}
 
     return [list_chats, read_chat]
+
+
+def role_note(entry):
+    """Agent 的角色说明，接在系统提示后面。"""
+    role = (entry.get("role") or "").strip()
+    return f"\n\n## 你的角色\n{role}" if role else ""
 
 
 def prompt_note(text, channel):

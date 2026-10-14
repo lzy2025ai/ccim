@@ -145,7 +145,8 @@ def write_state(path, **changes):
 
 
 def global_config():
-    """ccim config --global 设的全局默认（模型、思考深度），所有用 Claude Code 的项目都用；项目自己设了的以项目为准。"""
+    """ccim config --global 设的全局默认：model / effort 给 Claude Code，codex_model / codex_effort 给 Codex；
+    Agent（项目）自己设了的以它为准。"""
     try:
         with open(os.path.join(HOME, "config.json"), encoding="utf-8") as f:
             return json.load(f)

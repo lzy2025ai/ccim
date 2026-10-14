@@ -1,0 +1,224 @@
+"""Agent 登记表：~/.ccim/agents.json，{编号: Agent}。
+
+Agent = 名字、印章（字和颜色）、角色说明、底座（claude / codex）、默认模型和思考深度、工作目录（可以没有）。
+没有工作目录的 Agent 在 ~/.ccim/agents/<编号>/ 里干活。
+
+飞书、微信的登记还是按目录记的（registry.json、微信号的 projects），各带一个 agent_id 指回这里。
+Agent 是设置的唯一来源：改了 Agent，同步写回它关联的飞书、微信登记（agent / model / effort / role），
+飞书、微信进程里现有的代码照常从登记里读，不用改。
+0.11 以前的「项目」第一次用到时自动迁移成 Agent（`migrate`）。
+"""
+import contextlib, fcntl, json, os, re, tempfile, time, uuid
+
+from . import registry
+
+COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
+FIELDS = ("name", "seal", "color", "base", "model", "effort", "role", "dir")
+SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role"}   # Agent 字段 → 登记里的字段
+
+
+def _file():
+    return os.path.join(registry.HOME, "agents.json")
+
+
+@contextlib.contextmanager
+def _locked():
+    os.makedirs(registry.HOME, exist_ok=True)
+    with open(os.path.join(registry.HOME, ".agents.lock"), "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _read():
+    try:
+        with open(_file(), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _write(data):
+    fd, tmp = tempfile.mkstemp(dir=registry.HOME, prefix=".agents.", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, _file())
+
+
+def all_agents():
+    return _read()
+
+
+def get(aid):
+    a = _read().get(aid)
+    return dict(a, id=aid) if a else None
+
+
+def seal_of(name):
+    """印章上的字：名字里的前两个字（中文）或前两个字母。"""
+    chars = [c for c in (name or "") if not c.isspace() and c not in "-_·.()（）「」"]
+    han = [c for c in chars if "一" <= c <= "鿿"]
+    return "".join((han or chars)[:2]) or "新"
+
+
+def _new_id(name):
+    base = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")[:20] or "agent"
+    return f"{base}-{uuid.uuid4().hex[:4]}"
+
+
+def _clean(fields):
+    out = {k: v for k, v in fields.items() if k in FIELDS}
+    for k in ("model", "effort", "role", "dir"):
+        if k in out:
+            v = out[k]
+            out[k] = (v.strip() or None) if isinstance(v, str) else (v or None)
+    if out.get("dir"):
+        out["dir"] = os.path.realpath(os.path.expanduser(out["dir"]))
+    if "base" in out and out["base"] not in ("claude", "codex"):
+        out["base"] = "claude"
+    if "color" in out and out["color"] not in COLORS:
+        out["color"] = COLORS[0]
+    return out
+
+
+def create(**fields):
+    f = _clean(fields)
+    if not (f.get("name") or "").strip():
+        raise ValueError("先给它起个名字")
+    with _locked():
+        data = _read()
+        aid = _new_id(f["name"])
+        f.setdefault("seal", seal_of(f["name"]))
+        f.setdefault("color", COLORS[len(data) % len(COLORS)])
+        f.setdefault("base", "claude")
+        data[aid] = dict(f, created=registry.now())
+        _write(data)
+    return get(aid)
+
+
+def update(aid, **fields):
+    f = _clean(fields)
+    with _locked():
+        data = _read()
+        if aid not in data:
+            raise KeyError(aid)
+        data[aid].update(f)
+        _write(data)
+    a = get(aid)
+    _sync(a)
+    return a
+
+
+def remove(aid):
+    """删掉 Agent；它的飞书、微信接入要先断开（由调用方做）。工作目录、工作区里的文件不删。"""
+    with _locked():
+        data = _read()
+        data.pop(aid, None)
+        _write(data)
+
+
+def workspace(aid):
+    d = os.path.join(registry.HOME, "agents", aid)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def cwd(a):
+    """这个 Agent 在哪干活：工作目录，没有就用它自己的工作区。"""
+    return a.get("dir") or workspace(a["id"])
+
+
+# ---------- 和飞书、微信登记的关联 ----------
+
+def linked_paths(aid):
+    """这个 Agent 接了哪些渠道：[(渠道 feishu / weixin, 进程登记的路径, 项目路径)]。"""
+    out = []
+    for p, e in registry.all_projects().items():
+        if e.get("kind") == "weixin":
+            out += [("weixin", p, path) for path, s in (e.get("projects") or {}).items() if (s or {}).get("agent_id") == aid]
+        elif e.get("agent_id") == aid:
+            out.append(("feishu", p, p))
+    return out
+
+
+def for_path(path):
+    """项目目录对应的 Agent（飞书、微信登记里的 agent_id）。"""
+    path = os.path.realpath(path)
+    e = registry.get(path)
+    aid = e.get("agent_id") if e and e.get("kind") != "weixin" else None
+    if not aid:
+        for _, h in _hubs():
+            aid = aid or ((h.get("projects") or {}).get(path) or {}).get("agent_id")
+    return get(aid) if aid else None
+
+
+def _hubs():
+    return [(p, e) for p, e in registry.all_projects().items() if e.get("kind") == "weixin"]
+
+
+def _sync(a):
+    """把 Agent 的设置写回它关联的飞书、微信登记。"""
+    vals = {dst: (None if (src == "base" and a.get("base") == "claude") else a.get(src)) for src, dst in SYNCED.items()}
+    for kind, proc, path in linked_paths(a["id"]):
+        if kind == "feishu":
+            registry.update(proc, **vals)
+        else:
+            e = registry.get(proc)
+            projects = dict(e.get("projects") or {})
+            cur = dict(projects.get(path) or {})
+            cur.update(vals)
+            projects[path] = {k: v for k, v in cur.items() if v}
+            registry.update(proc, projects=projects)
+
+
+def absorb(path, **changes):
+    """命令行改了项目的设置（ccim config、--model、--agent）：记到对应的 Agent 上，再同步给它的其他渠道。"""
+    a = for_path(path)
+    if not a:
+        return
+    back = {src: changes[dst] for src, dst in SYNCED.items() if dst in changes}
+    if "base" in back:
+        back["base"] = back["base"] or "claude"
+    if back:
+        update(a["id"], **back)
+
+
+def link(aid, kind, proc, path):
+    """新接入的飞书、微信登记关联到这个 Agent，并写入它的设置。"""
+    if kind == "feishu":
+        registry.update(proc, agent_id=aid)
+    else:
+        e = registry.get(proc)
+        projects = dict(e.get("projects") or {})
+        projects[path] = dict(projects.get(path) or {}, agent_id=aid)
+        registry.update(proc, projects=projects)
+    _sync(get(aid))
+
+
+# ---------- 迁移：以前的「项目」变成 Agent ----------
+
+def migrate():
+    """每个还没关联 Agent 的项目目录建一个 Agent。一个目录同时接了飞书和微信的，算同一个 Agent。"""
+    data = registry.all_projects()
+    paths = {}
+    for p, e in data.items():
+        if e.get("kind") == "weixin":
+            for path, s in (e.get("projects") or {}).items():
+                paths.setdefault(path, {"weixin": [], "feishu": None})["weixin"].append((p, s or {}))
+        else:
+            paths.setdefault(p, {"weixin": [], "feishu": None})["feishu"] = e
+    for path, ch in paths.items():
+        linked = (ch["feishu"] or {}).get("agent_id") or next((s.get("agent_id") for _, s in ch["weixin"] if s.get("agent_id")), None)
+        if linked and get(linked):
+            continue
+        fe = ch["feishu"] or {}
+        ws = ch["weixin"][0][1] if ch["weixin"] else {}
+        name = os.path.basename(path) or path
+        a = create(name=name, base=fe.get("agent") or ws.get("agent") or "claude", model=fe.get("model") or ws.get("model"),
+                   effort=fe.get("effort") or ws.get("effort"), role=fe.get("role") or ws.get("role"), dir=path)
+        if ch["feishu"]:
+            link(a["id"], "feishu", path, path)
+        for hub, _ in ch["weixin"]:
+            link(a["id"], "weixin", hub, path)

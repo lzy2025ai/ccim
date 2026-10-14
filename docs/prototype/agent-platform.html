@@ -151,6 +151,15 @@ body{overflow:hidden}
 .pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
 .pop .desc{font-size:12px;color:var(--muted)}
 
+.newchat{margin:auto;width:min(720px,100%);padding:0 22px 12vh}
+.newchat h2{font:600 26px/1.3 var(--song);margin:0 0 16px}
+.seg.mini{padding:2px}
+.seg.mini button{padding:3px 9px;font-size:12px}
+.chip .path{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.or{margin-top:22px;font-size:13px;color:var(--muted)}
+.link{color:var(--qing);text-decoration:underline;text-underline-offset:3px}
+.pop{max-height:60vh;overflow:auto}
+
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
 .dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
@@ -328,7 +337,7 @@ function route(){
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === view));
   if (view === "agents") { renderAgentList(); id === "new" ? renderAgentForm(null) : id ? renderAgent(id) : renderAgentEmpty(); }
   else if (view === "settings") { renderSettingsList(); renderSettings(); }
-  else { renderChatList(); id ? renderChat(id) : renderChatEmpty(); }
+  else { renderChatList(); id === "new" ? renderNewChat() : id ? renderChat(id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
 
@@ -355,7 +364,7 @@ function renderChatList(){
 }
 
 function renderChatEmpty(){
-  $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>选一个 Agent 开始对话，或者开一个临时对话，直接选 Claude Code 或 Codex。</p>
+  $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>选好 Claude Code 或 Codex 就能开始；想找某个 Agent，去 Agent 页。</p>
     <button class="btn primary" onclick="newChat()">${ICON.plus}新对话</button></div>`;
 }
 
@@ -456,12 +465,13 @@ function supplement(cid){
 
 // ---- 模型、思考深度 ----
 function closePop(){ document.querySelectorAll(".pop").forEach(p => p.remove()); }
-function pop(e, html){
+function pop(e, html, below){
   e.stopPropagation(); closePop();
   const p = document.createElement("div"); p.className = "pop"; p.innerHTML = html; document.body.append(p);
   const r = e.currentTarget.getBoundingClientRect();
-  p.style.left = Math.min(r.left, innerWidth - p.offsetWidth - 10) + "px";
-  p.style.top = (r.top - p.offsetHeight - 6) + "px";
+  p.style.left = Math.max(10, Math.min(r.left, innerWidth - p.offsetWidth - 10)) + "px";
+  const up = r.top - p.offsetHeight - 6;
+  p.style.top = (below || up < 10 ? r.bottom + 6 : up) + "px";
 }
 addEventListener("click", closePop);
 function pickModel(e, cid){
@@ -478,41 +488,61 @@ function pickEffort(e, cid){
 }
 function setChat(cid, k, v){ const c = chats.find(x => x.id === cid); c[k] = v; closePop(); renderChat(cid); toast(k === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度"); }
 
-// ---- 新对话 ----
-let draft = null;
-function newChat(){
-  draft = {mode:"agent", agent:"ccim", base:"claude", model:null, effort:null, dir:""};
-  drawNewChat();
+// ---- 新对话：直接进入一个空白的临时对话，选好底座、模型就能开始 ----
+let draft = {base:"claude", model:null, effort:null, dir:""};
+function newChat(){ draft = {base:"claude", model:null, effort:null, dir:""}; location.hash = "#/chats/new"; }
+function renderNewChat(){
+  const d = draft, m = d.model || (d.base === "claude" ? "opus" : "gpt-6-sol"), e = d.effort || (d.base === "claude" ? "high" : "medium");
+  $("#main").innerHTML = `
+    <div class="newchat">
+      <h2>新对话</h2>
+      <div class="composer" style="margin:0;padding:0">
+        <div class="box">
+          <textarea id="input" rows="3" placeholder="想让它做什么？" aria-label="输入消息"></textarea>
+          <div class="bar">
+            <button class="icon-btn" aria-label="添加图片或文件" onclick="toast('选择图片或文件')">${ICON.clip}</button>
+            <span class="seg mini"><button class="${d.base === "claude" ? "on" : ""}" onclick="draft.base='claude';draft.model=draft.effort=null;renderNewChat()">Claude Code</button><button class="${d.base === "codex" ? "on" : ""}" onclick="draft.base='codex';draft.model=draft.effort=null;renderNewChat()">Codex</button></span>
+            <button class="chip" onclick="pickDraft(event,'model')">${esc(modelName(d.base, m))}${d.model ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}</button>
+            <button class="chip" onclick="pickDraft(event,'effort')">思考 ${esc(e)}${ICON.down}</button>
+            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(d.dir)}</span>` : "不选工作目录"}${ICON.down}</button>
+            <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
+          </div>
+        </div>
+        <div class="hint">${d.dir ? "它会在这个目录里读写文件、跑命令。" : "不选工作目录的话，它在一个空的临时目录里干活，适合问答、写作、调研。"}</div>
+      </div>
+      <div class="or">想和某个 Agent 聊？<button class="link" onclick="pickAgent(event)">选一个 Agent</button></div>
+    </div>`;
+  const i = $("#input"); i.focus();
+  i.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); startTemp(); } });
 }
-function drawNewChat(){
-  document.querySelector(".scrim")?.remove();
-  const s = document.createElement("div"); s.className = "scrim";
-  s.onclick = e => { if (e.target === s) s.remove(); };
+function pickDraft(e, k){
   const d = draft;
-  s.innerHTML = `<div class="dialog" role="dialog" aria-label="新对话"><header><h2>新对话</h2><button class="icon-btn" aria-label="关闭" onclick="this.closest('.scrim').remove()">✕</button></header>
-    <div class="body">
-      <div class="seg" role="tablist"><button class="${d.mode === "agent" ? "on" : ""}" onclick="draft.mode='agent';drawNewChat()">和 Agent 对话</button>
-        <button class="${d.mode === "temp" ? "on" : ""}" onclick="draft.mode='temp';drawNewChat()">临时对话</button></div>
-      ${d.mode === "agent" ? `
-        <div class="picks">${agents.map(a => `<button class="pick ${d.agent === a.id ? "on" : ""}" onclick="draft.agent='${a.id}';drawNewChat()">${seal(a)}
-          <span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base]}${a.state === "off" ? "，已停止" : ""}</div></span></button>`).join("")}</div>
-        <p class="muted" style="font-size:13px;margin:14px 0 0">在 ${esc(agentOf(d.agent).name)} 的${agentOf(d.agent).dir ? `工作目录 <span class="path">${esc(agentOf(d.agent).dir)}</span>` : "工作区"}里，用它的角色和默认设置开始一个新对话。</p>`
-      : `<div class="form" style="margin-top:16px">
-          <label>底座</label><div class="seg"><button class="${d.base === "claude" ? "on" : ""}" onclick="draft.base='claude';drawNewChat()">Claude Code</button><button class="${d.base === "codex" ? "on" : ""}" onclick="draft.base='codex';drawNewChat()">Codex</button></div>
-          <label>模型</label><select class="input">${MODELS[d.base].map(([k, n]) => `<option>${n}</option>`).join("")}</select>
-          <label>思考深度</label><select class="input">${EFFORTS[d.base].map(k => `<option ${k === (d.base === "claude" ? "high" : "medium") ? "selected" : ""}>${k}</option>`).join("")}</select>
-          <label>工作目录</label><div><div class="row"><input class="input" style="flex:1" placeholder="不选也行" value="${esc(d.dir)}" oninput="draft.dir=this.value"><button class="btn" onclick="toast('打开选择文件夹窗口')">${ICON.folder}选择…</button></div>
-            <div class="help">不选的话，它在一个空的临时目录里干活，适合问答、写作、调研。</div></div>
-        </div>`}
-    </div>
-    <footer><button class="btn" onclick="this.closest('.scrim').remove()">取消</button><button class="btn primary" onclick="createChat()">开始对话</button></footer></div>`;
-  document.body.append(s);
+  const opts = k === "model" ? MODELS[d.base].map(([v, n, ds]) => [v, n, ds]) : EFFORTS[d.base].map(v => [v, v, ""]);
+  pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + opts.map(([v, n, ds]) =>
+    `<button onclick="draft.${k}='${v}';closePop();renderNewChat()"><span><div>${n}</div>${ds ? `<div class="desc">${ds}</div>` : ""}</span>${d[k] === v ? `<span class="ck">✓</span>` : ""}</button>`).join("")
+    + `<button onclick="draft.${k}=null;closePop();renderNewChat()"><span><div>跟随默认</div><div class="desc">用设置里的默认值</div></span>${!d[k] ? `<span class="ck">✓</span>` : ""}</button>`);
 }
-function createChat(){
-  const d = draft, id = "c" + Date.now();
-  const c = d.mode === "agent" ? {id, agent:d.agent, title:"新对话", src:"web", when:"刚刚", group:"今天", model:null, effort:null, msgs:[]}
-                               : {id, agent:null, temp:{base:d.base, dir:d.dir || null}, title:"新对话", src:"web", when:"刚刚", group:"今天", model:null, effort:null, msgs:[]};
-  chats.unshift(c); document.querySelector(".scrim").remove(); location.hash = `#/chats/${id}`;
+function pickDir(e){
+  const recent = ["~/Desktop/李琼个人主义/ccim", "~/Desktop/SD-订单管理/0527-美团长期项目", "~/Documents/AI摩登时代"];
+  pop(e, `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
+    + `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir='${r}';closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${r}</span>${draft.dir === r ? `<span class="ck">✓</span>` : ""}</button>`).join("")
+    + `<button onclick="closePop();toast('打开选择文件夹窗口')">${ICON.folder}选择其他文件夹…</button>`);
+}
+function pickAgent(e){
+  pop(e, `<div class="sec">和 Agent 对话</div>` + agents.map(a => `<button onclick="closePop();startAgent('${a.id}')">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base]}${a.state === "off" ? "，已停止" : ""}</div></span></button>`).join(""), true);
+}
+function startTemp(){
+  const v = $("#input").value.trim(); if (!v) { $("#input").focus(); return; }
+  const id = "c" + Date.now();
+  chats.unshift({id, agent:null, temp:{base:draft.base, dir:draft.dir || null}, title:v.slice(0, 18), src:"web", when:"刚刚", group:"今天",
+                 model:draft.model, effort:draft.effort, msgs:[]});
+  location.hash = `#/chats/${id}`;
+  setTimeout(() => { $("#input").value = v; send(id); }, 60);
+}
+function startAgent(aid){
+  const id = "c" + Date.now();
+  chats.unshift({id, agent:aid, title:"新对话", src:"web", when:"刚刚", group:"今天", model:null, effort:null, msgs:[]});
+  location.hash = `#/chats/${id}`;
   setTimeout(() => $("#input")?.focus(), 0);
 }
 function saveAsAgent(cid){
@@ -549,7 +579,7 @@ function renderAgent(id){
     <div class="agent-top">${seal(a, "lg")}
       <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
         <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base]}</span>${a.dir ? `<span class="path">${esc(a.dir)}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
-      <button class="btn primary" onclick="draft={mode:'agent',agent:'${a.id}'};createChat()">开始对话</button>
+      <button class="btn primary" onclick="startAgent('${a.id}')">开始对话</button>
     </div>
     <div class="tabs" role="tablist">${[["overview","概览"],["edit","设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent('${id}')">${n}</button>`).join("")}</div>
     ${agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">

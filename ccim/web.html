@@ -977,7 +977,7 @@ function renderProjectEmpty(){
   $("#main").innerHTML = `<div class="empty"><h2>项目</h2><p>把几个 Agent 拉进一个项目，在里面 @ 它们派活；同一件事也可以交给几个 Agent 各做一份，对比结果。</p>
     <button class="btn primary" onclick="newProject()">${ICON.plus}新建项目</button></div>`;
 }
-async function openProject(id, keepInput){
+async function openProject(id, keepInput = true){
   try { proj = await api(`/api/project?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个项目</h2><p>${esc(e.message)}</p></div>`; return; }
   const v = keepInput && $("#input") ? $("#input").value : "";
@@ -1011,7 +1011,7 @@ function replyBody(r, live){
 }
 function replyActs(r, live){
   const a = agentOf(r.agent);
-  if (live || r.state === "queued") return `<div class="acts-row"><button class="link danger-link" onclick="stopReply(${q(r.chat)})">停下</button></div>`;
+  if (live || r.state === "queued") return `<div class="acts-row"><button class="link danger-link" onclick="stopReply(${q(r.task)},${q(r.agent)})">停下</button></div>`;
   if (r.state !== "done") return `<div class="acts-row"><a class="link" href="#/chats/${encodeURIComponent(r.chat)}">单独聊</a></div>`;
   return `<div class="acts-row"><button class="link" onclick="forward(${q(r.task)},${q(r.agent)})">转给…</button><a class="link" href="#/chats/${encodeURIComponent(r.chat)}">单独聊</a></div>`;
 }
@@ -1061,7 +1061,7 @@ function whenTs(sec){
   return when(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`);
 }
 function drawProject(){
-  const p = proj;
+  const p = proj, keep = $("#input") ? $("#input").value : "";
   const html = projThread();
   const multi = rcpt.length > 1;
   const hint = multi ? (compareMode ? (p.git ? "每个 Agent 在自己的分支上做同一件事，互不影响，做完并排对比，挑一个合并。"
@@ -1097,6 +1097,7 @@ function drawProject(){
   drawRcpt();
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const i = $("#input");
+  i.value = keep;
   i.addEventListener("keydown", e => {
     if (e.key === "@" && !e.isComposing) setTimeout(() => atMenu({currentTarget: $("#atchip"), stopPropagation(){}}), 0);
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); dispatch(); }
@@ -1139,10 +1140,11 @@ async function dispatch(){
   if (!v) return $("#input").focus();
   const body = {id: proj.id, text: v, to: rcpt, compare: rcpt.length > 1 && compareMode, quote: quote ? {task: quote.task, agent: quote.agent} : null};
   $("#input").value = "";
-  await act(() => api("/api/project/dispatch", body));
+  try { await act(() => api("/api/project/dispatch", body)); }
+  catch (e) { $("#input").value = v; return; }
   rcpt = []; quote = null; await openProject(proj.id); loadState();
 }
-async function stopReply(chat){ await act(() => api("/api/project/stop", {chat}), "正在停下"); }
+async function stopReply(task, agent){ await act(() => api("/api/project/stop", {id: proj.id, task, agent}), "正在停下"); }
 function forward(tid, aid){
   const r = proj.feed.find(x => x.type === "reply" && x.task === tid && x.agent === aid);
   quote = {task: tid, agent: aid, text: r.text || ""};

@@ -15,6 +15,7 @@ import asyncio, os, re, subprocess, time, uuid
 from . import agents, registry
 
 DIFF_LIMIT = 300 * 1024
+GIT_TIMEOUT = 120                            # 仓库的提交前检查、签名密码提示可能卡住：最多等这么久
 
 
 class Problem(Exception):
@@ -22,7 +23,11 @@ class Problem(Exception):
 
 
 def _git(d, *args, check=True):
-    r = subprocess.run(["git", "-C", d, *args], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["git", "-C", d, *args], capture_output=True, text=True, timeout=GIT_TIMEOUT,
+                           stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise Problem("git 等了太久没反应（可能在等密码或提交前检查）。")
     if check and r.returncode != 0:
         raise Problem((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout).strip() else "git 出错了")
     return r
@@ -36,6 +41,7 @@ class Projects:
     def __init__(self, pf):
         self.pf = pf
         self.running = set()                  # 正在做或排着队的 reply（平台重启后不在这里的，就是没做完的）
+        self.tasks = {}                       # reply → (对话, 它的 session.Task)，停下某一件时用
 
     # ----- 存取（只在主循环里调） -----
 
@@ -80,9 +86,36 @@ class Projects:
         self._emit(pid)
         return {"id": pid}
 
-    def delete(self, pid):
+    async def stop(self, pid, tid, aid):
+        """停下某一件：排着队的从队里拿掉；正在做的只打断这一件，后面排着的照常做。"""
+        cid, task = self.tasks.get(f"{tid}:{aid}", (None, None))
+        if not task:
+            return {"stopped": False}
+        for b in self.pf.bridges.values():
+            c = b.chats.get(cid)
+            if not c:
+                continue
+            waiting = [item for item in c.queue._queue if item[0] is task]
+            if waiting:
+                c.queue._queue.remove(waiting[0])
+                task.finish("stopped")
+            elif c.turn:
+                await c._interrupt()
+            return {"stopped": True}
+        return {"stopped": False}
+
+    async def delete(self, pid):
         if any(r.split(":")[0] in self._tasks(pid) for r in self.running):
             raise Problem("还有任务在做，先停下再删。")
+        p = self.get(pid)
+        for cid in [c for c in self.pf.chats() if c.startswith(f"p-{pid}-")]:   # 各 Agent 在这个项目里的对话
+            await self.pf.delete_chat(cid)
+        for r in self.pf.channel.logs.read(self._log(pid)):                      # 对比用的副本目录（分支留在仓库里）
+            if r.get("type") == "reply" and r.get("branch"):
+                wt = os.path.join(registry.HOME, "worktrees", pid, f"{r['task']}-{r['agent']}")
+                await asyncio.to_thread(self._drop_tree, r.get("repo") or p.get("dir"), wt)
+        for key in [k for k in self.pf.bridges if "@" in k and os.path.join(registry.HOME, "worktrees", pid) in k]:
+            self.pf.bridges.pop(key, None)
         data = self.all()
         data.pop(pid, None)
         self._write(data)
@@ -142,12 +175,21 @@ class Projects:
         compare = bool(compare) and len(to) > 1
         isolate = compare and is_git(p.get("dir"))
         q = None
-        if quote and quote.get("task") and quote.get("agent"):
+        if isinstance(quote, dict) and quote.get("task") and quote.get("agent"):
             r = next((x for x in self.pf.channel.logs.read(self._log(pid))
                       if x.get("type") == "reply" and x["id"] == f"{quote['task']}:{quote['agent']}"), None)
             if r and r.get("text"):
                 q = {"agent": quote["agent"], "text": r["text"]}
         tid = "t" + uuid.uuid4().hex[:8]
+        trees = {}
+        if isolate:                           # 先把每个人的副本都开好（在线程里，git 可能慢），有一个开不了就都撤掉，不留半截
+            try:
+                for aid in to:
+                    trees[aid] = await asyncio.to_thread(self._worktree, p, tid, aid)
+            except Problem:
+                for wt, branch, _ in trees.values():
+                    await asyncio.to_thread(self._drop_tree, p["dir"], wt, branch)
+                raise
         task = {"type": "task", "id": tid, "text": text, "to": to, "compare": compare, "quote": q}
         self._emit(pid, self.pf.channel.logs.append(self._log(pid), task))
         prompt = f"[项目「{p['name']}」派给你的任务] {text}"
@@ -158,15 +200,15 @@ class Projects:
             rid = f"{tid}:{aid}"
             branch = wt = None
             if isolate:
-                wt, branch = self._worktree(p, tid, aid)
+                wt, branch, cwd = trees[aid]
                 cid = f"p-{pid}-{aid}-{tid}"
-                cwd = wt
             else:
                 cid = f"p-{pid}-{aid}"
                 cwd = p.get("dir")
             self._ensure_chat(cid, aid, pid, p["name"], cwd)
             self.running.add(rid)
-            rec = {"type": "reply", "id": rid, "task": tid, "agent": aid, "chat": cid, "state": "queued", "branch": branch}
+            rec = {"type": "reply", "id": rid, "task": tid, "agent": aid, "chat": cid, "state": "queued", "branch": branch,
+                   "repo": p.get("dir") if branch else None}
             self._emit(pid, self.pf.channel.logs.append(self._log(pid), rec))
             t = asyncio.create_task(self._run(pid, rid, cid, prompt, wt, branch, p.get("dir")))
             self.pf.background.add(t)
@@ -192,11 +234,12 @@ class Projects:
             chat = b.chat(cid, "p2p")
             self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, {"type": "user", "text": prompt, "files": []}))
             task = Task(prompt)
+            self.tasks[rid] = (cid, task)
             chat.submit(task)
             state, answer = await task.future
             state = {"ok": "done"}.get(state, state)
             last = next((r for r in reversed(self.pf.channel.logs.read(cid))
-                         if r.get("type") == "answer" and r.get("at", 0) >= start), {})
+                         if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
             upd.update(state=state, text=answer or last.get("text") or "", steps=last.get("steps") or [],
                        elapsed=last.get("elapsed"))
             if wt and state == "done":
@@ -205,12 +248,15 @@ class Projects:
             upd.update(state="error", text=str(e))
         finally:
             self.running.discard(rid)
+            self.tasks.pop(rid, None)
         self._emit(pid, self.pf.channel.logs.append(self._log(pid), upd))
 
     # ----- 对比：分支和副本 -----
 
     def _worktree(self, p, tid, aid):
+        """返回 (副本目录, 分支, Agent 在副本里的工作目录)。项目目录是仓库里的子目录时，Agent 在副本里对应的子目录干活。"""
         d = p["dir"]
+        top = _git(d, "rev-parse", "--show-toplevel").stdout.strip()
         branch = f"ccim/{tid}-{aid}"
         wt = os.path.join(registry.HOME, "worktrees", p["id"], f"{tid}-{aid}")
         os.makedirs(os.path.dirname(wt), exist_ok=True)
@@ -218,14 +264,24 @@ class Projects:
             _git(d, "worktree", "add", "-b", branch, wt, "HEAD")
         except Problem as e:
             raise Problem(f"没能给它开一份副本：{e}")
-        return wt, branch
+        rel = os.path.relpath(os.path.realpath(d), os.path.realpath(top))
+        return wt, branch, os.path.normpath(os.path.join(wt, rel))
+
+    @staticmethod
+    def _drop_tree(repo, wt, branch=None):
+        """删掉副本目录（分支留着，「看改动」还要用）。branch 给了就连分支一起删（派活没成功时）。"""
+        if repo and os.path.isdir(repo):
+            _git(repo, "worktree", "remove", "--force", wt, check=False)
+            if branch:
+                _git(repo, "branch", "-D", branch, check=False)
 
     @staticmethod
     def _commit(wt, branch, pdir, rid):
         """把 Agent 在副本里的改动提交到它的分支上，返回「改了 3 个文件，+86 −41」。"""
         _git(wt, "add", "-A")
         if _git(wt, "diff", "--cached", "--quiet", check=False).returncode != 0:
-            _git(wt, "-c", "user.name=ccim", "-c", "user.email=ccim@localhost", "commit", "-q", "-m", f"ccim 对比 {rid}")
+            _git(wt, "-c", "user.name=ccim", "-c", "user.email=ccim@localhost", "-c", "commit.gpgsign=false",
+                 "commit", "-q", "--no-verify", "-m", f"ccim 对比 {rid}")      # ccim 自己的对比分支，不跑仓库的提交前检查
         stat = _git(pdir, "diff", "--shortstat", f"HEAD...{branch}", check=False).stdout.strip()
         if not stat:
             return "没有改文件"
@@ -241,18 +297,24 @@ class Projects:
             raise Problem("找不到这个结果。")
         return r
 
+    # 下面两个在 HTTP 线程里跑（git 可能慢，不能卡住主循环）：只读状态、往记录里追加，都是线程安全的
+
     def diff(self, pid, tid, aid):
         p, r = self.get(pid), self._reply(pid, tid, aid)
         if not r.get("branch"):
             raise Problem("这个结果没有单独的改动可看。")
-        out = _git(p["dir"], "diff", f"HEAD...{r['branch']}", check=False).stdout
+        out = _git(r.get("repo") or p["dir"], "diff", f"HEAD...{r['branch']}", check=False).stdout
         return {"diff": out[:DIFF_LIMIT], "cut": len(out) > DIFF_LIMIT}
 
     def choose(self, pid, tid, aid):
         p, r = self.get(pid), self._reply(pid, tid, aid)
         if not r.get("branch") or r.get("state") != "done":
             raise Problem("这个结果没有可以合并的改动。")
-        d = p["dir"]
+        if any(x.get("type") == "reply" and x.get("task") == tid and x.get("chosen") for x in self.pf.channel.logs.read(self._log(pid))):
+            raise Problem("这件事已经用了一份结果了。")
+        d = r.get("repo") or p["dir"]
+        if not is_git(d):
+            raise Problem("找不到当时的仓库了。")
         if _git(d, "status", "--porcelain").stdout.strip():
             raise Problem("项目目录里有还没提交的改动，先提交或收起，再合并。")
         a = agents.get(aid) or {"name": aid}
@@ -262,7 +324,11 @@ class Projects:
             _git(d, "reset", "--merge", check=False)
             raise Problem("合并时有冲突，没合进去。可以「看改动」后手动合并，或者让它基于最新代码重做。")
         if _git(d, "diff", "--cached", "--quiet", check=False).returncode != 0:
-            _git(d, "commit", "-q", "-m", f"采用「{a['name']}」的改动：{(task.get('text') or '')[:60]}")
+            try:
+                _git(d, "commit", "-q", "-m", f"采用「{a['name']}」的改动：{(task.get('text') or '')[:60]}")
+            except Problem as e:                  # 提交前检查没过、签名失败：退回合并前（合并前确认过目录是干净的）
+                _git(d, "reset", "--merge", check=False)
+                raise Problem(f"提交没成功，已经退回原样：{e}")
         for x in self.pf.channel.logs.read(self._log(pid)):
             if x.get("type") == "reply" and x.get("task") == tid:
                 self._emit(pid, self.pf.channel.logs.append(self._log(pid), {"type": "reply", "id": x["id"], "chosen": x["id"] == r["id"]}))

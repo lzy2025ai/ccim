@@ -36,6 +36,9 @@ async def _serve(path, entry, secret, mode):
     if entry.get("kind") == "weixin":
         from .weixin_hub import Hub
         bridge = Hub(path, entry)
+    elif entry.get("kind") == "platform":
+        from .platform import Platform
+        bridge = Platform(path, entry)
     else:
         bridge = Bridge(path, entry)
     channel = load(entry["channel"])(path, entry, secret, bridge.handlers())
@@ -92,7 +95,7 @@ def run(path, mode):
     entry = registry.get(path)
     if not entry:
         raise SystemExit(f"{path} 还没配对")
-    secret = registry.get_secret(entry["app_id"])
+    secret = registry.get_secret(entry["app_id"]) if entry.get("app_id") else None
     _logging(mode)
     for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):   # 在 Claude Code 的终端里启动时，别让子进程以为自己是嵌套会话
         os.environ.pop(k, None)
@@ -334,6 +337,9 @@ def cmd_list(args):
     for path, e in sorted(data.items(), key=lambda kv: (kv[1].get("kind") == "weixin", kv[0])):
         state, s, r = _state_text(path)
         ver = (runtime.describe(s.get("python")) + ("（顶替中）" if s.get("fallback") else "")) if r else ""
+        if e.get("kind") == "platform":
+            rows.append(("智能体平台", "网页", f"127.0.0.1:{s.get('port') or e.get('port')}", state, ver, ""))
+            continue
         if e.get("kind") == "weixin":
             names = "、".join(os.path.basename(p) for p in e.get("projects") or {}) or "（还没有项目）"
             rows.append((names, "微信", e.get("bot_name", ""), state, ver, ""))
@@ -755,8 +761,15 @@ def cmd_config(args):
 
 
 def cmd_web(args):
-    from . import web
-    web.serve(args.port, open_browser=not args.no_open)
+    from . import platform
+    if args.no_open:
+        from . import daemon
+        h, _ = platform.ensure_registered()
+        if not daemon.running(h):
+            daemon.start_always(h, "web")
+        print(f"ccim：{platform.url()}")
+        return
+    platform.open_in_browser()
 
 
 def cmd_unpair(args):
@@ -838,7 +851,7 @@ def parser():
     s.add_argument("items", nargs="*")
     s.add_argument("--global", dest="globally", action="store_true", help="设全局默认（model、effort），所有项目都用")
     s.set_defaults(fn=cmd_config)
-    s = sub.add_parser("web", help="在浏览器里打开控制台：看各项目状态、接入新项目、启动停止、改设置")
+    s = sub.add_parser("web", help="在浏览器里打开 ccim：和 Agent 对话、管理 Agent、接飞书和微信")
     s.add_argument("--port", type=int, default=8977, help="端口（默认 8977，被占用就往后找）")
     s.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     s.set_defaults(fn=cmd_web)

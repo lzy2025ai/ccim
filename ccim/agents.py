@@ -204,6 +204,8 @@ def migrate():
     data = registry.all_projects()
     paths = {}
     for p, e in data.items():
+        if e.get("kind") == "platform":
+            continue
         if e.get("kind") == "weixin":
             for path, s in (e.get("projects") or {}).items():
                 paths.setdefault(path, {"weixin": [], "feishu": None})["weixin"].append((p, s or {}))

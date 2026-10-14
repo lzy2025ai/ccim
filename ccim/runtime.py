@@ -72,7 +72,8 @@ def which(path, entry=None, force=None):
     if rt == "stable":
         v = entry.get("stable_version") or _channel().get("current")
         p = stable_python(v)
-        if p and (entry.get("kind") != "weixin" or _has(p, "weixin_hub.py")):   # 微信号要 0.10 以后的稳定版
+        need = {"weixin": "weixin_hub.py", "platform": "platform.py"}.get(entry.get("kind"))   # 老稳定版没有的进程跑开发版
+        if p and (not need or _has(p, need)):
             return p, f"稳定版 {v}"
     p = dev_python() or sys.executable
     return p, "开发版"

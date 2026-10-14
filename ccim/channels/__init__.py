@@ -1,8 +1,11 @@
-NAMES = {"feishu": "飞书", "weixin": "微信"}
+NAMES = {"feishu": "飞书", "weixin": "微信", "web": "网页"}
 
 
 def load(name):
     """按需导入渠道：飞书 SDK 导入要好几秒，用微信的项目不必加载它。"""
+    if name == "web":
+        from ..platform import WebChannel
+        return WebChannel
     if name == "weixin":
         from .weixin import Weixin
         return Weixin

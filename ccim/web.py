@@ -80,7 +80,7 @@ def _channels(path):
 
 
 def _all_paths():
-    paths = [p for p, e in registry.all_projects().items() if e.get("kind") != "weixin"]
+    paths = [p for p, e in registry.all_projects().items() if e.get("kind") not in ("weixin", "platform")]
     for _, h in weixin_hub.hubs():
         paths += [p for p in (h.get("projects") or {}) if p not in paths]
     return paths
@@ -308,6 +308,7 @@ class Job:
         self.id = secrets.token_hex(6)
         self.path, self.channel, self.agent = path, channel, agent
         self.state, self.qr, self.link, self.error, self.bot = "working", None, None, None, None
+        self.agent_id = None                  # 智能体平台里给某个 Agent 接的：接好后关联过去
         JOBS[self.id] = self
 
     def show(self, url):
@@ -331,6 +332,11 @@ class Job:
                 self.state = "starting"
                 daemon.start_always(self.path, "feishu")
                 self.bot = registry.get(self.path).get("bot_name")
+            if self.agent_id:
+                from . import agents
+                proc = (weixin_hub.hubs_of(self.path) or [(None,)])[0][0] if self.channel == "weixin" else self.path
+                if proc:
+                    agents.link(self.agent_id, self.channel, proc, self.path)
             self.state = "done"
         except SystemExit as e:
             self.state, self.error = "error", str(e.code if e.code is not None else "没有接入成功。")

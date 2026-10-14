@@ -426,6 +426,8 @@ class Chat:
             title, color = "出错", "red"
         else:
             title, color = "完成", "green"
+        if getattr(self.b.channel, "live", False):   # 网页：先把最终的步骤交过去，回答跟在后面
+            await self.b.channel.progress(self.chat_id, self._snap(t, "stopped" if self.stopping else "error" if error else "done"))
         if not self.b.channel.cards:
             await self.b.channel.typing(self.chat_id, False)
         # 先发回答再收尾卡片：卡片接口卡住时不能拖住回答
@@ -454,7 +456,23 @@ class Chat:
                 last = steps
                 self.b.save(self.chat_id, steps=steps)
 
+    def _snap(self, t, state="working"):
+        return {"state": state, "steps": list(t.steps), "text": t.live or t.text or "",
+                "elapsed": round(time.monotonic() - t.start, 1)}
+
     async def _tick(self, t, reply_to):
+        if getattr(self.b.channel, "live", False):   # 网页：每一步、正在写的字实时推过去
+            last = None
+            while True:
+                snap = self._snap(t)
+                key = (len(snap["steps"]), snap["text"])
+                if key != last:
+                    last = key
+                    try:
+                        await self.b.channel.progress(self.chat_id, snap)
+                    except Exception:
+                        log.debug("推送进度失败", exc_info=True)
+                await asyncio.sleep(0.3)
         if not self.b.channel.cards:          # 消息发出去改不了的渠道：干活时只显示「正在输入」
             while True:
                 await self.b.channel.typing(self.chat_id, True)

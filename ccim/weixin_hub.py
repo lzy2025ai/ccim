@@ -99,18 +99,16 @@ def rename(old, new):
 
 
 def add_project(hub, path, **settings):
-    e = registry.get(hub)
-    projects = dict(e.get("projects") or {})
-    projects[os.path.realpath(path)] = {**(projects.get(os.path.realpath(path)) or {}),
-                                        **{k: v for k, v in settings.items() if v}}
-    registry.update(hub, projects=projects)
+    p = os.path.realpath(path)
+
+    def fn(e):
+        projects = e.setdefault("projects", {})
+        projects[p] = {**(projects.get(p) or {}), **{k: v for k, v in settings.items() if v}}
+    registry.mutate(hub, fn)
 
 
 def remove_project(hub, path):
-    e = registry.get(hub)
-    projects = dict(e.get("projects") or {})
-    projects.pop(os.path.realpath(path), None)
-    registry.update(hub, projects=projects)
+    registry.mutate(hub, lambda e: (e.get("projects") or {}).pop(os.path.realpath(path), None))
 
 
 def ensure_running(hub):

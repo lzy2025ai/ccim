@@ -161,6 +161,16 @@ def _hubs():
     return [(p, e) for p, e in registry.all_projects().items() if e.get("kind") == "weixin"]
 
 
+def _set_project(proc, path, **vals):
+    """改微信号 projects 里一个项目的设置（在锁里，不覆盖别的项目）。"""
+    def fn(e):
+        projects = e.setdefault("projects", {})
+        cur = dict(projects.get(path) or {})
+        cur.update(vals)
+        projects[path] = {k: v for k, v in cur.items() if v}
+    registry.mutate(proc, fn)
+
+
 def _sync(a):
     """把 Agent 的设置写回它关联的飞书、微信登记。"""
     vals = {dst: (None if (src == "base" and a.get("base") == "claude") else a.get(src)) for src, dst in SYNCED.items()}
@@ -168,12 +178,7 @@ def _sync(a):
         if kind == "feishu":
             registry.update(proc, **vals)
         else:
-            e = registry.get(proc)
-            projects = dict(e.get("projects") or {})
-            cur = dict(projects.get(path) or {})
-            cur.update(vals)
-            projects[path] = {k: v for k, v in cur.items() if v}
-            registry.update(proc, projects=projects)
+            _set_project(proc, path, **vals)
 
 
 def absorb(path, **changes):
@@ -193,17 +198,32 @@ def link(aid, kind, proc, path):
     if kind == "feishu":
         registry.update(proc, agent_id=aid)
     else:
-        e = registry.get(proc)
-        projects = dict(e.get("projects") or {})
-        projects[path] = dict(projects.get(path) or {}, agent_id=aid)
-        registry.update(proc, projects=projects)
+        _set_project(proc, path, agent_id=aid)
     _sync(get(aid))
 
 
 # ---------- 迁移：以前的「项目」变成 Agent ----------
 
+@contextlib.contextmanager
+def _migrating():
+    """迁移整个过程一把锁：几个 ccim 命令同时跑时不会给同一个目录建出两个 Agent。"""
+    os.makedirs(registry.HOME, exist_ok=True)
+    with open(os.path.join(registry.HOME, ".migrate.lock"), "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
 def migrate():
-    """每个还没关联 Agent 的项目目录建一个 Agent。一个目录同时接了飞书和微信的，算同一个 Agent。"""
+    """每个接了飞书、微信的项目目录都要有 Agent：已关联的跳过；没关联的找这个目录已有的 Agent（比如网页里建的、
+    或者另一个渠道已经关联的），找不到才新建。一个目录同时接了飞书和微信的，算同一个 Agent。"""
+    with _migrating():
+        _migrate()
+
+
+def _migrate():
     data = registry.all_projects()
     paths = {}
     for p, e in data.items():
@@ -214,16 +234,23 @@ def migrate():
                 paths.setdefault(path, {"weixin": [], "feishu": None})["weixin"].append((p, s or {}))
         else:
             paths.setdefault(p, {"weixin": [], "feishu": None})["feishu"] = e
+    agents_now = _read()
     for path, ch in paths.items():
-        linked = (ch["feishu"] or {}).get("agent_id") or next((s.get("agent_id") for _, s in ch["weixin"] if s.get("agent_id")), None)
-        if linked and get(linked):
-            continue
         fe = ch["feishu"] or {}
-        ws = ch["weixin"][0][1] if ch["weixin"] else {}
-        name = os.path.basename(path) or path
-        a = create(name=name, base=fe.get("agent") or ws.get("agent") or "claude", model=fe.get("model") or ws.get("model"),
-                   effort=fe.get("effort") or ws.get("effort"), role=fe.get("role") or ws.get("role"), dir=path)
-        if ch["feishu"]:
-            link(a["id"], "feishu", path, path)
-        for hub, _ in ch["weixin"]:
-            link(a["id"], "weixin", hub, path)
+        unlinked_feishu = bool(ch["feishu"]) and not get(fe.get("agent_id") or "")
+        unlinked_weixin = [hub for hub, s in ch["weixin"] if not get(s.get("agent_id") or "")]
+        if not unlinked_feishu and not unlinked_weixin:
+            continue
+        aid = fe.get("agent_id") if get(fe.get("agent_id") or "") else None
+        aid = aid or next((s.get("agent_id") for _, s in ch["weixin"] if get(s.get("agent_id") or "")), None)
+        aid = aid or next((k for k, v in agents_now.items() if v.get("dir") == path), None)
+        if not aid:
+            ws = ch["weixin"][0][1] if ch["weixin"] else {}
+            aid = create(name=os.path.basename(path) or path, base=fe.get("agent") or ws.get("agent") or "claude",
+                         model=fe.get("model") or ws.get("model"), effort=fe.get("effort") or ws.get("effort"),
+                         role=fe.get("role") or ws.get("role"), dir=path)["id"]
+            agents_now = _read()
+        if unlinked_feishu:
+            link(aid, "feishu", path, path)
+        for hub in unlinked_weixin:
+            link(aid, "weixin", hub, path)

@@ -295,7 +295,7 @@ const ICON = {
 };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const q = s => esc(s).replace(/\\/g, "\\\\");   // 放进 onclick='…' 里的字符串
+const q = v => esc(JSON.stringify(String(v ?? "")));   // 放进 onclick="f(…)" 里的字符串：先成 JSON 字面量（带引号）再转义
 
 async function api(path, body){
   const r = await fetch(path, {method: body === undefined ? "GET" : "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
@@ -410,7 +410,7 @@ function optList(opts, value, pickJs){
 }
 function openDD(e, id){
   const d = DD[id], btn = e.currentTarget;
-  pop(e, optList(d.opts, d.value, v => `pickDD('${id}','${q(v)}')`), true);
+  pop(e, optList(d.opts, d.value, v => `pickDD('${id}',${q(v)})`), true);
   btn.setAttribute("aria-expanded", "true");
 }
 function pickDD(id, v){
@@ -635,11 +635,11 @@ async function cardAct(mid, value){ await act(() => api("/api/chat/action", {id:
 function chatModel(e){
   const c = detail;
   pop(e, `<div class="sec">模型</div>` + optList(modelOpts(c.base, "跟随默认").map(o => o[0] === "" ? o : o), c.model_custom ? c.model : "",
-          v => `setChat('model','${q(v)}')`) + customModelBox("setChatModel"));
+          v => `setChat('model',${q(v)})`) + customModelBox("setChatModel"));
 }
 function chatEffort(e){
   const c = detail;
-  pop(e, `<div class="sec">思考深度</div>` + optList(effortOpts(c.base, "跟随默认"), c.effort_custom ? c.effort : "", v => `setChat('effort','${q(v)}')`));
+  pop(e, `<div class="sec">思考深度</div>` + optList(effortOpts(c.base, "跟随默认"), c.effort_custom ? c.effort : "", v => `setChat('effort',${q(v)})`));
 }
 function setChatModel(v){ if (v) setChat("model", v); }
 async function setChat(key, value){
@@ -719,7 +719,7 @@ function renderNewChat(){
 }
 function draftPick(e, k){
   const opts = k === "model" ? modelOpts(draft.base, "跟随默认") : effortOpts(draft.base, "跟随默认");
-  pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}='${q(v)}';closePop();renderNewChat()`)
+  pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}=${q(v)};closePop();renderNewChat()`)
     + (k === "model" ? customModelBox("setDraftModel") : ""));
 }
 function setDraftModel(v){ if (v) { draft.model = v; closePop(); renderNewChat(); } }
@@ -729,7 +729,7 @@ async function pickDir(e){
   let recent = [];
   try { recent = (await api("/api/recent")).folders; } catch {}
   pop(ev, `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
-    + (recent.length ? `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir='${q(r.path)}';closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(r.home)}</span>${draft.dir === r.path ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "")
+    + (recent.length ? `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir=${q(r.path)};closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(r.home)}</span>${draft.dir === r.path ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "")
     + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();})">${ICON.folder}选择其他文件夹…</button>`);
 }
 async function chooseFolder(done){
@@ -738,7 +738,7 @@ async function chooseFolder(done){
 }
 function pickAgent(e){
   if (!S.agents.length) return toast("还没有 Agent，先去 Agent 页新建一个。");
-  pop(e, `<div class="sec">和 Agent 对话</div>` + S.agents.map(a => `<button onclick="closePop();startAgent('${q(a.id)}')">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
+  pop(e, `<div class="sec">和 Agent 对话</div>` + S.agents.map(a => `<button onclick="closePop();startAgent(${q(a.id)})">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
 }
 async function startTemp(){
   const v = $("#input").value.trim(), files = pendingFiles.filter(f => f.key);
@@ -783,9 +783,9 @@ async function renderAgent(id){
     <div class="agent-top">${seal(a, "lg")}
       <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
         <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base || "claude"]}</span>${a.dir ? `<span class="path">${esc(tilde(a.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
-      <button class="btn primary" onclick="startAgent('${q(a.id)}')">开始对话</button>
+      <button class="btn primary" onclick="startAgent(${q(a.id)})">开始对话</button>
     </div>
-    <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent('${q(a.id)}')">${n}</button>`).join("")}</div>
+    <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
     ${agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
       <div class="sect"><h3>在哪能找到它</h3>
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
@@ -799,17 +799,17 @@ async function renderAgent(id){
 function channelHtml(a, k){
   const label = k === "feishu" ? "飞书" : "微信";
   const ch = a.channels.find(c => (k === "weixin") === (c.kind === "weixin"));
-  if (!ch) return `<button class="channel add" style="width:100%" onclick="connectAgent('${q(a.id)}','${k}')"><span class="ci ${k}">${label[0]}</span><span class="grow" style="text-align:left">接到${label}</span>${ICON.plus}</button>`;
+  if (!ch) return `<button class="channel add" style="width:100%" onclick="connectAgent(${q(a.id)},'${k}')"><span class="ci ${k}">${label[0]}</span><span class="grow" style="text-align:left">接到${label}</span>${ICON.plus}</button>`;
   const st = {online: `<span class="status on"><i></i>在线</span>`, connecting: `<span class="status busy"><i></i>连接中</span>`,
               error: `<span class="status err"><i></i>${esc(ch.error || "出错了")}</span>`, retrying: `<span class="status err"><i></i>没连上，正在重试</span>`,
               stopped: `<span class="status"><i></i>已停止</span>`}[ch.state] || "";
   const name = k === "weixin" ? `微信「${ch.bot}」` : ch.bot;
   const shared = ch.shared_with && ch.shared_with.length ? `<span class="muted" style="font-size:12px">，这个微信还管着 ${ch.shared_with.length} 个别的 Agent</span>` : "";
   return `<div class="channel"><span class="ci ${k}">${label[0]}</span><div class="grow"><div>${esc(name)}</div><div>${st}${shared}</div></div>
-    ${ch.state === "stopped" ? `<button class="btn" onclick="chanAct('start','${q(ch.proc)}','已启动')">启动</button>`
-      : `<button class="btn ghost" onclick="chanAct('restart','${q(ch.proc)}','已重启')">重启</button><button class="btn ghost" onclick="chanAct('stop','${q(ch.proc)}','已停止')">停止</button>`}
-    <button class="btn ghost" onclick="showLogs('${q(ch.proc)}','${q(name)}')">日志</button>
-    <button class="btn ghost danger" onclick="disconnect('${q(a.id)}','${q(ch.path)}','${ch.kind === "weixin" ? "weixin" : "feishu"}','${q(ch.proc)}','${q(name)}')">断开</button></div>`;
+    ${ch.state === "stopped" ? `<button class="btn" onclick="chanAct('start',${q(ch.proc)},'已启动')">启动</button>`
+      : `<button class="btn ghost" onclick="chanAct('restart',${q(ch.proc)},'已重启')">重启</button><button class="btn ghost" onclick="chanAct('stop',${q(ch.proc)},'已停止')">停止</button>`}
+    <button class="btn ghost" onclick="showLogs(${q(ch.proc)},${q(name)})">日志</button>
+    <button class="btn ghost danger" onclick="disconnect(${q(a.id)},${q(ch.path)},'${ch.kind === "weixin" ? "weixin" : "feishu"}',${q(ch.proc)},${q(name)})">断开</button></div>`;
 }
 async function chanAct(what, proc, ok){ await act(() => api(`/api/channel/${what}`, {proc}), ok); await loadState(); renderAgent(current.id); }
 async function disconnect(aid, path, kind, proc, name){
@@ -856,8 +856,8 @@ function formHtml(a){
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);})">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
     <span></span><div class="row" style="margin-top:6px">
-      <button class="btn primary" onclick="saveAgent(${a ? `'${q(a.id)}'` : "null"})">${a ? "保存" : "新建 Agent"}</button>
-      ${a ? `<button class="btn danger" style="margin-left:auto" onclick="deleteAgent('${q(a.id)}','${q(a.name)}')">删除这个 Agent</button>` : ""}</div>
+      <button class="btn primary" onclick="saveAgent(${a ? `${q(a.id)}` : "null"})">${a ? "保存" : "新建 Agent"}</button>
+      ${a ? `<button class="btn danger" style="margin-left:auto" onclick="deleteAgent(${q(a.id)},${q(a.name)})">删除这个 Agent</button>` : ""}</div>
   </div>`;
 }
 function autoSeal(name){ const cs = [...name].filter(c => !/[\s\-_·.()（）「」]/.test(c)); const han = cs.filter(c => /[一-鿿]/.test(c)); return (han.length ? han : cs).slice(0, 2).join(""); }

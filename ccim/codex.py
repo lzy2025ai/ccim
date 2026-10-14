@@ -189,6 +189,9 @@ class CodexChat(Chat):
                     msg = (ev.get("error") or {}).get("message") if isinstance(ev.get("error"), dict) else ev.get("message")
                     if not self.stopping:
                         error = _readable(msg or last_error) or "Codex 出错了"
+                        if self.fork_from and not self.session_id:   # 分支没开成：下一条消息改成新对话，不至于一直失败
+                            self.fork_from = None
+                            self.b.save(self.chat_id, fork_from=None)
             await self.proc.wait()
             stderr = (await err_task).decode("utf-8", "replace")
             if not result and t.text and not error:

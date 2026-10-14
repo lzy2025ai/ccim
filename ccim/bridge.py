@@ -60,14 +60,16 @@ class Bridge:
         chats.setdefault(chat_id, {}).update(changes)
         self.store.write(chats)
 
+    def chat_class(self):
+        if self.entry.get("agent") == "codex":
+            from .codex import CodexChat
+            return CodexChat
+        return Chat
+
     def chat(self, addr, chat_type, fork_from=None):
         c = self.chats.get(addr)
         if not c:
-            cls = Chat
-            if self.entry.get("agent") == "codex":
-                from .codex import CodexChat
-                cls = CodexChat
-            c = self.chats[addr] = cls(self, addr, chat_type, fork_from)
+            c = self.chats[addr] = self.chat_class()(self, addr, chat_type, fork_from)
             if chat_type == "group" and not self.saved(addr).get("name"):
                 task = asyncio.create_task(self._remember_name(addr))   # 群名给 ccim show 用
                 self.background.add(task)
@@ -107,9 +109,10 @@ class Bridge:
         # 话题里的消息：回复都进话题；话题第一次开口时从主对话分一个分支出来，记得之前聊过什么
         addr = address(inc.chat_id, inc.thread_id)
         reply_to = inc.message_id if inc.chat_type == "group" or inc.thread_id else None
-        new_topic = bool(inc.thread_id) and addr not in self.chats and not self.saved(addr).get("session_id")
+        sid_key = self.chat_class().SID_KEY        # Claude Code 和 Codex 的会话编号分开记
+        new_topic = bool(inc.thread_id) and addr not in self.chats and not self.saved(addr).get(sid_key)
         main = self.chats.get(inc.chat_id)
-        fork_from = (main.session_id if main else self.saved(inc.chat_id).get("session_id")) if new_topic else None
+        fork_from = (main.session_id if main else self.saved(inc.chat_id).get(sid_key)) if new_topic else None
         chat = self.chat(addr, inc.chat_type, fork_from)
 
         paths = []

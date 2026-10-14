@@ -24,13 +24,13 @@ def claude(session_id, cwd=None, limit=200):
     if not path:
         return []
     out = []
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("isSidechain") or r.get("type") not in ("user", "assistant"):
+            if not isinstance(r, dict) or r.get("isSidechain") or r.get("type") not in ("user", "assistant"):
                 continue
             at = _ts(r.get("timestamp", ""))
             if handoff._is_prompt(r):
@@ -64,13 +64,15 @@ def codex(thread_id, limit=200):
     if not path:
         return []
     out = []
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
                 r = json.loads(line)
             except ValueError:
                 continue
-            p = r.get("payload") or {}
+            if not isinstance(r, dict) or not isinstance(r.get("payload"), dict):
+                continue
+            p = r["payload"]
             if r.get("type") != "event_msg" or p.get("type") != "item_completed":
                 continue
             item, at = p.get("item") or {}, _ts(r.get("timestamp", ""))
@@ -98,9 +100,12 @@ _titles = {}
 def title(base, session_id, cwd=None):
     """对话的第一句话，当标题（标题功能上线前的老对话没记标题）。按记录文件的修改时间缓存。"""
     path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
-    if not path:
+    try:
+        key = (path, os.path.getmtime(path)) if path else None
+    except OSError:
         return None
-    key = (path, os.path.getmtime(path))
+    if not key:
+        return None
     if key not in _titles:
         first = next((r["text"] for r in (codex(session_id, 400) if base == "codex" else claude(session_id, cwd, 400))
                       if r["type"] == "user" and r["text"]), "")

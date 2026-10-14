@@ -65,12 +65,16 @@ class Events:
             if q in self.subs:
                 self.subs.remove(q)
 
+    def alive(self, q):
+        with self.lock:
+            return q in self.subs
+
     def publish(self, ev):
         with self.lock:
             for q in list(self.subs):
                 try:
                     q.put_nowait(ev)
-                except queue.Full:
+                except queue.Full:                 # 这个页面卡住太久：断开它，浏览器会重连再整份拉一次
                     self.subs.remove(q)
 
 
@@ -152,11 +156,13 @@ class WebChannel(Channel):
             self.progress_of[chat_id] = snap
         else:
             self.progress_of.pop(chat_id, None)
-            self.done_steps[chat_id] = snap
+            self.done_steps[chat_id] = dict(snap, done_at=time.monotonic())
         self._emit(chat_id, {"type": "progress", **snap})
 
     async def send_text(self, chat_id, markdown, reply_to=None, uid=None):
         done = self.done_steps.pop(chat_id, None)
+        if done and time.monotonic() - done["done_at"] > 10:   # 那一轮没有回答：这是之后的提示，不带步骤
+            done = None
         if done:
             rec = {"type": "answer", "text": markdown or "", "steps": done["steps"], "state": done["state"],
                    "elapsed": done["elapsed"]}
@@ -199,11 +205,14 @@ class Store:
 
     def __init__(self, home):
         self.home = home
+        self.deleted = set()                  # 删掉的对话：Chat 断开时还会写一次状态，不能让它冒回来
 
     def read(self):
         return registry.read_state(self.home).get("chats") or {}
 
     def write(self, chats):
+        for cid in self.deleted:
+            chats.pop(cid, None)
         registry.write_state(self.home, chats=chats)
 
 
@@ -318,6 +327,8 @@ class Platform:
         return {"toast": toast}
 
     async def set_chat(self, cid, key, value):
+        if key not in ("model", "effort"):
+            raise Problem("只能改模型和思考深度。")
         b = self._bridge(cid)
         c = b.chat(cid, "p2p")
         if value:
@@ -326,12 +337,20 @@ class Platform:
             c.follow(key)
         return self.chat_view(cid)
 
-    def delete_chat(self, cid):
+    async def delete_chat(self, cid):
         chats = self.chats()
         if cid in chats and chats[cid].get("busy"):
             raise Problem("它还在干活，先停下再删。")
-        chats.pop(cid, None)
-        self.store.write(chats)
+        self.store.deleted.add(cid)
+        for key, b in list(self.bridges.items()):
+            c = b.chats.pop(cid, None)
+            if c:
+                await c.stop()
+                if c.worker:
+                    c.worker.cancel()
+            if key == "temp:" + cid:
+                self.bridges.pop(key, None)
+        self.store.write(self.chats())
         self.channel.logs.remove(cid)
 
     # ----- 给网页的数据 -----
@@ -398,7 +417,10 @@ class Platform:
                 mine.add(sid)
                 kind = "群「%s」" % c["name"] if c.get("name") else "群聊" if c.get("type") == "group" else "私聊"
                 from . import history
-                t = c.get("title") or history.title(base, sid, cwd) or f"{where}{kind}"
+                try:
+                    t = c.get("title") or history.title(base, sid, cwd) or f"{where}{kind}"
+                except Exception:                 # 对话记录读不了不影响列表
+                    t = f"{where}{kind}"
                 rows.append({"id": "x:" + sid, "sid": sid, "agent": a_id, "agent_name": a["name"], "source": where,
                              "title": t, "last_active": c.get("last_active"),
                              "busy": bool(c.get("busy")), "base": base, "external": True, "dir": a.get("dir")})
@@ -435,13 +457,20 @@ class Platform:
 
     def continue_chat(self, cid, text, files):
         """在网页里接着别处的对话聊：另开一个网页对话，从那个对话分支出来，原来那边不受影响。"""
+        check_message(self, text, files)
         r = self._external(cid)
-        new = self.new_chat(agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
+        new = self.call(self.new_chat, agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
         send(self, new, text, files)
         return {"id": new}
 
     def run(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
+
+    def call(self, fn, *args, **kw):
+        """在主循环里执行（state.json 只在主循环里改，不和 Chat 的保存抢）。"""
+        async def go():
+            return fn(*args, **kw)
+        return self.run(go())
 
     def bg(self, coro):
         """不等结果的（发消息：回答通过 SSE 推过去）。"""
@@ -563,13 +592,13 @@ def _handler(pf):
                 body = {}
             b = body.get
             routes = {
-                "/api/chat/new": lambda: {"id": pf.new_chat(agent=b("agent"), temp=b("temp"))},
+                "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"))},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or []),
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
-                "/api/chat/delete": lambda: pf.delete_chat(b("id")),
+                "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
@@ -588,6 +617,7 @@ def _handler(pf):
         def _upload(self):
             n = int(self.headers.get("Content-Length") or 0)
             if n > UPLOAD_LIMIT:
+                self.close_connection = True      # 没读的内容不能留在连接里，当成下一个请求
                 raise Problem("文件太大了（最多 100 MB）。")
             from urllib.parse import unquote
             name = re.sub(r"[/\\\x00]", "_", unquote(self.headers.get("X-Name") or "file"))   # 网页那边 encodeURIComponent 过
@@ -602,6 +632,9 @@ def _handler(pf):
                         break
                     f.write(chunk)
                     left -= len(chunk)
+            if left > 0:
+                os.remove(key)
+                raise Problem("文件没传完，再试一次。")
             return {"key": key, "name": name, "size": n}
 
         def _file(self, chat, path):
@@ -629,7 +662,7 @@ def _handler(pf):
                 self.end_headers()
                 self.wfile.write(b": hi\n\n")
                 self.wfile.flush()
-                while True:
+                while pf.channel.events.alive(q):
                     try:
                         ev = q.get(timeout=15)
                         data = "data: " + json.dumps(ev, ensure_ascii=False) + "\n\n"
@@ -648,16 +681,19 @@ def _handler(pf):
 
 # ---------- 接口用到的操作 ----------
 
-def send(pf, cid, text, files):
-    text = (text or "").strip()
-    if not text and not files:
+def check_message(pf, text, files):
+    if not (text or "").strip() and not files:
         raise Problem("消息是空的。")
-    pf.meta(cid)
+    up = os.path.realpath(os.path.join(registry.pdir(pf.home), "uploads")) + os.sep
     for f in files:
-        if not os.path.isfile(f.get("key", "")) or not os.path.realpath(f["key"]).startswith(
-                os.path.realpath(os.path.join(registry.pdir(pf.home), "uploads")) + os.sep):
+        if not isinstance(f, dict) or not os.path.isfile(f.get("key") or "") or not os.path.realpath(f["key"]).startswith(up):
             raise Problem("文件没传上来，再试一次。")
-    pf.bg(pf.send(cid, text, files))
+
+
+def send(pf, cid, text, files):
+    check_message(pf, text, files)
+    pf.meta(cid)
+    pf.bg(pf.send(cid, (text or "").strip(), files))
     return {"ok": True}
 
 

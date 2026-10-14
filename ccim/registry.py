@@ -74,6 +74,18 @@ def update(path, **changes):
         return data[p]
 
 
+def mutate(path, fn):
+    """在锁里改一条登记：fn(条目) 原地修改。几个进程同时改同一个微信号的 projects 时不会互相覆盖。"""
+    with _locked():
+        data = _read()
+        p = os.path.realpath(path)
+        if p not in data:
+            raise KeyError(path)
+        fn(data[p])
+        _write(data)
+        return data[p]
+
+
 def remove(path):
     with _locked():
         data = _read()

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "platform-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8988", "--bind", "127.0.0.1", "--directory", "docs/prototype"],
+      "port": 8988
+    }
+  ]
+}

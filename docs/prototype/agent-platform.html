@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccim</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1;
+  --lu:#3F7A5E; --zhe:#9A5B34; --huang:#B8902A; --zhu:#B5402F; --dai:#4A4F6B;
+  --ok:#3F7A5E; --warn:#B8902A; --bad:#B5402F;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:2px solid var(--qing);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- 骨架 ---------- */
+.app{display:grid;grid-template-columns:76px 300px 1fr;height:100vh;overflow:hidden}
+body{overflow:hidden}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);letter-spacing:.5px;margin-bottom:18px;color:var(--ink)}
+.rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--muted);text-decoration:none;font-size:12px}
+.rail a svg{width:20px;height:20px}
+.rail a:hover{background:var(--sunk);color:var(--ink)}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.rail .spacer{flex:1}
+
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.list-head{padding:18px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+.list-head h1{font:600 19px/1.2 var(--song);margin:0}
+.search{margin:0 16px 10px;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--sunk);color:var(--muted)}
+.search input{border:0;background:none;outline:none;flex:1;min-width:0}
+.scroll{overflow:auto;flex:1;padding:0 8px 16px}
+.group{font-size:12px;color:var(--faint);padding:12px 10px 4px}
+.item{display:flex;gap:10px;padding:9px 10px;border-radius:10px;align-items:flex-start;width:100%;text-align:left}
+.item:hover{background:var(--sunk)}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .t{flex:1;min-width:0}
+.item .title,.item .sub{display:block}
+.item .title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .when{font-size:12px;color:var(--faint);white-space:nowrap}
+
+.main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+
+/* ---------- 印章 ---------- */
+.seal{--c:var(--qing);flex:none;width:34px;height:34px;border-radius:7px;background:var(--c);color:#fff;
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;place-items:center;padding:3px;
+  font:700 12px/1 var(--song);position:relative;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+.seal.one{grid-template-columns:1fr;grid-template-rows:1fr;font-size:16px}
+.seal span{display:block}
+.seal.vert{grid-template-columns:1fr;gap:1px}
+.seal.lg{width:64px;height:64px;font-size:22px;border-radius:12px;padding:6px}
+.seal.lg.one{font-size:30px}
+.seal.sm{width:26px;height:26px;font-size:10px;border-radius:6px;padding:2px}
+.seal.sm.one{font-size:13px}
+.seal.off{background:transparent;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.seal .dot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--paper);background:var(--faint)}
+.seal .dot.on{background:var(--ok)} .seal .dot.busy{background:var(--huang)}
+
+/* ---------- 通用 ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);font-size:13px}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.btn.primary:hover{background:#223d5a}
+.btn.danger{color:var(--bad);border-color:#E3C3BD}
+.btn.ghost{border-color:transparent}
+.btn.ghost:hover{background:var(--sunk)}
+.btn svg{width:15px;height:15px}
+.icon-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.icon-btn:hover{background:var(--sunk);color:var(--ink)}
+.icon-btn svg{width:17px;height:17px}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:1px 7px;border-radius:5px;background:var(--sunk);color:var(--ink-2);white-space:nowrap}
+.tag.feishu{background:#E4ECF7;color:#2F5A93} .tag.weixin{background:#E3F1E7;color:#2E6E45} .tag.term{background:#ECE9E3;color:#5E5547}
+.tag.web{background:var(--qing-soft);color:var(--qing)}
+.path{font:12px/1.4 var(--mono);color:var(--muted)}
+.muted{color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.status.on i{background:var(--ok)} .status.busy i{background:var(--huang)} .status.err i{background:var(--bad)}
+.status.busy{color:#7A6216}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:380px;padding:40px 20px}
+.empty h2{font:600 22px/1.3 var(--song);color:var(--ink);margin:0 0 8px}
+
+/* ---------- 对话 ---------- */
+.chat-head{display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--line)}
+.chat-head .name{font:600 16px/1.3 var(--song)}
+.chat-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.chat-head .grow{flex:1;min-width:0}
+.notice{margin:12px 22px 0;padding:9px 12px;border-radius:8px;background:#F4F1E6;color:#6B5A27;font-size:13px}
+.thread{flex:1;overflow:auto;padding:22px 0 10px}
+.msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
+.msg.me{display:flex;justify-content:flex-end}
+.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;max-width:80%;white-space:pre-wrap}
+.msg.me .from{display:none}
+.from-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.from-row b{font:600 14px var(--song)}
+.from-row .tag{margin-left:2px}
+.answer{line-height:1.75}
+.answer p{margin:0 0 10px}
+.answer code{font:12.5px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
+.answer pre{font:12.5px/1.6 var(--mono);background:#1F242C;color:#E4E7EB;padding:12px 14px;border-radius:8px;overflow:auto}
+.steps{border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;font-size:13px}
+.steps>button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;color:var(--ink-2)}
+.steps>button .chev{margin-left:auto;transition:transform .15s}
+.steps.open>button .chev{transform:rotate(90deg)}
+.steps ol{display:none;margin:0;padding:2px 12px 10px 34px;color:var(--muted)}
+.steps.open ol{display:block}
+.steps li{padding:2px 0}
+.steps li code{font:12px var(--mono);color:var(--ink-2)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--huang);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cursor::after{content:"";display:inline-block;width:7px;height:15px;background:var(--ink-2);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.approve{border:1px solid #E6D7AE;background:#FBF7EA;border-radius:10px;padding:12px 14px;margin:4px 0 12px}
+.approve .q{font-weight:600;margin-bottom:4px}
+.approve pre{margin:6px 0 10px;font:12.5px var(--mono);background:#fff;border:1px solid #EFE5C8;padding:8px 10px;border-radius:6px;white-space:pre-wrap}
+.approve .acts{display:flex;gap:8px;flex-wrap:wrap}
+.approve.done{background:var(--paper);border-color:var(--line)}
+.files{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;justify-content:flex-end}
+.file{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+
+.composer{max-width:760px;width:100%;margin:0 auto 18px;padding:0 22px}
+.box{border:1px solid var(--line-strong);border-radius:14px;background:var(--panel);box-shadow:0 1px 0 rgba(29,34,43,.03)}
+.box:focus-within{border-color:var(--qing)}
+.box textarea{width:100%;border:0;outline:none;resize:none;padding:12px 14px 4px;min-height:52px;max-height:200px;background:none}
+.box .bar{display:flex;align-items:center;gap:4px;padding:6px 8px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:7px;font-size:12px;color:var(--ink-2)}
+.chip:hover{background:var(--sunk)}
+.chip svg{width:12px;height:12px}
+.send{margin-left:auto;width:32px;height:32px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center}
+.send:disabled{background:var(--line-strong);cursor:default}
+.send.stop{background:var(--ink)}
+.send svg{width:16px;height:16px}
+.hint{font-size:12px;color:var(--faint);text-align:center;margin-top:6px}
+
+.pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px}
+.pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop button:hover{background:var(--sunk)}
+.pop button .ck{margin-left:auto;color:var(--qing)}
+.pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
+.pop .desc{font-size:12px;color:var(--muted)}
+
+/* ---------- 弹窗 ---------- */
+.scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
+.dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
+.dialog header{padding:18px 22px 4px;display:flex;align-items:center}
+.dialog header h2{font:600 19px var(--song);margin:0;flex:1}
+.dialog .body{padding:10px 22px 20px}
+.dialog footer{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.form .seg{justify-self:start}
+.seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;gap:2px}
+.seg button{padding:5px 14px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:12px}
+.pick{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid var(--line);text-align:left}
+.pick:hover{border-color:var(--ink-2)}
+.pick.on{border-color:var(--qing);box-shadow:0 0 0 1px var(--qing)}
+.pick .nm{font-weight:500} .pick .ds{font-size:12px;color:var(--muted)}
+
+/* ---------- 表单 ---------- */
+.form{display:grid;grid-template-columns:120px 1fr;gap:16px 18px;align-items:start}
+.form>label{padding-top:7px;color:var(--ink-2)}
+.form .help{font-size:12px;color:var(--muted);margin-top:4px}
+.input,.textarea,select.input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);outline:none}
+.input:focus,.textarea:focus{border-color:var(--qing)}
+.textarea{min-height:96px;resize:vertical;line-height:1.6}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swatches{display:flex;gap:6px}
+.swatches button{width:22px;height:22px;border-radius:6px;background:var(--c)}
+.swatches button.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--c)}
+
+/* ---------- Agent ---------- */
+.agent-page{overflow:auto;flex:1}
+.agent-top{display:flex;gap:18px;align-items:center;padding:26px 32px 20px;border-bottom:1px solid var(--line)}
+.agent-top h2{font:600 24px/1.25 var(--song);margin:0}
+.agent-top .role{color:var(--muted);margin-top:2px;max-width:560px}
+.agent-top .grow{flex:1;min-width:0}
+.tabs{display:flex;gap:4px;padding:0 26px;border-bottom:1px solid var(--line)}
+.tabs button{padding:10px 8px;margin:0 6px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-color:var(--ink)}
+.pane{padding:22px 32px 40px;max-width:900px}
+.sect{margin-bottom:28px}
+.sect h3{font:600 15px var(--song);margin:0 0 10px}
+.channel{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+.channel .ci{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 13px var(--sans)}
+.channel .ci.feishu{background:#E4ECF7;color:#2F5A93} .channel .ci.weixin{background:#E3F1E7;color:#2E6E45}
+.channel .grow{flex:1;min-width:0}
+.channel.add{border-style:dashed;color:var(--muted)}
+.channel.add:hover{border-color:var(--ink-2);color:var(--ink)}
+.channel svg{width:16px;height:16px;flex:none}
+.chat-row{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.chat-row:hover .tt{color:var(--qing)}
+.chat-row .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:10px 18px}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.working{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#7A6216;margin-top:2px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
+
+@media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
+@media (max-width:760px){.app{grid-template-columns:1fr}.rail,.list{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="主导航">
+    <div class="brand">ccim</div>
+    <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
+    <div class="spacer"></div>
+    <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
+  </nav>
+  <section class="list" id="list"></section>
+  <main class="main" id="main"></main>
+</div>
+
+<script>
+// ================= 假数据 =================
+const COLORS = {qing:"#2B4C6F", lu:"#3F7A5E", zhe:"#9A5B34", huang:"#B8902A", zhu:"#B5402F", dai:"#4A4F6B"};
+const MODELS = {claude:[["opus","Opus 5.5","最强，复杂任务"],["sonnet","Sonnet 5","快，日常够用"],["haiku","Haiku","最快最省"]],
+                codex:[["gpt-6-sol","gpt-6-sol","默认"],["gpt-6-mini","gpt-6-mini","更快"]]};
+const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
+const BASE = {claude:"Claude Code", codex:"Codex"};
+
+let agents = [
+  {id:"ccim", name:"ccim 开发", seal:"开发", color:"qing", base:"claude", model:"opus", effort:"high",
+   role:"负责 ccim 仓库的开发：改代码、写测试、提交前跑一遍检查。改动只提交自己改的文件。",
+   dir:"~/Desktop/李琼个人主义/ccim", state:"busy", doing:"正在运行 pytest",
+   channels:{feishu:{name:"ccim测试智能助手", state:"on"}, weixin:null}, last:"刚刚"},
+  {id:"meituan", name:"美团长期项目", seal:"美团", color:"zhu", base:"claude", model:null, effort:null,
+   role:"美团长期项目的技术顾问：回答客户问题、评估需求、给出报价建议。", dir:"~/Desktop/SD-订单管理/0527-美团长期项目",
+   state:"on", channels:{feishu:{name:"美团长期项目助手", state:"on"}, weixin:null}, last:"昨天"},
+  {id:"weekly", name:"周报助手", seal:"周报", color:"huang", base:"claude", model:"sonnet", effort:"medium",
+   role:"每周五汇总本周各项目的 git 提交和对话要点，写成给客户的周报，语气正式、条理清楚。", dir:null,
+   state:"on", channels:{feishu:null, weixin:{name:"微信", state:"on"}}, last:"10月11日"},
+  {id:"codex", name:"Codex 测试", seal:"测", color:"lu", base:"codex", model:null, effort:null,
+   role:"", dir:"~/Desktop/李琼个人主义/codex测试", state:"on",
+   channels:{feishu:{name:"ccim测试codex机器人", state:"on"}, weixin:{name:"微信", state:"on"}}, last:"10月11日"},
+  {id:"qidian", name:"奇点对谈", seal:"奇点", color:"dai", base:"claude", model:"opus", effort:"max",
+   role:"陪我讨论 AI 产品和商业的想法，敢于反驳。", dir:"~/Desktop/Opus5.5-奇点-1002",
+   state:"off", channels:{feishu:{name:"奇点对谈", state:"off"}, weixin:null}, last:"10月8日"},
+  {id:"modeng", name:"AI 摩登时代", seal:"摩登", color:"zhe", base:"claude", model:null, effort:null,
+   role:"公众号「AI 摩登时代」的选题和写作。", dir:"~/Documents/AI摩登时代",
+   state:"on", channels:{feishu:{name:"AI摩登时代", state:"on"}, weixin:null}, last:"10月6日"},
+];
+
+let chats = [
+  {id:"c1", agent:"ccim", title:"微信发图片报 500 的排查", src:"web", when:"刚刚", group:"今天", running:true,
+   model:"opus", effort:"high", msgs:[
+    {me:true, text:"微信发图片一直报 500，帮我看看是哪里的问题", files:["截图 2026-10-10.png"]},
+    {agent:true, steps:["读了 ccim/channels/weixin.py","搜索 “upload_full_url”","运行 python up.py /tmp/cx_test.png","运行 curl 上传 250KB 到微信文件服务器"],
+     text:"<p>问题不在代码：到微信文件服务器的上传速度只有每秒 6～17KB，250KB 以上的图片传到十几秒就会被服务器断开，返回的就是 500。</p><p>换成 <code>curl</code> 直接上传也一样，说明和 ccim 无关。</p>"},
+    {me:true, text:"那加个发送前自动压缩图片吧"},
+    {agent:true, live:true, steps:["读了 ccim/channels/weixin.py","修改 ccim/channels/weixin.py"],
+     approve:{q:"要运行这个命令，需要你批准", cmd:"brew install pngquant", why:"安装图片压缩工具"}},
+  ]},
+  {id:"c2", agent:"meituan", title:"牵牛花插件的授权维度", src:"feishu", when:"19:20", group:"今天",
+   model:null, effort:null, msgs:[
+    {me:true, text:"就牵牛花插件这个项目，它现在授权是什么维度的？客户反馈一台电脑装了好几个浏览器，想做到同一台电脑的所有浏览器都算一台。"},
+    {agent:true, steps:["读了 src/license/fingerprint.ts","读了 docs/授权方案.md","搜索 “deviceId”"],
+     text:"<p>现在是按<b>浏览器实例</b>授权：指纹存在扩展自己的存储里，换个浏览器就是新设备。</p><p>要做到「同一台电脑算一台」，扩展本身拿不到稳定的硬件信息，只能借助本地辅助程序，开发和维护成本都会上一个台阶。</p>"},
+  ]},
+  {id:"c3", agent:"weekly", title:"第 41 周周报", src:"weixin", when:"10月11日", group:"更早", model:null, effort:null, msgs:[
+    {me:true, text:"把这周的周报写一下"},
+    {agent:true, steps:["运行 git log --since=7.days（4 个仓库）","查看其他对话：美团长期项目 3 段"], text:"<p>第 41 周周报已整理好，分「已完成」「进行中」「下周计划」三部分，共 12 项。要我发到飞书群吗？</p>"},
+  ]},
+  {id:"c4", agent:null, temp:{base:"claude", dir:null}, title:"对比两种分页实现", src:"web", when:"10月10日", group:"更早",
+   model:"sonnet", effort:"medium", msgs:[
+    {me:true, text:"游标分页和偏移分页，在订单量千万级的时候怎么选？"},
+    {agent:true, text:"<p>千万级、需要深翻页时选<b>游标分页</b>：每次按上一页最后一条的排序键往后查，耗时不随页数增长。</p><p>需要「跳到第 N 页」时只能用偏移分页，建议限制最大页数。</p>"},
+  ]},
+  {id:"c5", agent:"codex", title:"慢慢森林手绘版", src:"term", when:"10月4日", group:"更早", model:null, effort:null, msgs:[
+    {me:true, text:"把慢慢森林改成手绘风格"},
+    {agent:true, steps:["修改 index.html","修改 style.css","新建 assets/paper.png"], text:"<p>已改成手绘风格：铅笔线描边、纸张纹理背景、手写字体标题。</p>"},
+  ]},
+];
+
+// ================= 小工具 =================
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const agentOf = id => agents.find(a => a.id === id);
+const SRC = {web:["网页","web"], feishu:["飞书","feishu"], weixin:["微信","weixin"], term:["终端","term"]};
+const ICON = {
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  clip:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  stop:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+  chev:'<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+  folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
+  file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
+};
+function seal(a, size="", dot=true){
+  const txt = a ? a.seal : "临";
+  const chars = [...txt];
+  const c = a ? COLORS[a.color] : "#8A8F87";
+  const cls = ["seal", size, chars.length === 1 ? "one" : "", chars.length === 2 ? "vert" : "", a && a.state === "off" ? "off" : ""].join(" ");
+  const d = a && dot ? `<i class="dot ${a.state === "busy" ? "busy" : a.state === "on" ? "on" : ""}"></i>` : "";
+  return `<span class="${cls}" style="--c:${c}" aria-hidden="true">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${d}</span>`;
+}
+function toast(t){ const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.append(el); setTimeout(() => el.remove(), 2200); }
+function modelName(base, m){ const x = (MODELS[base] || []).find(v => v[0] === m); return x ? x[1] : m; }
+function chatBase(c){ return c.agent ? agentOf(c.agent).base : c.temp.base; }
+function effective(c){
+  const a = c.agent ? agentOf(c.agent) : null, base = chatBase(c);
+  const m = c.model || (a && a.model) || (base === "claude" ? "opus" : "gpt-6-sol");
+  const e = c.effort || (a && a.effort) || (base === "claude" ? "high" : "medium");
+  return {base, model:m, effort:e};
+}
+
+// ================= 路由 =================
+let current = {view:"chats", id:"c1"};
+function route(){
+  const [, view = "chats", id] = location.hash.split("/");
+  current = {view, id};
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === view));
+  if (view === "agents") { renderAgentList(); id === "new" ? renderAgentForm(null) : id ? renderAgent(id) : renderAgentEmpty(); }
+  else if (view === "settings") { renderSettingsList(); renderSettings(); }
+  else { renderChatList(); id ? renderChat(id) : renderChatEmpty(); }
+}
+addEventListener("hashchange", route);
+
+// ================= 对话列表 =================
+function renderChatList(){
+  const groups = ["今天","更早"];
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>对话</h1><button class="btn primary" onclick="newChat()">${ICON.plus}新对话</button></div>
+    <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话"></label>
+    <div class="scroll">${groups.map(g => {
+      const items = chats.filter(c => c.group === g);
+      if (!items.length) return "";
+      return `<div class="group">${g}</div>` + items.map(c => {
+        const a = c.agent ? agentOf(c.agent) : null, [sn, sc] = SRC[c.src];
+        const sub = c.running ? `<span class="working"><span class="spin"></span>干活中</span>`
+                              : `<span>${esc(a ? a.name : "临时对话")}</span>`;
+        return `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${c.id}" style="text-decoration:none;color:inherit">
+          ${seal(a, "", false)}
+          <span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
+          <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${c.when}</span><span class="tag ${sc}">${sn}</span></span>
+        </a>`;
+      }).join("");
+    }).join("")}</div>`;
+}
+
+function renderChatEmpty(){
+  $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>选一个 Agent 开始对话，或者开一个临时对话，直接选 Claude Code 或 Codex。</p>
+    <button class="btn primary" onclick="newChat()">${ICON.plus}新对话</button></div>`;
+}
+
+// ================= 对话页 =================
+function stepsHtml(steps, live){
+  if (!steps || !steps.length) return "";
+  const head = live ? `<span class="spin"></span>正在${esc(steps[steps.length - 1].replace(/^(读了|运行|修改|搜索|新建|查看)/, m => ({"读了":"读","运行":"运行","修改":"修改","搜索":"搜索","新建":"新建","查看":"查看"}[m])))}`
+                    : `做了 ${steps.length} 步`;
+  return `<div class="steps ${live ? "open" : ""}"><button onclick="this.parentElement.classList.toggle('open')" aria-expanded="${live}">${head}${ICON.chev}</button>
+    <ol>${steps.map(s => `<li>${esc(s).replace(/(ccim\/[\w/.]+|src\/[\w/.]+|docs\/\S+|[\w-]+\.(?:html|css|png|py|ts))/g, "<code>$1</code>")}</li>`).join("")}</ol></div>`;
+}
+function msgHtml(c, m, i){
+  if (m.me) return `<div class="msg me"><div><div class="bubble">${esc(m.text)}</div>
+      ${m.files ? `<div class="files">${m.files.map(f => `<span class="file">${ICON.file}${esc(f)}</span>`).join("")}</div>` : ""}</div></div>`;
+  const a = c.agent ? agentOf(c.agent) : null;
+  const ap = m.approve ? `<div class="approve ${m.approve.done ? "done" : ""}">
+      <div class="q">${m.approve.done ? esc(m.approve.done) : esc(m.approve.q)}</div>
+      <pre>${esc(m.approve.cmd)}</pre>
+      ${m.approve.done ? "" : `<div class="muted" style="font-size:13px;margin:-4px 0 10px">${esc(m.approve.why)}</div>
+      <div class="acts"><button class="btn primary" onclick="approve('${c.id}',${i},'已允许')">允许</button>
+      <button class="btn" onclick="approve('${c.id}',${i},'已允许，这个对话里同类操作不再询问')">这个对话里都允许</button>
+      <button class="btn danger" onclick="approve('${c.id}',${i},'已拒绝')">拒绝</button></div>`}</div>` : "";
+  return `<div class="msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a ? a.name : BASE[c.temp.base])}</b></div>
+    ${stepsHtml(m.steps, m.live && !m.text)}${ap}
+    ${m.text ? `<div class="answer ${m.streaming ? "cursor" : ""}">${m.text}</div>` : ""}</div>`;
+}
+function renderChat(id){
+  const c = chats.find(x => x.id === id);
+  if (!c) return renderChatEmpty();
+  const a = c.agent ? agentOf(c.agent) : null, ef = effective(c), [sn, sc] = SRC[c.src];
+  const notice = c.src === "feishu" || c.src === "weixin" || c.src === "term"
+    ? `<div class="notice">这个对话来自${sn}。在这里接着聊会另开一个分支，${sn}那边的对话不受影响。</div>` : "";
+  $("#main").innerHTML = `
+    <div class="chat-head">${seal(a)}
+      <div class="grow"><div class="name">${esc(c.title)}</div>
+        <div class="meta"><a class="muted" style="font-size:13px" href="${a ? `#/agents/${a.id}` : "javascript:void 0"}">${esc(a ? a.name : "临时对话")}</a>
+        <span class="tag">${BASE[ef.base]}</span><span class="tag ${sc}">${sn}</span>
+        ${(a ? a.dir : c.temp.dir) ? `<span class="path">${esc(a ? a.dir : c.temp.dir)}</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
+      ${c.temp ? `<button class="btn" onclick="saveAsAgent('${c.id}')">保存为 Agent</button>` : ""}
+      <button class="icon-btn" aria-label="更多">${ICON.more}</button>
+    </div>${notice}
+    <div class="thread" id="thread">${c.msgs.map((m, i) => msgHtml(c, m, i)).join("")}</div>
+    <div class="composer">
+      <div class="box">
+        <textarea id="input" rows="2" placeholder="${c.running ? "补充说明，它做完当前这一步就会看到" : `给 ${esc(a ? a.name : BASE[ef.base])} 发消息`}" aria-label="输入消息"></textarea>
+        <div class="bar">
+          <button class="icon-btn" aria-label="添加图片或文件" onclick="toast('选择图片或文件（原型里不上传）')">${ICON.clip}</button>
+          <button class="chip" onclick="pickModel(event,'${c.id}')">${esc(modelName(ef.base, ef.model))}${c.model ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}</button>
+          <button class="chip" onclick="pickEffort(event,'${c.id}')">思考 ${esc(ef.effort)}${ICON.down}</button>
+          <button class="send ${c.running ? "stop" : ""}" id="send" aria-label="${c.running ? "停下" : "发送"}" onclick="${c.running ? `stopChat('${c.id}')` : `send('${c.id}')`}">${c.running ? ICON.stop : ICON.up}</button>
+        </div>
+      </div>
+      <div class="hint">Enter 发送，Shift + Enter 换行</div>
+    </div>`;
+  const t = $("#thread"); t.scrollTop = t.scrollHeight;
+  $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); c.running ? supplement(c.id) : send(c.id); } });
+}
+function rerender(){ renderChatList(); renderChat(current.id); }
+
+function approve(cid, i, label){
+  const c = chats.find(x => x.id === cid), m = c.msgs[i];
+  m.approve.done = label;
+  if (label.startsWith("已允许")) { m.steps.push("运行 brew install pngquant"); rerender(); setTimeout(() => finish(c, m,
+    "<p>装好了 <code>pngquant</code>。现在发图片前会先检查大小：超过 200KB 就压到长边 1600 像素、转成 JPEG，一般能压到 100～200KB。</p><p>要发原图的话，让我「当文件发」就不压缩。</p>"), 900); }
+  else { finish(c, m, "<p>好，不装了。我换成 macOS 自带的 <code>sips</code> 来压缩，效果差一点但不用装东西，要这样改吗？</p>"); }
+}
+function finish(c, m, html){
+  m.live = false; m.text = ""; m.streaming = true; c.running = false; rerender();
+  let n = 0; const full = html;
+  const tick = setInterval(() => {
+    n += 6; m.text = full.slice(0, n).replace(/<[^>]*$/, "");
+    if (n >= full.length) { clearInterval(tick); m.text = full; m.streaming = false; }
+    if (current.id === c.id) { const el = document.querySelectorAll("#thread .msg"); renderChat(c.id); } else renderChatList();
+  }, 30);
+}
+function send(cid){
+  const c = chats.find(x => x.id === cid), v = $("#input").value.trim();
+  if (!v) return;
+  c.msgs.push({me:true, text:v});
+  const m = {agent:true, live:true, steps:[]};
+  c.msgs.push(m); c.running = true; c.when = "刚刚"; c.group = "今天";
+  chats = [c, ...chats.filter(x => x !== c)];
+  rerender();
+  const plan = ["读了 README.md","搜索 “" + v.slice(0, 8) + "”","运行 git status"];
+  plan.forEach((s, k) => setTimeout(() => { if (!c.running) return; m.steps.push(s); if (current.id === c.id) renderChat(c.id); }, 700 * (k + 1)));
+  setTimeout(() => { if (c.running) finish(c, m, `<p>看了一下仓库：README 里的说明和现在的代码对得上，工作区没有未提交的改动。</p><p>你说的「${esc(v.slice(0, 20))}」我理解是要先摸清现状，接下来我可以列一份改动清单给你确认，再动手。</p>`); }, 700 * (plan.length + 1));
+}
+function stopChat(cid){
+  const c = chats.find(x => x.id === cid), m = c.msgs[c.msgs.length - 1];
+  c.running = false; m.live = false; m.text = "<p class='muted'>已停下。</p>"; rerender();
+}
+function supplement(cid){
+  const c = chats.find(x => x.id === cid), v = $("#input").value.trim();
+  if (!v) return;
+  const last = c.msgs.pop(); c.msgs.push({me:true, text:v}, last);
+  rerender(); toast("已补充给正在做的任务");
+}
+
+// ---- 模型、思考深度 ----
+function closePop(){ document.querySelectorAll(".pop").forEach(p => p.remove()); }
+function pop(e, html){
+  e.stopPropagation(); closePop();
+  const p = document.createElement("div"); p.className = "pop"; p.innerHTML = html; document.body.append(p);
+  const r = e.currentTarget.getBoundingClientRect();
+  p.style.left = Math.min(r.left, innerWidth - p.offsetWidth - 10) + "px";
+  p.style.top = (r.top - p.offsetHeight - 6) + "px";
+}
+addEventListener("click", closePop);
+function pickModel(e, cid){
+  const c = chats.find(x => x.id === cid), ef = effective(c);
+  pop(e, `<div class="sec">模型</div>` + MODELS[ef.base].map(([k, n, d]) =>
+    `<button onclick="setChat('${cid}','model','${k}')"><span><div>${n}</div><div class="desc">${d}</div></span>${ef.model === k ? `<span class="ck">✓</span>` : ""}</button>`).join("")
+    + `<button onclick="setChat('${cid}','model',null)"><span><div>跟随默认</div><div class="desc">用 Agent 或全局设置的模型</div></span>${!c.model ? `<span class="ck">✓</span>` : ""}</button>`);
+}
+function pickEffort(e, cid){
+  const c = chats.find(x => x.id === cid), ef = effective(c);
+  pop(e, `<div class="sec">思考深度</div>` + EFFORTS[ef.base].map(k =>
+    `<button onclick="setChat('${cid}','effort','${k}')">${k}${ef.effort === k ? `<span class="ck">✓</span>` : ""}</button>`).join("")
+    + `<button onclick="setChat('${cid}','effort',null)">跟随默认${!c.effort ? `<span class="ck">✓</span>` : ""}</button>`);
+}
+function setChat(cid, k, v){ const c = chats.find(x => x.id === cid); c[k] = v; closePop(); renderChat(cid); toast(k === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度"); }
+
+// ---- 新对话 ----
+let draft = null;
+function newChat(){
+  draft = {mode:"agent", agent:"ccim", base:"claude", model:null, effort:null, dir:""};
+  drawNewChat();
+}
+function drawNewChat(){
+  document.querySelector(".scrim")?.remove();
+  const s = document.createElement("div"); s.className = "scrim";
+  s.onclick = e => { if (e.target === s) s.remove(); };
+  const d = draft;
+  s.innerHTML = `<div class="dialog" role="dialog" aria-label="新对话"><header><h2>新对话</h2><button class="icon-btn" aria-label="关闭" onclick="this.closest('.scrim').remove()">✕</button></header>
+    <div class="body">
+      <div class="seg" role="tablist"><button class="${d.mode === "agent" ? "on" : ""}" onclick="draft.mode='agent';drawNewChat()">和 Agent 对话</button>
+        <button class="${d.mode === "temp" ? "on" : ""}" onclick="draft.mode='temp';drawNewChat()">临时对话</button></div>
+      ${d.mode === "agent" ? `
+        <div class="picks">${agents.map(a => `<button class="pick ${d.agent === a.id ? "on" : ""}" onclick="draft.agent='${a.id}';drawNewChat()">${seal(a)}
+          <span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base]}${a.state === "off" ? "，已停止" : ""}</div></span></button>`).join("")}</div>
+        <p class="muted" style="font-size:13px;margin:14px 0 0">在 ${esc(agentOf(d.agent).name)} 的${agentOf(d.agent).dir ? `工作目录 <span class="path">${esc(agentOf(d.agent).dir)}</span>` : "工作区"}里，用它的角色和默认设置开始一个新对话。</p>`
+      : `<div class="form" style="margin-top:16px">
+          <label>底座</label><div class="seg"><button class="${d.base === "claude" ? "on" : ""}" onclick="draft.base='claude';drawNewChat()">Claude Code</button><button class="${d.base === "codex" ? "on" : ""}" onclick="draft.base='codex';drawNewChat()">Codex</button></div>
+          <label>模型</label><select class="input">${MODELS[d.base].map(([k, n]) => `<option>${n}</option>`).join("")}</select>
+          <label>思考深度</label><select class="input">${EFFORTS[d.base].map(k => `<option ${k === (d.base === "claude" ? "high" : "medium") ? "selected" : ""}>${k}</option>`).join("")}</select>
+          <label>工作目录</label><div><div class="row"><input class="input" style="flex:1" placeholder="不选也行" value="${esc(d.dir)}" oninput="draft.dir=this.value"><button class="btn" onclick="toast('打开选择文件夹窗口')">${ICON.folder}选择…</button></div>
+            <div class="help">不选的话，它在一个空的临时目录里干活，适合问答、写作、调研。</div></div>
+        </div>`}
+    </div>
+    <footer><button class="btn" onclick="this.closest('.scrim').remove()">取消</button><button class="btn primary" onclick="createChat()">开始对话</button></footer></div>`;
+  document.body.append(s);
+}
+function createChat(){
+  const d = draft, id = "c" + Date.now();
+  const c = d.mode === "agent" ? {id, agent:d.agent, title:"新对话", src:"web", when:"刚刚", group:"今天", model:null, effort:null, msgs:[]}
+                               : {id, agent:null, temp:{base:d.base, dir:d.dir || null}, title:"新对话", src:"web", when:"刚刚", group:"今天", model:null, effort:null, msgs:[]};
+  chats.unshift(c); document.querySelector(".scrim").remove(); location.hash = `#/chats/${id}`;
+  setTimeout(() => $("#input")?.focus(), 0);
+}
+function saveAsAgent(cid){
+  const c = chats.find(x => x.id === cid);
+  location.hash = "#/agents/new";
+  setTimeout(() => { const f = document.querySelector("[name=dir]"); if (f && c.temp.dir) f.value = c.temp.dir;
+    const b = document.querySelector(`[data-base=${c.temp.base}]`); b && b.click(); toast("用这个临时对话的设置新建 Agent"); }, 0);
+}
+
+// ================= Agent =================
+function renderAgentList(){
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>Agent</h1><a class="btn primary" href="#/agents/new" style="text-decoration:none">${ICON.plus}新建</a></div>
+    <label class="search">${ICON.search}<input placeholder="搜索 Agent" aria-label="搜索 Agent"></label>
+    <div class="scroll">${agents.map(a => {
+      const st = a.state === "busy" ? `<span class="working"><span class="spin"></span>${esc(a.doing)}</span>`
+               : a.state === "off" ? `<span class="sub">已停止</span>` : `<span class="sub">${BASE[a.base]}</span>`;
+      const ch = [a.channels.feishu && `<span class="tag feishu">飞书</span>`, a.channels.weixin && `<span class="tag weixin">微信</span>`].filter(Boolean).join(" ");
+      return `<a class="item ${current.id === a.id ? "on" : ""}" href="#/agents/${a.id}" style="text-decoration:none;color:inherit">${seal(a)}
+        <span class="t"><span class="title">${esc(a.name)}</span>${st}</span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${a.last}</span><span>${ch}</span></span></a>`;
+    }).join("")}</div>`;
+}
+function renderAgentEmpty(){
+  $("#main").innerHTML = `<div class="empty"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p>
+    <a class="btn primary" href="#/agents/new" style="text-decoration:none">${ICON.plus}新建 Agent</a></div>`;
+}
+let agentTab = "overview";
+function renderAgent(id){
+  const a = agentOf(id); if (!a) return renderAgentEmpty();
+  const mine = chats.filter(c => c.agent === id);
+  const stat = a.state === "busy" ? `<span class="status busy"><i></i>${esc(a.doing)}</span>` : a.state === "off" ? `<span class="status"><i></i>已停止</span>` : `<span class="status on"><i></i>空闲</span>`;
+  $("#main").innerHTML = `<div class="agent-page">
+    <div class="agent-top">${seal(a, "lg")}
+      <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
+        <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base]}</span>${a.dir ? `<span class="path">${esc(a.dir)}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
+      <button class="btn primary" onclick="draft={mode:'agent',agent:'${a.id}'};createChat()">开始对话</button>
+    </div>
+    <div class="tabs" role="tablist">${[["overview","概览"],["edit","设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent('${id}')">${n}</button>`).join("")}</div>
+    ${agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
+      <div class="sect"><h3>在哪能找到它</h3>
+        <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
+        ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
+      </div>
+      <div class="sect"><h3>对话</h3>${mine.length ? mine.map(c => { const [sn, sc] = SRC[c.src];
+        return `<a class="chat-row" href="#/chats/${c.id}" style="text-decoration:none;color:inherit"><span class="tag ${sc}">${sn}</span><span class="tt">${esc(c.title)}</span><span class="when muted" style="font-size:12px">${c.when}</span></a>`; }).join("")
+        : `<p class="muted">还没有对话。</p>`}</div>
+      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? modelName(a.base, a.model) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${a.effort || "跟随全局设置"}</dd></dl></div>
+    </div>`}</div>`;
+}
+function channelHtml(a, k){
+  const ch = a.channels[k], label = k === "feishu" ? "飞书" : "微信";
+  if (!ch) return `<button class="channel add" style="width:100%" onclick="toast('弹出${label}二维码，扫码接入')"><span class="ci ${k}">${label[0]}</span><span class="grow" style="text-align:left">接到${label}</span>${ICON.plus}</button>`;
+  const st = ch.state === "on" ? `<span class="status on"><i></i>在线</span>` : `<span class="status"><i></i>已停止</span>`;
+  return `<div class="channel"><span class="ci ${k}">${label[0]}</span><div class="grow"><div>${esc(ch.name)}</div><div>${st}</div></div>
+    ${ch.state === "on" ? `<button class="btn ghost" onclick="toast('已重启')">重启</button><button class="btn ghost" onclick="toast('打开日志')">日志</button>`
+      : `<button class="btn" onclick="toast('已启动，开机自动运行')">启动</button>`}
+    <button class="btn ghost danger" onclick="toast('断开前会确认')">断开</button></div>`;
+}
+let fd = null;
+function formHtml(a){
+  fd = a ? {...a} : {id:"", name:"", seal:"", color:"qing", base:"claude", model:null, effort:null, role:"", dir:""};
+  return `<div class="form">
+    <label>头像</label><div class="row" id="seal-prev">${seal(fd.name ? fd : {...fd, seal:"新"}, "lg", false)}
+      <div><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal(this)"></button>`).join("")}</div>
+      <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input class="input" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;drawSeal()"></div></div></div>
+    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=[...this.value.replace(/\\s/g,'')].slice(0,2).join('')};drawSeal()">
+    <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。">${esc(fd.role)}</textarea>
+      <div class="help">每次和它对话都会带上这段话。</div></div>
+    <label>底座</label><div class="seg"><button data-base="claude" class="${fd.base === "claude" ? "on" : ""}" onclick="fd.base='claude';this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Claude Code</button><button data-base="codex" class="${fd.base === "codex" ? "on" : ""}" onclick="fd.base='codex';this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Codex</button></div>
+    <label>默认模型</label><select class="input"><option>跟随全局设置</option>${MODELS[fd.base].map(([k, n]) => `<option ${fd.model === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+    <label>默认思考深度</label><select class="input"><option>跟随全局设置</option>${EFFORTS[fd.base].map(k => `<option ${fd.effort === k ? "selected" : ""}>${k}</option>`).join("")}</select>
+    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" name="dir" class="input" style="flex:1" value="${esc(fd.dir || "")}" placeholder="不填也行"><button class="btn" onclick="toast('打开选择文件夹窗口')">${ICON.folder}选择…</button></div>
+      <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
+    <span></span><div class="row" style="margin-top:6px">
+      <button class="btn primary" onclick="saveAgent(${a ? `'${a.id}'` : "null"})">${a ? "保存" : "新建 Agent"}</button>
+      ${a ? `<button class="btn danger" style="margin-left:auto" onclick="toast('删除前会确认；工作目录里的文件不会删')">删除这个 Agent</button>` : ""}</div>
+  </div>`;
+}
+function drawSeal(){ $("#seal-prev").firstElementChild.outerHTML = seal(fd.name || fd.seal ? {...fd, seal:fd.seal || "新"} : {...fd, seal:"新"}, "lg", false);
+  document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b.getAttribute("aria-label") === fd.color)); }
+function renderAgentForm(){
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>新建 Agent</h2><div class="role">给它起个名字、写清楚它负责什么。建好后可以直接对话，也可以接到飞书、微信。</div></div></div>
+    <div class="pane">${formHtml(null)}</div></div>`;
+}
+function saveAgent(id){
+  const role = $("#f-role").value, dir = $("#f-dir").value.trim();
+  if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
+  if (id) { Object.assign(agentOf(id), {name:fd.name, seal:fd.seal || fd.name.slice(0, 2), color:fd.color, base:fd.base, role, dir:dir || null}); toast("已保存"); agentTab = "overview"; route(); return; }
+  const nid = "a" + Date.now();
+  agents.unshift({id:nid, name:fd.name, seal:fd.seal || [...form.name].slice(0, 2).join(""), color:fd.color, base:fd.base, model:null, effort:null, role, dir:dir || null,
+                  state:"on", channels:{feishu:null, weixin:null}, last:"刚刚"});
+  toast("已新建"); agentTab = "overview"; location.hash = `#/agents/${nid}`;
+}
+
+// ================= 设置 =================
+function renderSettingsList(){
+  $("#list").innerHTML = `<div class="list-head"><h1>设置</h1></div><div class="scroll">
+    <a class="item on" href="#/settings" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">所有 Agent 没单独设置时用</span></span></a></div>`;
+}
+function renderSettings(){
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
+    <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置。</div></div></div>
+    <div class="pane"><div class="sect"><h3>Claude Code</h3><div class="form">
+      <label>模型</label><select class="input"><option>跟随 Claude Code 设置（opus）</option>${MODELS.claude.map(([k, n]) => `<option>${n}</option>`).join("")}</select>
+      <label>思考深度</label><select class="input"><option>跟随 Claude Code 设置（high）</option>${EFFORTS.claude.map(k => `<option>${k}</option>`).join("")}</select></div></div>
+      <div class="sect"><h3>Codex</h3><div class="form">
+      <label>模型</label><select class="input"><option>跟随 Codex 设置（gpt-6-sol）</option>${MODELS.codex.map(([k, n]) => `<option>${n}</option>`).join("")}</select>
+      <label>思考深度</label><select class="input"><option>跟随 Codex 设置（medium）</option>${EFFORTS.codex.map(k => `<option>${k}</option>`).join("")}</select></div></div>
+      <button class="btn primary" onclick="toast('已保存')">保存</button></div></div>`;
+}
+
+if (!location.hash) location.hash = "#/chats/c1"; else route();
+</script>
+</body>
+</html>

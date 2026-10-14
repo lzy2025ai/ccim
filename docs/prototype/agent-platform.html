@@ -150,6 +150,7 @@ body{overflow:hidden}
 .pop button .ck{margin-left:auto;color:var(--qing)}
 .pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
 .pop .desc{font-size:12px;color:var(--muted)}
+.pop svg{width:15px;height:15px;flex:none}
 
 .newchat{margin:auto;width:min(720px,100%);padding:0 22px 12vh}
 .newchat h2{font:600 26px/1.3 var(--song);margin:0 0 16px}
@@ -165,6 +166,35 @@ body{overflow:hidden}
 .select:hover{border-color:var(--ink-2)}
 .select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
 .select svg{width:14px;height:14px;color:var(--muted);flex:none}
+
+/* ---------- 项目 ---------- */
+.stack{display:flex;flex:none}
+.stack .seal{box-shadow:0 0 0 2px var(--paper),inset 0 0 0 2px rgba(255,255,255,.18)}
+.stack .seal+.seal{margin-left:-9px}
+.stack.lg .seal{width:34px;height:34px}
+.item .stack{width:58px}
+.at{display:inline-flex;align-items:center;gap:3px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:0 6px;font-size:13px;white-space:nowrap}
+.at button{color:var(--qing);font-size:11px;opacity:.7}
+.bubble .at{background:#fff}
+.meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
+.quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
+.quote.in-box{margin:8px 10px 0}
+.quote .icon-btn{margin-left:auto;width:22px;height:22px;flex:none}
+.rcpt{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;min-height:24px}
+.from-row .status{margin-left:6px}
+.acts-row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.compare .col{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.compare .col.chosen{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.branch{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--ink-2);margin-bottom:8px}
+.proj-body{flex:1;min-height:0;display:flex}
+.proj-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.proj-main .msg,.proj-main .composer{max-width:860px}
+.members{width:280px;flex:none;border-left:1px solid var(--line);padding:16px;overflow:auto;background:var(--paper)}
+.mem{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mem .title,.mem .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mem .sub{font-size:12px;color:var(--muted)}
+.danger-link{color:var(--bad)}
 
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
@@ -231,6 +261,7 @@ body{overflow:hidden}
   <nav class="rail" aria-label="主导航">
     <div class="brand">ccim</div>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a href="#/projects" data-nav="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
@@ -315,6 +346,7 @@ const ICON = {
   chev:'<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
+  branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
 };
 function seal(a, size="", dot=true){
@@ -341,7 +373,8 @@ function route(){
   const [, view = "chats", id] = location.hash.split("/");
   current = {view, id};
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === view));
-  if (view === "agents") { renderAgentList(); id === "new" ? renderAgentForm(null) : id ? renderAgent(id) : renderAgentEmpty(); }
+  if (view === "projects") { renderProjectList(); id ? renderProject(id) : renderProjectEmpty(); }
+  else if (view === "agents") { renderAgentList(); id === "new" ? renderAgentForm(null) : id ? renderAgent(id) : renderAgentEmpty(); }
   else if (view === "settings") { renderSettingsList(); renderSettings(); }
   else { renderChatList(); id === "new" ? renderNewChat() : id ? renderChat(id) : renderChatEmpty(); }
 }
@@ -681,7 +714,236 @@ function renderSettings(){
       <button class="btn primary" onclick="toast('已保存')">保存</button></div></div>`;
 }
 
-if (!location.hash) location.hash = "#/chats/c1"; else route();
+
+// ================= 项目（二期原型） =================
+agents.push(
+  {id:"fe", name:"前端开发", seal:"前端", color:"qing", base:"claude", model:"opus", effort:"high", role:"负责官网前端，Vue 3，改完必须跑 lint。", dir:null, state:"on", channels:{feishu:null, weixin:null}, last:"刚刚"},
+  {id:"fe2", name:"前端（Codex）", seal:"前", color:"dai", base:"codex", model:null, effort:null, role:"负责官网前端，Vue 3。", dir:null, state:"busy", doing:"正在修改 src/api/orders.ts", channels:{feishu:null, weixin:null}, last:"刚刚"},
+  {id:"copy", name:"文案", seal:"文案", color:"zhe", base:"claude", model:"sonnet", effort:"medium", role:"写官网和产品文案，口语化、不浮夸。", dir:null, state:"on", channels:{feishu:{name:"文案助手", state:"on"}, weixin:null}, last:"10:20"},
+  {id:"qa", name:"测试", seal:"测试", color:"lu", base:"claude", model:null, effort:null, role:"写测试用例、跑回归，发现问题列清复现步骤。", dir:null, state:"on", channels:{feishu:null, weixin:null}, last:"昨天"},
+);
+let projects = [
+  {id:"p1", name:"官网改版", dir:"~/Desktop/website", members:["fe", "fe2", "copy", "qa"], last:"刚刚", feed:[
+    {type:"task", id:"t1", time:"10:12", text:"首页加一个暗色模式开关，跟随系统设置，也能手动切换", to:["fe"]},
+    {type:"reply", task:"t1", agent:"fe", state:"done", elapsed:"2 分 13 秒", steps:["读了 src/App.vue","读了 src/styles/theme.css","修改 src/styles/theme.css","新建 src/components/ThemeToggle.vue","运行 npm run lint"],
+     text:"<p>加好了：右上角多了一个切换按钮，默认跟随系统，手动选过以后会记住。</p><p>颜色都换成了 CSS 变量，暗色下的对比度检查过，lint 通过。</p>"},
+    {type:"task", id:"t2", time:"10:18", text:"写一段新的首页介绍，突出「在自己电脑上跑、手机上也能用」，三句话以内", to:["copy"]},
+    {type:"reply", task:"t2", agent:"copy", state:"done", elapsed:"41 秒", steps:[],
+     text:"<p>你的 AI 助手，跑在你自己的电脑上。</p><p>代码、文件都不出门；出门在外，打开飞书或微信接着让它干活。</p>"},
+    {type:"task", id:"t3", time:"10:31", text:"把订单列表改成游标分页，千万级数据也不能卡", to:["fe", "fe2"], compare:true},
+    {type:"reply", task:"t3", agent:"fe", state:"done", elapsed:"4 分 02 秒", branch:"对比/前端开发", changed:"改了 3 个文件，+86 −41",
+     steps:["读了 src/api/orders.ts","读了 src/views/OrderList.vue","修改 src/api/orders.ts","修改 src/views/OrderList.vue","修改 server/routes/orders.js","运行 npm test"],
+     text:"<p>改成了按 <code>(created_at, id)</code> 游标翻页：前端改成「加载更多」，后端加了联合索引。</p><p>测了 1000 万条假数据，翻到最后一页也在 40ms 以内。</p>"},
+    {type:"reply", task:"t3", agent:"fe2", state:"working", elapsed:"3 分 10 秒", branch:"对比/前端（Codex）",
+     steps:["运行 rg -n \"page\" src","读了 src/api/orders.ts","修改 src/api/orders.ts"], text:""},
+    {type:"task", id:"t4", time:"10:40", text:"按这个改动写几条测试用例，覆盖系统设置切换和手动切换", to:["qa"],
+     quote:{agent:"fe", text:"加好了：右上角多了一个切换按钮，默认跟随系统，手动选过以后会记住。"}},
+    {type:"reply", task:"t4", agent:"qa", state:"queued", elapsed:"", steps:[], text:""},
+  ]},
+  {id:"p2", name:"牵牛花插件 2.0", dir:"~/Desktop/SD-订单管理/0527-美团长期项目", members:["meituan", "qa"], last:"昨天", feed:[
+    {type:"task", id:"t9", time:"昨天 19:20", text:"整理一下客户提的多浏览器授权需求，给出两个方案和报价", to:["meituan"]},
+    {type:"reply", task:"t9", agent:"meituan", state:"done", elapsed:"1 分 30 秒", steps:["读了 src/license/fingerprint.ts","读了 docs/授权方案.md"],
+     text:"<p><b>方案一</b>：维持按浏览器授权，同一台电脑多装几个浏览器就多占几个名额。不用开发。</p><p><b>方案二</b>：加一个本地辅助程序识别整台电脑，开发约 5 天，之后每次系统升级都要跟着测。</p>"},
+  ]},
+];
+const projOf = id => projects.find(p => p.id === id);
+
+function renderProjectList(){
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>项目</h1><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
+    <label class="search">${ICON.search}<input placeholder="搜索项目" aria-label="搜索项目"></label>
+    <div class="scroll">${projects.map(p => {
+      const busy = p.feed.some(f => f.type === "reply" && (f.state === "working" || f.state === "queued"));
+      return `<a class="item ${current.id === p.id ? "on" : ""}" href="#/projects/${p.id}" style="text-decoration:none;color:inherit">
+        <span class="stack">${p.members.slice(0, 3).map(m => seal(agentOf(m), "sm", false)).join("")}</span>
+        <span class="t"><span class="title">${esc(p.name)}</span>${busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${p.members.length} 个 Agent</span>`}</span>
+        <span class="when">${p.last}</span></a>`;
+    }).join("")}</div>`;
+}
+function renderProjectEmpty(){
+  $("#main").innerHTML = `<div class="empty"><h2>项目</h2><p>把几个 Agent 拉进一个项目，在里面 @ 它们派活；同一件事也可以交给几个 Agent 各做一份，对比结果。</p>
+    <button class="btn primary" onclick="newProject()">${ICON.plus}新建项目</button></div>`;
+}
+
+let rcpt = [], compareMode = true, quote = null, showMembers = false;
+function chipsOf(ids){ return ids.map(id => `<span class="at">@${esc(agentOf(id).name)}</span>`).join(" "); }
+function stateLabel(r){
+  return {done:`<span class="status on"><i></i>完成${r.elapsed ? "，用时 " + r.elapsed : ""}</span>`,
+          working:`<span class="status busy"><i></i>干活中 ${r.elapsed}</span>`,
+          queued:`<span class="status"><i></i>排队中，前面的做完就开始</span>`,
+          error:`<span class="status err"><i></i>出错了</span>`}[r.state] || "";
+}
+function replyBody(p, r){
+  const live = r.state === "working";
+  const steps = r.steps.length ? `<div class="steps ${live ? "open" : ""}"><button onclick="this.parentElement.classList.toggle('open')">${live ? `<span class="spin"></span>正在${esc(r.steps[r.steps.length - 1].replace(/^(读了|修改|运行|新建)/, m => ({"读了":"读","修改":"修改","运行":"运行","新建":"新建"}[m])))}` : `做了 ${r.steps.length} 步`}${ICON.chev}</button>
+    <ol>${r.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>` : "";
+  return `${steps}${r.text ? `<div class="answer">${r.text}</div>` : ""}`;
+}
+function taskHtml(p, t){
+  return `<div class="msg me"><div style="max-width:80%">
+      ${t.quote ? `<div class="quote">${seal(agentOf(t.quote.agent), "sm", false)}<span>${esc(t.quote.text)}</span></div>` : ""}
+      <div class="bubble">${chipsOf(t.to)} ${esc(t.text)}</div>
+      <div class="meta-r">${t.compare ? `<span class="tag">各做一份，对比结果</span>` : ""}<span>${t.time}</span></div></div></div>`;
+}
+function replyHtml(p, r){
+  const a = agentOf(r.agent);
+  return `<div class="msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base]}</span>${stateLabel(r)}</div>
+    ${replyBody(p, r)}
+    ${r.state === "done" ? `<div class="acts-row"><button class="link" onclick="forward('${p.id}','${r.agent}','${r.task}')">转给…</button><button class="link" onclick="toast('打开「${esc(a.name)}」在这个项目里的对话')">单独聊</button></div>` : ""}</div>`;
+}
+function compareHtml(p, t, rs){
+  return `<div class="msg"><div class="compare">${rs.map(r => {
+    const a = agentOf(r.agent);
+    return `<div class="col ${r.chosen ? "chosen" : ""}"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base]}</span></div>
+      <div style="margin:-2px 0 8px">${stateLabel(r)}</div>
+      <div class="branch">${ICON.branch}${esc(r.branch)}${r.changed ? `<span class="muted">　${esc(r.changed)}</span>` : ""}</div>
+      ${replyBody(p, r)}
+      ${r.state === "done" ? `<div class="acts-row">${r.chosen ? `<span class="status on"><i></i>已用这个，改动合并进项目目录了</span>`
+        : `<button class="btn" onclick="toast('打开改动对比')">看改动</button><button class="btn primary" onclick="choose('${p.id}','${t.id}','${r.agent}')">用这个</button><button class="link" onclick="forward('${p.id}','${r.agent}','${t.id}')">转给…</button>`}</div>` : ""}
+    </div>`; }).join("")}</div></div>`;
+}
+function renderProject(id){
+  const p = projOf(id); if (!p) return renderProjectEmpty();
+  if (!rcpt.length || rcpt.some(r => !p.members.includes(r))) rcpt = [];
+  let html = p.feed.length ? "" : `<div class="empty" style="margin-top:12vh"><h2>${esc(p.name)}</h2><p>输入 @ 选一个或几个 Agent，写上要做的事，就派出去了。</p></div>`;
+  for (const f of p.feed){
+    if (f.type === "task"){
+      html += taskHtml(p, f);
+      const rs = p.feed.filter(x => x.type === "reply" && x.task === f.id);
+      html += f.compare ? compareHtml(p, f, rs) : rs.map(r => replyHtml(p, r)).join("");
+    }
+  }
+  $("#main").innerHTML = `
+    <div class="chat-head">
+      <span class="stack lg">${p.members.slice(0, 4).map(m => seal(agentOf(m), "", false)).join("")}</span>
+      <div class="grow"><div class="name">${esc(p.name)}</div>
+        <div class="meta">${p.dir ? `<span class="path">${esc(p.dir)}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，各 Agent 在自己的工作区里干活</span>`}</div></div>
+      <button class="btn" onclick="showMembers=!showMembers;renderProject('${p.id}')">成员 ${p.members.length}</button>
+    </div>
+    <div class="proj-body">
+      <div class="proj-main">
+        <div class="thread" id="thread">${html}</div>
+        <div class="composer">
+          <div class="box">
+            ${quote ? `<div class="quote in-box">${seal(agentOf(quote.agent), "sm", false)}<span>${esc(quote.text)}</span><button class="icon-btn" aria-label="去掉引用" onclick="quote=null;renderProject('${p.id}')">✕</button></div>` : ""}
+            <div class="rcpt">${rcpt.length ? rcpt.map(r => `<span class="at">@${esc(agentOf(r).name)}<button aria-label="去掉" onclick="rcpt=rcpt.filter(x=>x!=='${r}');renderProject('${p.id}')">✕</button></span>`).join("") : `<span class="muted" style="font-size:12px">先 @ 选派给谁</span>`}</div>
+            <textarea id="input" rows="2" placeholder="输入 @ 选 Agent，再写要做的事" aria-label="派活"></textarea>
+            <div class="bar">
+              <button class="chip" onclick="atMenu(event,'${p.id}')">@ 选 Agent${ICON.down}</button>
+              ${rcpt.length > 1 ? `<span class="seg mini"><button class="${!compareMode ? "on" : ""}" onclick="compareMode=false;renderProject('${p.id}')">一起做</button><button class="${compareMode ? "on" : ""}" onclick="compareMode=true;renderProject('${p.id}')">各做一份，对比</button></span>` : ""}
+              <button class="send" aria-label="派出去" onclick="dispatch('${p.id}')">${ICON.up}</button>
+            </div>
+          </div>
+          <div class="hint">${rcpt.length > 1 ? (compareMode ? "每个 Agent 在自己的分支上做同一件事，互不影响，做完并排对比，挑一个合并。" : "几个 Agent 在同一个目录里一起做，各自负责的部分写清楚，免得改到一起。") : "Enter 派出去，Shift + Enter 换行"}</div>
+        </div>
+      </div>
+      ${showMembers ? membersPanel(p) : ""}
+    </div>`;
+  const t = $("#thread"); t.scrollTop = t.scrollHeight;
+  const i = $("#input");
+  i.addEventListener("keydown", e => {
+    if (e.key === "@" ) { setTimeout(() => atMenu({currentTarget: i, stopPropagation(){}}, p.id), 0); }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); dispatch(p.id); }
+  });
+}
+function membersPanel(p){
+  const others = agents.filter(a => !p.members.includes(a.id));
+  return `<aside class="members"><div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font:600 15px var(--song)">成员</b><button class="icon-btn" aria-label="收起" onclick="showMembers=false;renderProject('${p.id}')">✕</button></div>
+    ${p.members.map(m => { const a = agentOf(m); return `<div class="mem">${seal(a)}<span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${a.state === "busy" ? esc(a.doing) : BASE[a.base]}</span></span>
+      <button class="link" onclick="toast('打开「${esc(a.name)}」在这个项目里的对话')">单独聊</button><button class="link danger-link" onclick="removeMember('${p.id}','${m}')">移出</button></div>`; }).join("")}
+    <div class="row" style="margin-top:12px">
+      ${others.length ? `<button class="btn" onclick="addMemberMenu(event,'${p.id}')">${ICON.plus}拉人</button>` : ""}
+      <button class="btn" onclick="quickAgent('${p.id}')">${ICON.plus}新建 Agent</button></div></aside>`;
+}
+function atMenu(e, pid){
+  const p = projOf(pid);
+  pop(e, `<div class="sec">派给谁（可以多选）</div>`
+    + `<button onclick="rcpt=[...projOf('${pid}').members];closePop();renderProject('${pid}')"><span><div>所有人</div><div class="desc">${p.members.length} 个 Agent</div></span></button>`
+    + p.members.map(m => { const a = agentOf(m); const on = rcpt.includes(m);
+      return `<button onclick="event.stopPropagation();toggleRcpt('${pid}','${m}',this)">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base]}${a.state === "busy" ? "，正在干活" : ""}</div></span>${on ? `<span class="ck">✓</span>` : ""}</button>`; }).join("")
+    + `<button onclick="closePop();quickAgent('${pid}')">${ICON.plus}新建一个 Agent 拉进来</button>`);
+}
+function toggleRcpt(pid, m, btn){
+  rcpt = rcpt.includes(m) ? rcpt.filter(x => x !== m) : [...rcpt, m];
+  const ck = btn.querySelector(".ck"); if (ck) ck.remove(); else btn.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
+  const box = document.querySelector(".rcpt");
+  box.innerHTML = rcpt.length ? rcpt.map(r => `<span class="at">@${esc(agentOf(r).name)}</span>`).join("") : `<span class="muted" style="font-size:12px">先 @ 选派给谁</span>`;
+  document.addEventListener("click", function once(){ document.removeEventListener("click", once); renderProject(pid); }, {once:true});
+}
+function dispatch(pid){
+  const p = projOf(pid), v = $("#input").value.trim();
+  if (!rcpt.length) { toast("先 @ 选派给谁"); return; }
+  if (!v) { $("#input").focus(); return; }
+  const tid = "t" + Date.now(), compare = rcpt.length > 1 && compareMode;
+  p.feed.push({type:"task", id:tid, time:"刚刚", text:v, to:[...rcpt], compare, quote});
+  const rs = rcpt.map((m, k) => ({type:"reply", task:tid, agent:m, state:k === 0 || compare ? "working" : "queued", elapsed:"0 秒", steps:[], text:"",
+                                  branch: compare ? `对比/${agentOf(m).name}` : null}));
+  p.feed.push(...rs); p.last = "刚刚";
+  rcpt = []; quote = null; renderProjectList(); renderProject(pid);
+  rs.forEach((r, k) => {
+    const plan = ["读了 README.md", "搜索 “" + v.slice(0, 6) + "”", "修改 src/" + ["index", "main", "app"][k % 3] + ".ts"];
+    plan.forEach((s, j) => setTimeout(() => { r.state = "working"; r.steps.push(s); r.elapsed = (j + 1) * 2 + " 秒"; if (current.id === pid) renderProject(pid); }, 900 * (j + 1) + 400 * k));
+    setTimeout(() => { r.state = "done"; r.elapsed = (plan.length * 2 + 1) + " 秒"; r.changed = compare ? `改了 ${k + 1} 个文件，+${12 + 7 * k} −${3 + k}` : null;
+      r.text = `<p>${["按你说的做完了，改动集中在一个文件里，原来的接口没动。", "做完了。我换了个思路：先抽了一个公共函数，再改调用的地方，改动多一点但以后好维护。", "做完了，顺手补了两条测试。"][k % 3]}</p>`;
+      if (current.id === pid) renderProject(pid); renderProjectList(); }, 900 * (plan.length + 1) + 400 * k);
+  });
+}
+function choose(pid, tid, aid){
+  const p = projOf(pid);
+  p.feed.filter(f => f.type === "reply" && f.task === tid).forEach(r => r.chosen = r.agent === aid);
+  renderProject(pid); toast(`已把「${agentOf(aid).name}」的改动合并进项目目录，其他分支保留着`);
+}
+function forward(pid, aid, tid){
+  const p = projOf(pid), r = p.feed.find(f => f.type === "reply" && f.task === tid && f.agent === aid);
+  quote = {agent:aid, text:r.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 80)};
+  rcpt = []; renderProject(pid); toast("选一个 Agent，写上要它接着做什么");
+  setTimeout(() => atMenu({currentTarget: document.querySelector(".bar .chip"), stopPropagation(){}}, pid), 50);
+}
+function removeMember(pid, m){ const p = projOf(pid); p.members = p.members.filter(x => x !== m); rcpt = rcpt.filter(x => x !== m); renderProject(pid); renderProjectList(); toast("已移出，它在这个项目里的对话还留着"); }
+function addMemberMenu(e, pid){
+  const p = projOf(pid);
+  pop(e, `<div class="sec">拉进项目</div>` + agents.filter(a => !p.members.includes(a.id)).map(a =>
+    `<button onclick="closePop();projOf('${pid}').members.push('${a.id}');renderProject('${pid}');renderProjectList();toast('已拉进来')">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base]}</div></span></button>`).join(""), true);
+}
+function quickAgent(pid){
+  closePop();
+  const s = document.createElement("div"); s.className = "scrim"; s.onclick = e => { if (e.target === s) s.remove(); };
+  s.innerHTML = `<div class="dialog" role="dialog" aria-label="新建 Agent"><header><h2>新建 Agent，拉进「${esc(projOf(pid).name)}」</h2><button class="icon-btn" aria-label="关闭" onclick="this.closest('.scrim').remove()">✕</button></header>
+    <div class="body"><div class="form">
+      <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">
+      <label for="q-role">角色说明</label><textarea id="q-role" class="textarea" placeholder="它负责什么、有什么要求"></textarea>
+      <label>底座</label><div class="seg"><button class="on" onclick="this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Claude Code</button><button onclick="this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Codex</button></div>
+    </div><p class="muted" style="font-size:13px;margin:14px 0 0">它在项目目录里干活。头像、默认模型这些以后可以在 Agent 页再改。</p></div>
+    <footer><button class="btn" onclick="this.closest('.scrim').remove()">取消</button><button class="btn primary" onclick="createQuick('${pid}')">新建并拉进来</button></footer></div>`;
+  document.body.append(s); $("#q-name").focus();
+}
+function createQuick(pid){
+  const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
+  const id = "a" + Date.now(), codex = document.querySelector(".scrim .seg button:last-child").classList.contains("on");
+  agents.push({id, name, seal:[...name.replace(/\s/g, "")].slice(0, 2).join(""), color:["zhu", "huang", "lu", "zhe", "dai"][agents.length % 5], base:codex ? "codex" : "claude",
+               model:null, effort:null, role:$("#q-role").value, dir:null, state:"on", channels:{feishu:null, weixin:null}, last:"刚刚"});
+  projOf(pid).members.push(id); rcpt = [id];
+  document.querySelector(".scrim").remove(); showMembers = true; renderProject(pid); renderProjectList(); toast(`「${name}」已拉进项目，现在可以 @ 它了`);
+}
+function newProject(){
+  const picked = new Set();
+  const s = document.createElement("div"); s.className = "scrim"; s.onclick = e => { if (e.target === s) s.remove(); };
+  const draw = () => { s.innerHTML = `<div class="dialog" role="dialog" aria-label="新建项目"><header><h2>新建项目</h2><button class="icon-btn" aria-label="关闭" onclick="this.closest('.scrim').remove()">✕</button></header>
+    <div class="body"><div class="form">
+      <label for="np-name">名字</label><input id="np-name" class="input" placeholder="比如：官网改版">
+      <label>工作目录</label><div><div class="row"><input class="input" style="flex:1" placeholder="不填也行"><button class="btn" onclick="toast('打开选择文件夹窗口')">${ICON.folder}选择…</button></div>
+        <div class="help">填了的话，拉进来的 Agent 都在这个目录里干活；不填就各在各的工作区。</div></div>
+      <label>拉哪些 Agent</label><div class="picks" style="margin:0">${agents.map(a => `<button class="pick ${picked.has(a.id) ? "on" : ""}" data-id="${a.id}">${seal(a, "", false)}<span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base]}</div></span></button>`).join("")}</div>
+    </div></div>
+    <footer><button class="btn" onclick="this.closest('.scrim').remove()">取消</button><button class="btn primary" id="np-ok">新建项目</button></footer></div>`;
+    s.querySelectorAll(".pick").forEach(b => b.onclick = () => { const v = $("#np-name").value; picked.has(b.dataset.id) ? picked.delete(b.dataset.id) : picked.add(b.dataset.id); draw(); $("#np-name").value = v; });
+    $("#np-ok").onclick = () => { const name = $("#np-name").value.trim(); if (!name) { toast("先给项目起个名字"); return; }
+      const id = "p" + Date.now(); projects.unshift({id, name, dir:null, members:[...picked], last:"刚刚", feed:[]}); s.remove(); location.hash = `#/projects/${id}`; };
+  };
+  draw(); document.body.append(s); $("#np-name").focus();
+}
+
+if (!location.hash) location.hash = "#/projects/p1"; else route();
 </script>
 </body>
 </html>

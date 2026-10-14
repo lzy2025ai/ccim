@@ -160,6 +160,12 @@ body{overflow:hidden}
 .link{color:var(--qing);text-decoration:underline;text-underline-offset:3px}
 .pop{max-height:60vh;overflow:auto}
 
+.select{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 10px;border-radius:8px;
+  border:1px solid var(--line-strong);background:var(--panel);text-align:left}
+.select:hover{border-color:var(--ink-2)}
+.select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
+.select svg{width:14px;height:14px;color:var(--muted);flex:none}
+
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
 .dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
@@ -181,7 +187,7 @@ body{overflow:hidden}
 .form{display:grid;grid-template-columns:120px 1fr;gap:16px 18px;align-items:start}
 .form>label{padding-top:7px;color:var(--ink-2)}
 .form .help{font-size:12px;color:var(--muted);margin-top:4px}
-.input,.textarea,select.input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);outline:none}
+.input,.textarea{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);outline:none}
 .input:focus,.textarea:focus{border-color:var(--qing)}
 .textarea{min-height:96px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -464,16 +470,36 @@ function supplement(cid){
 }
 
 // ---- 模型、思考深度 ----
-function closePop(){ document.querySelectorAll(".pop").forEach(p => p.remove()); }
+function closePop(){ document.querySelectorAll(".pop").forEach(p => p.remove()); document.querySelectorAll(".select[aria-expanded=true]").forEach(b => b.setAttribute("aria-expanded", "false")); }
+
+// ---- 下拉框：不用原生 select（系统样式和页面不搭，也放不下选项说明） ----
+const EFF_DESC = {low:"快，适合简单的事",medium:"日常够用",high:"想得更周全",xhigh:"更深入",max:"最深入，最慢",minimal:"几乎不思考，最快"};
+const DD = {};
+function dd(id, opts, value){
+  DD[id] = {opts, value};
+  const cur = opts.find(o => o[0] === value) || opts[0];
+  return `<button type="button" class="select" id="dd-${id}" aria-haspopup="listbox" aria-expanded="false" onclick="openDD(event,'${id}')"><span>${esc(cur[1])}</span>${ICON.down}</button>`;
+}
+function openDD(e, id){
+  const d = DD[id], btn = e.currentTarget;
+  pop(e, d.opts.map(([v, l, ds]) => `<button role="option" aria-selected="${d.value === v}" onclick="pickDD('${id}','${v}')"><span><div>${esc(l)}</div>${ds ? `<div class="desc">${esc(ds)}</div>` : ""}</span>${d.value === v ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+  btn.setAttribute("aria-expanded", "true");
+}
+function pickDD(id, v){
+  DD[id].value = v; closePop();
+  document.querySelector(`#dd-${id} span`).textContent = DD[id].opts.find(o => o[0] === v)[1];
+}
 function pop(e, html, below){
   e.stopPropagation(); closePop();
   const p = document.createElement("div"); p.className = "pop"; p.innerHTML = html; document.body.append(p);
   const r = e.currentTarget.getBoundingClientRect();
+  if (below) p.style.minWidth = r.width + "px";
   p.style.left = Math.max(10, Math.min(r.left, innerWidth - p.offsetWidth - 10)) + "px";
   const up = r.top - p.offsetHeight - 6;
   p.style.top = (below || up < 10 ? r.bottom + 6 : up) + "px";
 }
 addEventListener("click", closePop);
+addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
 function pickModel(e, cid){
   const c = chats.find(x => x.id === cid), ef = effective(c);
   pop(e, `<div class="sec">模型</div>` + MODELS[ef.base].map(([k, n, d]) =>
@@ -613,8 +639,8 @@ function formHtml(a){
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。">${esc(fd.role)}</textarea>
       <div class="help">每次和它对话都会带上这段话。</div></div>
     <label>底座</label><div class="seg"><button data-base="claude" class="${fd.base === "claude" ? "on" : ""}" onclick="fd.base='claude';this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Claude Code</button><button data-base="codex" class="${fd.base === "codex" ? "on" : ""}" onclick="fd.base='codex';this.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">Codex</button></div>
-    <label>默认模型</label><select class="input"><option>跟随全局设置</option>${MODELS[fd.base].map(([k, n]) => `<option ${fd.model === k ? "selected" : ""}>${n}</option>`).join("")}</select>
-    <label>默认思考深度</label><select class="input"><option>跟随全局设置</option>${EFFORTS[fd.base].map(k => `<option ${fd.effort === k ? "selected" : ""}>${k}</option>`).join("")}</select>
+    <label>默认模型</label>${dd("f-model", [["", "跟随全局设置", "用设置里的默认模型"], ...MODELS[fd.base]], fd.model || "")}
+    <label>默认思考深度</label>${dd("f-effort", [["", "跟随全局设置", "用设置里的默认思考深度"], ...EFFORTS[fd.base].map(k => [k, k, EFF_DESC[k]])], fd.effort || "")}
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" name="dir" class="input" style="flex:1" value="${esc(fd.dir || "")}" placeholder="不填也行"><button class="btn" onclick="toast('打开选择文件夹窗口')">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
     <span></span><div class="row" style="margin-top:6px">
@@ -647,11 +673,11 @@ function renderSettings(){
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
     <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置。</div></div></div>
     <div class="pane"><div class="sect"><h3>Claude Code</h3><div class="form">
-      <label>模型</label><select class="input"><option>跟随 Claude Code 设置（opus）</option>${MODELS.claude.map(([k, n]) => `<option>${n}</option>`).join("")}</select>
-      <label>思考深度</label><select class="input"><option>跟随 Claude Code 设置（high）</option>${EFFORTS.claude.map(k => `<option>${k}</option>`).join("")}</select></div></div>
+      <label>模型</label>${dd("g-cm", [["", "跟随 Claude Code 设置（opus）", "和终端里的 claude 一致"], ...MODELS.claude], "")}
+      <label>思考深度</label>${dd("g-ce", [["", "跟随 Claude Code 设置（high）", "和终端里的 claude 一致"], ...EFFORTS.claude.map(k => [k, k, EFF_DESC[k]])], "")}</div></div>
       <div class="sect"><h3>Codex</h3><div class="form">
-      <label>模型</label><select class="input"><option>跟随 Codex 设置（gpt-6-sol）</option>${MODELS.codex.map(([k, n]) => `<option>${n}</option>`).join("")}</select>
-      <label>思考深度</label><select class="input"><option>跟随 Codex 设置（medium）</option>${EFFORTS.codex.map(k => `<option>${k}</option>`).join("")}</select></div></div>
+      <label>模型</label>${dd("g-xm", [["", "跟随 Codex 设置（gpt-6-sol）", "和终端里的 codex 一致"], ...MODELS.codex], "")}
+      <label>思考深度</label>${dd("g-xe", [["", "跟随 Codex 设置（medium）", "和终端里的 codex 一致"], ...EFFORTS.codex.map(k => [k, k, EFF_DESC[k]])], "")}</div></div>
       <button class="btn primary" onclick="toast('已保存')">保存</button></div></div>`;
 }
 

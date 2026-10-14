@@ -31,6 +31,15 @@ RECONNECT = "网络不稳，重连中"
 SEND_RE = re.compile(r"^\s*\[发送文件\]\s*(.+?)\s*$", re.M)
 
 
+def _readable(msg):
+    """Codex 把服务端的错误原样包成 JSON 字符串，取出里面那句话。"""
+    try:
+        d = json.loads(msg)
+        return (d.get("error") or {}).get("message") or d.get("message") or msg
+    except (ValueError, TypeError, AttributeError):
+        return msg
+
+
 def find_codex():
     """ChatGPT 桌面版自带的 codex 不依赖 Node，后台进程里也能跑；没有再找 nvm 装的（直接用里面的原生程序，不经过 node）。"""
     app = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
@@ -88,8 +97,8 @@ class CodexChat(Chat):
     SID_KEY = "codex_session_id"
 
     def __init__(self, bridge, chat_id, chat_type, fork_from=None):
-        super().__init__(bridge, chat_id, chat_type, None)   # Codex 不支持从别的对话分支出来
-        self.fork_from = self.fork_at = None
+        super().__init__(bridge, chat_id, chat_type, fork_from)
+        self.fork_at = None                   # Codex 分支只能从整个对话分，不能截到某条消息
         self.proc = None
 
     # ----- 和 Claude Code 不同的几处 -----
@@ -138,6 +147,8 @@ class CodexChat(Chat):
                     args.append(f"--image={p}")   # 不能写成「-i 路径」：-i 能接多个文件，会把后面的消息也当成图片吞掉
             if self.session_id:
                 args += ["resume", self.session_id, prompt]
+            elif self.fork_from:              # 接着别处的对话聊：另开一个分支，原来那个不受影响
+                args += ["fork", self.fork_from, prompt]
             else:
                 args.append(prompt_note(NOTE, self.b.channel) + role_note(self.b.entry).lstrip() + "\n\n" * bool(role_note(self.b.entry)) + prompt)
             self.proc = await asyncio.create_subprocess_exec(
@@ -154,7 +165,8 @@ class CodexChat(Chat):
                 if kind == "thread.started" and ev.get("thread_id"):
                     if ev["thread_id"] != self.session_id:
                         self.session_id = ev["thread_id"]
-                        self.b.save(self.chat_id, **{self.SID_KEY: self.session_id})
+                        self.fork_from = None
+                        self.b.save(self.chat_id, fork_from=None, **{self.SID_KEY: self.session_id})
                 elif kind == "item.started":
                     d = describe(item)
                     if d:
@@ -176,7 +188,7 @@ class CodexChat(Chat):
                 elif kind == "turn.failed":
                     msg = (ev.get("error") or {}).get("message") if isinstance(ev.get("error"), dict) else ev.get("message")
                     if not self.stopping:
-                        error = msg or last_error or "Codex 出错了"
+                        error = _readable(msg or last_error) or "Codex 出错了"
             await self.proc.wait()
             stderr = (await err_task).decode("utf-8", "replace")
             if not result and t.text and not error:

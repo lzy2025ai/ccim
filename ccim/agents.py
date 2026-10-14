@@ -60,7 +60,10 @@ def seal_of(name):
     """印章上的字：名字里的前两个字（中文）或前两个字母。"""
     chars = [c for c in (name or "") if not c.isspace() and c not in "-_·.()（）「」"]
     han = [c for c in chars if "一" <= c <= "鿿"]
-    return "".join((han or chars)[:2]) or "新"
+    if han:
+        return "".join(han[:2])
+    letters = [c for c in chars if c.isalpha()]
+    return (letters[0].upper() if letters else "".join(chars[:1])) or "新"   # 英文名刻一个大写首字母
 
 
 def _new_id(name):

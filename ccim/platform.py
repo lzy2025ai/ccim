@@ -284,8 +284,8 @@ class Platform:
                     raise Problem("找不到这个文件夹。")
             rec["temp"] = {"base": t.get("base") if t.get("base") in ("claude", "codex") else "claude", "dir": d or None,
                            "model": t.get("model") or None, "effort": t.get("effort") or None}
-        if fork_from:
-            rec.update(fork_from=fork_from, source=source)
+        if fork_from:                         # 接着别处的对话聊：origin 留着，网页里把之前的内容也显示出来
+            rec.update(fork_from=fork_from, origin=fork_from, source=source)
         if title:
             rec["title"] = title
         chats = self.chats()
@@ -355,19 +355,90 @@ class Platform:
         t = m.get("temp") or {}
         return {"id": cid, "title": m.get("title") or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
-                "dir": (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")), "source": m.get("source"),
+                "dir": (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")), "source": "网页",
+                "origin_source": m.get("source"),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
+        if cid.startswith("x:"):
+            return self.external_detail(cid)
         v = self.chat_view(cid)
         v["log"] = self.channel.logs.read(cid)
         v["progress"] = self.channel.progress_of.get(cid)
+        m = self.meta(cid)
+        if m.get("origin"):
+            from . import history
+            a = agents.get(m["agent"]) if m.get("agent") else None
+            v["earlier"] = history.read(v["base"], m["origin"], agents.cwd(a) if a else None)
         return v
 
     def chat_list(self):
-        rows = [self.chat_view(cid) for cid in self.chats()]
+        rows = [self.chat_view(cid) for cid in self.chats()] + self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
+
+    # ----- 飞书、微信、终端里的对话 -----
+
+    def external_chats(self, aid=None, terminal=False):
+        """各 Agent 在飞书、微信里的对话（terminal=True 时加上终端、桌面端里开的）。网页里接着聊过的不重复列。"""
+        mine = set()                          # 网页对话自己的会话（接着别处聊出来的分支有新编号，原来那个照常列出）
+        for c in self.chats().values():
+            mine |= {c.get("session_id"), c.get("codex_session_id")}
+        rows = []
+        for a_id, a in agents.all_agents().items():
+            if aid and a_id != aid:
+                continue
+            a = dict(a, id=a_id)
+            base, cwd = a.get("base") or "claude", agents.cwd(a)
+            key = "codex_session_id" if base == "codex" else "session_id"
+            for where, k, c in registry.all_chats(cwd):
+                sid = c.get(key)
+                if not sid or sid in mine:
+                    continue
+                mine.add(sid)
+                kind = "群「%s」" % c["name"] if c.get("name") else "群聊" if c.get("type") == "group" else "私聊"
+                from . import history
+                t = c.get("title") or history.title(base, sid, cwd) or f"{where}{kind}"
+                rows.append({"id": "x:" + sid, "sid": sid, "agent": a_id, "agent_name": a["name"], "source": where,
+                             "title": t, "last_active": c.get("last_active"),
+                             "busy": bool(c.get("busy")), "base": base, "external": True, "dir": a.get("dir")})
+            if terminal and base == "claude":
+                try:
+                    from claude_agent_sdk import list_sessions
+                    sessions = list_sessions(directory=cwd, limit=15)
+                except Exception:
+                    sessions = []
+                for x in sessions:
+                    if x.session_id in mine:
+                        continue
+                    mine.add(x.session_id)
+                    title = " ".join((x.custom_title or x.summary or x.first_prompt or "终端里的对话").split())[:30]
+                    rows.append({"id": "x:" + x.session_id, "sid": x.session_id, "agent": a_id, "agent_name": a["name"],
+                                 "source": "终端", "title": title, "base": base, "external": True, "busy": False,
+                                 "last_active": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x.last_modified / 1000)),
+                                 "dir": a.get("dir")})
+        return rows
+
+    def _external(self, cid):
+        sid = cid[2:]
+        for r in self.external_chats(terminal=True):
+            if r["sid"] == sid:
+                return r
+        raise Problem("找不到这个对话。")
+
+    def external_detail(self, cid):
+        from . import history
+        r = self._external(cid)
+        a = agents.get(r["agent"])
+        return dict(r, log=history.read(r["base"], r["sid"], agents.cwd(a)), progress=None, readonly=True,
+                    model=None, effort=None, temp=False)
+
+    def continue_chat(self, cid, text, files):
+        """在网页里接着别处的对话聊：另开一个网页对话，从那个对话分支出来，原来那边不受影响。"""
+        r = self._external(cid)
+        new = self.new_chat(agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
+        send(self, new, text, files)
+        return {"id": new}
 
     def run(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
@@ -494,6 +565,7 @@ def _handler(pf):
             routes = {
                 "/api/chat/new": lambda: {"id": pf.new_chat(agent=b("agent"), temp=b("temp"))},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or []),
+                "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
@@ -617,7 +689,8 @@ def agent_view(pf, aid, detail=False):
     view["last_active"] = max([c.get("last_active") or "" for c in pf.chats().values() if c.get("agent") == aid] +
                               [c.get("last_active") or "" for _, _, c in registry.all_chats(agents.cwd(a))] + [""]) or None
     if detail:
-        view["chats"] = [pf.chat_view(cid) for cid, c in pf.chats().items() if c.get("agent") == aid]
+        view["chats"] = [pf.chat_view(cid) for cid, c in pf.chats().items() if c.get("agent") == aid] + \
+            pf.external_chats(aid, terminal=True)
         view["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
     return view
 

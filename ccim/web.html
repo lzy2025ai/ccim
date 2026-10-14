@@ -499,9 +499,14 @@ function renderChatList(){
         const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.agent_name || "临时对话")}</span>`;
         return `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">
           ${seal(a, "", false)}<span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
-          <span class="when">${when(c.last_active)}</span></a>`;
+          <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span>${srcTag(c.source)}</span></a>`;
       }).join("");
     }).join("") : `<p class="muted" style="padding:10px">${chatFilter ? "没有找到。" : "还没有对话。"}</p>`}</div>`;
+}
+function srcTag(src){
+  if (!src) return "";
+  const cls = src.startsWith("飞书") ? "feishu" : src.startsWith("微信") ? "weixin" : src === "网页" ? "web" : "term";
+  return `<span class="tag ${cls}">${esc(src)}</span>`;
 }
 function renderChatEmpty(){
   $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>选好 Claude Code 或 Codex 就能开始；想找某个 Agent，去 Agent 页。</p>
@@ -558,7 +563,9 @@ function liveHtml(){
 function drawThread(){
   const t = $("#thread"); if (!t) return;
   const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
-  t.innerHTML = detail.log.map(recHtml).join("") + liveHtml();
+  const earlier = (detail.earlier || []).map(recHtml).join("");
+  t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
+    + detail.log.map(recHtml).join("") + liveHtml();
   if (near) t.scrollTop = t.scrollHeight;
 }
 function drawChat(){
@@ -567,11 +574,12 @@ function drawChat(){
     <div class="chat-head">${seal(a)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>
+        <span class="tag">${BASE[c.base]}</span>${srcTag(c.source)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
-      <button class="icon-btn" aria-label="更多" onclick="chatMenu(event)">${ICON.more}</button>
+      ${c.readonly ? "" : `<button class="icon-btn" aria-label="更多" onclick="chatMenu(event)">${ICON.more}</button>`}
     </div>
+    ${c.readonly ? `<div class="notice">这个对话来自${esc(c.source)}。在这里接着聊会另开一个分支，${esc(c.source)}那边的对话不受影响。</div>` : ""}
     <div class="thread" id="thread"></div>
     <div class="composer">
       <div class="box" id="box">
@@ -597,14 +605,16 @@ function drawChat(){
 }
 function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
-  $("#input").placeholder = c.busy ? "补充说明，它做完当前这一步就会看到" : `给 ${c.agent_name || BASE[c.base]} 发消息`;
+  $("#input").placeholder = c.readonly ? "在这里接着聊" : c.busy ? "补充说明，它做完当前这一步就会看到" : `给 ${c.agent_name || BASE[c.base]} 发消息`;
+  if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
   $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}`;
   $("#chip-effort").innerHTML = `思考 ${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}`;
   const s = $("#send");
   s.className = "send" + (c.busy ? " stop" : "");
   s.innerHTML = c.busy ? ICON.stop : ICON.up;
   s.setAttribute("aria-label", c.busy ? "停下" : "发送");
-  s.onclick = c.busy && !$("#input").value.trim() && !pendingFiles.length ? stopChat : sendChat;
+  s.onclick = c.readonly ? sendChat : c.busy && !$("#input").value.trim() && !pendingFiles.length ? stopChat : sendChat;
+  if (c.readonly) { s.className = "send"; s.innerHTML = ICON.up; }
   $("#input").oninput = drawComposerState;
 }
 async function sendChat(){
@@ -612,6 +622,10 @@ async function sendChat(){
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
   $("#input").value = ""; pendingFiles = []; drawPending();
+  if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
+    const {id} = await act(() => api("/api/chat/continue", {id: detail.id, text: v, files}));
+    await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`; return;
+  }
   if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: ""}; }
   drawThread(); drawComposerState();
   await act(() => api("/api/chat/send", {id: detail.id, text: v, files}));
@@ -777,7 +791,7 @@ async function renderAgent(id){
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
         ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
       </div>
-      <div class="sect"><h3>对话</h3>${a.chats.length ? a.chats.map(c => `<a class="chat-row" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">${c.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(c.title)}</span><span class="muted" style="font-size:12px">${when(c.last_active)}</span></a>`).join("")
+      <div class="sect"><h3>对话</h3>${a.chats.length ? a.chats.map(c => `<a class="chat-row" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">${srcTag(c.source || "网页")}${c.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(c.title)}</span><span class="muted" style="font-size:12px">${when(c.last_active)}</span></a>`).join("")
         : `<p class="muted">还没有对话。</p>`}</div>
       <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd></dl></div>
     </div>`}</div>`;

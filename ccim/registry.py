@@ -94,6 +94,8 @@ def find(name_or_path):
     hits = [(k, v) for k, v in data.items() if os.path.basename(k) == name_or_path and v.get("kind") != "weixin"]
     if not hits:
         hits = [(k, v) for k, v in data.items() if v.get("bot_name") == name_or_path]
+    if not hits and name_or_path in ("智能体平台", "平台", "网页", "web"):
+        hits = [(k, v) for k, v in data.items() if v.get("kind") == "platform"]
     if len(hits) == 1:
         return hits[0]
     if len(hits) > 1:

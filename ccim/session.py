@@ -314,11 +314,16 @@ class Chat:
                 log.debug("断开出错", exc_info=True)
 
     async def _turn(self, prompt, reply_to):
-        self.b.save(self.chat_id, busy=True)  # 桌面端同步飞书内容时，据此跳过还没答完的这一轮
+        # busy：桌面端同步飞书内容时，据此跳过还没答完的这一轮；asked / since / steps 给 ccim web 显示它在做什么
+        self.b.save(self.chat_id, busy=True, asked=short(str(prompt), 80), since=registry.now(), steps=[])
+        if not self.b.saved(self.chat_id).get("title"):
+            self.b.save(self.chat_id, title=short(str(prompt), 30))   # 第一句话当标题，ccim web 里区分各个话题
+        pub = asyncio.create_task(self._publish())
         try:
             await self._turn_inner(prompt, reply_to)
         finally:
-            self.b.save(self.chat_id, busy=False)
+            pub.cancel()
+            self.b.save(self.chat_id, busy=False, asked=None, since=None, steps=[])
             for fn in (self.turn.on_end if self.turn else []):
                 fn()
 
@@ -439,6 +444,15 @@ class Chat:
         if answer:
             log.info("→ 回复 %d 字，用时 %.1f 秒（启动会话 %.1f 秒）%s", len(answer or ""), time.monotonic() - t.start,
                      (t.ready or t.start) - t.start, f"，{len(t.steps)} 步" if t.steps else "")
+
+    async def _publish(self):
+        last = []
+        while True:
+            await asyncio.sleep(2)
+            steps = list(self.turn.steps[-4:]) if self.turn else []
+            if steps != last:
+                last = steps
+                self.b.save(self.chat_id, steps=steps)
 
     async def _tick(self, t, reply_to):
         if not self.b.channel.cards:          # 消息发出去改不了的渠道：干活时只显示「正在输入」

@@ -4,6 +4,7 @@
     ccim start|stop|restart [项目]   后台常驻 / 关停 / 重启
     ccim list                  所有已配对项目和在线状态
     ccim logs [项目] [-f]       查看日志
+    ccim web                   在浏览器里打开控制台
     ccim config [项目] 键=值     group=owner|all、model=、effort=
     ccim unpair [项目]          解除配对
 """
@@ -161,7 +162,7 @@ def _apply_agent(path, agent):
     return True
 
 
-def add_weixin(path, name, agent, model=None, effort=None):
+def add_weixin(path, name, agent, model=None, effort=None, show=None):
     """ccim --weixin：扫码，扫的哪个微信就加到哪个（已经登录过的不会重复登录）。
     ccim --weixin 名字：不扫码，直接加到这个已登录的微信号；还没有这个名字就扫码登录一个新的。"""
     from . import weixin_hub
@@ -169,7 +170,7 @@ def add_weixin(path, name, agent, model=None, effort=None):
     if not hub:
         if name:
             print(f"还没有叫「{name}」的微信号，扫码登录一个。")
-        hub, e, existed, changed = weixin_hub.login(name)
+        hub, e, existed, changed = weixin_hub.login(name, show=show)
         if existed and changed and daemon.running(hub):   # 重新扫码后旧的登录凭证马上失效，后台进程要换上新的
             print("重启一下这个微信，用上新的登录…", flush=True)
             daemon.stop(hub)
@@ -744,6 +745,11 @@ def cmd_config(args):
     print("已保存。" + ("正在运行的要重启才生效：ccim restart " + os.path.basename(path) if daemon.running(path) else ""))
 
 
+def cmd_web(args):
+    from . import web
+    web.serve(args.port, open_browser=not args.no_open)
+
+
 def cmd_unpair(args):
     path, entry = _need(args.project)
     if entry.get("kind") == "weixin":
@@ -823,6 +829,10 @@ def parser():
     s.add_argument("items", nargs="*")
     s.add_argument("--global", dest="globally", action="store_true", help="设全局默认（model、effort），所有项目都用")
     s.set_defaults(fn=cmd_config)
+    s = sub.add_parser("web", help="在浏览器里打开控制台：看各项目状态、接入新项目、启动停止、改设置")
+    s.add_argument("--port", type=int, default=8977, help="端口（默认 8977，被占用就往后找）")
+    s.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
+    s.set_defaults(fn=cmd_web)
     s = sub.add_parser("promote", help="验收通过后：把当前代码装成稳定版，逐个升级跑稳定版的项目")
     s.set_defaults(fn=cmd_promote)
     s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程

@@ -130,6 +130,7 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim handback` | Back at the computer, run in the same conversation: bring in what happened in Feishu |
 | `ccim resume [project] [id]` | Continue a Feishu conversation in your terminal; defaults to the most recent one |
 | `ccim ask project "task"` | For agents: give the project's Claude / Codex a task and print the answer when done; see below |
+| `ccim web` | Open the console in your browser: project status, connect new projects, start, stop, settings, logs |
 | `ccim logs [project] [-f]` | Show background logs |
 | `ccim config [project] key=value` | Project settings, see below |
 | `ccim unpair [project]` | Unpair |

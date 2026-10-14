@@ -50,6 +50,10 @@
   asks/<编号>.json，进程每秒取；`Bridge.ask` 在聊天里发「[谁 派的任务] …」、按普通消息排队（不插进正在做的一轮，
   因为要单独拿结果）。任务是 `session.Task`（str 子类，带 future），`Chat._finish` 记下 outcome，`_work` 结束时交给它；
   /stop 清队列时也会结束。命令行等结果时看 status 里的进程号，进程没了就不再等。退出码 0 / 2 / 3 / 4 / 1
+- `ccim/web.py` + `ccim/web.html`：`ccim web` 本机控制台（#6）。标准库 http.server，只听 127.0.0.1；Host 必须是本机、接口要带 X-CCIM 头
+  （挡别的网页跨站调用）。页面是单个 HTML，每 3 秒轮询 /api/overview。扫码接入在线程里跑 `cli.pair` / `cli.add_weixin`，
+  二维码经 show 回调交给网页。项目设置只有一份：飞书登记和各微信号 projects 里一起改，改完没在干活的进程自动重启。
+  「它在做什么」来自 session `_publish`：干活时把 asked / since / steps（最近 4 步）写进聊天状态；话题标题是第一句话（title）
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

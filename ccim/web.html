@@ -192,7 +192,8 @@ body{overflow:hidden}
 .branch{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--ink-2);margin-bottom:8px}
 .proj-body{flex:1;min-height:0;display:flex}
 .proj-main{flex:1;min-width:0;display:flex;flex-direction:column}
-.proj-main .msg,.proj-main .composer{max-width:860px}
+.proj-main .msg,.proj-main .composer{max-width:1180px}
+.proj-main .msg:has(.compare){max-width:none}          /* 对比几栏并排：用满宽度 */
 .members{width:280px;flex:none;border-left:1px solid var(--line);padding:16px;overflow:auto;background:var(--paper)}
 .mem{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .mem .title,.mem .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -262,7 +263,8 @@ body{overflow:hidden}
 @media (max-width:760px){.app{grid-template-columns:1fr}.rail,.list{display:none}}
 /* ---------- 正式版补充 ---------- */
 .answer{min-width:0;overflow-wrap:anywhere}
-.answer table{display:block;max-width:100%;overflow-x:auto}
+.answer table{display:block;max-width:100%;overflow-x:auto;overflow-wrap:normal}
+.answer th,.answer td{min-width:3.5em}
 .answer pre{max-width:100%;white-space:pre}
 .answer code{overflow-wrap:anywhere}
 .compare{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)) !important}
@@ -281,6 +283,7 @@ body{overflow:hidden}
 .answer table{border-collapse:collapse;margin:6px 0 12px;font-size:13px}
 .answer th,.answer td{border:1px solid var(--line);padding:5px 9px;text-align:left}
 .answer th{background:var(--paper)}
+.answer hr{border:0;border-top:1px solid var(--line);margin:12px 0}
 .answer blockquote{margin:0 0 10px;padding:2px 12px;border-left:3px solid var(--line-strong);color:var(--muted)}
 .answer a{color:var(--qing)}
 .answer img{max-width:100%;border-radius:8px}
@@ -418,6 +421,7 @@ function md(src){
       continue;
     }
     let m;
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l)){ out.push("<hr>"); i++; continue; }
     if ((m = l.match(/^(#{1,6})\s+(.*)/))){ out.push(`<h3>${inline(m[2])}</h3>`); i++; continue; }
     if (/^\s*([-*]|\d+\.)\s+/.test(l)){
       const ordered = /^\s*\d+\./.test(l), items = [];
@@ -431,7 +435,8 @@ function md(src){
     }
     if (!l.trim()){ i++; continue; }
     const buf = [];
-    while (i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|\s*([-*]|\d+\.)\s|>)/.test(lines[i])) buf.push(inline(lines[i++]));
+    const tableAt = k => /^\s*\|.*\|\s*$/.test(lines[k]) && k + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[k + 1]) && lines[k + 1].includes("-");
+    while (i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|\s*([-*]|\d+\.)\s|>)/.test(lines[i]) && !tableAt(i)) buf.push(inline(lines[i++]));
     out.push(`<p>${buf.join("<br>")}</p>`);
   }
   return out.join("");

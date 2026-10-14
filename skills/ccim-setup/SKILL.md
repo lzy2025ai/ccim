@@ -99,6 +99,12 @@ More WeChat commands:
 | Remove a project from WeChat | `ccim weixin remove <project>` (`--from <name>` for one account only) |
 | Log out an account | `ccim weixin logout <name>` |
 
+## The web UI
+
+`ccim web` opens ccim in the user's browser: chat with Claude Code / Codex like the desktop apps, create and manage
+agents (name, role, base, default model, optional working folder), and connect an agent to Feishu or WeChat by scanning
+a QR code there. If the user would rather click than run commands, point them to it.
+
 ## Check that it works
 
 - `ccim list` should show the project (Feishu) or the WeChat account as 在线.

@@ -84,6 +84,22 @@ In Claude Code, run:
 
 Then, in any project, tell Claude "I'm heading out, move this to Feishu" and it hands the current conversation off; when you're back, say "I'm back" and it brings in what happened in Feishu. If the project isn't paired yet, a QR code opens in your browser and pairing happens once you scan it. Other agents can read [skills/feishu-handoff/SKILL.md](skills/feishu-handoff/SKILL.md) directly.
 
+## Web
+
+```bash
+ccim web
+```
+
+Opens ccim in your browser (only on this Mac); it keeps running in the background after login.
+
+- **Chats**: click "新对话" and start typing; pick Claude Code or Codex, the model, effort level and a working folder
+  (optional) below the input box. Answers stream in, each step can be expanded, approvals are buttons, and you can attach
+  images and files. Chats from Feishu, WeChat and the terminal show up too; continuing one here starts a branch and
+  leaves the original untouched.
+- **Agents**: long-lived agents with a name, role description, base (Claude Code / Codex), default model and an optional
+  working folder. Existing projects were turned into agents automatically. Chat with them or connect them to Feishu / WeChat.
+- **Settings**: default model and effort level for Claude Code and for Codex.
+
 ## In Feishu
 
 | You | What happens |
@@ -130,7 +146,7 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim handback` | Back at the computer, run in the same conversation: bring in what happened in Feishu |
 | `ccim resume [project] [id]` | Continue a Feishu conversation in your terminal; defaults to the most recent one |
 | `ccim ask project "task"` | For agents: give the project's Claude / Codex a task and print the answer when done; see below |
-| `ccim web` | Open the console in your browser: project status, connect new projects, start, stop, settings, logs |
+| `ccim web` | Open ccim in your browser: chat with Claude Code / Codex, manage agents, connect them to Feishu / WeChat |
 | `ccim logs [project] [-f]` | Show background logs |
 | `ccim config [project] key=value` | Project settings, see below |
 | `ccim unpair [project]` | Unpair |

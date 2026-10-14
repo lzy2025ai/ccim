@@ -50,10 +50,20 @@
   asks/<编号>.json，进程每秒取；`Bridge.ask` 在聊天里发「[谁 派的任务] …」、按普通消息排队（不插进正在做的一轮，
   因为要单独拿结果）。任务是 `session.Task`（str 子类，带 future），`Chat._finish` 记下 outcome，`_work` 结束时交给它；
   /stop 清队列时也会结束。命令行等结果时看 status 里的进程号，进程没了就不再等。退出码 0 / 2 / 3 / 4 / 1
-- `ccim/web.py` + `ccim/web.html`：`ccim web` 本机控制台（#6）。标准库 http.server，只听 127.0.0.1；Host 必须是本机、接口要带 X-CCIM 头
-  （挡别的网页跨站调用）。页面是单个 HTML，每 3 秒轮询 /api/overview。扫码接入在线程里跑 `cli.pair` / `cli.add_weixin`，
-  二维码经 show 回调交给网页。项目设置只有一份：飞书登记和各微信号 projects 里一起改，改完没在干活的进程自动重启。
-  「它在做什么」来自 session `_publish`：干活时把 asked / since / steps（最近 4 步）写进聊天状态；话题标题是第一句话（title）
+- 智能体平台（#7，方案 docs/智能体平台-产品方案.md）：`ccim web` 打开。
+  - `ccim/agents.py`：Agent 登记表 ~/.ccim/agents.json（名字、印章、角色说明、底座、默认模型和思考深度、工作目录可空）。
+    Agent 是设置的唯一来源，改了同步写回它关联的飞书登记、微信号 projects（agent_id 指回来；`_sync`）；命令行改项目设置用
+    `absorb` 记回 Agent。老「项目」在任意 ccim 命令时 `migrate` 成 Agent。角色说明经 `session.role_note` 进系统提示（飞书、微信也生效）
+  - `ccim/platform.py`：平台进程（登记表 kind=platform，路径 ~/.ccim/platform，daemon / 安全重启照常用）。asyncio 主循环跑对话，
+    HTTP（ThreadingHTTPServer）在线程里，用 run_coroutine_threadsafe 交回主循环；/api/events 是 SSE。
+    `WebChannel`：cards=False、live=True —— Chat `_tick` 每 0.3 秒推 progress（步骤、正在写的字），`_finish` 先推最终步骤再 send_text，
+    渠道把两者合成一条 answer。每个网页对话一份记录 web/<对话>.jsonl（user / answer / note / card / file）。
+    网页对话的状态在平台 state.json 的 chats（agent 或 temp 设置、origin 等）。Agent 对话共用 Agent 的 Bridge；临时对话各一个 Bridge
+  - 飞书、微信、终端里的对话：`registry.all_chats` + `list_sessions`，内容由 `ccim/history.py` 从 Claude Code / Codex 的对话记录读出来；
+    网页里接着聊 = 新网页对话 fork（Codex 用 `codex exec fork`），原来那个照常列出
+  - `ccim/web.py`：原控制台的渠道管理（启动停止、日志、断开、扫码接入 Job）被平台接口复用；接入成功后 `agents.link`
+  - `ccim/web.html`：单页，原型在 docs/prototype/。界面不用浏览器原生控件（下拉、确认框都是自己画的）
+- `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；
   读 Claude Code 自己的设置（`claude_defaults`），只用于显示

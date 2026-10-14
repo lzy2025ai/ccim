@@ -1,6 +1,6 @@
 {
   "name": "ccim",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Connect Claude Code or Codex to Feishu / Lark or WeChat, and hand off a conversation to your phone",
   "author": { "name": "lzy2025ai" },
   "homepage": "https://github.com/lzy2025ai/ccim",

@@ -1412,7 +1412,7 @@ function drawScheduleForm(){
         <div class="row" style="margin-top:10px">
           ${d.freq === "weekly" ? `<span class="weekdays">${WEEK.map((w, i) => `<button class="${d.days.includes(i) ? "on" : ""}" data-d="${i}" aria-label="周${w}">${w}</button>`).join("")}</span>` : ""}
           ${d.freq === "monthly" ? `<span style="width:120px">${dd("sd-dom", Array.from({length: 28}, (_, i) => [String(i + 1), `${i + 1} 号`, ""]), String(d.dom), v => sd.dom = +v)}</span>` : ""}
-          ${d.freq === "once" ? `<span style="width:170px">${dd("sd-date", dates, d.date, v => sd.date = v)}</span>` : ""}
+          ${d.freq === "once" ? `<span style="width:170px">${dd("sd-date", dates, dates.some(x => x[0] === d.date) ? d.date : (sd.date = dates[0][0]), v => sd.date = v)}</span>` : ""}
           <span style="width:110px">${dd("sd-h", hours, hh, v => sd.time = v + ":" + sd.time.split(":")[1])}</span>
           <span style="width:110px">${dd("sd-m", mins, mins.some(x => x[0] === mm) ? mm : "00", v => sd.time = sd.time.split(":")[0] + ":" + v)}</span>
         </div></div>

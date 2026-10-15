@@ -23,7 +23,11 @@ async def send_once(path, entry, text, chat_id=None):
     try:
         if chat_id:
             await ch.send_text(chat_id, text)
-        else:
-            await ch.send_to_user(entry["owner_open_id"], text)
+        else:                                 # 私聊主人：第一段开启私聊，剩下的按普通消息发（会自动拆条）
+            from .base import split_text
+            parts = split_text(text, 3000)
+            cid = await ch.send_to_user(entry["owner_open_id"], parts[0])
+            if cid and len(parts) > 1:
+                await ch.send_text(cid, "\n".join(parts[1:]))
     finally:
         await ch.stop()

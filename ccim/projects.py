@@ -219,6 +219,7 @@ class Projects:
         return {"task": tid}
 
     def _ensure_chat(self, cid, aid, pid, name, cwd):
+        self.pf.store.deleted.discard(cid)     # 用户在对话页删过：重新开
         chats = self.pf.chats()
         if cid not in chats:
             chats[cid] = {"type": "p2p", "agent": aid, "project": pid, "cwd": cwd, "title": name,

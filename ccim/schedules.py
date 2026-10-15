@@ -70,6 +70,20 @@ class Schedules:
         self.pf.channel.events.publish({"type": "schedule", "schedule": sid})
 
     def _clean(self, f):
+        try:
+            return self._clean_inner(f if isinstance(f, dict) else {})
+        except Problem:
+            raise
+        except (TypeError, ValueError, AttributeError, KeyError):
+            raise Problem("填的内容有不对的地方，检查一下再保存。")
+
+    def _clean_inner(self, f):
+        for k in ("name", "prompt", "time", "date", "freq", "session"):
+            if f.get(k) is not None and not isinstance(f[k], str):
+                raise Problem("填的内容有不对的地方，检查一下再保存。")
+        if not isinstance(f.get("target") or {}, dict) or not isinstance(f.get("days") or [], list) \
+                or not isinstance(f.get("deliver") or [], list):
+            raise Problem("填的内容有不对的地方，检查一下再保存。")
         name = (f.get("name") or "").strip()
         prompt = (f.get("prompt") or "").strip()
         if not name:
@@ -157,8 +171,10 @@ class Schedules:
         out = []
         for sid, s in self.all().items():
             runs = [r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run"]
-            out.append(dict(s, id=sid, last_state=runs[-1]["state"] if runs else None,
-                            running=any(r.startswith(sid + ":") for r in self.running)))
+            last = runs[-1]["state"] if runs else None
+            if last == "working" and runs[-1]["id"] not in self.running:
+                last = "lost"
+            out.append(dict(s, id=sid, last_state=last, running=any(r.startswith(sid + ":") for r in self.running)))
         out.sort(key=lambda r: (not r.get("on"), r.get("next_run") or 9e18))
         return out
 
@@ -186,19 +202,28 @@ class Schedules:
     async def _tick(self):
         now = time.time()
         data = self.all()
-        changed = False
+        due = []
         for sid, s in data.items():
-            if not s.get("on") or not s.get("next_run") or s["next_run"] > now:
-                continue
-            catchup = now - s["next_run"] > CATCHUP_AFTER
-            s["last_run"] = now
-            s["next_run"] = next_time(s, now)
-            if s["freq"] == "once":
-                s["on"] = False
-            changed = True
-            self.fire(sid, dict(s, id=sid), catchup=catchup)
-        if changed:
-            self._write(data)
+            try:
+                if not s.get("on") or not s.get("next_run") or s["next_run"] > now:
+                    continue
+                catchup = now - s["next_run"] > CATCHUP_AFTER
+                s["next_run"] = next_time(s, now)      # 下一次从现在往后算：错过几次都只补这一次
+                if s["freq"] == "once":
+                    s["on"] = False
+                if any(r.startswith(sid + ":") for r in self.running):
+                    continue                            # 上一次还没跑完（比如电脑睡着时正在跑）：这次不跑了
+                s["last_run"] = now
+                due.append((sid, dict(s, id=sid), catchup))
+            except Exception:
+                log.exception("定时任务 %s 的时间算不出来，先暂停", sid)
+                s["on"], s["next_run"] = False, None
+        self._write(data)                              # 先存好下一次的时间，再开跑，中途出错也不会反复跑
+        for sid, s, catchup in due:
+            try:
+                self.fire(sid, s, catchup=catchup)
+            except Exception:
+                log.exception("定时任务 %s 没开起来", sid)
 
     def run_now(self, sid):
         if any(r.startswith(sid + ":") for r in self.running):
@@ -234,7 +259,9 @@ class Schedules:
     async def _run_agent(self, sid, rid, s, prompt):
         from .session import Task
         aid = s["target"]["id"]
-        cid = f"s-{sid}" if s.get("session") == "same" else f"s-{sid}-{rid.split(':')[1]}"
+        # 接着同一个对话：一个 Agent 一个（改派给别的 Agent 就是另一个对话）
+        cid = f"s-{sid}-{aid}" if s.get("session") == "same" else f"s-{sid}-{rid.split(':')[1]}"
+        self.pf.store.deleted.discard(cid)     # 用户在对话页删过这个对话：这次重新开
         chats = self.pf.chats()
         if cid not in chats:
             chats[cid] = {"type": "p2p", "agent": aid, "schedule": sid, "title": s["name"],
@@ -270,7 +297,7 @@ class Schedules:
 
     async def _deliver(self, s, text):
         """把结果用这个 Agent 接的飞书、微信机器人私聊主人。发不出去不影响这次运行的结果。"""
-        from .channels import send_once
+        from .channels import load, send_once
         if s["target"]["kind"] != "agent":
             return
         msg = f"【定时任务「{s['name']}」】\n\n{text}"
@@ -278,7 +305,9 @@ class Schedules:
             if kind not in s["deliver"]:
                 continue
             try:
-                await send_once(proc, registry.get(proc), msg)
+                entry = registry.get(proc)
+                await asyncio.to_thread(load, entry["channel"])   # 第一次要导入飞书 SDK，好几秒，别卡住主循环
+                await send_once(proc, entry, msg)
             except BaseException as e:            # 钥匙串里找不到时是 SystemExit
                 log.warning("定时任务结果没发到%s：%s", kind, e)
 

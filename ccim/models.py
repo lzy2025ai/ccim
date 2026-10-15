@@ -48,7 +48,8 @@ def claude():
         for x in cat:
             if x["id"] not in have:
                 have.add(x["id"])
-                more = x.get("section") != "main"
+                fam = _family({"value": x["id"]})   # 同系列已经有新的了（比如 haiku 指到 5.5），旧的放进「更多模型」
+                more = x.get("section") != "main" or any(len(o) < 5 and _family({"value": o[3]}) == fam for o in out)
                 out.append([x["id"], x.get("name") or x["id"], "" if more else DESC.get(_family({"value": x["id"]}), ""),
                             x["id"]] + (["more"] if more else []))
         # 和桌面端一样：Opus、Fable、Sonnet、Haiku；「更多模型」在后面，按账号模型目录里的顺序

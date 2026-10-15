@@ -278,7 +278,25 @@ body{overflow:hidden}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
 
 @media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
-@media (max-width:760px){.app{grid-template-columns:1fr}.rail,.list{display:none}}
+/* 窄窗口、手机：导航缩成窄栏一直在；列表变成浮在内容上的抽屉，选了就收起 */
+@media (max-width:760px){
+  .app,.app.list-off{grid-template-columns:56px 1fr}
+  .rail{padding:12px 0}
+  .rail a{width:48px;font-size:11px;padding:7px 0 5px}
+  .brand{margin-bottom:10px;font-size:13px}
+  .rail .unfold{display:grid}
+  .list{position:fixed;left:56px;top:0;bottom:0;width:min(320px,calc(100vw - 56px));z-index:15;background:var(--paper);
+    box-shadow:8px 0 30px rgba(29,34,43,.18)}
+  .app.list-off .list{display:none}
+  .newchat{padding:0 14px 8vh}
+  .chat-head{padding:10px 14px}
+  .msg,.composer{padding:0 14px}
+  .agent-top{padding:18px 16px 14px;flex-wrap:wrap}
+  .pane{padding:16px}
+  .form{grid-template-columns:1fr;gap:6px 0}
+  .form>label{padding-top:10px}
+  .members{position:fixed;right:0;top:0;bottom:0;z-index:15;box-shadow:-8px 0 30px rgba(29,34,43,.18)}
+}
 /* ---------- 正式版补充 ---------- */
 .answer{min-width:0;overflow-wrap:anywhere}
 .answer table{display:block;max-width:100%;overflow-x:auto;overflow-wrap:normal}
@@ -559,9 +577,11 @@ function connectEvents(){
 }
 
 // ================= 路由 =================
+function narrow(){ return innerWidth <= 760; }
 function route(){
   const parts = location.hash.slice(2).split("/");
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null};
+  if (narrow()) document.querySelector(".app").classList.toggle("list-off", !!current.id);   // 窄屏：打开了某一项就收起列表
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   closePop();
   renderList();
@@ -1471,12 +1491,22 @@ function confirmBox(title, text, okLabel){
 
 function toggleList(on){
   document.querySelector(".app").classList.toggle("list-off", !on);
+  if (narrow()) return;                  // 窄屏的抽屉开关不记，宽屏时还按原来的习惯
   try { localStorage.setItem("ccim.listOff", on ? "" : "1"); } catch {}
 }
 
+let wasNarrow = narrow();
+addEventListener("resize", () => {             // 跨过窄屏线时：变窄按当前页面收起，变宽恢复原来的习惯
+  if (narrow() === wasNarrow) return;
+  wasNarrow = narrow();
+  let off = !!current.id;
+  if (!wasNarrow) { try { off = !!localStorage.getItem("ccim.listOff"); } catch { off = false; } }
+  document.querySelector(".app").classList.toggle("list-off", off);
+});
+
 // ================= 启动 =================
 (async () => {
-  try { if (localStorage.getItem("ccim.listOff")) document.querySelector(".app").classList.add("list-off"); } catch {}
+  try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
   connectEvents();
   if (!location.hash) history.replaceState(null, "", "#/chats/new");

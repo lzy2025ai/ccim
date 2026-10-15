@@ -199,6 +199,24 @@ body{overflow:hidden}
 .mem .sub{font-size:12px;color:var(--muted)}
 .danger-link{color:var(--bad)}
 
+/* ---------- 定时任务 ---------- */
+.run{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
+.run-head{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;text-align:left}
+.run-head .chev{margin-left:auto;transition:transform .15s}
+.run.open .run-head .chev{transform:rotate(90deg)}
+.run-body{display:none;padding:0 14px 12px;border-top:1px solid var(--line)}
+.run.open .run-body{display:block;padding-top:10px}
+.weekdays{display:inline-flex;gap:4px}
+.weekdays button{width:32px;height:32px;border-radius:50%;border:1px solid var(--line-strong);font-size:13px;color:var(--ink-2)}
+.weekdays button.on{background:var(--qing);border-color:var(--qing);color:#fff}
+.checks{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px}
+.check{display:inline-flex;align-items:center;gap:8px;color:var(--ink-2)}
+.check svg{width:18px;height:18px;padding:2px;border-radius:5px;border:1.5px solid var(--line-strong);color:transparent;box-sizing:border-box}
+.check.on svg{background:var(--qing);border-color:var(--qing);color:#fff}
+.check.locked{color:var(--muted)}
+.check.locked svg{background:var(--faint);border-color:var(--faint)}
+.kv dd{white-space:pre-wrap}
+
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
 .dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
@@ -265,6 +283,7 @@ body{overflow:hidden}
     <div class="brand">ccim</div>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/projects" data-nav="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
+    <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
@@ -350,6 +369,7 @@ const ICON = {
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
+  check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L19 7"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
 };
 function seal(a, size="", dot=true){
@@ -377,6 +397,7 @@ function route(){
   current = {view, id};
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === view));
   if (view === "projects") { renderProjectList(); id ? renderProject(id) : renderProjectEmpty(); }
+  else if (view === "schedules") { renderScheduleList(); id === "new" ? renderScheduleForm(null) : id && id.startsWith("edit-") ? renderScheduleForm(id.slice(5)) : id ? renderSchedule(id) : renderScheduleEmpty(); }
   else if (view === "agents") { renderAgentList(); id === "new" ? renderAgentForm(null) : id ? renderAgent(id) : renderAgentEmpty(); }
   else if (view === "settings") { renderSettingsList(); renderSettings(); }
   else { renderChatList(); id === "new" ? renderNewChat() : id ? renderChat(id) : renderChatEmpty(); }
@@ -951,7 +972,136 @@ function newProject(){
   draw(); document.body.append(s); $("#np-name").focus();
 }
 
-if (!location.hash) location.hash = "#/projects/p1"; else route();
+
+// ================= 定时任务（三期原型） =================
+const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
+let schedules = [
+  {id:"s1", name:"每日站会小结", target:{kind:"agent", id:"weekly"}, prompt:"汇总昨天各项目的 git 提交和对话要点，列出今天要跟进的三件事。",
+   freq:"workday", time:"09:00", days:[], date:null, deliver:["web", "feishu"], session:"new", on:true, next:"明天 09:00",
+   runs:[
+     {at:"今天 09:00", state:"done", elapsed:"1 分 12 秒", text:"<p><b>昨天</b>：官网改版合并了暗色模式；美团项目回复了多浏览器授权的两个方案。</p><p><b>今天跟进</b>：1. 订单列表游标分页上线前回归；2. 客户确认授权方案；3. 周报素材收集。</p>"},
+     {at:"昨天 09:00", state:"done", elapsed:"58 秒", text:"<p>昨天没有新提交。今天建议优先处理官网首页文案。</p>"},
+     {at:"10月13日 09:03", state:"done", elapsed:"1 分 40 秒", catchup:true, text:"<p>（电脑当时在睡眠，醒来后补跑）昨天提交了 6 次，主要是 ccim 的微信渠道。</p>"},
+   ]},
+  {id:"s2", name:"周五回归测试", target:{kind:"project", id:"p1", agents:["qa"]}, prompt:"把官网跑一遍回归：首页、登录、订单列表；发现问题列清复现步骤。",
+   freq:"weekly", time:"16:00", days:[4], date:null, deliver:["web"], session:"same", on:true, next:"周五 16:00",
+   runs:[{at:"上周五 16:00", state:"error", elapsed:"3 分 05 秒", text:"<p>登录页跑不起来：本地 8080 端口没起来。</p>"}]},
+  {id:"s3", name:"月度账单提醒", target:{kind:"agent", id:"modeng"}, prompt:"整理本月公众号的阅读数据，写一段 200 字的复盘。",
+   freq:"monthly", time:"10:00", days:[], dom:1, date:null, deliver:["web", "weixin"], session:"new", on:false, next:"已暂停", runs:[]},
+];
+const schedOf = id => schedules.find(s => s.id === id);
+function freqText(s){
+  if (s.freq === "daily") return `每天 ${s.time}`;
+  if (s.freq === "workday") return `每个工作日 ${s.time}`;
+  if (s.freq === "weekly") return `每周${s.days.map(d => WEEK[d]).join("、")} ${s.time}`;
+  if (s.freq === "monthly") return `每月 ${s.dom} 号 ${s.time}`;
+  return `${s.date || "某天"} ${s.time}，只跑一次`;
+}
+function targetSeal(s){
+  if (s.target.kind === "project") { const p = projOf(s.target.id); return pmark(p); }
+  return seal(agentOf(s.target.id), "", false);
+}
+function targetText(s){
+  if (s.target.kind === "project") { const p = projOf(s.target.id); return `项目「${p.name}」：${s.target.agents.map(a => agentOf(a).name).join("、")}`; }
+  return agentOf(s.target.id).name;
+}
+function runState(r){
+  return {done:`<span class="status on"><i></i>完成，用时 ${r.elapsed}</span>`, error:`<span class="status err"><i></i>出错了</span>`,
+          working:`<span class="status busy"><i></i>正在跑</span>`}[r.state] + (r.catchup ? ` <span class="tag">补跑</span>` : "");
+}
+function renderScheduleList(){
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>定时任务</h1><a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建</a></div>
+    <div class="scroll">${schedules.map(s => `<a class="item ${current.id === s.id ? "on" : ""}" href="#/schedules/${s.id}" style="text-decoration:none;color:inherit">
+      ${targetSeal(s)}<span class="t"><span class="title">${esc(s.name)}</span><span class="sub">${esc(freqText(s))}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${s.on ? esc(s.next) : ""}</span>${s.on ? (s.runs[0] && s.runs[0].state === "error" ? `<span class="tag" style="color:var(--bad)">上次出错</span>` : "") : `<span class="tag">已暂停</span>`}</span></a>`).join("")}</div>`;
+}
+function renderScheduleEmpty(){
+  $("#main").innerHTML = `<div class="empty"><h2>定时任务</h2><p>让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。结果留在这里，也可以发到飞书、微信。</p>
+    <a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a></div>`;
+}
+function renderSchedule(id){
+  const s = schedOf(id); if (!s) return renderScheduleEmpty();
+  const dl = {web:"留在这里", feishu:"发到飞书", weixin:"发到微信"};
+  $("#main").innerHTML = `<div class="agent-page">
+    <div class="agent-top">${targetSeal(s)}
+      <div class="grow"><h2>${esc(s.name)}</h2>
+        <div class="row" style="margin-top:6px">${s.on ? `<span class="status on"><i></i>下次 ${esc(s.next)}</span>` : `<span class="status"><i></i>已暂停</span>`}<span class="tag">${esc(freqText(s))}</span></div></div>
+      <button class="btn" onclick="runNow('${s.id}')">立即跑一次</button>
+      <button class="btn" onclick="schedOf('${s.id}').on=!schedOf('${s.id}').on;schedOf('${s.id}').next=schedOf('${s.id}').on?'明天 ${s.time}':'已暂停';renderScheduleList();renderSchedule('${s.id}');toast(schedOf('${s.id}').on?'已恢复':'已暂停')">${s.on ? "暂停" : "恢复"}</button>
+      <button class="icon-btn" aria-label="更多" onclick="schedMenu(event,'${s.id}')">${ICON.more}</button>
+    </div>
+    <div class="pane">
+      <div class="sect"><h3>做什么</h3><div class="kv"><dt>给谁</dt><dd>${esc(targetText(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
+        <dt>结果</dt><dd>${s.deliver.map(d => dl[d]).join("，")}</dd><dt>对话</dt><dd>${s.session === "new" ? "每次开一个新对话" : "接着同一个对话聊，记得之前跑过的"}</dd></div></div>
+      <div class="sect"><h3>运行记录</h3>${s.runs.length ? s.runs.map((r, i) => `<div class="run">
+        <button class="run-head" onclick="this.parentElement.classList.toggle('open')"><span class="when" style="width:120px">${esc(r.at)}</span>${runState(r)}${ICON.chev}</button>
+        <div class="run-body"><div class="answer">${r.text}</div><a class="link" href="javascript:void 0" onclick="toast('打开这次运行的完整对话')">看完整对话</a></div></div>`).join("")
+        : `<p class="muted">还没跑过。可以先「立即跑一次」看看效果。</p>`}</div>
+    </div></div>`;
+  const first = document.querySelector(".run"); if (first) first.classList.add("open");
+}
+function runNow(id){
+  const s = schedOf(id);
+  const r = {at:"刚刚", state:"working", elapsed:"", text:"<p class='muted'>正在跑…</p>"};
+  s.runs.unshift(r); renderSchedule(id); toast("已开始，跑完结果会出现在这里");
+  setTimeout(() => { r.state = "done"; r.elapsed = "41 秒"; r.text = "<p>跑完了：今天没有新的提交，三件待跟进的事都还没变化。</p>"; if (current.id === id) renderSchedule(id); }, 3000);
+}
+// ---- 新建 / 编辑 ----
+let sd = null;
+function renderScheduleForm(id){
+  const s = id ? schedOf(id) : null;
+  sd = s ? JSON.parse(JSON.stringify(s)) : {name:"", target:{kind:"agent", id:agents[0].id}, prompt:"", freq:"workday", time:"09:00", days:[0], dom:1, date:"明天", deliver:["web"], session:"new"};
+  drawScheduleForm(s);
+}
+function drawScheduleForm(s){
+  const d = sd;
+  const hours = Array.from({length:24}, (_, h) => [String(h).padStart(2, "0"), String(h).padStart(2, "0") + " 点", ""]);
+  const mins = ["00", "10", "15", "20", "30", "40", "45", "50"].map(m => [m, m + " 分", ""]);
+  const [hh, mm] = d.time.split(":");
+  const tgtOpts = [...agents.map(a => ["agent:" + a.id, a.name, BASE[a.base]]), ...projects.map(p => ["project:" + p.id, `项目「${p.name}」`, `${p.members.length} 个 Agent`])];
+  const tval = d.target.kind + ":" + d.target.id;
+  const proj = d.target.kind === "project" ? projOf(d.target.id) : null;
+  const a = d.target.kind === "agent" ? agentOf(d.target.id) : null;
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>${s ? "编辑定时任务" : "新建定时任务"}</h2>
+    <div class="role">到了时间，ccim 会把任务交给它去做；电脑睡着错过了，醒来补跑一次。</div></div></div>
+    <div class="pane"><div class="form">
+      <label for="sd-name">名字</label><input id="sd-name" class="input" value="${esc(d.name)}" placeholder="比如：每日站会小结" oninput="sd.name=this.value">
+      <label>给谁</label><div>${dd("sd-target", tgtOpts, tval, v => { const [k, i] = v.split(":"); sd.target = k === "project" ? {kind:k, id:i, agents:[projOf(i).members[0]]} : {kind:k, id:i}; sd.deliver = ["web"]; drawScheduleForm(s); })}
+        ${proj ? `<div class="row" style="margin-top:8px">${proj.members.map(m => `<button class="pick ${d.target.agents.includes(m) ? "on" : ""}" style="padding:6px 10px" onclick="sd.target.agents=sd.target.agents.includes('${m}')?sd.target.agents.filter(x=>x!=='${m}'):[...sd.target.agents,'${m}'];drawScheduleForm(${s ? `schedOf('${s.id}')` : "null"})">${seal(agentOf(m), "sm", false)}<span class="nm">${esc(agentOf(m).name)}</span></button>`).join("")}</div>
+          <div class="help">选了几个就交给几个人，各做一份，结果都留在项目里。</div>` : ""}</div>
+      <label for="sd-prompt">做什么</label><textarea id="sd-prompt" class="textarea" placeholder="写清楚每次要它做什么，就像平时发消息一样" oninput="sd.prompt=this.value">${esc(d.prompt)}</textarea>
+      <label>什么时候</label><div>
+        <div class="seg">${[["daily", "每天"], ["workday", "工作日"], ["weekly", "每周"], ["monthly", "每月"], ["once", "只一次"]].map(([k, n]) => `<button class="${d.freq === k ? "on" : ""}" onclick="sd.freq='${k}';drawScheduleForm(${s ? `schedOf('${s.id}')` : "null"})">${n}</button>`).join("")}</div>
+        <div class="row" style="margin-top:10px">
+          ${d.freq === "weekly" ? `<span class="weekdays">${WEEK.map((w, i) => `<button class="${d.days.includes(i) ? "on" : ""}" onclick="sd.days=sd.days.includes(${i})?sd.days.filter(x=>x!==${i}):[...sd.days,${i}].sort();drawScheduleForm(${s ? `schedOf('${s.id}')` : "null"})">${w}</button>`).join("")}</span>` : ""}
+          ${d.freq === "monthly" ? `<span style="width:120px">${dd("sd-dom", Array.from({length:28}, (_, i) => [String(i + 1), `${i + 1} 号`, ""]), String(d.dom), v => sd.dom = +v)}</span>` : ""}
+          ${d.freq === "once" ? `<span style="width:150px">${dd("sd-date", [["今天", "今天", ""], ["明天", "明天", ""], ["后天", "后天", ""], ["10月20日", "10月20日", ""], ["10月27日", "10月27日", ""]], d.date, v => sd.date = v)}</span>` : ""}
+          <span style="width:110px">${dd("sd-h", hours, hh, v => sd.time = v + ":" + sd.time.split(":")[1])}</span>
+          <span style="width:110px">${dd("sd-m", mins, mm, v => sd.time = sd.time.split(":")[0] + ":" + v)}</span>
+        </div></div>
+      <label>结果发到哪</label><div class="checks">
+        <span class="check on locked">${ICON.check}留在这里</span>
+        ${a && a.channels.feishu ? `<button class="check ${d.deliver.includes("feishu") ? "on" : ""}" onclick="toggleDeliver('feishu',${s ? `'${s.id}'` : "null"})">${ICON.check}也发到飞书「${esc(a.channels.feishu.name)}」</button>` : ""}
+        ${a && a.channels.weixin ? `<button class="check ${d.deliver.includes("weixin") ? "on" : ""}" onclick="toggleDeliver('weixin',${s ? `'${s.id}'` : "null"})">${ICON.check}也发到微信</button>` : ""}
+        ${a && !a.channels.feishu && !a.channels.weixin ? `<span class="help" style="margin:0">这个 Agent 还没接飞书、微信；接了以后可以把结果也发过去。</span>` : ""}</div>
+      <label>对话</label><div><div class="seg"><button class="${d.session === "new" ? "on" : ""}" onclick="sd.session='new';drawScheduleForm(${s ? `schedOf('${s.id}')` : "null"})">每次开新对话</button><button class="${d.session === "same" ? "on" : ""}" onclick="sd.session='same';drawScheduleForm(${s ? `schedOf('${s.id}')` : "null"})">接着同一个对话</button></div>
+        <div class="help">${d.session === "new" ? "每次从头开始，互不影响。" : "记得之前每次跑的结果，适合「和上次比有什么变化」这类任务。"}</div></div>
+      <span></span><div class="row" style="margin-top:6px"><button class="btn primary" onclick="saveSchedule(${s ? `'${s.id}'` : "null"})">${s ? "保存" : "新建"}</button><button class="btn" onclick="toast('先跑一次看看效果，不会保存')">先试跑一次</button></div>
+    </div></div></div>`;
+}
+function toggleDeliver(k, sid){ sd.deliver = sd.deliver.includes(k) ? sd.deliver.filter(x => x !== k) : [...sd.deliver, k]; drawScheduleForm(sid ? schedOf(sid) : null); }
+function saveSchedule(id){
+  if (!sd.name.trim()) { toast("先起个名字"); return; }
+  if (!sd.prompt.trim()) { toast("写上要它做什么"); return; }
+  if (sd.freq === "weekly" && !sd.days.length) { toast("选一下每周几"); return; }
+  if (id) { Object.assign(schedOf(id), sd); toast("已保存"); location.hash = `#/schedules/${id}`; return; }
+  const nid = "s" + Date.now(); schedules.unshift({...sd, id:nid, on:true, next:"明天 " + sd.time, runs:[]}); toast("已新建"); location.hash = `#/schedules/${nid}`;
+}
+
+function schedMenu(e, id){ pop(e, `<button onclick="closePop();location.hash='#/schedules/edit-${id}'">编辑</button><button onclick="closePop();toast('删除前会确认')">删除</button>`, true); }
+
+if (!location.hash) location.hash = "#/schedules/s1"; else route();
 </script>
 </body>
 </html>

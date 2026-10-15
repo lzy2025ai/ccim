@@ -156,7 +156,7 @@ body{overflow:hidden}
 .send svg{width:16px;height:16px}
 .hint{font-size:12px;color:var(--faint);text-align:center;margin-top:6px}
 
-.pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px}
+.pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px;overflow-y:auto;overscroll-behavior:contain}
 .pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
 .pop button:hover{background:var(--sunk)}
 .pop button .ck{margin-left:auto;color:var(--qing)}
@@ -514,8 +514,11 @@ function pop(e, html, below){
   const r = e.currentTarget.getBoundingClientRect();
   if (below) p.style.minWidth = r.width + "px";
   p.style.left = Math.max(10, Math.min(r.left, innerWidth - p.offsetWidth - 10)) + "px";
-  const up = r.top - p.offsetHeight - 6;
-  p.style.top = (below || up < 10 ? Math.min(r.bottom + 6, innerHeight - p.offsetHeight - 10) : up) + "px";
+  const h = p.offsetHeight, above = r.top - 16, under = innerHeight - r.bottom - 16;
+  let goUp = below ? under < h && above > under : above >= h || above > under;   // 放不下就放空间大的那边，里面滚动
+  const room = goUp ? above : under;
+  if (h > room) p.style.maxHeight = room + "px";
+  p.style.top = (goUp ? r.top - 6 - Math.min(h, room) : r.bottom + 6) + "px";
   p.querySelector("input")?.focus();
   return p;
 }
@@ -528,7 +531,8 @@ function dd(id, opts, value, onpick){
   return `<button type="button" class="select" id="dd-${id}" aria-haspopup="listbox" aria-expanded="false" onclick="openDD(event,'${id}')"><span>${esc(cur[1])}</span>${ICON.down}</button>`;
 }
 function optList(opts, value, pickJs){
-  return opts.map(([v, l, ds]) => `<button role="option" aria-selected="${value === v}" onclick="${pickJs(v)}"><span><div>${esc(l)}</div>${ds ? `<div class="desc">${esc(ds)}</div>` : ""}</span>${value === v ? `<span class="ck">✓</span>` : ""}</button>`).join("");
+  let more = false;
+  return opts.map(([v, l, ds, , sec]) => (sec === "more" && !more && (more = true) ? `<div class="sec">更多模型</div>` : "") + `<button role="option" aria-selected="${value === v}" onclick="${pickJs(v)}"><span><div>${esc(l)}</div>${ds ? `<div class="desc">${esc(ds)}</div>` : ""}</span>${value === v ? `<span class="ck">✓</span>` : ""}</button>`).join("");
 }
 function openDD(e, id){
   const d = DD[id], btn = e.currentTarget;
@@ -541,7 +545,7 @@ function pickDD(id, v){
   d.onpick && d.onpick(v);
 }
 function modelOpts(base, followLabel, cur){
-  const list = modelList(base).map(o => o.slice(0, 3));
+  const list = modelList(base).slice();
   if (base === "codex"){
     const dm = (S.defaults.codex || [])[0];
     if (dm && !list.some(o => o[0] === dm)) list.unshift([dm, dm, ""]);

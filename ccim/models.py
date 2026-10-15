@@ -1,9 +1,12 @@
 """能选的模型：和 Claude Code 的 /model、Codex 的模型列表一致。
 
 Claude Code：连一次会话拿 initialize 里的 models（不发消息，不花额度），存 ~/.ccim/models.json，一天刷新一次。
+要用和对话同一个 claude（session.CLI）：不同版本的 claude 里 sonnet、haiku 指向的型号不一样。
+「更多模型」（旧版本）：Claude Code 按账号缓存的模型目录 ~/.claude/cache/model-catalog/*-cc.json 里 section=overflow 的，
+和桌面端模型菜单里的「更多模型」一致。
 Codex：读它自己缓存的 ~/.codex/models_cache.json（只要 visibility=list 的）。
 """
-import asyncio, json, logging, os, time
+import asyncio, glob, json, logging, os, time
 
 from . import registry
 
@@ -37,7 +40,35 @@ def claude():
             continue
         name = (m.get("description") or "").split("·")[0].strip() or m.get("displayName") or m["value"]
         out.append([m["value"], name, DESC.get(_family(m), ""), m.get("resolvedModel") or ""])
+    if out:                                   # 账号模型目录里有、这个版本的 claude 别名没指到的（比如更新的 Sonnet），也列出来
+        cat = _catalog()
+        older = {x["id"] for x in cat if x.get("section") != "main"}
+        out = [o + ["more"] if o[3] in older else o for o in out]   # 别名指到的是旧型号：放进「更多模型」
+        have = {o[3] for o in out}
+        for x in cat:
+            if x["id"] not in have:
+                have.add(x["id"])
+                more = x.get("section") != "main"
+                out.append([x["id"], x.get("name") or x["id"], "" if more else DESC.get(_family({"value": x["id"]}), ""),
+                            x["id"]] + (["more"] if more else []))
+        # 和桌面端一样：Opus、Fable、Sonnet、Haiku；「更多模型」在后面，按账号模型目录里的顺序
+        fam, pos = list(DESC), {x["id"]: i for i, x in enumerate(cat)}
+        out = [o[:2] + [""] + o[3:] if len(o) > 4 else o for o in out]
+        out.sort(key=lambda o: (1, pos.get(o[3], 99)) if len(o) > 4 else
+                 (0, fam.index(_family({"value": o[3]})) if _family({"value": o[3]}) else 9))
     return out
+
+
+def _catalog():
+    files = sorted(glob.glob(os.path.expanduser("~/.claude/cache/model-catalog/*-cc.json")), key=os.path.getmtime, reverse=True)
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                ms = ((json.load(fh).get("catalog") or {}).get("config") or {}).get("models") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        return [m for m in ms if m.get("id") and m.get("section") in ("main", "overflow")]
+    return []
 
 
 def codex():
@@ -60,7 +91,8 @@ def stale():
 async def refresh():
     """问 Claude Code 现在能用哪些模型。失败就留着旧的。"""
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-    client = ClaudeSDKClient(ClaudeAgentOptions(cwd=os.path.expanduser("~")))
+    from .session import CLI
+    client = ClaudeSDKClient(ClaudeAgentOptions(cwd=os.path.expanduser("~"), cli_path=CLI))
     try:
         await asyncio.wait_for(client.connect(), 60)
         info = await client.get_server_info() or {}

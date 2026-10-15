@@ -305,7 +305,11 @@ body{overflow:hidden}
 .custom input{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--line-strong);border-radius:7px;outline:none}
 .loading{margin:auto;color:var(--faint)}
 .chip,.seg button,.btn,.tag{white-space:nowrap}
-.box .bar{flex-wrap:wrap;row-gap:4px}
+.box .bar{flex-wrap:nowrap;align-items:flex-end;gap:6px}
+.box .bar .opts{display:flex;flex-wrap:wrap;align-items:center;gap:4px;flex:1;min-width:0}
+.dflt{font-size:11px;color:var(--faint);margin-left:4px}
+.custom button{width:auto;flex:none}
+.custom input{min-width:120px}
 .chat-head .meta .path{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
 .retry{color:var(--bad);font-size:13px}
@@ -654,11 +658,11 @@ function drawChat(){
       <div class="box" id="box">
         <div class="pending" id="pending"></div>
         <textarea id="input" rows="2" aria-label="输入消息"></textarea>
-        <div class="bar">
+        <div class="bar"><div class="opts">
           <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
-          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
+          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button></div>
           <button class="send" id="send"></button>
         </div>
       </div>
@@ -676,8 +680,8 @@ function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
   $("#input").placeholder = c.readonly ? "在这里接着聊" : c.busy ? "补充说明，它做完当前这一步就会看到" : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
-  $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}`;
-  $("#chip-effort").innerHTML = `思考 ${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}`;
+  $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
+  $("#chip-effort").innerHTML = `思考 ${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
   const s = $("#send");
   s.className = "send" + (c.busy ? " stop" : "");
   s.innerHTML = c.busy ? ICON.stop : ICON.up;
@@ -766,13 +770,13 @@ function renderNewChat(){
         <div class="box" id="box">
           <div class="pending" id="pending"></div>
           <textarea id="input" rows="3" placeholder="想让它做什么？" aria-label="输入消息"></textarea>
-          <div class="bar">
+          <div class="bar"><div class="opts">
             <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
             <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
-            <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}</button>
-            <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='muted'>（默认）</span>"}${ICON.down}</button>
-            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
+            <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
+            <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
+            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
         </div>
@@ -1104,9 +1108,9 @@ function drawProject(){
             ${quote ? `<div class="quote in-box">${seal(agentOf(quote.agent), "sm", false)}<span>${esc(quote.text.replace(/\s+/g, " ").slice(0, 120))}</span><button class="icon-btn" aria-label="去掉引用" onclick="quote=null;drawProject()">${ICON.x}</button></div>` : ""}
             <div class="rcpt" id="rcpt"></div>
             <textarea id="input" rows="2" placeholder="输入 @ 选 Agent，再写要做的事" aria-label="派活"></textarea>
-            <div class="bar">
+            <div class="bar"><div class="opts">
               <button class="chip" id="atchip" onclick="atMenu(event)">@ 选 Agent${ICON.down}</button>
-              ${multi ? `<span class="seg mini"><button class="${!compareMode ? "on" : ""}" onclick="compareMode=false;drawProject()">一起做</button><button class="${compareMode ? "on" : ""}" onclick="compareMode=true;drawProject()">各做一份，对比</button></span>` : ""}
+              ${multi ? `<span class="seg mini"><button class="${!compareMode ? "on" : ""}" onclick="compareMode=false;drawProject()">一起做</button><button class="${compareMode ? "on" : ""}" onclick="compareMode=true;drawProject()">各做一份，对比</button></span>` : ""}</div>
               <button class="send" aria-label="派出去" onclick="dispatch()">${ICON.up}</button>
             </div>
           </div>

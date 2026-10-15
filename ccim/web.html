@@ -109,7 +109,15 @@ body{overflow:hidden}
 .msg-acts button{display:flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted)}
 .msg-acts button:hover{background:var(--sunk);color:var(--ink)}
 .msg-acts svg{width:14px;height:14px}
-.kids{margin:0 0 2px 27px;padding-left:6px;border-left:1px solid var(--line-strong)}
+/* 分叉出来的对话：从上面那个对话的印章下面引一条线，每个分支一个拐角，最后一个到拐角为止 */
+.kids{margin:-2px 0 2px 26px}
+.kids>.node{position:relative;padding-left:16px}
+.kids>.node::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1.5px solid var(--line-strong)}
+.kids>.node:last-child::before{display:none}
+.kids>.node::after{content:"";position:absolute;left:0;top:0;width:11px;height:17px;border-left:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong);border-bottom-left-radius:7px}
+.kids>.node:first-child::before{top:-8px}
+.kids>.node:first-child::after{top:-8px;height:25px}   /* 第一条接到印章底下 */
+.kids .kids{margin-left:10px}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .msg.wide{max-width:1180px}
@@ -657,7 +665,8 @@ function chatItem(c, kids, child){
         ${seal(a, "", false)}<span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span>${srcTag(c.source)}</span></a>`;
   const ks = (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
-  return me + (ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true)).join("")}</div>` : "");
+  const tree = ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true)).join("")}</div>` : "";
+  return child ? `<div class="node">${me}${tree}</div>` : me + tree;
 }
 function renderChatList(){
   const rows = S.chats.filter(c => !chatFilter || (c.title + (c.agent_name || "")).toLowerCase().includes(chatFilter));

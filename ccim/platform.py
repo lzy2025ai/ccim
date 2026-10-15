@@ -27,7 +27,7 @@ PORT = 8977
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 UPLOAD_LIMIT = 100 * 1024 * 1024
-MERGED = ("card", "reply", "run")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
+MERGED = ("card", "reply", "run", "mention")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
 def home():
@@ -234,8 +234,10 @@ class Platform:
         self.background = set()
         from .projects import Projects
         from .schedules import Schedules
+        from .mentions import Mentions
         self.projects = Projects(self)
         self.schedules = Schedules(self)
+        self.mentions = Mentions(self)
 
     def handlers(self):
         return {"platform": self}
@@ -334,14 +336,17 @@ class Platform:
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size")} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
+        if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上
+            text = self.mentions.unseen(cid) + text if text else text
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file")
         await b.on_message(inc)
 
     async def stop_chat(self, cid):
+        hit = await self.mentions.stop_all(cid)
         b = self._bridge(cid)
         c = b.chats.get(cid)
-        return bool(c and await c.stop())
+        return bool(c and await c.stop()) or hit
 
     async def action(self, cid, mid, value):
         b = self._bridge(cid)
@@ -365,6 +370,7 @@ class Platform:
         chats = self.chats()
         if cid in chats and chats[cid].get("busy"):
             raise Problem("它还在干活，先停下再删。")
+        await self.mentions.delete_subs(cid)
         self.store.deleted.add(cid)
         for key, b in list(self.bridges.items()):
             c = b.chats.pop(cid, None)
@@ -409,8 +415,10 @@ class Platform:
         if cid.startswith("x:"):
             return self.external_detail(cid)
         v = self.chat_view(cid)
-        v["log"] = self.channel.logs.read(cid)
+        v["log"] = self.mentions.lost(self.channel.logs.read(cid))
         v["progress"] = self.channel.progress_of.get(cid)
+        v["sub_progress"] = {r["chat"]: self.channel.progress_of[r["chat"]] for r in v["log"]
+                             if r.get("type") == "mention" and r.get("chat") in self.channel.progress_of}
         m = self.meta(cid)
         if m.get("origin"):
             from . import history
@@ -419,7 +427,8 @@ class Platform:
         return v
 
     def chat_list(self):
-        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")] + \
+        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")
+                and not c.get("mention_of")] + \
             self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
@@ -519,7 +528,7 @@ class Platform:
             chats[new]["temp"]["scratch"] = t.get("scratch") or cid
             self.store.write(chats)
         for r in rows[:index + 1]:
-            if r.get("type") in ("user", "answer", "file", "note"):
+            if r.get("type") in ("user", "answer", "file", "note", "mention"):
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
@@ -665,6 +674,8 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
+                "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),
+                "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
@@ -772,6 +783,12 @@ def send(pf, cid, text, files):
     pf.meta(cid)
     pf.bg(pf.send(cid, (text or "").strip(), files))
     return {"ok": True}
+
+
+def mention(pf, cid, text, to, files):
+    check_message(pf, text, files)
+    pf.meta(cid)
+    return pf.run(pf.mentions.send(cid, (text or "").strip(), to, files))
 
 
 def _busy_of(a):

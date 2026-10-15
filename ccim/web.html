@@ -112,6 +112,8 @@ body{overflow:hidden}
 .kids{margin:0 0 2px 27px;padding-left:6px;border-left:1px solid var(--line-strong)}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
+.msg.wide{max-width:1180px}
+.box .rcpt:empty{display:none}
 .fork-from{font-size:12px;color:var(--muted);text-decoration:none}
 .fork-from:hover{color:var(--ink)}
 .msg.me .from{display:none}
@@ -582,14 +584,19 @@ function connectEvents(){
       if (ev.state === "working") proj.progress[ev.chat] = ev; else delete proj.progress[ev.chat];
       redrawProjThread();
     }
+    if (detail && ev.type === "progress" && detail.log.some(r => r.type === "mention" && r.chat === ev.chat)){
+      detail.sub_progress = detail.sub_progress || {};
+      if (ev.state === "working") detail.sub_progress[ev.chat] = ev; else delete detail.sub_progress[ev.chat];
+      drawThread();
+    }
     if (detail && ev.chat === detail.id){
       if (ev.type === "progress"){
         detail.progress = ev.state === "working" ? ev : null;
         detail.busy = ev.state === "working";
         drawThread(); drawComposerState();
       } else {
-        const i = ev.type === "card" ? detail.log.findIndex(r => r.type === "card" && r.id === ev.id) : -1;
-        if (i >= 0) detail.log[i] = ev; else detail.log.push(ev);
+        const i = ev.type === "card" || ev.type === "mention" ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
+        if (i >= 0) detail.log[i] = ev.type === "mention" ? {...detail.log[i], ...ev, at: detail.log[i].at} : ev; else detail.log.push(ev);
         drawThread();
       }
     }
@@ -678,6 +685,7 @@ function renderChatEmpty(){
 // ================= 对话页 =================
 async function openChat(id){
   $("#main").innerHTML = `<div class="loading">…</div>`;
+  if (!detail || detail.id !== id) chatRcpt = [];
   try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
   pendingFiles = [];
@@ -706,10 +714,12 @@ function canFork(i, r){
 }
 function recHtml(r, i, src = "log"){
   if (r.type === "user"){
-    return `<div class="msg me"><div>${r.text ? `<div class="bubble">${esc(r.text)}</div>` : ""}
+    const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
+    return `<div class="msg me"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => `<span class="file">${ICON.file}${esc(f.name)}</span>`).join("")}</div>` : ""}
-      ${r.text ? msgActs(src, i, r) : ""}</div></div>`;
+      ${r.text ? msgActs(src, i, r) : ""}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
+  if (r.type === "mention") return "";
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
     return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
@@ -762,22 +772,27 @@ function drawChat(){
     <div class="thread" id="thread"></div>
     <div class="composer">
       <div class="box" id="box">
+        <div class="rcpt" id="rcpt-chat"></div>
         <div class="pending" id="pending"></div>
         <textarea id="input" rows="2" aria-label="输入消息"></textarea>
         <div class="bar"><div class="opts">
           <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
-          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button></div>
+          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
+          ${c.readonly ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}</div>
           <button class="send" id="send"></button>
         </div>
       </div>
-      <div class="hint">Enter 发送，Shift + Enter 换行；可以把图片、文件拖进来</div>
+      <div class="hint">Enter 发送，Shift + Enter 换行；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
     </div>`;
-  drawThread(); drawComposerState(); drawPending();
+  drawThread(); drawComposerState(); drawPending(); drawChatRcpt();
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const input = $("#input");
-  input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
+  if (!c.readonly) input.addEventListener("input", atTyped);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
+  });
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
   input.focus();
@@ -800,6 +815,14 @@ async function sendChat(){
   const v = $("#input").value.trim(), files = pendingFiles.filter(f => f.key);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
+  closePop();
+  if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
+    const to = chatRcpt;
+    $("#input").value = ""; pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
+    try { await act(() => api("/api/chat/mention", {id: detail.id, text: v, files, to})); }
+    catch { $("#input").value = v; chatRcpt = to; drawChatRcpt(); }
+    return;
+  }
   $("#input").value = ""; pendingFiles = []; drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
     const {id} = await act(() => api("/api/chat/continue", {id: detail.id, text: v, files}));
@@ -833,6 +856,57 @@ async function deleteChat(){
   await act(() => api("/api/chat/delete", {id: detail.id}), "已删除");
   detail = null; await loadState(); location.hash = "#/chats";
 }
+// ---- @ 其他 Agent ----
+let chatRcpt = [], draftText = "";
+function drawChatRcpt(){
+  const el = $("#rcpt-chat"); if (!el) return;
+  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
+}
+function chatAt(e){
+  const own = detail && detail.agent;
+  const list = S.agents.filter(a => a.id !== own);
+  if (!list.length) return toast("还没有建好的 Agent，先去 Agent 页建一个");
+  const pp = pop(e, `<div class="sec">让谁回答（可以多选）</div>` + list.map(a =>
+    `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${chatRcpt.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
+  pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+    const m = b.dataset.m;
+    chatRcpt = chatRcpt.includes(m) ? chatRcpt.filter(x => x !== m) : [...chatRcpt, m];
+    const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
+    const i = $("#input"); if (i && /[@＠]$/.test(i.value)) { i.value = i.value.slice(0, -1); draftText = i.value; }   // 打的 @ 换成上面的标签
+    drawChatRcpt();
+  });
+  const done = () => { removeEventListener("click", done); $("#input")?.focus(); };
+  setTimeout(() => addEventListener("click", done, {once: true}), 0);
+}
+function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent
+  if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#chip-at"), stopPropagation(){}}), 0);
+}
+function liveOfMention(r){
+  if (r.state !== "queued") return null;
+  const p = (detail.sub_progress || {})[r.chat]; if (!p) return null;
+  const first = detail.log.find(x => x.type === "mention" && x.chat === r.chat && x.state === "queued");
+  return first && first.id === r.id ? p : null;
+}
+function mentionActs(i, r, live){
+  if (live || r.state === "queued") return `<div class="msg-acts" style="opacity:1"><button onclick="stopMention(${q(r.id)})">停下</button></div>`;
+  const btns = [];
+  if (r.text) btns.push(`<button onclick="copyMsg(this,'log',${i})" title="复制">${ICON.copy}复制</button>`,
+                        `<button onclick="quoteMsg(this,'log',${i})" title="引用到输入框">${ICON.quote}引用</button>`);
+  btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none"><button title="打开它的对话接着聊">单独聊</button></a>`);
+  return `<div class="msg-acts">${btns.join("")}</div>`;
+}
+function mentionGroup(mid){
+  const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && r.msg === mid);
+  if (!rs.length) return "";
+  const one = ([r, i]) => {
+    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
+    return `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${stateLabel(r, live)}</div>
+      ${replyBody(r, live)}${mentionActs(i, r, live)}`;
+  };
+  if (rs.length === 1) return `<div class="msg">${one(rs[0])}</div>`;
+  return `<div class="msg wide"><div class="compare">${rs.map(x => `<div class="col">${one(x)}</div>`).join("")}</div></div>`;
+}
+async function stopMention(rid){ await act(() => api("/api/chat/mention/stop", {rid}), "正在停下"); }
 function msgText(src, i){ return ((src === "earlier" ? detail.earlier : detail.log)[i] || {}).text || ""; }
 async function copyMsg(btn, src, i){
   const text = msgText(src, i);
@@ -898,6 +972,7 @@ function renderNewChat(){
       <h2>新对话</h2>
       <div class="composer" style="margin:0;padding:0">
         <div class="box" id="box">
+          <div class="rcpt" id="rcpt-chat"></div>
           <div class="pending" id="pending"></div>
           <textarea id="input" rows="3" placeholder="想让它做什么？" aria-label="输入消息"></textarea>
           <div class="bar"><div class="opts">
@@ -906,7 +981,8 @@ function renderNewChat(){
             <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
-            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button></div>
+            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
+            <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
         </div>
@@ -914,9 +990,12 @@ function renderNewChat(){
       </div>
       <div class="or">想和某个 Agent 聊？<button class="link" onclick="pickAgent(event)">选一个 Agent</button></div>
     </div>`;
-  drawPending();
-  const i = $("#input"); i.focus();
-  i.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); startTemp(); } });
+  drawPending(); drawChatRcpt();
+  const i = $("#input"); i.value = draftText; i.focus();
+  i.addEventListener("input", e => { draftText = i.value; atTyped(e); });
+  i.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); startTemp(); }
+  });
   i.addEventListener("paste", ev => { const fs = [...(ev.clipboardData?.files || [])]; if (fs.length) { ev.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
 }
@@ -946,8 +1025,9 @@ async function startTemp(){
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return $("#input").focus();
   const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}));
-  await act(() => api("/api/chat/send", {id, text: v, files}));
-  pendingFiles = [];
+  const to = chatRcpt; closePop();
+  await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}) : api("/api/chat/send", {id, text: v, files}));
+  pendingFiles = []; chatRcpt = []; draftText = "";
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 async function startAgent(aid){

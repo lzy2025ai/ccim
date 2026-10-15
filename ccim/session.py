@@ -94,6 +94,7 @@ class Turn:
         self.card_id = None
         self.shown = None
         self.retry = None                     # 连不上 Claude 时第几次重试（api_retry），连上了就清掉
+        self.uuid = None                      # 这一轮最后一条回答的编号（从这里分叉用）
 
     def card(self, title, color):
         hidden = len(self.steps) - SHOW_STEPS
@@ -389,6 +390,8 @@ class Chat:
                         elif ev.get("type") == "message_start":
                             t.live = ""
                     elif isinstance(m, AssistantMessage):
+                        if m.uuid and not m.parent_tool_use_id:
+                            t.uuid = m.uuid       # 以后要从这一轮的回答分叉，接到这条为止
                         for blk in m.content:
                             if isinstance(blk, ToolUseBlock):
                                 d = describe_tool(blk.name, blk.input)
@@ -464,8 +467,11 @@ class Chat:
                 self.b.save(self.chat_id, steps=steps)
 
     def _snap(self, t, state="working"):
-        return {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "retry": t.retry,
+        snap = {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "retry": t.retry,
                 "elapsed": round(time.monotonic() - t.start, 1)}
+        if state == "done" and t.uuid and self.session_id:
+            snap["fork"] = {"sid": self.session_id, "at": t.uuid}
+        return snap
 
     async def _tick(self, t, reply_to):
         if getattr(self.b.channel, "live", False):   # 网页：每一步、正在写的字实时推过去

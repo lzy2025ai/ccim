@@ -168,6 +168,8 @@ class WebChannel(Channel):
         if done:
             rec = {"type": "answer", "text": markdown or "", "steps": done["steps"], "state": done["state"],
                    "elapsed": done["elapsed"]}
+            if done.get("fork"):
+                rec["fork"] = done["fork"]
         else:
             rec = {"type": "note", "text": markdown or ""}
         self._emit(chat_id, self.logs.append(chat_id, rec))
@@ -242,6 +244,15 @@ class Platform:
         self.channel = channel
         self.loop = asyncio.get_event_loop()
         self.schedules.start()                # 到点就跑的定时任务
+        self.background.add(asyncio.ensure_future(self._models()))
+
+    async def _models(self):
+        """能选的模型列表：启动时、之后每天问一次 Claude Code。"""
+        from . import models
+        while True:
+            if models.stale():
+                await models.refresh()
+            await asyncio.sleep(3600)
 
     # ----- 对话 -----
 
@@ -270,7 +281,7 @@ class Platform:
         else:
             t = m.get("temp") or {}
             key = "temp:" + cid
-            path = t.get("dir") or os.path.join(registry.HOME, "scratch", cid)
+            path = t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
                      "effort": t.get("effort")}
@@ -286,7 +297,7 @@ class Platform:
             b.name = b.approvals.project = name
         return b
 
-    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None):
+    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None, parent=None, fork_at=None):
         cid = "w-" + uuid.uuid4().hex[:10]
         rec = {"type": "p2p", "created": registry.now(), "last_active": registry.now()}
         if agent:
@@ -306,6 +317,10 @@ class Platform:
             rec.update(fork_from=fork_from, origin=fork_from, source=source)
         if title:
             rec["title"] = title
+        if parent:                            # 从网页里另一个对话的某条回答分出来
+            rec.update(parent=parent, fork_from=fork_from, fork_at=fork_at)
+            rec.pop("origin", None)
+            rec.pop("source", None)
         chats = self.chats()
         chats[cid] = rec
         self.store.write(chats)
@@ -315,7 +330,7 @@ class Platform:
         b = self._bridge(cid)
         m = self.meta(cid)
         if m.get("fork_from") and cid not in b.chats:
-            b.chat(cid, "p2p", m["fork_from"])
+            b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size")} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
@@ -387,6 +402,7 @@ class Platform:
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
+                "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
@@ -473,6 +489,38 @@ class Platform:
         r = self._external(cid)
         new = self.call(self.new_chat, agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
         send(self, new, text, files)
+        return {"id": new}
+
+    def fork_chat(self, cid, index):
+        """从这个对话的第 index 条回答分出一个新对话：之前的内容带过去，之后两边各聊各的。"""
+        m = self.meta(cid)
+        if m.get("busy"):
+            raise Problem("等它这一轮做完再分叉。")
+        rows = self.channel.logs.read(cid)
+        if not isinstance(index, int) or not 0 <= index < len(rows) or rows[index].get("type") != "answer":
+            raise Problem("找不到这条回答。")
+        base = self._effective(m)["base"]
+        last = max(i for i, r in enumerate(rows) if r.get("type") == "answer")
+        fork = rows[index].get("fork") or {}
+        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        if index == last and sid:
+            at = None if base == "codex" else fork.get("at")
+        elif fork.get("at") and base != "codex":
+            sid, at = fork.get("sid") or sid, fork["at"]
+        else:
+            raise Problem("这条回答之后的内容分不开，只能从最后一条回答分叉。")
+        if not sid:
+            raise Problem("这个对话还没开始，没法分叉。")
+        t = m.get("temp")
+        # 标题留空：分出来以后的第一句话当标题
+        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, fork_from=sid, fork_at=at, parent=cid)
+        if t and not t.get("dir"):            # 没选目录的临时对话：接着用原来那个临时目录（会话记录按目录存）
+            chats = self.chats()
+            chats[new]["temp"]["scratch"] = t.get("scratch") or cid
+            self.store.write(chats)
+        for r in rows[:index + 1]:
+            if r.get("type") in ("user", "answer", "file", "note"):
+                self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
     def run(self, coro, timeout=30):
@@ -616,6 +664,7 @@ def _handler(pf):
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
+                "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
@@ -760,13 +809,15 @@ def agent_view(pf, aid, detail=False):
 
 
 def state(pf):
+    from . import models
     from . import web as console
     g = registry.global_config()
     return {"agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
             "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
             "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                       "codex": _defaults("codex", os.path.expanduser("~"))},
-            "codex": console._codex(), "home": os.path.expanduser("~")}
+            "codex": console._codex(), "home": os.path.expanduser("~"),
+            "models": {"claude": models.claude(), "codex": models.codex()}}
 
 
 def save_agent(aid, fields):

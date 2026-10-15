@@ -73,6 +73,12 @@
   平台进程里每 30 秒检查一次：到点就跑，下一次从「现在」往后算，所以错过几次都只补一次（比预定晚 5 分钟以上标 catchup）；
   只跑一次的跑完就暂停。给 Agent：网页对话 s-<任务>-<运行>（或 session=same 时一直用 s-<任务>），meta 里 schedule，不进对话列表；
   给项目：走 `projects.dispatch`（一起做），等各人做完。deliver 用 `channels.send_once` 私聊主人
+- 分叉（`Platform.fork_chat`）：每轮回答记下 `fork`（会话编号 + 这一轮最后一条回答的 uuid，`Turn.uuid`），新网页对话 parent 指回去、
+  fork_from / fork_at 存在状态里（`send` 里不能把 fork_from 当参数传，否则 fork_at 被丢掉，变成从整个对话分），之前的记录复制过去。
+  Codex 只能从整个对话分，所以只有最后一条回答能分叉。没选目录的临时对话分叉后用原来的临时目录（temp.scratch），会话记录按目录存。
+  对话列表按 parent 挂成树（接着飞书、微信对话聊的，parent 是 x:<原会话>）
+- 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息），平台每天刷新，存 ~/.ccim/models.json；
+  Codex 读它自己的 ~/.codex/models_cache.json
 - 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文

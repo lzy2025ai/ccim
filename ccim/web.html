@@ -101,7 +101,19 @@ body{overflow:hidden}
 .thread{flex:1;overflow:auto;padding:22px 0 10px}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
 .msg.me{display:flex;justify-content:flex-end}
-.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;max-width:80%;white-space:pre-wrap}
+.msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
+.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg-acts{display:flex;gap:2px;margin-top:4px;opacity:0;transition:opacity .15s}
+.msg:hover .msg-acts,.msg:focus-within .msg-acts{opacity:1}
+@media (hover:none){.msg-acts{opacity:1}}
+.msg-acts button{display:flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted)}
+.msg-acts button:hover{background:var(--sunk);color:var(--ink)}
+.msg-acts svg{width:14px;height:14px}
+.kids{margin:0 0 2px 27px;padding-left:6px;border-left:1px solid var(--line-strong)}
+.item.child{padding:6px 10px;align-items:center}
+.item.child .title{font-weight:400;font-size:13.5px}
+.fork-from{font-size:12px;color:var(--muted);text-decoration:none}
+.fork-from:hover{color:var(--ink)}
 .msg.me .from{display:none}
 .from-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .from-row b{font:600 14px var(--song)}
@@ -337,15 +349,11 @@ body{overflow:hidden}
 .qr{width:220px;height:220px;margin:8px auto;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px}
 .qr svg{width:100%;height:100%}
 .logs{font:12px/1.5 var(--mono);background:#1F242C;color:#E4E7EB;padding:12px;border-radius:8px;max-height:60vh;overflow:auto;white-space:pre-wrap}
-.custom{display:flex;gap:6px;padding:6px 10px 8px}
-.custom input{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--line-strong);border-radius:7px;outline:none}
 .loading{margin:auto;color:var(--faint)}
 .chip,.seg button,.btn,.tag{white-space:nowrap}
 .box .bar{flex-wrap:nowrap;align-items:flex-end;gap:6px}
 .box .bar .opts{display:flex;flex-wrap:wrap;align-items:center;gap:4px;flex:1;min-width:0}
 .dflt{font-size:11px;color:var(--faint);margin-left:4px}
-.custom button{width:auto;flex:none}
-.custom input{min-width:120px}
 .chat-head .meta .path{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
 .retry{color:var(--bad);font-size:13px}
@@ -384,6 +392,10 @@ const ICON = {
   stop:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
   chev:'<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+  quote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h7M4 12h11M4 17h7"/><path d="M18 14v5"/></svg>',
+  branch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 5 5 9-10"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
@@ -421,9 +433,18 @@ function group(ts){
   const d = new Date(ts.replace(" ", "T")), now = new Date();
   return d.toDateString() === now.toDateString() ? "今天" : "更早";
 }
+function modelList(base){   // [值, 名字, 说明, 具体型号]：和 Claude Code / Codex 自己的模型列表一致
+  const got = (S.models || {})[base] || [];
+  return got.length || base === "codex" ? got : CLAUDE_MODELS;
+}
 function modelName(m){
   if (!m) return "默认";
-  const s = String(m), one = s.includes("[1m]") ? "（1M）" : "", b = s.replace("[1m]", "");
+  const s = String(m);
+  const known = [...modelList("claude"), ...modelList("codex")].find(o => o[0] === s);
+  if (known) return known[1];
+  const one = s.includes("[1m]") ? "（1M）" : "", b = s.replace("[1m]", "");
+  const same = modelList("claude").find(o => o[0].replace("[1m]", "") === b);
+  if (same) return same[1] + one;
   const hit = CLAUDE_MODELS.find(([k]) => b === k || b.startsWith(`claude-${k}`));
   if (!hit) return s;
   const v = b.match(/(\d+)-(\d+)(?:-\d{8})?$/);
@@ -519,18 +540,16 @@ function pickDD(id, v){
   document.querySelector(`#dd-${id} span`).textContent = (d.opts.find(o => o[0] === v) || [v, v])[1];
   d.onpick && d.onpick(v);
 }
-function modelOpts(base, followLabel){
-  const follow = [["", followLabel, "用默认设置"]];
+function modelOpts(base, followLabel, cur){
+  const list = modelList(base).map(o => o.slice(0, 3));
   if (base === "codex"){
     const dm = (S.defaults.codex || [])[0];
-    return follow.concat(dm ? [[dm, dm, "Codex 设置里的模型"]] : []);
+    if (dm && !list.some(o => o[0] === dm)) list.unshift([dm, dm, ""]);
   }
-  return follow.concat(CLAUDE_MODELS);
+  if (cur && !list.some(o => o[0] === cur)) list.push([cur, modelName(cur), ""]);   // 以前设过、现在列表里没有的
+  return [["", followLabel, "用默认设置"]].concat(list);
 }
 function effortOpts(base, followLabel){ return [["", followLabel, "用默认设置"]].concat(EFFORTS[base].map(k => [k, k, EFF_DESC[k]])); }
-function customModelBox(onset){   // 模型可以直接写名字（Codex 的模型、完整的 Claude 模型名）
-  return `<div class="sec">其他模型</div><div class="custom"><input placeholder="写模型名" onkeydown="if(event.key==='Enter'){${onset}(this.value.trim())}"><button class="btn" onclick="${onset}(this.previousElementSibling.value.trim())">用它</button></div>`;
-}
 
 // ================= 状态和推送 =================
 let S = {agents:[], chats:[], global:{}, defaults:{}, home:""};
@@ -604,22 +623,42 @@ function renderList(){
 
 // ================= 对话列表 =================
 let chatFilter = "";
+function chatTree(rows){
+  // 分叉出来的对话挂在原来那个下面；整棵树按里面最近一次聊的时间排
+  const byId = Object.fromEntries(rows.map(c => [c.id, c])), kids = {};
+  const roots = rows.filter(c => !(c.parent && byId[c.parent] && c.parent !== c.id));
+  rows.forEach(c => { if (c.parent && byId[c.parent] && !roots.includes(c)) (kids[c.parent] = kids[c.parent] || []).push(c); });
+  const latest = (c, seen = new Set()) => {
+    if (seen.has(c.id)) return c.last_active || ""; seen.add(c.id);
+    return (kids[c.id] || []).reduce((m, k) => { const v = latest(k, seen); return v > m ? v : m; }, c.last_active || "");
+  };
+  roots.forEach(c => { c._latest = latest(c); });
+  roots.sort((a, b) => (b._latest > a._latest ? 1 : -1));
+  return {roots, kids};
+}
+function chatItem(c, kids, child){
+  const a = c.agent ? agentOf(c.agent) : null;
+  const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.agent_name || "临时对话")}</span>`;
+  const me = child
+    ? `<a class="item child ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">
+        <span class="t"><span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `<span class="when">${when(c.last_active)}</span>`}</a>`
+    : `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">
+        ${seal(a, "", false)}<span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span>${srcTag(c.source)}</span></a>`;
+  const ks = (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
+  return me + (ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true)).join("")}</div>` : "");
+}
 function renderChatList(){
   const rows = S.chats.filter(c => !chatFilter || (c.title + (c.agent_name || "")).toLowerCase().includes(chatFilter));
+  const {roots, kids} = chatFilter ? {roots: rows, kids: {}} : chatTree(rows);
   const groups = ["今天", "更早"];
   $("#list").innerHTML = `
     <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="chatFilter=this.value.toLowerCase();renderChatList();this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.length ? groups.map(g => {
-      const items = rows.filter(c => group(c.last_active) === g);
+      const items = roots.filter(c => group(c._latest || c.last_active) === g);
       if (!items.length) return "";
-      return `<div class="group">${g}</div>` + items.map(c => {
-        const a = c.agent ? agentOf(c.agent) : null;
-        const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.agent_name || "临时对话")}</span>`;
-        return `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">
-          ${seal(a, "", false)}<span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
-          <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span>${srcTag(c.source)}</span></a>`;
-      }).join("");
+      return `<div class="group">${g}</div>` + items.map(c => chatItem(c, kids, false)).join("");
     }).join("") : `<p class="muted" style="padding:10px">${chatFilter ? "没有找到。" : "还没有对话。"}</p>`}</div>`;
 }
 function srcTag(src){
@@ -649,14 +688,27 @@ function fromRow(){
   const a = detail.agent ? agentOf(detail.agent) : null;
   return `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
 }
-function recHtml(r){
+function msgActs(src, i, r){
+  const ref = `${q(src)},${i}`;
+  const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
+  if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
+  if (src === "log" && canFork(i, r)) btns.push(`<button onclick="forkAt(${i})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
+  return `<div class="msg-acts">${btns.join("")}</div>`;
+}
+function canFork(i, r){
+  if (r.type !== "answer" || r.state !== "done" || detail.readonly || detail.busy) return false;
+  const last = detail.log.map(x => x.type).lastIndexOf("answer");
+  return i === last || (!!r.fork && detail.base !== "codex");
+}
+function recHtml(r, i, src = "log"){
   if (r.type === "user"){
     return `<div class="msg me"><div>${r.text ? `<div class="bubble">${esc(r.text)}</div>` : ""}
-      ${r.files && r.files.length ? `<div class="files">${r.files.map(f => `<span class="file">${ICON.file}${esc(f.name)}</span>`).join("")}</div>` : ""}</div></div>`;
+      ${r.files && r.files.length ? `<div class="files">${r.files.map(f => `<span class="file">${ICON.file}${esc(f.name)}</span>`).join("")}</div>` : ""}
+      ${r.text ? msgActs(src, i, r) : ""}</div></div>`;
   }
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
-    return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
+    return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
   }
   if (r.type === "card"){
     const live = r.buttons && r.buttons.length;
@@ -682,10 +734,14 @@ function liveHtml(){
 function drawThread(){
   const t = $("#thread"); if (!t) return;
   const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
-  const earlier = (detail.earlier || []).map(recHtml).join("");
+  const earlier = (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
   t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map(recHtml).join("") + liveHtml();
+    + detail.log.map((r, i) => recHtml(r, i)).join("") + liveHtml();
   if (near) t.scrollTop = t.scrollHeight;
+}
+function forkFrom(c){
+  const p = c.parent && S.chats.find(x => x.id === c.parent);
+  return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
 }
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
@@ -693,7 +749,7 @@ function drawChat(){
     <div class="chat-head">${seal(a)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>${srcTag(c.source)}
+        <span class="tag">${BASE[c.base]}</span>${srcTag(c.source)}${forkFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${c.readonly ? "" : `<button class="icon-btn" aria-label="更多" onclick="chatMenu(event)">${ICON.more}</button>`}
@@ -753,14 +809,13 @@ async function stopChat(){ await act(() => api("/api/chat/stop", {id: detail.id}
 async function cardAct(mid, value){ await act(() => api("/api/chat/action", {id: detail.id, mid, value})); }
 function chatModel(e){
   const c = detail;
-  pop(e, `<div class="sec">模型</div>` + optList(modelOpts(c.base, "跟随默认").map(o => o[0] === "" ? o : o), c.model_custom ? c.model : "",
-          v => `setChat('model',${q(v)})`) + customModelBox("setChatModel"));
+  const cur = c.model_custom ? c.model : "";
+  pop(e, `<div class="sec">模型</div>` + optList(modelOpts(c.base, "跟随默认", cur), cur, v => `setChat('model',${q(v)})`));
 }
 function chatEffort(e){
   const c = detail;
   pop(e, `<div class="sec">思考深度</div>` + optList(effortOpts(c.base, "跟随默认"), c.effort_custom ? c.effort : "", v => `setChat('effort',${q(v)})`));
 }
-function setChatModel(v){ if (v) setChat("model", v); }
 async function setChat(key, value){
   closePop();
   const v = await act(() => api("/api/chat/set", {id: detail.id, key, value: value || null}), key === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度");
@@ -773,6 +828,31 @@ async function deleteChat(){
   if (!await confirmBox("删除这个对话？", "对话记录会删掉，工作目录里的文件不受影响。", "删除")) return;
   await act(() => api("/api/chat/delete", {id: detail.id}), "已删除");
   detail = null; await loadState(); location.hash = "#/chats";
+}
+function msgText(src, i){ return ((src === "earlier" ? detail.earlier : detail.log)[i] || {}).text || ""; }
+async function copyMsg(btn, src, i){
+  const text = msgText(src, i);
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+  const old = btn.innerHTML; btn.innerHTML = `${ICON.check}已复制`;
+  setTimeout(() => { btn.innerHTML = old; }, 1500);
+}
+function quoteMsg(btn, src, i){
+  const box = btn.closest(".msg"), sel = getSelection();
+  const picked = sel && !sel.isCollapsed && box.contains(sel.anchorNode) ? sel.toString() : "";   // 选中了一段就只引用这段
+  const text = (picked || msgText(src, i)).trim();
+  const input = $("#input"); if (!input || !text) return;
+  const quoted = text.split("\n").map(l => "> " + l).join("\n") + "\n\n";
+  input.value = quoted + input.value.replace(/^\s+/, "");
+  input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+  input.style.height = ""; drawComposerState();
+}
+async function forkAt(i){
+  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i}), "已分叉，在新对话里接着聊");
+  await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 function saveAsAgent(){
   agentDraftFrom = {base: detail.base, dir: detail.dir || "", model: detail.model_custom ? detail.model : null, effort: detail.effort_custom ? detail.effort : null};
@@ -837,11 +917,9 @@ function renderNewChat(){
   dropZone($("#box"));
 }
 function draftPick(e, k){
-  const opts = k === "model" ? modelOpts(draft.base, "跟随默认") : effortOpts(draft.base, "跟随默认");
-  pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}=${q(v)};closePop();renderNewChat()`)
-    + (k === "model" ? customModelBox("setDraftModel") : ""));
+  const opts = k === "model" ? modelOpts(draft.base, "跟随默认", draft.model) : effortOpts(draft.base, "跟随默认");
+  pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}=${q(v)};closePop();renderNewChat()`));
 }
-function setDraftModel(v){ if (v) { draft.model = v; closePop(); renderNewChat(); } }
 async function pickDir(e){
   const anchor = e.currentTarget, ev = {currentTarget: anchor, stopPropagation(){}};
   e.stopPropagation();
@@ -970,7 +1048,7 @@ function formHtml(a){
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
     <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
-    <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置"), fd.model || "", v => fd.model = v)}</div>
+    <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);})">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
@@ -1016,10 +1094,10 @@ function renderSettings(){
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
     <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。</div></div></div>
     <div class="pane"><div class="sect"><h3>Claude Code</h3><div class="form">
-      <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`), gs.model, v => gs.model = v)}
+      <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`, gs.model), gs.model, v => gs.model = v)}
       <label>思考深度</label>${dd("g-ce", effortOpts("claude", `跟随 Claude Code 设置（${ce || "默认"}）`), gs.effort, v => gs.effort = v)}</div></div>
       ${S.codex ? `<div class="sect"><h3>Codex</h3><div class="form">
-      <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`), gs.codex_model, v => gs.codex_model = v)}
+      <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`, gs.codex_model), gs.codex_model, v => gs.codex_model = v)}
       <label>思考深度</label>${dd("g-xe", effortOpts("codex", `跟随 Codex 设置（${xe || "默认"}）`), gs.codex_effort, v => gs.codex_effort = v)}</div></div>` : ""}
       <button class="btn primary" onclick="saveGlobal()">保存</button></div></div>`;
 }
@@ -1088,7 +1166,7 @@ function replyActs(r, live){
 }
 function taskHtml(t){
   const qa = t.quote ? agentOf(t.quote.agent) : null;
-  return `<div class="msg me"><div style="max-width:80%">
+  return `<div class="msg me"><div>
       ${t.quote ? `<div class="quote">${seal(qa, "sm", false)}<span>${esc(t.quote.text.replace(/\s+/g, " ").slice(0, 120))}</span></div>` : ""}
       <div class="bubble">${chipsOf(t.to)} ${esc(t.text)}</div>
       <div class="meta-r">${t.compare ? `<span class="tag">各做一份，对比结果</span>` : ""}<span>${whenTs(t.at)}</span></div></div></div>`;

@@ -398,11 +398,19 @@ class Platform:
         return {"base": base, "model": model or dm, "effort": effort or de,
                 "model_custom": bool((c or {}).get("model")), "effort_custom": bool((c or {}).get("effort"))}
 
+    def _fork_title(self, cid, m):
+        """分叉出来、还没开口的对话：用分叉那条回答之前的问题当标题；开口后第一句话就是标题。"""
+        if not m.get("parent"):
+            return None
+        q = next((r.get("text") for r in reversed(self.channel.logs.read(cid)) if r.get("type") == "user" and r.get("text")), "")
+        q = " ".join(q.split())
+        return f"从「{q[:16]}{'…' if len(q) > 16 else ''}」分出" if q else None
+
     def chat_view(self, cid):
         m = self.meta(cid)
         a = agents.get(m["agent"]) if m.get("agent") else None
         t = m.get("temp") or {}
-        return {"id": cid, "title": m.get("title") or "新对话", "agent": m.get("agent"),
+        return {"id": cid, "title": m.get("title") or self._fork_title(cid, m) or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")

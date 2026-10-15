@@ -27,7 +27,7 @@ PORT = 8977
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 UPLOAD_LIMIT = 100 * 1024 * 1024
-MERGED = ("card", "reply")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
+MERGED = ("card", "reply", "run")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
 def home():
@@ -231,7 +231,9 @@ class Platform:
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
         self.background = set()
         from .projects import Projects
+        from .schedules import Schedules
         self.projects = Projects(self)
+        self.schedules = Schedules(self)
 
     def handlers(self):
         return {"platform": self}
@@ -239,6 +241,7 @@ class Platform:
     def attach(self, channel):
         self.channel = channel
         self.loop = asyncio.get_event_loop()
+        self.schedules.start()                # 到点就跑的定时任务
 
     # ----- 对话 -----
 
@@ -381,7 +384,8 @@ class Platform:
         return {"id": cid, "title": m.get("title") or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
-                "source": f"项目「{m.get('title')}」" if m.get("project") else "网页", "project": m.get("project"),
+                "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
+                else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
@@ -399,7 +403,8 @@ class Platform:
         return v
 
     def chat_list(self):
-        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project")] + self.external_chats()
+        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")] + \
+            self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
 
@@ -525,6 +530,7 @@ def _defaults(base, path):
 def _handler(pf):
     from . import web as console
     from . import projects as projects_mod
+    from . import schedules as schedules_mod
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "ccim"
@@ -558,7 +564,7 @@ def _handler(pf):
                 return
             try:
                 self._send(200, fn() or {})
-            except (Problem, console.Problem, projects_mod.Problem, ValueError) as e:
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -584,6 +590,7 @@ def _handler(pf):
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
+                "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -616,6 +623,11 @@ def _handler(pf):
                 "/api/project/dispatch": lambda: pf.run(pf.projects.dispatch(b("id"), b("text"), b("to"), b("compare"), b("quote")), 600),
                 "/api/project/choose": lambda: pf.projects.choose(b("id"), b("task"), b("agent")),
                 "/api/project/stop": lambda: pf.run(pf.projects.stop(b("id"), b("task"), b("agent"))),
+                "/api/schedule/save": lambda: pf.call(pf.schedules.save, b("id"), b("fields") or {}),
+                "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
+                "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
+                "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
+                "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
                 "/api/channel/start": lambda: console.start(b("proc")),
@@ -751,7 +763,7 @@ def state(pf):
     from . import web as console
     g = registry.global_config()
     return {"agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
-            "projects": pf.projects.summary(),
+            "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
             "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                       "codex": _defaults("codex", os.path.expanduser("~"))},
             "codex": console._codex(), "home": os.path.expanduser("~")}

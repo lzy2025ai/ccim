@@ -203,6 +203,24 @@ body{overflow:hidden}
 .diff .d-add{color:#9FE6A0}.diff .d-del{color:#F2A49B}.diff .d-hunk{color:#8FB8E8}
 .acts-row a.link{text-decoration:underline;text-underline-offset:3px}
 
+/* ---------- 定时任务 ---------- */
+.run{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
+.run-head{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;text-align:left}
+.run-head .chev{margin-left:auto;transition:transform .15s}
+.run.open .run-head .chev{transform:rotate(90deg)}
+.run-body{display:none;padding:0 14px 12px;border-top:1px solid var(--line)}
+.run.open .run-body{display:block;padding-top:10px}
+.weekdays{display:inline-flex;gap:4px}
+.weekdays button{width:32px;height:32px;border-radius:50%;border:1px solid var(--line-strong);font-size:13px;color:var(--ink-2)}
+.weekdays button.on{background:var(--qing);border-color:var(--qing);color:#fff}
+.checks{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px}
+.check{display:inline-flex;align-items:center;gap:8px;color:var(--ink-2)}
+.check svg{width:18px;height:18px;padding:2px;border-radius:5px;border:1.5px solid var(--line-strong);color:transparent;box-sizing:border-box}
+.check.on svg{background:var(--qing);border-color:var(--qing);color:#fff}
+.check.locked{color:var(--muted)}
+.check.locked svg{background:var(--faint);border-color:var(--faint)}
+.kv dd{white-space:pre-wrap}
+
 /* ---------- 弹窗 ---------- */
 .scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
 .dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
@@ -324,6 +342,7 @@ body{overflow:hidden}
     <button class="fold unfold" aria-label="展开列表" title="展开列表" onclick="toggleList(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/></svg></button>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/projects" data-nav="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
+    <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
@@ -351,6 +370,7 @@ const ICON = {
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
   fold:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg>',
+  check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L19 7"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
@@ -511,6 +531,9 @@ function connectEvents(){
   const es = new EventSource("/api/events");
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
+    if (sched && ev.type === "schedule" && ev.schedule === sched.id){
+      clearTimeout(window._st); window._st = setTimeout(() => { if (sched) openSchedule(sched.id); }, 300);
+    }
     if (proj && ev.type === "project" && ev.project === proj.id){
       clearTimeout(window._pt); window._pt = setTimeout(() => { if (proj) openProject(proj.id, true); }, 300);
     }
@@ -543,7 +566,9 @@ function route(){
   closePop();
   renderList();
   if (current.view !== "projects") proj = null;
+  if (current.view !== "schedules") sched = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectEmpty(); }
+  else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
   else if (current.view === "agents") { current.id === "new" ? renderAgentForm(null) : current.id ? renderAgent(current.id) : renderAgentEmpty(); }
   else if (current.view === "settings") renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
@@ -552,6 +577,7 @@ addEventListener("hashchange", route);
 function renderList(){
   if (current.view === "agents") renderAgentList();
   else if (current.view === "projects") renderProjectList();
+  else if (current.view === "schedules") renderScheduleList();
   else if (current.view === "settings") renderSettingsList();
   else renderChatList();
 }
@@ -1255,6 +1281,173 @@ function editProject(){
 async function deleteProject(){
   if (!await confirmBox(`删除「${proj.name}」？`, "项目和里面的消息会删掉；Agent、工作目录里的文件、各自的分支不受影响。", "删除")) return;
   await act(() => api("/api/project/delete", {id: proj.id}), "已删除"); proj = null; await loadState(); location.hash = "#/projects";
+}
+
+
+// ================= 定时任务 =================
+const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
+let sched = null, sd = null;
+const schedSummary = id => (S.schedules || []).find(s => s.id === id);
+function pad2(n){ return String(n).padStart(2, "0"); }
+function fmtDay(d){
+  const now = new Date(), t = new Date(now); t.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return "今天";
+  if (d.toDateString() === t.toDateString()) return "明天";
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+function fmtTs(sec){ if (!sec) return ""; const d = new Date(sec * 1000); return `${fmtDay(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function freqText(s){
+  if (s.freq === "daily") return `每天 ${s.time}`;
+  if (s.freq === "workday") return `每个工作日 ${s.time}`;
+  if (s.freq === "weekly") return `每周${(s.days || []).map(d => WEEK[d]).join("、")} ${s.time}`;
+  if (s.freq === "monthly") return `每月 ${s.dom} 号 ${s.time}`;
+  return `${s.date ? fmtDay(new Date(s.date + "T00:00")) : ""} ${s.time}，只跑一次`;
+}
+function schedMark(s){
+  if (s.target.kind === "project") return pmark(projSummary(s.target.id) || {name: "项"});
+  return seal(agentOf(s.target.id), "", false);
+}
+function schedTarget(s){
+  if (s.target.kind === "project") {
+    const p = projSummary(s.target.id);
+    return `项目「${p ? p.name : "已删除"}」：${s.target.agents.map(a => (agentOf(a) || {name: "已删除的 Agent"}).name).join("、")}`;
+  }
+  return (agentOf(s.target.id) || {name: "已删除的 Agent"}).name;
+}
+function renderScheduleList(){
+  const rows = S.schedules || [];
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>定时任务</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建</a></div>
+    <div class="scroll">${rows.length ? rows.map(s => `<a class="item ${current.id === s.id ? "on" : ""}" href="#/schedules/${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit">
+      ${schedMark(s)}<span class="t"><span class="title">${esc(s.name)}</span>${s.running ? `<span class="working"><span class="spin"></span>正在跑</span>` : `<span class="sub">${esc(freqText(s))}</span>`}</span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${s.on ? esc(fmtTs(s.next_run)) : ""}</span>${!s.on ? `<span class="tag">已暂停</span>` : s.last_state === "error" ? `<span class="tag" style="color:var(--bad)">上次出错</span>` : ""}</span></a>`).join("")
+      : `<p class="muted" style="padding:10px">还没有定时任务。</p>`}</div>`;
+}
+function renderScheduleEmpty(){
+  sched = null;
+  $("#main").innerHTML = `<div class="empty"><h2>定时任务</h2><p>让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。结果留在这里，也可以发到飞书、微信。</p>
+    <a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a></div>`;
+}
+function runState(r){
+  return ({done: `<span class="status on"><i></i>完成${r.elapsed ? `，用时 ${fmtSec(r.elapsed)}` : ""}</span>`, error: `<span class="status err"><i></i>出错了</span>`,
+           stopped: `<span class="status"><i></i>停下了</span>`, working: `<span class="status busy"><i></i>正在跑</span>`,
+           lost: `<span class="status"><i></i>没跑完（ccim 重启过）</span>`}[r.state] || "") + (r.catchup ? ` <span class="tag">补跑</span>` : "");
+}
+async function openSchedule(id){
+  try { sched = await api(`/api/schedule?id=${encodeURIComponent(id)}`); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个定时任务</h2><p>${esc(e.message)}</p></div>`; return; }
+  drawSchedule();
+}
+function drawSchedule(){
+  const s = sched, open = new Set([...document.querySelectorAll(".run.open")].map(x => x.dataset.id));
+  const a = s.target.kind === "agent" ? agentOf(s.target.id) : null;
+  const dl = ["留在这里"].concat((s.deliver || []).map(d => d === "feishu" ? "发到飞书" : "发到微信")).join("，");
+  $("#main").innerHTML = `<div class="agent-page">
+    <div class="agent-top">${schedMark(s)}
+      <div class="grow"><h2>${esc(s.name)}</h2>
+        <div class="row" style="margin-top:6px">${s.running ? `<span class="status busy"><i></i>正在跑</span>` : s.on ? `<span class="status on"><i></i>下次 ${esc(fmtTs(s.next_run))}</span>` : `<span class="status"><i></i>已暂停</span>`}<span class="tag">${esc(freqText(s))}</span></div></div>
+      <button class="btn" onclick="schedRun()" ${s.running ? "disabled" : ""}>立即跑一次</button>
+      <button class="btn" onclick="schedToggle()">${s.on ? "暂停" : "恢复"}</button>
+      <button class="icon-btn" aria-label="更多" onclick="schedMenu(event)">${ICON.more}</button>
+    </div>
+    <div class="pane">
+      <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
+        <dt>结果</dt><dd>${esc(dl)}</dd>${s.target.kind === "agent" ? `<dt>对话</dt><dd>${s.session === "same" ? "接着同一个对话聊，记得之前跑过的" : "每次开一个新对话"}</dd>` : ""}</dl></div>
+      <div class="sect"><h3>运行记录</h3>${s.runs.length ? s.runs.map((r, i) => `<div class="run ${open.has(r.id) || (!open.size && i === 0) ? "open" : ""}" data-id="${esc(r.id)}">
+        <button class="run-head" onclick="this.parentElement.classList.toggle('open')"><span class="when" style="width:120px">${esc(fmtTs(r.at))}</span>${runState(r)}${ICON.chev}</button>
+        <div class="run-body">${r.state === "working" ? `<p class="muted">正在跑，跑完结果会出现在这里。</p>` : `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text || "")}</div>`}
+          ${r.chat ? `<a class="link" href="#/chats/${encodeURIComponent(r.chat)}">看完整对话</a>` : r.project ? `<a class="link" href="#/projects/${encodeURIComponent(r.project)}">去项目里看</a>` : ""}</div></div>`).join("")
+        : `<p class="muted">还没跑过。可以先「立即跑一次」看看效果。</p>`}</div>
+    </div></div>`;
+}
+async function schedRun(){ await act(() => api("/api/schedule/run", {id: sched.id}), "已开始，跑完结果会出现在这里"); openSchedule(sched.id); loadState(); }
+async function schedToggle(){ await act(() => api("/api/schedule/toggle", {id: sched.id, on: !sched.on}), sched.on ? "已暂停" : "已恢复"); await loadState(); openSchedule(sched.id); }
+function schedMenu(e){
+  pop(e, `<button onclick="closePop();location.hash='#/schedules/edit-'+encodeURIComponent(sched.id)">编辑</button><button onclick="closePop();schedDelete()">删除</button>`, true);
+}
+async function schedDelete(){
+  if (!await confirmBox(`删除「${sched.name}」？`, "以后不会再跑，运行记录也会删掉。", "删除")) return;
+  await act(() => api("/api/schedule/delete", {id: sched.id}), "已删除"); sched = null; await loadState(); location.hash = "#/schedules";
+}
+
+// ---- 新建 / 编辑 ----
+async function renderScheduleForm(id){
+  let s = null;
+  if (id) { try { s = await api(`/api/schedule?id=${encodeURIComponent(id)}`); } catch (e) { toast(e.message); return; } }
+  const today = new Date(), tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const iso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  sd = s ? {name: s.name, target: JSON.parse(JSON.stringify(s.target)), prompt: s.prompt, freq: s.freq, time: s.time, days: s.days || [], dom: s.dom || 1,
+            date: s.date || iso(tomorrow), deliver: s.deliver || [], session: s.session || "new"}
+         : {name: "", target: {kind: "agent", id: (S.agents[0] || {}).id}, prompt: "", freq: "workday", time: "09:00", days: [0], dom: 1,
+            date: iso(tomorrow), deliver: [], session: "new"};
+  sd._id = id || null;
+  drawScheduleForm();
+}
+function drawScheduleForm(){
+  const d = sd, keep = {name: $("#sd-name")?.value, prompt: $("#sd-prompt")?.value};
+  if (keep.name !== undefined) { d.name = keep.name; d.prompt = keep.prompt; }
+  const hours = Array.from({length: 24}, (_, h) => [pad2(h), pad2(h) + " 点", ""]);
+  const mins = Array.from({length: 12}, (_, i) => [pad2(i * 5), pad2(i * 5) + " 分", ""]);
+  const [hh, mm] = d.time.split(":");
+  const tgtOpts = [...S.agents.map(a => ["agent:" + a.id, a.name, BASE[a.base || "claude"]]),
+                   ...(S.projects || []).map(p => ["project:" + p.id, `项目「${p.name}」`, `${p.members.length} 个 Agent`])];
+  const p = d.target.kind === "project" ? projSummary(d.target.id) : null;
+  const a = d.target.kind === "agent" ? agentOf(d.target.id) : null;
+  const ch = k => a && a.channels.find(c => (k === "weixin") === (c.kind === "weixin"));
+  const dates = Array.from({length: 60}, (_, i) => { const x = new Date(); x.setDate(x.getDate() + i);
+    const v = `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; return [v, fmtDay(x) + (i > 1 ? `（周${WEEK[(x.getDay() + 6) % 7]}）` : ""), ""]; });
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>${d._id ? "编辑定时任务" : "新建定时任务"}</h2>
+    <div class="role">到了时间，ccim 会把任务交给它去做；电脑睡着错过了，醒来补跑一次。</div></div></div>
+    <div class="pane"><div class="form">
+      <label for="sd-name">名字</label><input id="sd-name" class="input" value="${esc(d.name)}" placeholder="比如：每日站会小结">
+      <label>给谁</label><div>${tgtOpts.length ? dd("sd-target", tgtOpts, d.target.kind + ":" + d.target.id, v => {
+          const [k, i] = v.split(":"); const pp = projSummary(i);
+          sd.target = k === "project" ? {kind: k, id: i, agents: pp && pp.members.length ? [pp.members[0]] : []} : {kind: k, id: i};
+          sd.deliver = []; drawScheduleForm(); }) : `<span class="muted">先去 Agent 页新建一个 Agent。</span>`}
+        ${p ? `<div class="row" style="margin-top:8px">${p.members.map(m => { const ag = agentOf(m); return ag ? `<button class="pick ${d.target.agents.includes(m) ? "on" : ""}" style="padding:6px 10px" data-m="${esc(m)}">${seal(ag, "sm", false)}<span class="nm">${esc(ag.name)}</span></button>` : ""; }).join("")}</div>
+          <div class="help">选了几个就交给几个人，一起做，结果都留在项目里。</div>` : ""}</div>
+      <label for="sd-prompt">做什么</label><textarea id="sd-prompt" class="textarea" placeholder="写清楚每次要它做什么，就像平时发消息一样">${esc(d.prompt)}</textarea>
+      <label>什么时候</label><div>
+        <div class="seg" id="sd-freq">${[["daily", "每天"], ["workday", "工作日"], ["weekly", "每周"], ["monthly", "每月"], ["once", "只一次"]].map(([k, n]) => `<button class="${d.freq === k ? "on" : ""}" data-f="${k}">${n}</button>`).join("")}</div>
+        <div class="row" style="margin-top:10px">
+          ${d.freq === "weekly" ? `<span class="weekdays">${WEEK.map((w, i) => `<button class="${d.days.includes(i) ? "on" : ""}" data-d="${i}" aria-label="周${w}">${w}</button>`).join("")}</span>` : ""}
+          ${d.freq === "monthly" ? `<span style="width:120px">${dd("sd-dom", Array.from({length: 28}, (_, i) => [String(i + 1), `${i + 1} 号`, ""]), String(d.dom), v => sd.dom = +v)}</span>` : ""}
+          ${d.freq === "once" ? `<span style="width:170px">${dd("sd-date", dates, d.date, v => sd.date = v)}</span>` : ""}
+          <span style="width:110px">${dd("sd-h", hours, hh, v => sd.time = v + ":" + sd.time.split(":")[1])}</span>
+          <span style="width:110px">${dd("sd-m", mins, mins.some(x => x[0] === mm) ? mm : "00", v => sd.time = sd.time.split(":")[0] + ":" + v)}</span>
+        </div></div>
+      <label>结果发到哪</label><div class="checks">
+        <span class="check on locked">${ICON.check}留在这里</span>
+        ${ch("feishu") ? `<button class="check ${d.deliver.includes("feishu") ? "on" : ""}" data-dl="feishu">${ICON.check}也发到飞书「${esc(ch("feishu").bot)}」</button>` : ""}
+        ${ch("weixin") ? `<button class="check ${d.deliver.includes("weixin") ? "on" : ""}" data-dl="weixin">${ICON.check}也发到微信「${esc(ch("weixin").bot)}」</button>` : ""}
+      </div>
+      ${a ? `<label>对话</label><div><div class="seg" id="sd-sess"><button class="${d.session === "new" ? "on" : ""}" data-s="new">每次开新对话</button><button class="${d.session === "same" ? "on" : ""}" data-s="same">接着同一个对话</button></div>
+        <div class="help">${d.session === "new" ? "每次从头开始，互不影响。" : "记得之前每次跑的结果，适合「和上次比有什么变化」这类任务。"}</div></div>` : ""}
+      <span></span><div class="row" style="margin-top:6px"><button class="btn primary" id="sd-save">${d._id ? "保存" : "新建"}</button><button class="btn" id="sd-try">先试跑一次</button></div>
+    </div></div></div>`;
+  document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { const m = b.dataset.m; sd.target.agents = sd.target.agents.includes(m) ? sd.target.agents.filter(x => x !== m) : [...sd.target.agents, m]; drawScheduleForm(); });
+  document.querySelectorAll("#sd-freq button").forEach(b => b.onclick = () => { sd.freq = b.dataset.f; drawScheduleForm(); });
+  document.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { const i = +b.dataset.d; sd.days = sd.days.includes(i) ? sd.days.filter(x => x !== i) : [...sd.days, i].sort(); drawScheduleForm(); });
+  document.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => { const k = b.dataset.dl; sd.deliver = sd.deliver.includes(k) ? sd.deliver.filter(x => x !== k) : [...sd.deliver, k]; drawScheduleForm(); });
+  document.querySelectorAll("#sd-sess button").forEach(b => b.onclick = () => { sd.session = b.dataset.s; drawScheduleForm(); });
+  $("#sd-save").onclick = saveSchedule;
+  $("#sd-try").onclick = trySchedule;
+}
+function schedFields(){
+  sd.name = $("#sd-name").value; sd.prompt = $("#sd-prompt").value;
+  const {_id, ...f} = sd; return f;
+}
+async function saveSchedule(){
+  const f = schedFields();
+  const r = await act(() => api("/api/schedule/save", {id: sd._id, fields: f}), sd._id ? "已保存" : "已新建");
+  await loadState(); location.hash = `#/schedules/${encodeURIComponent(r.id)}`;
+}
+async function trySchedule(){
+  const r = await act(() => api("/api/schedule/try", {fields: schedFields()}));
+  await loadState();
+  const href = r.chat ? `#/chats/${encodeURIComponent(r.chat)}` : `#/projects/${encodeURIComponent(r.project)}`;
+  dialog("试跑开始了", `<p>这次试跑不会保存成定时任务。可以先去看看效果，回来接着改。</p>`,
+    `<button class="btn" onclick="closeDialog()">留在这里</button><a class="btn primary" href="${href}" target="_blank" style="text-decoration:none" onclick="closeDialog()">在新标签页里看</a>`);
 }
 
 // ================= 对话框 =================

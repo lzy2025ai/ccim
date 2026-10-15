@@ -69,6 +69,10 @@
   对比且项目目录是 git 仓库：每人 `git worktree`（~/.ccim/worktrees/，分支 ccim/<任务>-<Agent>）+ 新对话 p-…-<任务>，
   做完自动提交到分支；「用这个」= squash 合并进项目目录当前分支记成一次提交，项目目录有没提交的改动时拒绝，冲突就 reset 回去。
   回答还没出来时状态是 queued，网页按「这个对话正在干活、而且是它最早没做完的一件」显示成干活中；平台重启后没做完的显示 lost
+- `ccim/schedules.py`：定时任务（#9）。存平台 state.json 的 schedules（next_run 存盘），运行记录 web/schedule-<编号>.jsonl（run 按 id 合并）。
+  平台进程里每 30 秒检查一次：到点就跑，下一次从「现在」往后算，所以错过几次都只补一次（比预定晚 5 分钟以上标 catchup）；
+  只跑一次的跑完就暂停。给 Agent：网页对话 s-<任务>-<运行>（或 session=same 时一直用 s-<任务>），meta 里 schedule，不进对话列表；
+  给项目：走 `projects.dispatch`（一起做），等各人做完。deliver 用 `channels.send_once` 私聊主人
 - 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文

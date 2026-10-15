@@ -102,6 +102,9 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   another, different agents work in parallel, and each agent only sees its own tasks. Send the same task to several agents
   to compare: in a git repo each one works on its own branch, and you pick one result to merge. Forward an answer to another
   agent, or create a new agent right in the project.
+- **Scheduled tasks**: have an agent (or several agents in a project) do something on a schedule — daily, on workdays,
+  on certain weekdays, monthly, or once. Results stay in the web UI and can also be sent through the agent's Feishu /
+  WeChat bot. A run missed while the Mac was asleep runs once when it wakes up.
 - **Settings**: default model and effort level for Claude Code and for Codex.
 
 ## In Feishu

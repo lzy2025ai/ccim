@@ -334,7 +334,7 @@ class Platform:
         if m.get("fork_from") and cid not in b.chats:
             b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
         mid = "u-" + uuid.uuid4().hex[:10]
-        shown = [{"name": f["name"], "size": f.get("size")} for f in files]
+        shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上
             text = self.mentions.unseen(cid) + text if text else text
@@ -734,10 +734,12 @@ def _handler(pf):
             return {"key": key, "name": name, "size": n}
 
         def _file(self, chat, path):
-            """对话里 Agent 发出来的文件：只给这个对话记录里出现过的。"""
+            """对话里 Agent 发出来的、用户发过去的文件：只给这个对话记录里出现过的。"""
             if not self._host_ok():
                 return self._send(403, b"forbidden", "text/plain")
-            ok = any(r.get("type") == "file" and r.get("path") == path for r in pf.channel.logs.read(chat))
+            ok = any(r.get("type") == "file" and r.get("path") == path
+                     or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
+                     for r in pf.channel.logs.read(chat))
             if not ok or not os.path.isfile(path):
                 return self._send(404, b"not found", "text/plain")
             import mimetypes

@@ -262,7 +262,8 @@ body{overflow:hidden}
 
 /* ---------- 表单 ---------- */
 .form{display:grid;grid-template-columns:120px 1fr;gap:16px 18px;align-items:start}
-.form>label{padding-top:7px;color:var(--ink-2)}
+.form>label,.form>.sub>label{padding-top:7px;color:var(--ink-2)}
+.form>.sub{display:contents}
 .form .help{font-size:12px;color:var(--muted);margin-top:4px}
 .input,.textarea{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);outline:none}
 .input:focus,.textarea:focus{border-color:var(--qing)}
@@ -316,7 +317,7 @@ body{overflow:hidden}
   .agent-top{padding:18px 16px 14px;flex-wrap:wrap}
   .pane{padding:16px}
   .form{grid-template-columns:1fr;gap:6px 0}
-  .form>label{padding-top:10px}
+  .form>label,.form>.sub>label{padding-top:10px}
   .members{position:fixed;right:0;top:0;bottom:0;z-index:15;box-shadow:-8px 0 30px rgba(29,34,43,.18)}
 }
 /* ---------- 正式版补充 ---------- */
@@ -354,6 +355,12 @@ body{overflow:hidden}
 .sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
 .pending{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 0}
 .pending .file button{color:var(--muted);margin-left:2px}
+.pending .thumb{position:relative;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.pending .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pending .thumb.up img{opacity:.45}
+.pending .thumb button{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
+.pending .thumb button svg{width:12px;height:12px}
+.files .shot img{display:block;max-width:240px;max-height:180px;border-radius:10px;border:1px solid var(--line)}
 .box.drag{border-color:var(--qing);background:var(--qing-soft)}
 .state-err{color:var(--bad)}
 .qr{width:220px;height:220px;margin:8px auto;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px}
@@ -725,7 +732,11 @@ function recHtml(r, i, src = "log"){
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     return `<div class="msg me"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
-      ${r.files && r.files.length ? `<div class="files">${r.files.map(f => `<span class="file">${ICON.file}${esc(f.name)}</span>`).join("")}</div>` : ""}
+      ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
+        const src = f.path && `/api/file?chat=${encodeURIComponent(detail.id)}&path=${encodeURIComponent(f.path)}`;
+        return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
+          : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
+      }).join("")}</div>` : ""}
       ${r.text ? msgActs(src, i, r) : ""}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "mention") return "";
@@ -741,7 +752,7 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "file"){
     const src = `/api/file?chat=${encodeURIComponent(detail.id)}&path=${encodeURIComponent(r.path)}`;
-    const img = /\.(png|jpe?g|gif|webp|svg)$/i.test(r.name);
+    const img = isImg(r.name);
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
@@ -950,12 +961,22 @@ function saveAsAgent(){
 let pendingFiles = [];
 function drawPending(){
   const el = $("#pending"); if (!el) return;
-  el.innerHTML = pendingFiles.map((f, i) => `<span class="file">${ICON.file}${esc(f.name)}${f.key ? "" : "（上传中）"}<button aria-label="移除" onclick="pendingFiles.splice(${i},1);drawPending();drawComposerState()">${ICON.x}</button></span>`).join("");
+  const rm = i => `<button aria-label="移除" onclick="dropPending(${i})">${ICON.x}</button>`;
+  el.innerHTML = pendingFiles.map((f, i) => f.url
+    ? `<span class="thumb ${f.key ? "" : "up"}" title="${esc(f.name)}"><img src="${f.url}" alt="${esc(f.name)}">${rm(i)}</span>`
+    : `<span class="file">${ICON.file}${esc(f.name)}${f.key ? "" : "（上传中）"}${rm(i)}</span>`).join("");
   el.style.display = pendingFiles.length ? "flex" : "none";
 }
+function dropPending(i){
+  const [f] = pendingFiles.splice(i, 1); if (f && f.url) URL.revokeObjectURL(f.url);
+  drawPending(); drawComposerState();
+}
+const isImg = name => /\.(png|jpe?g|gif|webp|svg)$/i.test(name || "");
 async function addFiles(list){
   for (const file of list){
-    const f = {name: file.name || "粘贴的图片.png"}; pendingFiles.push(f); drawPending();
+    const f = {name: file.name || "粘贴的图片.png"};
+    if ((file.type || "").startsWith("image/") || isImg(f.name)) f.url = URL.createObjectURL(file);
+    pendingFiles.push(f); drawPending();
     try {
       const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(f.name)}, body: file});
       const d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
@@ -1415,18 +1436,26 @@ function addMemberMenu(e){
 }
 function quickAgent(){
   closePop();
-  let base = "claude";
+  let base = "claude", model = "", effort = "";
+  const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model), model, v => model = v)}</div>
+      <label>默认思考深度</label><div>${dd("q-effort", effortOpts(base, "跟随全局设置"), effort, v => effort = v)}</div>`;
   dialog(`新建 Agent，拉进「${proj.name}」`, `<div class="form">
       <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">
       <label for="q-role">角色说明</label><textarea id="q-role" class="textarea" placeholder="它负责什么、有什么要求"></textarea>
       <label>底座</label><div class="seg" id="q-base"><button class="on" data-b="claude">Claude Code</button><button data-b="codex" ${S.codex ? "" : "disabled"}>Codex</button></div>
-    </div><p class="muted" style="font-size:13px;margin:14px 0 0">头像、默认模型这些以后可以在 Agent 页再改。</p>`,
+      <div id="q-picks" class="sub">${picks()}</div>
+    </div>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="q-ok">新建并拉进来</button>`);
-  document.querySelectorAll("#q-base button").forEach(b => b.onclick = () => { base = b.dataset.b; document.querySelectorAll("#q-base button").forEach(x => x.classList.toggle("on", x === b)); });
+  document.querySelectorAll("#q-base button").forEach(b => b.onclick = () => {
+    if (base === b.dataset.b) return;
+    base = b.dataset.b; model = effort = "";
+    document.querySelectorAll("#q-base button").forEach(x => x.classList.toggle("on", x === b));
+    $("#q-picks").innerHTML = picks();
+  });
   $("#q-name").focus();
   $("#q-ok").onclick = async () => {
     const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
-    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name)}}));
+    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name), model: model || null, effort: effort || null}}));
     await act(() => api("/api/project/member", {id: proj.id, add: id}));
     closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`);
   };

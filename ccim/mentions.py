@@ -63,7 +63,7 @@ class Mentions:
             raise Problem("找不到要 @ 的 Agent。")
         view = self.pf.chat_view(cid)
         mid = "u-" + uuid.uuid4().hex[:10]
-        shown = [{"name": f["name"], "size": f.get("size")} for f in files]
+        shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         # 之前的内容在记下这条消息之前取，不把它自己算进去
         ctx = {aid: self._context(cid, (self.pf.chats().get(self.sub(cid, aid)) or {}).get("ctx_upto", 0)) for aid in to}
         log = self.pf.channel.logs

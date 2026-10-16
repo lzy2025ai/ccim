@@ -23,6 +23,8 @@ SHOW_STEPS = 6
 TYPING_EVERY = 5            # 没有卡片的渠道（微信）每隔几秒续一次「正在输入」
 RESET = object()
 ATTACH = object()
+END = object()                # 收件箱里：和 Claude 的连接断了
+AWAKE = object()              # 没人问，Claude 自己开了一轮（比如后台任务做完了）
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
 STRAY_WAIT = 30           # 收到一个什么都没说的「一轮结束」（比如接上对话时补的后台任务通知那一轮）后，再等多久用户这一轮的结果
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
@@ -128,6 +130,9 @@ class Chat:
         self.queue = asyncio.Queue()
         self.worker = None
         self.client = None
+        self.held = None
+        self.inbox = None                     # Claude 发来的消息，连上后由 _pump 一直读进来，空闲时也读
+        self.pump = None
         self.turn = None
         self.stopping = False
         self.reconnect = False
@@ -248,11 +253,11 @@ class Chat:
     async def _work(self):
         try:
             while True:
-                try:
-                    prompt, reply_to, react = await asyncio.wait_for(self.queue.get(), IDLE)
-                except asyncio.TimeoutError:
+                item = await self._next()
+                if item is None:
                     log.info("[%s] 空闲 %d 分钟，断开会话", self.chat_id[-6:], IDLE // 60)
                     return
+                prompt, reply_to, react = item
                 if prompt is RESET:
                     await self._disconnect()
                     self._forget()
@@ -261,7 +266,7 @@ class Chat:
                     await self._disconnect()
                     self._attach(*reply_to)
                     continue
-                if self.reconnect:
+                if self.reconnect and prompt is not AWAKE:
                     await self._disconnect()
                     self.reconnect = False
                 self.stopping = False
@@ -283,6 +288,70 @@ class Chat:
         finally:
             await self._disconnect()
 
+    async def _next(self):
+        """等下一条要处理的消息。空闲时 Claude 也可能自己开一轮（后台任务做完的通知）：
+        那一轮要当场读完发出去，不然它的回答会被当成下一条消息的回答，之后每条都错一位。"""
+        deadline = time.monotonic() + IDLE
+        while True:
+            if not self.client:
+                try:
+                    return await asyncio.wait_for(self.queue.get(), max(0, deadline - time.monotonic()))
+                except asyncio.TimeoutError:
+                    return None
+            while not self.inbox.empty():
+                m = self.inbox.get_nowait()
+                if m is END or isinstance(m, Exception):
+                    log.info("[%s] 和 Claude 的连接断了", self.chat_id[-6:])
+                    await self._disconnect()
+                    break
+                if isinstance(m, RateLimitEvent):
+                    self._rate(m)
+                elif not isinstance(m, SystemMessage) or m.subtype == "init":
+                    self.held = m             # 这一轮的第一条，交给 _turn_inner 接着读
+                    return AWAKE, None, None
+            if not self.client:
+                continue
+            get = asyncio.ensure_future(self.queue.get())
+            got = asyncio.ensure_future(self.arrived.wait())
+            done, _ = await asyncio.wait({get, got}, timeout=max(0, deadline - time.monotonic()),
+                                         return_when=asyncio.FIRST_COMPLETED)
+            got.cancel()
+            self.arrived.clear()
+            if get in done:
+                return get.result()
+            get.cancel()
+            if not done:
+                return None
+
+    async def _pump(self, client, inbox):
+        try:
+            async for m in client.receive_messages():
+                inbox.put_nowait(m)
+                self.arrived.set()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            inbox.put_nowait(e)
+        else:
+            inbox.put_nowait(END)
+        self.arrived.set()
+
+    async def _recv(self, wait=None):
+        """读 Claude 的下一条消息；连接断了返回 END，读出错照原样抛出。"""
+        if self.held is not None:
+            m, self.held = self.held, None
+            return m
+        m = await (asyncio.wait_for(self.inbox.get(), wait) if wait else self.inbox.get())
+        if isinstance(m, Exception):
+            raise m
+        return m
+
+    def _rate(self, m):
+        try:
+            usage.record(m.rate_limit_info)
+        except Exception:
+            log.debug("记录额度失败", exc_info=True)
+
     async def _connect(self):
         if self.client:
             return
@@ -301,6 +370,8 @@ class Chat:
             try:
                 await client.connect()
                 self.client = client
+                self.inbox, self.held, self.arrived = asyncio.Queue(), None, asyncio.Event()
+                self.pump = asyncio.create_task(self._pump(client, self.inbox))
                 if self.fork_from:            # 分支开好了（或者分不出来改开了新对话），都不用再分
                     self.fork_from = self.fork_at = None
                     self.b.save(self.chat_id, fork_from=None, fork_at=None)
@@ -314,6 +385,9 @@ class Chat:
 
     async def _disconnect(self):
         c, self.client = self.client, None
+        if self.pump:
+            self.pump.cancel()
+            self.pump = None
         if c:
             self.b.save(self.chat_id, live=False)
             try:
@@ -323,8 +397,9 @@ class Chat:
 
     async def _turn(self, prompt, reply_to):
         # busy：桌面端同步飞书内容时，据此跳过还没答完的这一轮；asked / since / steps 给 ccim web 显示它在做什么
-        self.b.save(self.chat_id, busy=True, asked=short(str(prompt), 80), since=registry.now(), steps=[])
-        if not self.b.saved(self.chat_id).get("title"):
+        own = prompt is AWAKE
+        self.b.save(self.chat_id, busy=True, asked=None if own else short(str(prompt), 80), since=registry.now(), steps=[])
+        if not own and not self.b.saved(self.chat_id).get("title"):
             self.b.save(self.chat_id, title=short(str(prompt), 30))   # 第一句话当标题，ccim web 里区分各个话题
         pub = asyncio.create_task(self._publish())
         try:
@@ -342,22 +417,24 @@ class Chat:
         try:
             await self._connect()
             t.ready = time.monotonic()
+            own = prompt is AWAKE             # Claude 自己开的一轮，已经在跑了，不用提问
             if not self.stopping:
-                await self.client.query(prompt)
-                it = self.client.receive_messages().__aiter__()
+                if not own:
+                    await self.client.query(prompt)
                 grace = False                 # 这一轮已结束、正在等 Claude 处理来得太晚的补充
                 stray = False                 # 收到的「一轮结束」不是这一轮的，接着等
                 while True:
                     wait = INJECT_GRACE if grace else STRAY_WAIT if stray else None
                     try:
-                        m = await (asyncio.wait_for(it.__anext__(), wait) if wait else it.__anext__())
-                    except StopAsyncIteration:
-                        break
+                        m = await self._recv(wait)
                     except asyncio.TimeoutError:
                         if grace:
                             for p, r in t.unseen:     # Claude 没接着处理：照常排到最前面
                                 self._push_front((p, r, None))
                             t.unseen = []
+                        break
+                    if m is END:
+                        await self._disconnect()
                         break
                     if stray and not isinstance(m, RateLimitEvent):
                         stray = False
@@ -383,10 +460,7 @@ class Chat:
                                 and not self.stopping):    # 打断时那条「已中断」的工具结果不算
                             t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
                     elif isinstance(m, RateLimitEvent):
-                        try:
-                            usage.record(m.rate_limit_info)
-                        except Exception:
-                            log.debug("记录额度失败", exc_info=True)
+                        self._rate(m)
                     elif isinstance(m, StreamEvent):
                         ev = m.event or {}
                         if ev.get("type") == "content_block_delta" and (ev.get("delta") or {}).get("type") == "text_delta":
@@ -412,7 +486,7 @@ class Chat:
                         else:
                             result = f"{result}\n\n{m.result}" if result and m.result else (m.result or result)
                         said = (m.result or t.text or "").strip()
-                        if (not self.stopping and not m.is_error and not t.steps and not t.unseen
+                        if (not own and not self.stopping and not m.is_error and not t.steps and not t.unseen
                                 and said in ("", "No response requested.")):
                             # 接上对话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空；用户这一轮还在后面
                             result, t.text, stray = None, "", True

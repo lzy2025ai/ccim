@@ -16,6 +16,8 @@
   否则它的回答会落到下一条消息头上；打断产生的「已中断」工具结果不能当成「已看到」
 - 一轮的结束不能只看第一个 `ResultMessage`：接上会话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空，
   要接着读（`STRAY_WAIT`）。session_id 在 `SystemMessage(init)` 时就存，第一轮被打断也能接上。见 docs/排查-2026-10-03-*.md
+- Claude 的消息由 `_pump` 一直读进 `Chat.inbox`，空闲时也读：后台任务（子 agent、后台命令）做完，Claude Code 会自己开一轮，
+  `_next` 读到就当一轮处理（AWAKE，不提问、没有 reply_to），回答单独发出去。以前空闲时不读，这一轮积着，下一条消息先读到它（秒回），之后每条错一位
 - `ccim/codex.py`：`CodexChat`（继承 `Chat`，项目 `agent=codex` 时 bridge 用它）。一轮 = 一次 `codex exec --json`（接着聊加 `resume <thread_id>`），
   标准输入必须关掉否则一直等。只换了「怎么和助手说话」：`_turn_inner` / `_interrupt`（SIGINT）/ `inject`（恒 False，exec 不接受中途补充，
   `codex queue` 放进去它也看不到）；进度卡片、排队、发回答（`Chat._finish`）都复用。发文件靠回复里的「[发送文件] 路径」行。

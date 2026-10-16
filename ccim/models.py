@@ -6,7 +6,7 @@ Claude Code：连一次会话拿 initialize 里的 models（不发消息，不�
 和桌面端模型菜单里的「更多模型」一致。
 Codex：读它自己缓存的 ~/.codex/models_cache.json（只要 visibility=list 的）。
 """
-import asyncio, glob, json, logging, os, time
+import asyncio, glob, json, logging, os, re, time
 
 from . import registry
 
@@ -38,7 +38,9 @@ def claude():
     for m in raw:
         if m.get("value") == "default":
             continue
-        name = (m.get("description") or "").split("·")[0].strip() or m.get("displayName") or m["value"]
+        desc = m.get("description") or ""
+        name = _label(m.get("resolvedModel")) or (desc.split("·")[0].strip() if "·" in desc else "") \
+            or m.get("displayName") or m["value"]
         out.append([m["value"], name, DESC.get(_family(m), ""), m.get("resolvedModel") or ""])
     if out:                                   # 账号模型目录里有、这个版本的 claude 别名没指到的（比如更新的 Sonnet），也列出来
         cat = _catalog()
@@ -50,7 +52,7 @@ def claude():
                 have.add(x["id"])
                 fam = _family({"value": x["id"]})   # 同系列已经有新的了（比如 haiku 指到 5.5），旧的放进「更多模型」
                 more = x.get("section") != "main" or any(len(o) < 5 and _family({"value": o[3]}) == fam for o in out)
-                out.append([x["id"], x.get("name") or x["id"], "" if more else DESC.get(_family({"value": x["id"]}), ""),
+                out.append([x["id"], _label(x["id"]) or x.get("name") or x["id"], "" if more else DESC.get(_family({"value": x["id"]}), ""),
                             x["id"]] + (["more"] if more else []))
         # 和桌面端一样：Opus、Fable、Sonnet、Haiku；「更多模型」在后面，按账号模型目录里的顺序
         fam, pos = list(DESC), {x["id"]: i for i, x in enumerate(cat)}
@@ -58,6 +60,14 @@ def claude():
         out.sort(key=lambda o: (1, pos.get(o[3], 99)) if len(o) > 4 else
                  (0, fam.index(_family({"value": o[3]})) if _family({"value": o[3]}) else 9))
     return out
+
+
+def _label(model_id):
+    """claude-opus-4-8 → Opus 4.8；claude-haiku-4-5-20251001 → Haiku 4.5。不同版本的 Claude Code 给的名字、说明格式不一样，按编号算最稳。"""
+    m = re.match(r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$", (model_id or "").replace("[1m]", ""))
+    if not m:
+        return None
+    return m.group(1).capitalize() + " " + m.group(2) + (f".{m.group(3)}" if m.group(3) else "")
 
 
 def _catalog():

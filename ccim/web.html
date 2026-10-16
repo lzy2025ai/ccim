@@ -454,7 +454,10 @@ async function api(path, body, machine){
 }
 async function act(fn, ok){ try { const r = await fn(); if (ok) toast(ok); return r; } catch (e) { toast(e.message); throw e; } }
 function toast(t){ const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.append(el); setTimeout(() => el.remove(), 2600); }
-const tilde = p => p && S.home && p.startsWith(S.home) ? "~" + p.slice(S.home.length) : p;
+function tilde(p, machine){   // 用那台电脑自己的主目录缩写成 ~
+  const home = ((S.machine_info || {})[machine || ctxMachine || S.me] || {}).home || S.home;
+  return p && home && p.startsWith(home) ? "~" + p.slice(home.length) : p;
+}
 
 function when(ts){
   if (!ts) return "";
@@ -561,7 +564,7 @@ function pop(e, html, below){
   return p;
 }
 addEventListener("click", closePop);
-addEventListener("keydown", e => { if (e.key === "Escape") { closePop(); document.querySelector(".scrim")?.remove(); } });
+addEventListener("keydown", e => { if (e.key === "Escape") { closePop(); [...document.querySelectorAll(".scrim")].pop()?.remove(); } });   // 只关最上面那层
 const DD = {};
 function dd(id, opts, value, onpick){
   DD[id] = {opts, value, onpick};
@@ -1134,14 +1137,23 @@ async function browseDirs(machine, path, done){
   let d;
   try { d = await api(`/api/dirs?path=${encodeURIComponent(path)}`, undefined, machine); }
   catch (e) { return toast(e.message); }
-  window._dirDone = p => { closeDialog(); done(p); };
+  window._dirDone = p => { document.querySelector(".scrim.dirpick")?.remove(); done(p); };
   window._dirGo = p => browseDirs(machine, p, done);
   const home = d.home && d.path.startsWith(d.home) ? "~" + d.path.slice(d.home.length) : d.path;
-  dialog(`选择「${(machineOf(machine) || {}).name || ""}」上的文件夹`, `<div class="dirs">
+  // 叠在上面一层，不关掉下面的对话框（比如新建项目时选文件夹）
+  layer(`选择「${(machineOf(machine) || {}).name || ""}」上的文件夹`, `<div class="dirs">
       <div class="path" style="margin-bottom:8px">${esc(home || "/")}</div>
       ${d.parent ? `<button class="dir up" onclick="_dirGo(${q(d.parent)})">上一层</button>` : ""}
       ${d.dirs.map(n => `<button class="dir" onclick="_dirGo(${q(d.path.replace(/\/$/, "") + "/" + n)})">${ICON.folder}${esc(n)}</button>`).join("") || `<p class="muted">里面没有文件夹。</p>`}</div>`,
-    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="_dirDone(${q(d.path)})">选这个文件夹</button>`);
+    `<button class="btn" onclick="this.closest('.scrim').remove()">取消</button><button class="btn primary" onclick="_dirDone(${q(d.path)})">选这个文件夹</button>`);
+}
+function layer(title, body, foot){
+  document.querySelector(".scrim.dirpick")?.remove();
+  const s = document.createElement("div"); s.className = "scrim dirpick";
+  s.onclick = e => { if (e.target === s) s.remove(); };
+  s.innerHTML = `<div class="dialog" role="dialog" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="icon-btn" aria-label="关闭" onclick="this.closest('.scrim').remove()">${ICON.x}</button></header>
+    <div class="body">${body}</div><footer>${foot}</footer></div>`;
+  document.body.append(s);
 }
 function pickAgent(e){
   if (!S.agents.length) return toast("还没有 Agent，先去 Agent 页新建一个。");
@@ -1616,16 +1628,16 @@ function newProject(){
     dialog("新建项目", `<div class="form">
       ${multi() ? `<label>在哪台电脑</label><div class="seg">${S.machines.map(m => `<button class="${machine === m.id ? "on" : ""}" ${m.online ? "" : "disabled"} data-machine="${esc(m.id)}">${esc(m.name)}</button>`).join("")}</div>` : ""}
       <label for="np-name">名字</label><input id="np-name" class="input" placeholder="比如：官网改版" value="${esc(name)}">
-      <label>工作目录</label><div><div class="row"><input id="np-dir" class="input" style="flex:1" placeholder="不填也行" value="${esc(tilde(dir))}"><button class="btn" id="np-pick">${ICON.folder}选择…</button></div>
+      <label>工作目录</label><div><div class="row"><input id="np-dir" class="input" style="flex:1" placeholder="不填也行" value="${esc(tilde(dir, machine))}"><button class="btn" id="np-pick">${ICON.folder}选择…</button></div>
         <div class="help">填了的话，拉进来的 Agent 都在这个目录里干活；不填就各在各的工作区。</div></div>
       <label>拉哪些 Agent</label><div class="picks" style="margin:0">${mine.map(a => `<button class="pick ${picked.has(a.id) ? "on" : ""}" data-id="${esc(a.id)}">${seal(a, "", false)}<span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base || "claude"]}</div></span></button>`).join("")}</div>
     </div>`, `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="np-ok">新建项目</button>`);
     document.querySelectorAll(".scrim .pick").forEach(b => b.onclick = () => { dir = $("#np-dir").value; picked.has(b.dataset.id) ? picked.delete(b.dataset.id) : picked.add(b.dataset.id); draw(); });
     document.querySelectorAll(".scrim [data-machine]").forEach(b => b.onclick = () => { machine = b.dataset.machine; dir = ""; picked.clear(); draw(); });
-    $("#np-pick").onclick = () => chooseFolder(p => { dir = p; $("#np-dir").value = tilde(p); }, machine);
+    $("#np-pick").onclick = () => chooseFolder(p => { dir = p; $("#np-dir").value = tilde(p, machine); }, machine);
     $("#np-ok").onclick = async () => {
       const n = $("#np-name").value.trim(); if (!n) { toast("先给项目起个名字"); return; }
-      const d = $("#np-dir").value.trim().replace(/^~/, S.home);
+      const d = $("#np-dir").value.trim();      // ~ 由那台电脑自己展开
       const {id} = await act(() => api("/api/project/save", {name: n, dir: d, members: [...picked]}, machine));
       closeDialog(); await loadState(); location.hash = `#/projects/${encodeURIComponent(id)}`;
     };
@@ -1831,7 +1843,7 @@ function dialog(title, body, foot){
     <div class="body">${body}</div>${foot ? `<footer>${foot}</footer>` : ""}</div>`;
   document.body.append(s);
 }
-function closeDialog(){ document.querySelector(".scrim")?.remove(); }
+function closeDialog(){ document.querySelector(".scrim:not(.dirpick)")?.remove(); }
 function confirmBox(title, text, okLabel){
   return new Promise(res => {
     dialog(title, `<p>${esc(text)}</p>`, `<button class="btn" id="cb-no">取消</button><button class="btn danger" id="cb-ok">${esc(okLabel)}</button>`);

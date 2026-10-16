@@ -121,6 +121,8 @@ body{overflow:hidden}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .msg.wide{max-width:1180px}
+.approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
+.approve .pw:focus{border-color:var(--ink-2)}
 .box .rcpt:empty{display:none}
 .fork-from{font-size:12px;color:var(--muted);text-decoration:none}
 .fork-from:hover{color:var(--ink)}
@@ -610,8 +612,8 @@ function connectEvents(){
         detail.busy = ev.state === "working";
         drawThread(); drawComposerState();
       } else {
-        const i = ev.type === "card" || ev.type === "mention" ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
-        if (i >= 0) detail.log[i] = ev.type === "mention" ? {...detail.log[i], ...ev, at: detail.log[i].at} : ev; else detail.log.push(ev);
+        const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
+        if (i >= 0) detail.log[i] = ev.type === "card" ? ev : {...detail.log[i], ...ev, at: detail.log[i].at}; else detail.log.push(ev);
         drawThread();
       }
     }
@@ -740,6 +742,7 @@ function recHtml(r, i, src = "log"){
       ${r.text ? msgActs(src, i, r) : ""}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "mention") return "";
+  if (r.type === "secret") return secretHtml(r);
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
     return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
@@ -768,9 +771,15 @@ function liveHtml(){
 function drawThread(){
   const t = $("#thread"); if (!t) return;
   const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+  // 正在输的密码：重画前记下，重画后放回去（进度每零点几秒刷新一次）
+  const typed = [...t.querySelectorAll("form[data-sid]")].map(f => [f.dataset.sid, f.pw.value, document.activeElement === f.pw]);
   const earlier = (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
   t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
     + detail.log.map((r, i) => recHtml(r, i)).join("") + liveHtml();
+  for (const [sid, v, focus] of typed){
+    const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
+    f.pw.value = v; if (focus) f.pw.focus();
+  }
   if (near) t.scrollTop = t.scrollHeight;
 }
 function forkFrom(c){
@@ -876,6 +885,25 @@ async function deleteChat(){
   await act(() => api("/api/chat/delete", {id: detail.id}), "已删除");
   detail = null; await loadState(); location.hash = "#/chats";
 }
+// ---- 管理员权限：看命令、输密码 ----
+function secretHtml(r){
+  const done = {done: "已输入密码，交给它执行了", declined: "没有执行", expired: "已作废，没有执行"}[r.state];
+  return `<div class="msg"><div class="approve"><div class="q">要用管理员权限执行</div>
+    ${r.reason ? `<div class="answer" style="font-size:13px;margin-bottom:8px">${esc(r.reason)}</div>` : ""}
+    <pre>${esc(r.command || "")}</pre>
+    ${done ? `<div class="muted" style="font-size:13px;margin-top:8px">${done}</div>` : `
+    <form class="acts" data-sid="${esc(r.id)}" onsubmit="event.preventDefault();answerSecret(${q(r.id)},true,this)">
+      <input type="password" class="pw" name="pw" placeholder="开机密码" autocomplete="off" aria-label="开机密码">
+      <button type="button" class="btn" onclick="answerSecret(${q(r.id)},false,this.form)">不执行</button>
+      <button class="btn primary">执行</button></form>`}</div></div>`;
+}
+async function answerSecret(sid, run, form){
+  const pw = form.pw.value;
+  if (run && !pw) return form.pw.focus();
+  form.pw.value = "";                     // 密码只交给这一次，不留在页面上
+  await act(() => api("/api/chat/secret", {id: sid, run, password: run ? pw : null}), run ? "已交给它执行" : "不执行");
+}
+
 // ---- @ 其他 Agent ----
 let chatRcpt = [], draftText = "";
 function drawChatRcpt(){

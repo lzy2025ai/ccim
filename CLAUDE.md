@@ -80,6 +80,10 @@
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删
+- `ccim/admin.py`：管理员权限（#12）。私聊里给 Claude 一个 `run_as_admin` 工具（在 allowed_tools 里，它自己让用户确认）。
+  渠道有 `ask_secret`（只有网页：本机）时弹卡片看命令、输开机密码，密码从标准输入交给 `sudo -S -k`（每次都要输），
+  不进记录、不进日志、不回给 Claude；卡片 type=secret 按 id 合并，平台重启后没处理的显示作废。
+  飞书、微信不收密码，用 osascript `with administrator privileges` 在 Mac 上弹系统授权窗口。网页重画时保留正在输的密码
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

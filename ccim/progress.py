@@ -29,6 +29,8 @@ def describe_tool(name, inp):
         return "搜索：" + short(inp.get("query"), 50)
     if name in ("TodoWrite", "ToolSearch", "BashOutput"):
         return None
+    if name.startswith("mcp__ccim__run_as_admin"):
+        return "用管理员权限执行：" + short(inp.get("command"), 60)
     if name.startswith("mcp__ccim__send_file"):
         return f"发送文件 {base(inp.get('path'))}"
     if name.startswith("mcp__"):

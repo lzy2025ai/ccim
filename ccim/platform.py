@@ -27,7 +27,7 @@ PORT = 8977
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 UPLOAD_LIMIT = 100 * 1024 * 1024
-MERGED = ("card", "reply", "run", "mention")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
+MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
 def home():
@@ -140,6 +140,7 @@ class WebChannel(Channel):
         self.progress_of = {}                 # 对话 → 正在干活的进度
         self.done_steps = {}                  # 对话 → 刚做完那一轮的步骤，接下来的回答带上它
         self.card_chat = {}                   # 卡片 id → 对话
+        self.secrets = {}                     # 等用户输密码的卡片 id → (对话, future)
         self.server = None
 
     async def start(self):
@@ -197,6 +198,34 @@ class WebChannel(Channel):
         dest = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{re.sub(r'[/\\\\]', '_', name or 'file')}")
         shutil.copy(key, dest)
         return dest
+
+    async def ask_secret(self, chat_id, command, reason, timeout):
+        """管理员权限：弹卡片让用户看命令、输开机密码。返回密码，不同意或超时返回 None。密码不记下来。"""
+        sid = "sec-" + uuid.uuid4().hex[:10]
+        fut = asyncio.get_running_loop().create_future()
+        self.secrets[sid] = (chat_id, fut)
+        self._emit(chat_id, self.logs.append(chat_id, {"type": "secret", "id": sid, "command": command, "reason": reason,
+                                                       "state": "pending"}))
+        state, pw = "expired", None
+        try:
+            pw = await asyncio.wait_for(fut, timeout)
+            state = "done" if pw is not None else "declined"
+            return pw
+        except asyncio.TimeoutError:
+            return None
+        finally:
+            self.secrets.pop(sid, None)
+            self._emit(chat_id, self.logs.append(chat_id, {"type": "secret", "id": sid, "state": state}))
+            pw = None
+
+    def answer_secret(self, sid, password):
+        """HTTP 线程里调：把密码（或 None = 不执行）交给等着的那一轮。"""
+        hit = self.secrets.get(sid)
+        if not hit or hit[1].done():
+            return False
+        fut = hit[1]
+        self.platform.loop.call_soon_threadsafe(lambda: fut.done() or fut.set_result(password))
+        return True
 
     async def send_to_user(self, user_id, markdown):
         return None
@@ -424,6 +453,9 @@ class Platform:
             return self.external_detail(cid)
         v = self.chat_view(cid)
         v["log"] = self.mentions.lost(self.channel.logs.read(cid))
+        for r in v["log"]:                    # 平台重启过：没处理的密码卡片作废
+            if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
+                r.update(state="expired")
         v["progress"] = self.channel.progress_of.get(cid)
         v["sub_progress"] = {r["chat"]: self.channel.progress_of[r["chat"]] for r in v["log"]
                              if r.get("type") == "mention" and r.get("chat") in self.channel.progress_of}
@@ -684,6 +716,7 @@ def _handler(pf):
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),
                 "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
+                "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run")),
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
@@ -793,6 +826,14 @@ def send(pf, cid, text, files):
     pf.meta(cid)
     pf.bg(pf.send(cid, (text or "").strip(), files))
     return {"ok": True}
+
+
+def answer_secret(pf, sid, password, run):
+    if run and not password:
+        raise Problem("先输入开机密码。")
+    if not pf.channel.answer_secret(sid or "", password if run else None):
+        raise Problem("这张卡片已经处理过或作废了。")
+    return {}
 
 
 def mention(pf, cid, text, to, files):

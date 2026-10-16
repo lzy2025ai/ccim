@@ -167,6 +167,9 @@
 
 ## 约定
 
+- 要能在 Python 3.11 上跑（pyproject 写的 >=3.11，别的电脑可能就是 3.11）：f-string 的 {} 里不能有反斜杠、不能用和外层相同的引号。
+  改完用 3.11 过一遍：`for f in ccim/*.py ccim/channels/*.py; do python3.11 -c "import ast;ast.parse(open('$f').read())"; done`
+
 - 卡片、回复、命令行输出里只写用户需要的信息，不写实现细节。
 - 本地验证不需要飞书：写个假渠道（实现 send_text / send_card / update_card / delete_message / add_reaction / send_file / download），
   在临时目录建项目，把 `registry.HOME` 指到临时目录，直接调 `Bridge.on_message`，就能跑真实的 Claude 会话。

@@ -152,7 +152,8 @@ def translate(raw):
             continue
         m = re.match(r"(Top [A-Za-z ]+): (.+)", s)
         if m and m.group(1) in _TOPS:
-            out.append(f"· {_TOPS[m.group(1)]}：{re.sub(r'(^|, )/', r'\1', m.group(2))}")
+            cmds = re.sub(r"(^|, )/", r"\1", m.group(2))      # f-string 里不能有反斜杠（Python 3.11）
+            out.append(f"· {_TOPS[m.group(1)]}：{cmds}")
             continue
         out.append(s)
     return out

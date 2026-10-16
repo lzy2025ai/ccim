@@ -195,7 +195,8 @@ class WebChannel(Channel):
 
     async def download(self, message_id, kind, key, name, folder):
         """网页上传的文件先放在平台的 uploads 里，这里挪到项目的收件箱。"""
-        dest = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{re.sub(r'[/\\\\]', '_', name or 'file')}")
+        safe = re.sub(r"[/\\\\]", "_", name or "file")      # f-string 里不能有反斜杠（Python 3.11）
+        dest = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{safe}")
         shutil.copy(key, dest)
         return dest
 

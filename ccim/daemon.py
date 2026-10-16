@@ -119,9 +119,14 @@ def start_always(path, channel, python=None):
     if r.returncode != 0:
         os.remove(plist_path(path))
         raise SystemExit(f"交给系统托管失败：{(r.stderr or r.stdout).strip()}")
+    # 有的电脑上 RunAtLoad 不会马上启动（launchctl print 里是 pended nondemand spawn = speculative），主动启动一次
+    _launchctl("kickstart", f"{_domain()}/{label(path)}")
     try:
         return _wait_online(path, started, exited=lambda: False)
     except SystemExit:
+        if "never exited" in _launchctl("print", f"{_domain()}/{label(path)}").stdout and not os.path.exists(log_path(path)):
+            raise SystemExit("系统没让它在后台启动。到「系统设置 → 通用 → 登录项与扩展」的「允许在后台」里把 python3 / uv 打开，"
+                             f"再运行：launchctl kickstart -k {_domain()}/{label(path)}")
         # 启动失败时 launchd 会每 30 秒重试；这里不撤销，让它在网络恢复后自己连上
         print("（系统会每 30 秒自动重试；不想要了就 ccim stop）")
         raise

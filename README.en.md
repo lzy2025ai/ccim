@@ -95,7 +95,12 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
 - **Chats**: click "新对话" and start typing; pick Claude Code or Codex, the model, effort level and a working folder
   (optional) below the input box. Answers stream in, each step can be expanded, approvals are buttons, and you can attach
   images and files. Chats from Feishu, WeChat and the terminal show up too; continuing one here starts a branch and
-  leaves the original untouched.
+  leaves the original untouched. Messages can be copied and quoted; "分叉" (fork) starts a new chat from any answer,
+  and forks are nested under the original in the list. The model list matches Claude Code's own, with older versions
+  under "更多模型" (more models). Type @ to have one or more agents answer too, shown side by side; the chat's own
+  assistant sees their answers afterwards. Commands that need admin rights (sudo) show a card with the exact command and
+  run only after you enter your Mac password there (every time, never stored); in Feishu / WeChat the Mac shows the
+  system's own authorization dialog instead.
 - **Agents**: long-lived agents with a name, role description, base (Claude Code / Codex), default model and an optional
   working folder. Existing projects were turned into agents automatically. Chat with them or connect them to Feishu / WeChat.
 - **Projects**: put several agents in a project and @ them like in a group chat. Tasks for the same agent run one after

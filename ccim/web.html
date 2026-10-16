@@ -121,6 +121,7 @@ body{overflow:hidden}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .msg.wide{max-width:1180px}
+.at-btn{font-size:17px;line-height:1}
 .approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
 .approve .pw:focus{border-color:var(--ink-2)}
 .box .rcpt:empty{display:none}
@@ -176,7 +177,7 @@ body{overflow:hidden}
 .pop .desc{font-size:12px;color:var(--muted)}
 .pop svg{width:15px;height:15px;flex:none}
 
-.newchat{margin:auto;width:min(720px,100%);padding:0 22px 12vh}
+.newchat{margin:auto;width:min(800px,100%);padding:0 22px 12vh}
 .newchat h2{font:600 26px/1.3 var(--song);margin:0 0 16px}
 .seg.mini{padding:2px}
 .seg.mini button{padding:3px 9px;font-size:12px}
@@ -807,9 +808,9 @@ function drawChat(){
         <div class="bar"><div class="opts">
           <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
+          ${c.readonly ? "" : `<button class="icon-btn at-btn" id="chip-at" aria-label="让其他 Agent 一起回答" title="让其他 Agent 一起回答" onclick="chatAt(event)">@</button>`}
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
-          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
-          ${c.readonly ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}</div>
+          <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button></div>
           <button class="send" id="send"></button>
         </div>
       </div>
@@ -1036,11 +1037,11 @@ function renderNewChat(){
           <div class="bar"><div class="opts">
             <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
+            <button class="icon-btn at-btn" id="chip-at" aria-label="让其他 Agent 一起回答" title="让其他 Agent 一起回答" onclick="chatAt(event)">@</button>
             <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
-            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
-            <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
+            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
         </div>

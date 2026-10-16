@@ -772,6 +772,26 @@ def cmd_web(args):
     platform.open_in_browser()
 
 
+def cmd_join(args):
+    """加入另一台电脑（#13）：在一个网页里管理几台电脑的 Agent。"""
+    from . import daemon, peers, platform
+    h, _ = platform.ensure_registered()
+    if args.leave:
+        if not os.path.exists(os.path.join(registry.HOME, "hub.json")):
+            raise SystemExit("这台电脑没有加入别的电脑。")
+        peers.leave()
+        print("已断开。网页里只显示这台电脑自己的东西了。")
+    else:
+        if not args.host or not args.code:
+            raise SystemExit("用法：ccim join 那台电脑的地址 配对码（配对码在那台电脑的网页「设置」→「电脑」里生成）")
+        name = peers.join(args.host, args.code)
+        print(f"已加入「{name}」。")
+    if daemon.running(h):
+        daemon.stop(h)
+    daemon.start_always(h, "web")
+    print(f"在这台电脑上打开 {platform.url()} 就能看到{'两台' if not args.leave else '这台'}电脑的 Agent 和对话。")
+
+
 def cmd_unpair(args):
     path, entry = _need(args.project)
     if entry.get("kind") == "weixin":
@@ -855,6 +875,11 @@ def parser():
     s.add_argument("--port", type=int, default=8977, help="端口（默认 8977，被占用就往后找）")
     s.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     s.set_defaults(fn=cmd_web)
+    s = sub.add_parser("join", help="加入另一台电脑：在一个网页里管理几台电脑的 Agent 和对话")
+    s.add_argument("host", nargs="?", help="那台电脑的地址（局域网 IP）")
+    s.add_argument("code", nargs="?", help="配对码：在那台电脑的网页「设置」→「电脑」里生成")
+    s.add_argument("--leave", action="store_true", help="断开，不再加入别的电脑")
+    s.set_defaults(fn=cmd_join)
     s = sub.add_parser("promote", help="验收通过后：把当前代码装成稳定版，逐个升级跑稳定版的项目")
     s.set_defaults(fn=cmd_promote)
     s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程

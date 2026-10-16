@@ -111,6 +111,11 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   on certain weekdays, monthly, or once. Results stay in the web UI and can also be sent through the agent's Feishu /
   WeChat bot. A run missed while the Mac was asleep runs once when it wakes up.
 - **Settings**: default model and effort level for Claude Code and for Codex.
+- **Two computers**: install ccim on the other Mac, create a pairing code under 设置 → 电脑 (Settings → Computers) on
+  this one, and run `ccim join <this Mac's address> <code>` there (both on the same network). From then on the web UI on
+  either Mac shows and controls the agents, chats, projects and scheduled tasks of both, each labelled with its computer;
+  work still runs on the computer it belongs to and files are not copied across. Messages to a computer that is offline
+  are kept and sent when it reconnects. `ccim join --leave` disconnects.
 
 ## In Feishu
 

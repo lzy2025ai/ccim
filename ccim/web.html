@@ -121,6 +121,13 @@ body{overflow:hidden}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .msg.wide{max-width:1180px}
+.dirs{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:1px}
+.dirs .dir{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.dirs .dir:hover{background:var(--sunk)}
+.dirs .dir svg{width:15px;height:15px;color:var(--muted)}
+.dirs .dir.up{color:var(--muted)}
+.tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px}
+.tag.mach.off{color:var(--faint);background:var(--sunk)}
 .approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
 .approve .pw:focus{border-color:var(--ink-2)}
 .box .rcpt:empty{display:none}
@@ -428,8 +435,18 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const q = v => esc(JSON.stringify(String(v ?? "")));   // 放进 onclick="f(…)" 里的字符串：先成 JSON 字面量（带引号）再转义
 
-async function api(path, body){
-  const r = await fetch(path, {method: body === undefined ? "GET" : "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
+// 多台电脑：请求交给东西所在的那台电脑（X-Machine）。没指明时按 id 找，找不到用当前打开的东西所在的电脑
+const LOCAL_API = /^\/api\/(state|global|peers|events)/;
+function targetOf(path, body, machine){
+  if (machine !== undefined) return machine;
+  if (LOCAL_API.test(path)) return null;
+  const u = new URL(path, location.origin);
+  return ownerOf(u.searchParams.get("id")) || ownerOf(body && (body.id || body.agent)) || ctxMachine;
+}
+const remoteHeader = m => m && S.me && m !== S.me ? {"X-Machine": m} : {};
+async function api(path, body, machine){
+  const r = await fetch(path, {method: body === undefined ? "GET" : "POST",
+                               headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(targetOf(path, body, machine))},
                                body: body === undefined ? undefined : JSON.stringify(body)});
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "出错了，再试一次。");
@@ -453,8 +470,9 @@ function group(ts){
   const d = new Date(ts.replace(" ", "T")), now = new Date();
   return d.toDateString() === now.toDateString() ? "今天" : "更早";
 }
-function modelList(base){   // [值, 名字, 说明, 具体型号]：和 Claude Code / Codex 自己的模型列表一致
-  const got = (S.models || {})[base] || [];
+function modelList(base){   // [值, 名字, 说明, 具体型号]：和 Claude Code / Codex 自己的模型列表一致（当前那台电脑的）
+  const info = (S.machine_info || {})[ctxMachine || S.me] || {};
+  const got = ((info.models || S.models) || {})[base] || [];
   return got.length || base === "codex" ? got : CLAUDE_MODELS;
 }
 function modelName(m){
@@ -587,6 +605,25 @@ async function loadState(){
 }
 function refreshSoon(){ clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }
 const agentOf = id => S.agents.find(a => a.id === id);
+const multi = () => (S.machines || []).length > 1;
+const machineOf = id => (S.machines || []).find(m => m.id === id);
+let ctxMachine = null;            // 当前打开的东西在哪台电脑
+function ownerOf(id){
+  if (!id) return null;
+  for (const k of ["agents", "chats", "projects", "schedules"]){
+    const x = (S[k] || []).find(x => x.id === id);
+    if (x && x.machine) return x.machine;
+  }
+  return null;
+}
+function mtag(mid, always){   // 在哪台电脑：只有几台电脑时才显示；默认本机的不标
+  if (!multi() || !mid || (!always && mid === S.me)) return "";
+  const m = machineOf(mid) || {name: "另一台电脑"};
+  return `<span class="tag mach ${m.online === false ? "off" : ""}">${esc(m.name)}${m.online === false ? "（离线）" : ""}</span>`;
+}
+const isRemote = mid => !!(mid && S.me && mid !== S.me);
+const fileUrl = (chat, path) => `/api/file?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}`
+  + (isRemote(ctxMachine) ? `&machine=${encodeURIComponent(ctxMachine)}` : "");
 
 function connectEvents(){
   const es = new EventSource("/api/events");
@@ -629,6 +666,10 @@ function narrow(){ return innerWidth <= 760; }
 function route(){
   const parts = location.hash.slice(2).split("/");
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null};
+  const own = ownerOf(current.id && current.id.startsWith("edit-") ? current.id.slice(5) : current.id);
+  if (own) ctxMachine = own;
+  else if (!current.id || current.id === "new" || current.view === "settings") ctxMachine = S.me;   // 隐藏的子对话：沿用打开它的那台
+  if (current.view === "chats" && current.id === "new" && draft.machine) ctxMachine = draft.machine;
   if (narrow()) document.querySelector(".app").classList.toggle("list-off", !!current.id);   // 窄屏：打开了某一项就收起列表
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   closePop();
@@ -638,7 +679,7 @@ function route(){
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectEmpty(); }
   else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
   else if (current.view === "agents") { current.id === "new" ? renderAgentForm(null) : current.id ? renderAgent(current.id) : renderAgentEmpty(); }
-  else if (current.view === "settings") renderSettings();
+  else if (current.view === "settings") current.id === "machines" ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
@@ -673,7 +714,7 @@ function chatItem(c, kids, child){
         <span class="t"><span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `<span class="when">${when(c.last_active)}</span>`}</a>`
     : `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit">
         ${seal(a, "", false)}<span class="t"><span class="title">${esc(c.title)}</span><span class="sub">${sub}</span></span>
-        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span>${srcTag(c.source)}</span></a>`;
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span><span>${mtag(c.machine)}${srcTag(c.source)}</span></span></a>`;
   const ks = (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
   const tree = ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true)).join("")}</div>` : "";
   return child ? `<div class="node">${me}${tree}</div>` : me + tree;
@@ -736,7 +777,7 @@ function recHtml(r, i, src = "log"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     return `<div class="msg me"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
-        const src = f.path && `/api/file?chat=${encodeURIComponent(detail.id)}&path=${encodeURIComponent(f.path)}`;
+        const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
           : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
       }).join("")}</div>` : ""}
@@ -755,7 +796,7 @@ function recHtml(r, i, src = "log"){
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='cardAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
   if (r.type === "file"){
-    const src = `/api/file?chat=${encodeURIComponent(detail.id)}&path=${encodeURIComponent(r.path)}`;
+    const src = fileUrl(detail.id, r.path);
     const img = isImg(r.name);
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
@@ -793,7 +834,7 @@ function drawChat(){
     <div class="chat-head">${seal(a)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>${srcTag(c.source)}${forkFrom(c)}
+        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${c.readonly ? "" : `<button class="icon-btn" aria-label="更多" onclick="chatMenu(event)">${ICON.more}</button>`}
@@ -849,7 +890,7 @@ async function sendChat(){
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt;
     $("#input").value = ""; pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
-    try { await act(() => api("/api/chat/mention", {id: detail.id, text: v, files, to})); }
+    try { const r = await act(() => api("/api/chat/mention", {id: detail.id, text: v, files, to})); if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`); }
     catch { $("#input").value = v; chatRcpt = to; drawChatRcpt(); }
     return;
   }
@@ -860,7 +901,11 @@ async function sendChat(){
   }
   if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: ""}; }
   drawThread(); drawComposerState();
-  await act(() => api("/api/chat/send", {id: detail.id, text: v, files}));
+  const r = await act(() => api("/api/chat/send", {id: detail.id, text: v, files}));
+  if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
+    detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
+    toast(`「${r.machine}」现在离线，上线后自动发出`);
+  }
 }
 async function stopChat(){ await act(() => api("/api/chat/stop", {id: detail.id})); }
 async function cardAct(mid, value){ await act(() => api("/api/chat/action", {id: detail.id, mid, value})); }
@@ -888,15 +933,21 @@ async function deleteChat(){
 }
 // ---- 管理员权限：看命令、输密码 ----
 function secretHtml(r){
-  const done = {done: "已输入密码，交给它执行了", declined: "没有执行", expired: "已作废，没有执行"}[r.state];
+  const done = {done: "已输入密码，交给它执行了", dialog: "在那台电脑上弹出了授权窗口", declined: "没有执行", expired: "已作废，没有执行"}[r.state];
+  const there = isRemote(ctxMachine) ? (machineOf(ctxMachine) || {}).name || "那台电脑" : null;
   return `<div class="msg"><div class="approve"><div class="q">要用管理员权限执行</div>
     ${r.reason ? `<div class="answer" style="font-size:13px;margin-bottom:8px">${esc(r.reason)}</div>` : ""}
     <pre>${esc(r.command || "")}</pre>
-    ${done ? `<div class="muted" style="font-size:13px;margin-top:8px">${done}</div>` : `
+    ${done ? `<div class="muted" style="font-size:13px;margin-top:8px">${done}</div>` : there ? `
+    <div class="acts"><button class="btn" onclick="answerSecretDialog(${q(r.id)},false)">不执行</button>
+      <button class="btn primary" onclick="answerSecretDialog(${q(r.id)},true)">在「${esc(there)}」上弹授权窗口</button></div>` : `
     <form class="acts" data-sid="${esc(r.id)}" onsubmit="event.preventDefault();answerSecret(${q(r.id)},true,this)">
       <input type="password" class="pw" name="pw" placeholder="开机密码" autocomplete="off" aria-label="开机密码">
       <button type="button" class="btn" onclick="answerSecret(${q(r.id)},false,this.form)">不执行</button>
       <button class="btn primary">执行</button></form>`}</div></div>`;
+}
+async function answerSecretDialog(sid, run){
+  await act(() => api("/api/chat/secret", {id: sid, run: run ? "dialog" : false, password: null}), run ? "去那台电脑上确认" : "不执行");
 }
 async function answerSecret(sid, run, form){
   const pw = form.pw.value;
@@ -912,8 +963,8 @@ function drawChatRcpt(){
   el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
 }
 function chatAt(e){
-  const own = detail && detail.agent;
-  const list = S.agents.filter(a => a.id !== own);
+  const own = detail && detail.agent, here = (detail ? ownerOf(detail.id) || ctxMachine : draft.machine) || S.me;
+  const list = S.agents.filter(a => a.id !== own && (a.machine || S.me) === here);
   if (!list.length) return toast("还没有建好的 Agent，先去 Agent 页建一个");
   const pp = pop(e, `<div class="sec">让谁回答（可以多选）</div>` + list.map(a =>
     `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${chatRcpt.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
@@ -1007,7 +1058,7 @@ async function addFiles(list){
     if ((file.type || "").startsWith("image/") || isImg(f.name)) f.url = URL.createObjectURL(file);
     pendingFiles.push(f); drawPending();
     try {
-      const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(f.name)}, body: file});
+      const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(f.name), ...remoteHeader(ctxMachine)}, body: file});
       const d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
       Object.assign(f, d);
     } catch (e) { pendingFiles = pendingFiles.filter(x => x !== f); toast(`${f.name} 没传上：${e.message}`); }
@@ -1024,6 +1075,8 @@ function dropZone(el){
 let draft = {base:"claude", model:"", effort:"", dir:""};
 function renderNewChat(){
   detail = null;
+  if (!draft.machine || !machineOf(draft.machine)) draft.machine = S.me;
+  ctxMachine = draft.machine;
   const d = draft, g = S.global, px = d.base === "claude" ? "" : "codex_";
   const dm = g[px + "model"] || (S.defaults[d.base] || [])[0], de = g[px + "effort"] || (S.defaults[d.base] || [])[1];
   $("#main").innerHTML = `
@@ -1040,7 +1093,7 @@ function renderNewChat(){
             <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
-            <button class="chip" onclick="pickDir(event)">${ICON.folder}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
+            <button class="chip" onclick="pickDir(event)">${ICON.folder}${isRemote(d.machine) ? esc((machineOf(d.machine) || {}).name || "") + "：" : ""}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
@@ -1066,14 +1119,29 @@ async function pickDir(e){
   const anchor = e.currentTarget, ev = {currentTarget: anchor, stopPropagation(){}};
   e.stopPropagation();
   let recent = [];
-  try { recent = (await api("/api/recent")).folders; } catch {}
-  pop(ev, `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
+  try { recent = (await api("/api/recent", undefined, draft.machine)).folders; } catch {}
+  const mm = multi() ? `<div class="sec">在哪台电脑上</div>` + S.machines.map(m => `<button ${m.online ? "" : "disabled"} onclick="draft.machine=${q(m.id)};draft.dir='';draft.model='';closePop();renderNewChat()"><span><div>${esc(m.name)}${m.me ? "（这台）" : ""}</div>${m.online ? "" : `<div class="desc">离线</div>`}</span>${draft.machine === m.id ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "";
+  pop(ev, mm + `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
     + (recent.length ? `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir=${q(r.path)};closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(r.home)}</span>${draft.dir === r.path ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "")
-    + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();})">${ICON.folder}选择其他文件夹…</button>`);
+    + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();}, draft.machine)">${ICON.folder}选择其他文件夹…</button>`);
 }
-async function chooseFolder(done){
-  const r = await act(() => api("/api/pick", {}));
+async function chooseFolder(done, machine){
+  if (isRemote(machine)) return browseDirs(machine, "", done);   // 另一台电脑：在网页里一层层点进去选
+  const r = await act(() => api("/api/pick", {}, null));
   if (r && r.path) done(r.path);
+}
+async function browseDirs(machine, path, done){
+  let d;
+  try { d = await api(`/api/dirs?path=${encodeURIComponent(path)}`, undefined, machine); }
+  catch (e) { return toast(e.message); }
+  window._dirDone = p => { closeDialog(); done(p); };
+  window._dirGo = p => browseDirs(machine, p, done);
+  const home = d.home && d.path.startsWith(d.home) ? "~" + d.path.slice(d.home.length) : d.path;
+  dialog(`选择「${(machineOf(machine) || {}).name || ""}」上的文件夹`, `<div class="dirs">
+      <div class="path" style="margin-bottom:8px">${esc(home || "/")}</div>
+      ${d.parent ? `<button class="dir up" onclick="_dirGo(${q(d.parent)})">上一层</button>` : ""}
+      ${d.dirs.map(n => `<button class="dir" onclick="_dirGo(${q(d.path.replace(/\/$/, "") + "/" + n)})">${ICON.folder}${esc(n)}</button>`).join("") || `<p class="muted">里面没有文件夹。</p>`}</div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="_dirDone(${q(d.path)})">选这个文件夹</button>`);
 }
 function pickAgent(e){
   if (!S.agents.length) return toast("还没有 Agent，先去 Agent 页新建一个。");
@@ -1083,9 +1151,10 @@ async function startTemp(){
   const v = $("#input").value.trim(), files = pendingFiles.filter(f => f.key);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return $("#input").focus();
-  const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}));
+  const m = draft.machine || S.me;
+  const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}, m));
   const to = chatRcpt; closePop();
-  await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}) : api("/api/chat/send", {id, text: v, files}));
+  await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}, m) : api("/api/chat/send", {id, text: v, files}, m));
   pendingFiles = []; chatRcpt = []; draftText = "";
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
@@ -1107,7 +1176,7 @@ function renderAgentList(){
       const ch = a.channels.map(c => `<span class="tag ${c.kind === "weixin" ? "weixin" : "feishu"}">${c.kind === "weixin" ? "微信" : "飞书"}</span>`).join(" ");
       return `<a class="item ${current.id === a.id ? "on" : ""}" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a)}
         <span class="t"><span class="title">${esc(a.name)}</span>${st}</span>
-        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(a.last_active)}</span><span>${ch}</span></span></a>`;
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(a.last_active)}</span><span>${mtag(a.machine)}${ch}</span></span></a>`;
     }).join("") || `<p class="muted" style="padding:10px">${agentFilter ? "没有找到。" : "还没有 Agent。"}</p>`}</div>`;
 }
 function renderAgentEmpty(){
@@ -1122,7 +1191,7 @@ async function renderAgent(id){
   $("#main").innerHTML = `<div class="agent-page">
     <div class="agent-top">${seal(a, "lg")}
       <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
-        <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base || "claude"]}</span>${a.dir ? `<span class="path">${esc(tilde(a.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
+        <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base || "claude"]}</span>${mtag(ownerOf(a.id))}${a.dir ? `<span class="path">${esc(tilde(a.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
       <button class="btn primary" onclick="startAgent(${q(a.id)})">开始对话</button>
     </div>
     <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
@@ -1182,18 +1251,23 @@ let fd = null;
 function formHtml(a){
   fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", ...(agentDraftFrom || {})};
   agentDraftFrom = null;
+  fd.machine = (a && ownerOf(a.id)) || fd.machine || ctxMachine || S.me;
+  ctxMachine = fd.machine;
+  const hasCodex = ((S.machine_info || {})[fd.machine] || {}).codex ?? S.codex;
+  const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => m.online).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), fd.machine,
+    v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if (fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) fd.base = "claude"; redrawForm(); })}</div>` : "";
   fd._sealSet = !!(a && a.seal);
-  return `<div class="form">
+  return `<div class="form">${machineRow}
     <label>头像</label><div class="row" id="seal-prev">${seal({...fd, seal: fd.seal || "新"}, "lg", false)}
       <div><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="颜色" data-c="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal()"></button>`).join("")}</div>
       <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input class="input" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;fd._sealSet=!!this.value;drawSeal()"></div></div></div>
     <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);this.closest('.form').querySelector('[maxlength]').value=fd.seal};drawSeal()">
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
-    <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
+    <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
-    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);})">${ICON.folder}选择…</button></div>
+    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
     <span></span><div class="row" style="margin-top:6px">
       <button class="btn primary" onclick="saveAgent(${a ? `${q(a.id)}` : "null"})">${a ? "保存" : "新建 Agent"}</button>
@@ -1211,7 +1285,7 @@ async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
   const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, base: fd.base || "claude",
                   model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null};
-  const r = await act(() => api("/api/agent/save", {id, fields}), id ? "已保存" : "已新建");
+  const r = await act(() => api("/api/agent/save", {id, fields}, id ? ownerOf(id) || ctxMachine : fd.machine), id ? "已保存" : "已新建");
   agentTab = "overview"; await loadState();
   if (id) renderAgent(id); else location.hash = `#/agents/${encodeURIComponent(r.id)}`;
 }
@@ -1228,7 +1302,49 @@ function renderAgentForm(){
 // ================= 设置 =================
 function renderSettingsList(){
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
-    <a class="item on" href="#/settings" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a></div>`;
+    <a class="item ${current.id !== "machines" ? "on" : ""}" href="#/settings" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>
+    <a class="item ${current.id === "machines" ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "在这里管另一台电脑上的 Agent"}</span></span></a></div>`;
+}
+function renderMachines(){
+  const ms = S.machines || [], me = ms.find(m => m.me) || {}, hub = ms.find(m => m.hub) || {};
+  const joined = !me.hub;
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>电脑</h2>
+    <div class="role">把另一台电脑加进来，两台电脑的 Agent、对话、项目、定时任务都在这里管。活还是在各自的电脑上干，文件不会传到另一台。</div></div></div>
+    <div class="pane">
+      <div class="sect">${ms.map(m => `<div class="mem" style="padding:10px 0">
+        <span class="t" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
+        <span class="sub">${m.hub ? "总控" : "加入的电脑"}</span></span>
+        <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
+        ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
+      ${joined ? `<div class="sect"><h3>已加入「${esc(hub.name || "")}」</h3><p class="muted">要添加别的电脑，到「${esc(hub.name || "")}」上操作。</p>
+        <button class="btn danger" onclick="leaveHub()">断开</button></div>`
+      : `<div class="sect"><h3>添加电脑</h3><p class="muted">两台电脑要在同一个网络里。先在另一台电脑上装好 ccim，再生成配对码。</p>
+        <div id="pair-box"><button class="btn primary" onclick="newPairCode()">生成配对码</button></div></div>`}
+    </div></div>`;
+}
+async function newPairCode(){
+  const r = await act(() => api("/api/peers/code", {}));
+  const cmds = (r.hosts.length ? r.hosts : ["这台电脑的地址"]).map(h => `ccim join ${h}${r.port !== 8978 ? ":" + r.port : ""} ${r.code}`);
+  $("#pair-box").innerHTML = `<p>在另一台电脑的终端里运行：</p>
+    ${cmds.map(c => `<div class="row" style="margin:6px 0"><pre style="flex:1;margin:0;padding:8px 10px;background:var(--sunk);border-radius:8px">${esc(c)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(c)});toast('已复制')">复制</button></div>`).join("")}
+    <p class="muted" style="font-size:13px">配对码 ${r.minutes} 分钟内有效，只能用一次。第一次连接时，这台 Mac 可能会问是否允许 ccim 接收连接，选「允许」。</p>
+    <button class="btn" onclick="newPairCode()">重新生成</button>`;
+  clearInterval(window._pairWatch);
+  const n = (S.machines || []).length;
+  window._pairWatch = setInterval(async () => {       // 那边加入了就刷新
+    await loadState();
+    if ((S.machines || []).length > n) { clearInterval(window._pairWatch); toast("已加入"); if (current.view === "settings") renderMachines(); }
+  }, 3000);
+  setTimeout(() => clearInterval(window._pairWatch), r.minutes * 60000);
+}
+async function removeMachine(id, name){
+  if (!await confirmBox(`移除「${name}」？`, "移除后它的 Agent、对话不再显示在这里；那台电脑上的东西不受影响。要再加回来，重新配对就行。", "移除")) return;
+  await act(() => api("/api/peers/remove", {id}), "已移除"); await loadState(); renderMachines();
+}
+async function leaveHub(){
+  if (!await confirmBox("断开？", "断开后这里只显示这台电脑自己的东西，两边的 Agent、对话都不受影响。", "断开")) return;
+  await act(() => api("/api/peers/leave", {}), "已断开，几秒后刷新");
+  setTimeout(() => location.reload(), 6000);
 }
 const gs = {};
 function renderSettings(){
@@ -1262,7 +1378,7 @@ function renderProjectList(){
     <div class="list-head"><h1>项目</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><button class="btn primary" onclick="newProject()">${ICON.plus}新建</button></div>
     <div class="scroll">${rows.length ? rows.map(p => `<a class="item ${current.id === p.id ? "on" : ""}" href="#/projects/${encodeURIComponent(p.id)}" style="text-decoration:none;color:inherit">
         ${pmark(p)}<span class="t"><span class="title">${esc(p.name)}</span>${p.busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${esc(memberLine(p))}</span>`}</span>
-        <span class="when">${when(p.last_active)}</span></a>`).join("") : `<p class="muted" style="padding:10px">还没有项目。</p>`}</div>`;
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(p.last_active)}</span>${mtag(p.machine)}</span></a>`).join("") : `<p class="muted" style="padding:10px">还没有项目。</p>`}</div>`;
 }
 function renderProjectEmpty(){
   proj = null;
@@ -1401,7 +1517,8 @@ function drawRcpt(){
                               : `<span class="muted" style="font-size:12px">先 @ 选派给谁</span>`;
 }
 function membersPanel(p){
-  const others = S.agents.filter(a => !p.members.includes(a.id));
+  const pm = ownerOf(p.id) || S.me;
+  const others = S.agents.filter(a => !p.members.includes(a.id) && (a.machine || S.me) === pm);
   return `<aside class="members"><div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font:600 15px var(--song)">成员</b><button class="icon-btn" aria-label="收起" onclick="showMembers=false;drawProject()">${ICON.x}</button></div>
     ${p.members.map(m => { const a = agentOf(m); if (!a) return ""; return `<div class="mem">${seal(a)}<span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${a.busy ? esc(a.doing || "干活中") : BASE[a.base || "claude"]}</span></span>
       <button class="link danger-link" onclick="removeMember(${q(m)})">移出</button></div>`; }).join("") || `<p class="muted">还没有成员。</p>`}
@@ -1457,7 +1574,8 @@ async function choose(tid, aid){
 }
 async function removeMember(m){ await act(() => api("/api/project/member", {id: proj.id, remove: m}), "已移出"); rcpt = rcpt.filter(x => x !== m); await loadState(); openProject(proj.id); }
 function addMemberMenu(e){
-  const pp = pop(e, `<div class="sec">拉进项目</div>` + S.agents.filter(a => !proj.members.includes(a.id)).map(a =>
+  const pm = ownerOf(proj.id) || S.me;
+  const pp = pop(e, `<div class="sec">拉进项目</div>` + S.agents.filter(a => !proj.members.includes(a.id) && (a.machine || S.me) === pm).map(a =>
     `<button data-a="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
   pp.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     closePop(); await act(() => api("/api/project/member", {id: proj.id, add: b.dataset.a}), "已拉进来"); await loadState(); openProject(proj.id);
@@ -1491,21 +1609,24 @@ function quickAgent(){
 }
 function newProject(){
   const picked = new Set();
-  let dir = "";
+  let dir = "", machine = S.me;
   const draw = () => {
     const name = $("#np-name") ? $("#np-name").value : "";
+    const mine = S.agents.filter(a => (a.machine || S.me) === machine);
     dialog("新建项目", `<div class="form">
+      ${multi() ? `<label>在哪台电脑</label><div class="seg">${S.machines.map(m => `<button class="${machine === m.id ? "on" : ""}" ${m.online ? "" : "disabled"} data-machine="${esc(m.id)}">${esc(m.name)}</button>`).join("")}</div>` : ""}
       <label for="np-name">名字</label><input id="np-name" class="input" placeholder="比如：官网改版" value="${esc(name)}">
       <label>工作目录</label><div><div class="row"><input id="np-dir" class="input" style="flex:1" placeholder="不填也行" value="${esc(tilde(dir))}"><button class="btn" id="np-pick">${ICON.folder}选择…</button></div>
         <div class="help">填了的话，拉进来的 Agent 都在这个目录里干活；不填就各在各的工作区。</div></div>
-      <label>拉哪些 Agent</label><div class="picks" style="margin:0">${S.agents.map(a => `<button class="pick ${picked.has(a.id) ? "on" : ""}" data-id="${esc(a.id)}">${seal(a, "", false)}<span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base || "claude"]}</div></span></button>`).join("")}</div>
+      <label>拉哪些 Agent</label><div class="picks" style="margin:0">${mine.map(a => `<button class="pick ${picked.has(a.id) ? "on" : ""}" data-id="${esc(a.id)}">${seal(a, "", false)}<span><div class="nm">${esc(a.name)}</div><div class="ds">${BASE[a.base || "claude"]}</div></span></button>`).join("")}</div>
     </div>`, `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="np-ok">新建项目</button>`);
     document.querySelectorAll(".scrim .pick").forEach(b => b.onclick = () => { dir = $("#np-dir").value; picked.has(b.dataset.id) ? picked.delete(b.dataset.id) : picked.add(b.dataset.id); draw(); });
-    $("#np-pick").onclick = () => chooseFolder(p => { dir = p; $("#np-dir").value = tilde(p); });
+    document.querySelectorAll(".scrim [data-machine]").forEach(b => b.onclick = () => { machine = b.dataset.machine; dir = ""; picked.clear(); draw(); });
+    $("#np-pick").onclick = () => chooseFolder(p => { dir = p; $("#np-dir").value = tilde(p); }, machine);
     $("#np-ok").onclick = async () => {
       const n = $("#np-name").value.trim(); if (!n) { toast("先给项目起个名字"); return; }
       const d = $("#np-dir").value.trim().replace(/^~/, S.home);
-      const {id} = await act(() => api("/api/project/save", {name: n, dir: d, members: [...picked]}));
+      const {id} = await act(() => api("/api/project/save", {name: n, dir: d, members: [...picked]}, machine));
       closeDialog(); await loadState(); location.hash = `#/projects/${encodeURIComponent(id)}`;
     };
   };
@@ -1569,7 +1690,7 @@ function renderScheduleList(){
     <div class="list-head"><h1>定时任务</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建</a></div>
     <div class="scroll">${rows.length ? rows.map(s => `<a class="item ${current.id === s.id ? "on" : ""}" href="#/schedules/${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit">
       ${schedMark(s)}<span class="t"><span class="title">${esc(s.name)}</span>${s.running ? `<span class="working"><span class="spin"></span>正在跑</span>` : `<span class="sub">${esc(freqText(s))}</span>`}</span>
-      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${s.on ? esc(fmtTs(s.next_run)) : ""}</span>${!s.on ? `<span class="tag">已暂停</span>` : s.last_state === "error" ? `<span class="tag" style="color:var(--bad)">上次出错</span>` : ""}</span></a>`).join("")
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${s.on ? esc(fmtTs(s.next_run)) : ""}</span>${mtag(s.machine)}${!s.on ? `<span class="tag">已暂停</span>` : s.last_state === "error" ? `<span class="tag" style="color:var(--bad)">上次出错</span>` : ""}</span></a>`).join("")
       : `<p class="muted" style="padding:10px">还没有定时任务。</p>`}</div>`;
 }
 function renderScheduleEmpty(){
@@ -1638,8 +1759,9 @@ function drawScheduleForm(){
   const hours = Array.from({length: 24}, (_, h) => [pad2(h), pad2(h) + " 点", ""]);
   const mins = Array.from({length: 12}, (_, i) => [pad2(i * 5), pad2(i * 5) + " 分", ""]);
   const [hh, mm] = d.time.split(":");
-  const tgtOpts = [...S.agents.map(a => ["agent:" + a.id, a.name, BASE[a.base || "claude"]]),
-                   ...(S.projects || []).map(p => ["project:" + p.id, `项目「${p.name}」`, `${p.members.length} 个 Agent`])];
+  const where = x => multi() ? "，在" + ((machineOf(x.machine) || {}).name || "") : "";
+  const tgtOpts = [...S.agents.map(a => ["agent:" + a.id, a.name, BASE[a.base || "claude"] + where(a)]),
+                   ...(S.projects || []).map(p => ["project:" + p.id, `项目「${p.name}」`, `${p.members.length} 个 Agent` + where(p)])];
   const p = d.target.kind === "project" ? projSummary(d.target.id) : null;
   const a = d.target.kind === "agent" ? agentOf(d.target.id) : null;
   const ch = k => a && a.channels.find(c => (k === "weixin") === (c.kind === "weixin"));
@@ -1688,11 +1810,12 @@ function schedFields(){
 }
 async function saveSchedule(){
   const f = schedFields();
-  const r = await act(() => api("/api/schedule/save", {id: sd._id, fields: f}), sd._id ? "已保存" : "已新建");
+  const r = await act(() => api("/api/schedule/save", {id: sd._id, fields: f}, sd._id ? ownerOf(sd._id) : ownerOf(f.target && f.target.id) || S.me), sd._id ? "已保存" : "已新建");
   await loadState(); location.hash = `#/schedules/${encodeURIComponent(r.id)}`;
 }
 async function trySchedule(){
-  const r = await act(() => api("/api/schedule/try", {fields: schedFields()}));
+  const fs = schedFields();
+  const r = await act(() => api("/api/schedule/try", {fields: fs}, ownerOf(fs.target && fs.target.id) || S.me));
   await loadState();
   const href = r.chat ? `#/chats/${encodeURIComponent(r.chat)}` : `#/projects/${encodeURIComponent(r.project)}`;
   dialog("试跑开始了", `<p>这次试跑不会保存成定时任务。可以先去看看效果，回来接着改。</p>`,

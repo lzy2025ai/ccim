@@ -209,7 +209,8 @@ class WebChannel(Channel):
         state, pw = "expired", None
         try:
             pw = await asyncio.wait_for(fut, timeout)
-            state = "done" if pw is not None else "declined"
+            from .admin import DIALOG
+            state = "dialog" if pw is DIALOG else "done" if pw is not None else "declined"
             return pw
         except asyncio.TimeoutError:
             return None
@@ -275,6 +276,9 @@ class Platform:
         self.channel = channel
         self.loop = asyncio.get_event_loop()
         self.schedules.start()                # 到点就跑的定时任务
+        from .peers import Peers
+        self.peers = Peers(self)
+        self.peers.start()
         self.background.add(asyncio.ensure_future(self._models()))
 
     async def _models(self):
@@ -590,6 +594,8 @@ class Platform:
         pass
 
     async def shutdown(self):
+        if getattr(self, "peers", None):
+            self.peers.stop()
         for b in list(self.bridges.values()):
             await b.shutdown()
 
@@ -669,9 +675,41 @@ def _handler(pf):
                 log.exception("接口出错")
                 self._send(500, {"error": f"出错了：{e}"})
 
+        def _remote(self, body=None):
+            """网页要操作另一台电脑上的东西（X-Machine）：交给那台电脑执行。返回 True 表示已处理。"""
+            mid = self.headers.get("X-Machine") or \
+                (parse_qs(urlparse(self.path).query).get("machine") or [""])[0]   # 图片等 <img> 带不了头，用参数
+            if not mid or mid == pf.peers.me["id"]:
+                return False
+            if not self._guard():
+                return True
+            path = urlparse(self.path).path
+            if body is None:
+                body = self.rfile.read(int(self.headers.get("Content-Length") or 0)) if self.command == "POST" else b""
+            from .peers import Offline
+            try:
+                status, ctype, data = pf.peers.forward(mid, self.command, self.path, body,
+                                                       {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)})
+            except Offline:
+                name = next((m["name"] for m in pf.peers.machines() if m["id"] == mid), "那台电脑")
+                if self.command == "POST" and path in ("/api/chat/send", "/api/chat/mention"):
+                    pf.peers.queue_out(mid, "POST", self.path, body)
+                    self._send(200, {"queued": True, "machine": name})
+                else:
+                    self._send(503, {"error": f"「{name}」现在离线，等它连上再试。"})
+                return True
+            except Exception as e:
+                log.exception("转交出错")
+                self._send(502, {"error": f"出错了：{e}"})
+                return True
+            self._send(status, data, ctype)
+            return True
+
         def do_GET(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if u.path.startswith("/api/") and u.path != "/api/events" and self._remote():
+                return
             if u.path in ("/", "/index.html"):
                 if not self._host_ok():
                     return self._send(403, b"forbidden", "text/plain")
@@ -682,7 +720,8 @@ def _handler(pf):
             if u.path == "/api/file":
                 return self._file(q.get("chat", ""), q.get("path", ""))
             routes = {
-                "/api/state": lambda: state(pf),
+                "/api/state": lambda: state(pf) if q.get("local") else pf.peers.merged_state(state(pf)),
+                "/api/dirs": lambda: list_dirs(q.get("path") or ""),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
@@ -698,6 +737,10 @@ def _handler(pf):
 
         def do_POST(self):
             u = urlparse(self.path)
+            if self._remote():
+                return
+            if self.headers.get("X-From-Peer") and u.path in ("/api/pick", "/api/reveal"):
+                return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
                 return self._api(self._upload)
             try:
@@ -716,7 +759,10 @@ def _handler(pf):
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),
                 "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
-                "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run")),
+                "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run"), bool(self.headers.get("X-From-Peer"))),
+                "/api/peers/code": lambda: pf.peers.new_code(),
+                "/api/peers/remove": lambda: pf.peers.remove(b("id")),
+                "/api/peers/leave": lambda: leave_hub(pf),
                 "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
@@ -828,11 +874,36 @@ def send(pf, cid, text, files):
     return {"ok": True}
 
 
-def answer_secret(pf, sid, password, run):
-    if run and not password:
+def answer_secret(pf, sid, password, run, from_peer=False):
+    from . import admin
+    if run == "dialog":                       # 在另一台电脑上看：在这台 Mac 上弹系统授权窗口
+        password = admin.DIALOG
+    elif run and from_peer:
+        raise Problem("开机密码只能在这台电脑自己的网页里输。")
+    elif run and not password:
         raise Problem("先输入开机密码。")
     if not pf.channel.answer_secret(sid or "", password if run else None):
         raise Problem("这张卡片已经处理过或作废了。")
+    return {}
+
+
+def list_dirs(path):
+    """网页里选另一台电脑上的文件夹：列出子文件夹。"""
+    home = os.path.expanduser("~")
+    d = os.path.realpath(os.path.expanduser(path or "~"))
+    if not os.path.isdir(d):
+        raise Problem("找不到这个文件夹。")
+    try:
+        names = sorted(n for n in os.listdir(d) if not n.startswith(".") and os.path.isdir(os.path.join(d, n)))
+    except PermissionError:
+        raise Problem("没有权限打开这个文件夹。")
+    return {"path": d, "parent": os.path.dirname(d) if d != "/" else None, "home": home, "dirs": names[:500]}
+
+
+def leave_hub(pf):
+    pf.peers.leave()
+    from . import runtime
+    runtime.schedule_restart(pf.home, delay=2)
     return {}
 
 

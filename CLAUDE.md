@@ -84,6 +84,15 @@
   渠道有 `ask_secret`（只有网页：本机）时弹卡片看命令、输开机密码，密码从标准输入交给 `sudo -S -k`（每次都要输），
   不进记录、不进日志、不回给 Claude；卡片 type=secret 按 id 合并，平台重启后没处理的显示作废。
   飞书、微信不收密码，用 osascript `with administrator privileges` 在 Mac 上弹系统授权窗口。网页重画时保留正在输的密码
+- `ccim/peers.py`：多台电脑（#13）。没加入别人的是总控，`ccim join 地址 配对码` 加入（~/.ccim/hub.json；总控记在 peers.json，
+  本机编号和名字在 machine.json）。各台电脑的平台照旧管自己的东西，网页只在本机打开；网页请求带 X-Machine（`<img>` 用 machine 参数），
+  平台不是自己的就 `forward`，那边照原样请求自己的 127.0.0.1 接口（带 X-From-Peer），所以各接口不用改。/api/state 拼起来（每项带
+  machine，另有 machines / me / machine_info），离线的用 peer-cache.json。连接方向是加入的电脑主动连总控（局域网只开 PEER_PORT 8978，
+  有电脑加入或生成了配对码才开）：总控→它靠长轮询 /peer/poll 取请求和推送，它→别处 POST /peer/call，推送 /peer/push，_m 记来源不回传。
+  每个请求和回应都 HMAC 签名（时间戳 + 随机数 + 内容摘要）。请求一直没被取走就撤回并算离线（免得回来重复执行）；发消息给离线的电脑
+  先存 outbox.json，连上再发。从别的电脑来的密码请求一律拒绝，只能选「在那台 Mac 上弹授权窗口」（admin.DIALOG）；/api/pick、/api/reveal
+  不接受别的电脑来的。网页按 id 找东西在哪台电脑（`ownerOf`），找不到用 ctxMachine（当前打开的东西所在的电脑）。
+  测试：两个临时 HOME 各跑一个平台进程（registry.HOME、peers.PEER_PORT 改掉），一个 join 另一个
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

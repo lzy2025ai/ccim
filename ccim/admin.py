@@ -13,6 +13,7 @@ TIMEOUT = 600                                 # 等用户确认
 RUN_TIMEOUT = 600                             # 命令本身最多跑这么久
 OUTPUT_LIMIT = 20000
 SUDO = "/usr/bin/sudo"
+DIALOG = object()                             # 用户在另一台电脑上看：改成在这台 Mac 上弹系统授权窗口
 
 
 def _cut(text):
@@ -63,6 +64,8 @@ async def run(chat, command, reason):
         pw = await ask(chat.chat_id, command, reason, TIMEOUT)
         if pw is None:
             return False, "用户没有同意（或者超时了），命令没有执行。"
+        if pw is DIALOG:
+            return await _dialog(command, reason)
         try:
             return await _sudo(command, pw)
         finally:

@@ -1,0 +1,636 @@
+"""多台电脑（#13）：局域网里另一台电脑加入，在一个网页里管理几台电脑的 Agent、对话、项目、定时任务。
+
+一台是总控（没加入别人的就是总控），其他的「加入」它。每台电脑的平台进程照旧管自己的东西（Agent、对话记录、
+项目、定时任务都在本机），网页也只在本机打开（127.0.0.1）；跨电脑的事都是「把这个接口请求交给那台电脑执行」：
+
+- 网页请求带 X-Machine 头（目标电脑），平台发现不是自己，就 forward 过去；那台电脑收到后照原样请求自己的
+  127.0.0.1 接口（带 X-From-Peer），所以各接口不用改。/api/state 把各台电脑的拼在一起（每一项带 machine）。
+- 连接方向：加入的电脑主动连总控（总控对局域网只开 PEER_PORT 这一个端口），以后总控放到公网也一样。
+  总控 → 加入的电脑：加入的电脑一直长轮询 /peer/poll，总控把要它执行的请求、别处的推送放进去；它执行完 POST /peer/reply。
+  加入的电脑 → 别处：POST /peer/call（目标是总控就总控执行，是另一台就总控转交）。
+  推送（SSE）：各台电脑把自己产生的推送交给总控（/peer/push），总控转给其他电脑（带 _m 记来源，不回传）。
+- 认证：配对码（一次性、10 分钟、错 10 次作废）换一把密钥；之后每个请求、每个回应都用它做 HMAC 签名
+  （时间戳 + 随机数 + 内容摘要，防伪造和重放）。局域网里内容不加密。
+- 离线：发消息给离线的电脑先存在本机 outbox，连上后发出。
+- 管理员密码不跨电脑传：从别的电脑来的 /api/chat/secret 只能选「在那台 Mac 上弹授权窗口」。
+"""
+import base64, hashlib, hmac, http.client, json, logging, os, queue, secrets, socket, subprocess, threading, time, uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
+
+from . import registry
+
+log = logging.getLogger("ccim.peers")
+
+PEER_PORT = 8978
+PROTOCOL = 1
+POLL_WAIT = 20                                # 长轮询最多挂这么久
+ONLINE_WINDOW = 45                            # 这么久没来轮询就算离线
+SKEW = 120                                    # 签名时间戳允许的误差
+CODE_TTL = 600
+STATE_TIMEOUT = 5
+CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
+QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs"}
+QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
+
+
+class Offline(Exception):
+    pass
+
+
+def _file(name):
+    return os.path.join(registry.HOME, name)
+
+
+def _load(name, default):
+    try:
+        with open(_file(name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def _save(name, data):
+    os.makedirs(registry.HOME, exist_ok=True)
+    tmp = _file(name) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, _file(name))
+
+
+def identity():
+    """这台电脑：编号（第一次生成）和名字（系统里的电脑名）。"""
+    m = _load("machine.json", {})
+    if not m.get("id"):
+        m["id"] = "m" + uuid.uuid4().hex[:8]
+    if not m.get("name"):
+        try:
+            m["name"] = subprocess.run(["scutil", "--get", "ComputerName"], capture_output=True, text=True,
+                                       timeout=5).stdout.strip() or socket.gethostname()
+        except Exception:
+            m["name"] = socket.gethostname()
+        _save("machine.json", m)
+    elif not os.path.exists(_file("machine.json")):
+        _save("machine.json", m)
+    return m
+
+
+def lan_ips():
+    ips = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))          # 不会真的发出去，只是让系统选一个出口地址
+        ips.append(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except OSError:
+        pass
+    return ips
+
+
+# ---------- 签名 ----------
+
+def _digest(body):
+    return hashlib.sha256(body or b"").hexdigest()
+
+
+def _sign(key, *parts):
+    return hmac.new(key.encode(), "\n".join(parts).encode(), hashlib.sha256).hexdigest()
+
+
+class Nonces:
+    def __init__(self):
+        self.seen, self.lock = {}, threading.Lock()
+
+    def fresh(self, nonce):
+        now = time.time()
+        with self.lock:
+            for k in [k for k, t in self.seen.items() if now - t > SKEW * 2]:
+                del self.seen[k]
+            if nonce in self.seen:
+                return False
+            self.seen[nonce] = now
+            return True
+
+
+# ---------- 执行本机接口 ----------
+
+def local_request(pf, method, path, body=b"", headers=None, timeout=CALL_TIMEOUT):
+    """照原样请求本机平台的接口（和网页发的一样），返回 (状态码, 内容类型, 内容)。"""
+    port = registry.read_state(pf.home).get("port") or 8977
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    try:
+        h = {"X-CCIM": "1", "X-From-Peer": "1", "Host": f"127.0.0.1:{port}"}
+        for k in ("X-Name", "Content-Type"):
+            if (headers or {}).get(k):
+                h[k] = headers[k]
+        c.request(method, path, body=body or None, headers=h)
+        r = c.getresponse()
+        return r.status, r.getheader("Content-Type") or "application/json", r.read()
+    finally:
+        c.close()
+
+
+class Peers:
+    def __init__(self, pf):
+        self.pf = pf
+        self.me = identity()
+        self.lock = threading.RLock()
+        self.nonces = Nonces()
+        # 总控这边
+        self.nodes = _load("peers.json", {})          # 加入的电脑：编号 → {name, key, added}
+        self.codes = {}                               # 配对码 → {"until", "tries"}
+        self.boxes = {}                               # 加入的电脑 → 等它取走的消息（请求、推送）
+        self.seen = {}                                # 加入的电脑 → 最近一次来轮询的时间
+        self.waiting = {}                             # 请求编号 → [Event, 结果]
+        self.server = None
+        # 加入别人的这边
+        self.hub = _load("hub.json", None)            # {url, hub_id, hub_name, key}
+        self.hub_ok = 0                               # 最近一次连上总控的时间
+        self.machines_from_hub = []
+        self.cache = _load("peer-cache.json", {})     # 各台电脑上次的 state，离线时显示
+        self.stopping = False
+
+    # ----- 启动 -----
+
+    def start(self):
+        if self.hub:
+            for fn in (self._poll_loop, self._push_loop, self._outbox_loop):
+                threading.Thread(target=fn, name=fn.__name__, daemon=True).start()
+        else:
+            if self.nodes:
+                self.serve()
+            threading.Thread(target=self._fanout_loop, name="fanout", daemon=True).start()
+            threading.Thread(target=self._outbox_loop, name="outbox", daemon=True).start()
+
+    def serve(self):
+        with self.lock:
+            if self.server:
+                return
+            try:
+                self.server = ThreadingHTTPServer(("0.0.0.0", PEER_PORT), _handler(self))
+            except OSError as e:
+                raise RuntimeError(f"端口 {PEER_PORT} 被占用了，别的电脑连不进来：{e}")
+            self.server.daemon_threads = True
+            threading.Thread(target=self.server.serve_forever, name="peers", daemon=True).start()
+            log.info("等别的电脑连进来：%s 端口 %d", ", ".join(lan_ips()) or "本机", PEER_PORT)
+
+    def stop(self):
+        self.stopping = True
+        if self.server:
+            self.server.shutdown()
+
+    # ----- 电脑列表 -----
+
+    def is_hub(self):
+        return not self.hub
+
+    def online(self, mid):
+        if mid == self.me["id"]:
+            return True
+        if self.is_hub():
+            return time.time() - self.seen.get(mid, 0) < ONLINE_WINDOW
+        if mid == self.hub["hub_id"]:
+            return time.time() - self.hub_ok < ONLINE_WINDOW
+        return any(m["id"] == mid and m.get("online") for m in self.machines_from_hub)
+
+    def machines(self):
+        """[{id, name, me, hub, online}]，第一个是总控。"""
+        if self.is_hub():
+            out = [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
+            out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()]
+        else:
+            out = [dict(m) for m in self.machines_from_hub] or \
+                [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True},
+                 {"id": self.me["id"], "name": self.me["name"], "hub": False}]
+        for m in out:
+            m["me"] = m["id"] == self.me["id"]
+            m["online"] = self.online(m["id"])
+        return out
+
+    # ----- 配对（总控） -----
+
+    def new_code(self):
+        if not self.is_hub():
+            raise ValueError("这台电脑已经加入了别的电脑，要添加电脑请到那台电脑上操作。")
+        self.serve()
+        code = f"{secrets.randbelow(10 ** 6):06d}"
+        with self.lock:
+            self.codes = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
+            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0}
+        return {"code": code, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
+
+    def pair(self, body):
+        code = str(body.get("code") or "")
+        with self.lock:
+            live = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
+            for v in live.values():
+                v["tries"] += 1
+            if code not in live or live[code]["tries"] > 10:
+                if all(v["tries"] > 10 for v in live.values()):
+                    self.codes = {}
+                raise PermissionError("配对码不对或者过期了，在那台电脑的网页里重新生成一个。")
+            del self.codes[code]
+            mid = str(body.get("id") or "")[:20] or "m" + uuid.uuid4().hex[:8]
+            if mid == self.me["id"]:
+                raise PermissionError("不能加入自己。")
+            key = secrets.token_hex(32)
+            self.nodes[mid] = {"name": str(body.get("name") or mid)[:40], "key": key, "added": registry.now()}
+            _save("peers.json", self.nodes)
+        self._emit_machines()
+        return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL}
+
+    def remove(self, mid):
+        if not self.is_hub():
+            raise ValueError("在总控那台电脑上移除。")
+        with self.lock:
+            if self.nodes.pop(mid, None) is None:
+                raise ValueError("没有这台电脑。")
+            _save("peers.json", self.nodes)
+            self.boxes.pop(mid, None)
+            self.seen.pop(mid, None)
+            self.cache.pop(mid, None)
+        self._emit_machines()
+        return {}
+
+    def leave(self):
+        leave()
+        return {}
+
+    def _emit_machines(self):
+        self.pf.channel.events.publish({"type": "machines"})
+
+    # ----- 转交请求 -----
+
+    def forward(self, mid, method, path, body=b"", headers=None):
+        """把一个接口请求交给另一台电脑执行，返回 (状态码, 内容类型, 内容)。连不上抛 Offline。"""
+        if mid == self.me["id"]:
+            return local_request(self.pf, method, path, body, headers)
+        if not self.online(mid):
+            raise Offline()
+        timeout = STATE_TIMEOUT if urlparse(path).path in QUICK else CALL_TIMEOUT
+        if self.is_hub():
+            return self._to_node(mid, method, path, body, headers, timeout)
+        h = {"X-Target": mid, "X-Method": method, "X-Path": path}
+        for k in ("X-Name", "Content-Type"):
+            if (headers or {}).get(k):
+                h[k] = headers[k]
+        try:
+            status, rh, data = self._hub_request("/peer/call", body, h, timeout + 5)
+        except (OSError, http.client.HTTPException):
+            raise Offline()
+        if status == 503:
+            raise Offline()
+        return int(rh.get("X-Status") or status), rh.get("X-Ctype") or "application/json", data
+
+    def _to_node(self, mid, method, path, body, headers, timeout):
+        rid = uuid.uuid4().hex
+        ev, picked = threading.Event(), threading.Event()
+        self.waiting[rid] = [ev, None, picked]
+        self._box(mid).put({"kind": "req", "rid": rid, "method": method, "path": path,
+                            "headers": {k: v for k, v in (headers or {}).items() if k in ("X-Name", "Content-Type")},
+                            "body": base64.b64encode(body or b"").decode()})
+        try:
+            if not picked.wait(POLL_WAIT + 10):      # 一直没人来取：那台电脑其实已经断了，撤回，免得它回来后又执行一次
+                box = self._box(mid)
+                with box.mutex:
+                    for m in [m for m in box.queue if m.get("rid") == rid]:
+                        box.queue.remove(m)
+                raise Offline()
+            if not ev.wait(timeout):
+                raise Offline()
+            return self.waiting[rid][1]
+        finally:
+            self.waiting.pop(rid, None)
+
+    def _box(self, mid):
+        with self.lock:
+            if mid not in self.boxes:
+                self.boxes[mid] = queue.Queue(maxsize=5000)
+            return self.boxes[mid]
+
+    # ----- 汇总各台电脑的 state -----
+
+    def merged_state(self, local):
+        out = dict(local)
+        me = self.me["id"]
+        for k in ("agents", "chats", "projects", "schedules"):
+            out[k] = [dict(x, machine=me) for x in local.get(k) or []]
+        machines = self.machines()
+        extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
+                      "home": local.get("home")}}
+        results = {}
+
+        def fetch(m):
+            try:
+                status, _, data = self.forward(m["id"], "GET", "/api/state?local=1")
+                if status == 200:
+                    results[m["id"]] = json.loads(data)
+            except Exception:
+                pass
+
+        threads = [threading.Thread(target=fetch, args=(m,)) for m in machines if not m["me"] and m["online"]]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(STATE_TIMEOUT + 1)
+        changed = False
+        for m in machines:
+            if m["me"]:
+                continue
+            s = results.get(m["id"])
+            if s:
+                self.cache[m["id"]] = s
+                changed = True
+            else:
+                s = self.cache.get(m["id"])
+                m["online"] = False if m["id"] not in results else m["online"]
+            if not s:
+                continue
+            for k in ("agents", "chats", "projects", "schedules"):
+                out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
+            extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
+                              "home": s.get("home")}
+        if changed:
+            try:
+                _save("peer-cache.json", self.cache)
+            except OSError:
+                pass
+        out["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
+        out["machines"], out["me"], out["machine_info"] = machines, me, extra
+        return out
+
+    # ----- 离线时先存着的消息 -----
+
+    def queue_out(self, mid, method, path, body):
+        box = _load("outbox.json", [])
+        box.append({"machine": mid, "method": method, "path": path, "body": base64.b64encode(body or b"").decode(),
+                    "at": time.time()})
+        _save("outbox.json", box)
+
+    def _outbox_loop(self):
+        while not self.stopping:
+            time.sleep(10)
+            box = _load("outbox.json", [])
+            if not box:
+                continue
+            left = []
+            for item in box:
+                if not self.online(item["machine"]):
+                    left.append(item)
+                    continue
+                try:
+                    self.forward(item["machine"], item["method"], item["path"], base64.b64decode(item["body"]),
+                                 {"Content-Type": "application/json"})
+                except Offline:
+                    left.append(item)
+                except Exception:
+                    log.warning("补发失败", exc_info=True)
+            _save("outbox.json", left)
+
+    # ----- 推送 -----
+
+    def _fanout_loop(self):
+        """总控：本机产生的、加入的电脑交上来的推送，转给其他电脑（不回给来源）。"""
+        q = self.pf.channel.events.subscribe()
+        while not self.stopping:
+            try:
+                ev = q.get(timeout=5)
+            except queue.Empty:
+                if not self.pf.channel.events.alive(q):
+                    q = self.pf.channel.events.subscribe()
+                continue
+            origin = ev.get("_m") or self.me["id"]
+            for mid in list(self.nodes):
+                if mid != origin and self.online(mid):
+                    try:
+                        self._box(mid).put_nowait({"kind": "ev", "ev": dict(ev, _m=origin)})
+                    except queue.Full:
+                        pass
+
+    def _push_loop(self):
+        """加入的电脑：本机产生的推送交给总控。"""
+        q = self.pf.channel.events.subscribe()
+        while not self.stopping and self.hub:
+            batch = []
+            try:
+                batch.append(q.get(timeout=5))
+                while len(batch) < 200:
+                    batch.append(q.get(timeout=0.15))
+            except queue.Empty:
+                pass
+            if not self.pf.channel.events.alive(q):
+                q = self.pf.channel.events.subscribe()
+            batch = [e for e in batch if e.get("_m") in (None, self.me["id"])]
+            if not batch or not self.online(self.hub["hub_id"]):
+                continue
+            try:
+                self._hub_request("/peer/push", json.dumps(batch, ensure_ascii=False).encode(), {}, 10)
+            except Exception:
+                pass
+
+    # ----- 加入的电脑：和总控说话 -----
+
+    def _hub_request(self, path, body=b"", headers=None, timeout=30):
+        u = urlparse(self.hub["url"])
+        c = http.client.HTTPConnection(u.hostname, u.port or PEER_PORT, timeout=timeout)
+        ts, nonce = str(int(time.time())), secrets.token_hex(12)
+        h = dict(headers or {}, **{"X-Node": self.me["id"], "X-Ts": ts, "X-Nonce": nonce,
+                                   "X-Sig": _sign(self.hub["key"], "POST", path, ts, nonce, _digest(body))})
+        try:
+            c.request("POST", path, body=body or b"", headers=h)
+            r = c.getresponse()
+            data = r.read()
+            rh = {k: v for k, v in r.getheaders()}
+        finally:
+            c.close()
+        if r.status == 401:
+            raise PermissionError("总控不认这台电脑了（可能被移除了），重新运行 ccim join。")
+        sig = rh.get("X-Sig") or ""
+        if not hmac.compare_digest(sig, _sign(self.hub["key"], "resp", nonce, str(r.status), _digest(data))):
+            raise http.client.HTTPException("总控的回应签名不对")
+        return r.status, rh, data
+
+    def _poll_loop(self):
+        fails = 0
+        while not self.stopping and self.hub:
+            try:
+                status, _, data = self._hub_request("/peer/poll", json.dumps({"name": self.me["name"],
+                                                                              "protocol": PROTOCOL}).encode(),
+                                                    {}, POLL_WAIT + 15)
+                if status != 200:
+                    raise OSError(f"总控回应 {status}")
+                if not self.hub_ok or time.time() - self.hub_ok > ONLINE_WINDOW:
+                    log.info("连上总控 %s", self.hub["hub_name"])
+                    self._emit_machines()
+                self.hub_ok, fails = time.time(), 0
+                msg = json.loads(data)
+                self.machines_from_hub = msg.get("machines") or self.machines_from_hub
+                for m in msg.get("msgs") or []:
+                    if m["kind"] == "ev":
+                        self.pf.channel.events.publish(m["ev"])
+                    elif m["kind"] == "req":
+                        threading.Thread(target=self._serve_req, args=(m,), daemon=True).start()
+            except PermissionError as e:
+                log.error("%s", e)
+                time.sleep(60)
+            except Exception as e:
+                fails += 1
+                if fails == 3:
+                    log.warning("连不上总控 %s：%s", self.hub["url"], e)
+                    self._emit_machines()
+                time.sleep(min(3 * fails, 15))
+
+    def _serve_req(self, m):
+        try:
+            status, ctype, data = local_request(self.pf, m["method"], m["path"], base64.b64decode(m["body"]),
+                                                m.get("headers"))
+        except Exception as e:
+            status, ctype, data = 500, "application/json", json.dumps({"error": f"出错了：{e}"}).encode()
+        try:
+            self._hub_request("/peer/reply", data, {"X-Rid": m["rid"], "X-Status": str(status), "X-Ctype": ctype}, 60)
+        except Exception:
+            log.warning("回复总控失败", exc_info=True)
+
+
+# ---------- 总控对局域网开的端口 ----------
+
+def _handler(peers):
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "ccim-peer"
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _reply(self, status, body, key=None, nonce="", extra=None):
+            data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            if key:
+                self.send_header("X-Sig", _sign(key, "resp", nonce, str(status), _digest(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 160 * 1024 * 1024:
+                self.close_connection = True
+                return self._reply(413, {"error": "太大了"})
+            body = self.rfile.read(n) if n else b""
+            path = urlparse(self.path).path
+            if path == "/peer/pair":
+                try:
+                    return self._reply(200, peers.pair(json.loads(body or b"{}")))
+                except PermissionError as e:
+                    return self._reply(403, {"error": str(e)})
+                except ValueError:
+                    return self._reply(400, {"error": "请求不对"})
+            mid = self.headers.get("X-Node") or ""
+            node = peers.nodes.get(mid)
+            ts, nonce, sig = self.headers.get("X-Ts") or "0", self.headers.get("X-Nonce") or "", self.headers.get("X-Sig") or ""
+            if not node or not nonce or abs(time.time() - int(ts if ts.isdigit() else 0)) > SKEW or \
+                    not hmac.compare_digest(sig, _sign(node["key"], "POST", path, ts, nonce, _digest(body))) or \
+                    not peers.nonces.fresh(nonce):
+                return self._reply(401, {"error": "unauthorized"})
+            key = node["key"]
+            peers.seen[mid] = time.time()
+            try:
+                if path == "/peer/poll":
+                    return self._poll(mid, key, nonce, body)
+                if path == "/peer/reply":
+                    w = peers.waiting.get(self.headers.get("X-Rid") or "")
+                    if w:
+                        w[1] = (int(self.headers.get("X-Status") or 200), self.headers.get("X-Ctype") or "application/json", body)
+                        w[0].set()
+                    return self._reply(200, {}, key, nonce)
+                if path == "/peer/push":
+                    for ev in json.loads(body or b"[]"):
+                        peers.pf.channel.events.publish(dict(ev, _m=mid))
+                    return self._reply(200, {}, key, nonce)
+                if path == "/peer/call":
+                    target = self.headers.get("X-Target") or ""
+                    method, p = self.headers.get("X-Method") or "GET", self.headers.get("X-Path") or "/"
+                    if not p.startswith("/api/"):
+                        return self._reply(400, {"error": "bad path"}, key, nonce)
+                    hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
+                    try:
+                        status, ctype, data = peers.forward(target, method, p, body, hs)
+                    except Offline:
+                        return self._reply(503, {"error": "offline"}, key, nonce)
+                    return self._reply(200, data, key, nonce, {"X-Status": str(status), "X-Ctype": ctype})
+            except Exception as e:
+                log.exception("处理 %s 出错", path)
+                return self._reply(500, {"error": str(e)}, key, nonce)
+            return self._reply(404, {"error": "not found"}, key, nonce)
+
+        def _poll(self, mid, key, nonce, body):
+            try:
+                info = json.loads(body or b"{}")
+                if info.get("name") and peers.nodes[mid].get("name") != info["name"]:
+                    peers.nodes[mid]["name"] = str(info["name"])[:40]
+                    _save("peers.json", peers.nodes)
+            except (ValueError, KeyError):
+                pass
+            first = mid not in peers.boxes
+            box = peers._box(mid)
+            if first:
+                peers._emit_machines()
+            msgs = []
+            try:
+                msgs.append(box.get(timeout=POLL_WAIT))
+                while len(msgs) < 200:
+                    msgs.append(box.get_nowait())
+            except queue.Empty:
+                pass
+            for m in msgs:                    # 请求被取走了：那边在线，接着等它的回复
+                w = peers.waiting.get(m.get("rid") or "")
+                if w:
+                    w[2].set()
+            return self._reply(200, {"machines": peers.machines(), "msgs": msgs}, key, nonce)
+
+    return Handler
+
+
+# ---------- ccim join ----------
+
+def leave():
+    """加入的这台：断开总控。"""
+    try:
+        os.remove(_file("hub.json"))
+    except OSError:
+        pass
+
+
+def join(host, code):
+    """加入另一台电脑（总控）。返回总控的名字。"""
+    if ":" not in host.split("//")[-1]:
+        host = f"{host}:{PEER_PORT}"
+    url = host if host.startswith("http") else "http://" + host
+    me = identity()
+    u = urlparse(url)
+    c = http.client.HTTPConnection(u.hostname, u.port or PEER_PORT, timeout=15)
+    try:
+        c.request("POST", "/peer/pair", body=json.dumps({"code": code, "id": me["id"], "name": me["name"]}).encode(),
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        data = json.loads(r.read() or b"{}")
+    except OSError as e:
+        raise SystemExit(f"连不上 {u.hostname}:{u.port or PEER_PORT}（{e}）。确认两台电脑在同一个网络里，"
+                         f"那台电脑的网页「设置」里生成过配对码，而且系统防火墙允许 ccim 接收连接。")
+    finally:
+        c.close()
+    if r.status != 200:
+        raise SystemExit(data.get("error") or f"加入失败（{r.status}）")
+    _save("hub.json", {"url": url, "hub_id": data["hub_id"], "hub_name": data["hub_name"], "key": data["key"],
+                       "joined": registry.now()})
+    return data["hub_name"]

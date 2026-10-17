@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccim · 按电脑切换（原型，假数据）</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1;
+  --lu:#3F7A5E; --zhe:#9A5B34; --huang:#B8902A; --zhu:#B5402F; --dai:#4A4F6B;
+  --ok:#3F7A5E; --warn:#B8902A; --bad:#B5402F;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:2px solid var(--qing);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- 骨架 ---------- */
+.app{display:grid;grid-template-columns:76px 300px 1fr;height:100vh;overflow:hidden}
+body{overflow:hidden}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);letter-spacing:.5px;margin-bottom:18px;color:var(--ink)}
+.rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--muted);text-decoration:none;font-size:12px}
+.rail a svg{width:20px;height:20px}
+.rail a:hover{background:var(--sunk);color:var(--ink)}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.rail .spacer{flex:1}
+
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.list-head{padding:18px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+.list-head h1{font:600 19px/1.2 var(--song);margin:0}
+.search{margin:0 16px 10px;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--sunk);color:var(--muted)}
+.search input{border:0;background:none;outline:none;flex:1;min-width:0}
+.scroll{overflow:auto;flex:1;padding:0 8px 16px}
+.group{font-size:12px;color:var(--faint);padding:12px 10px 4px}
+.item{display:flex;gap:10px;padding:9px 10px;border-radius:10px;align-items:flex-start;width:100%;text-align:left}
+.item:hover{background:var(--sunk)}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .t{flex:1;min-width:0}
+.item .title,.item .sub{display:block}
+.item .title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .when{font-size:12px;color:var(--faint);white-space:nowrap}
+
+.main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+
+/* ---------- 印章 ---------- */
+.seal{--c:var(--qing);flex:none;width:34px;height:34px;border-radius:7px;background:var(--c);color:#fff;
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;place-items:center;padding:3px;
+  font:700 12px/1 var(--song);position:relative;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+.seal.one{grid-template-columns:1fr;grid-template-rows:1fr;font-size:16px}
+.seal span{display:block}
+.seal.vert{grid-template-columns:1fr;gap:1px}
+.seal.lg{width:64px;height:64px;font-size:22px;border-radius:12px;padding:6px}
+.seal.lg.one{font-size:30px}
+.seal.sm{width:26px;height:26px;font-size:10px;border-radius:6px;padding:2px}
+.seal.sm.one{font-size:13px}
+.seal.off{background:transparent;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.seal .dot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--paper);background:var(--faint)}
+.seal .dot.on{background:var(--ok)} .seal .dot.busy{background:var(--huang)}
+
+/* ---------- 通用 ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);font-size:13px}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.btn.primary:hover{background:#223d5a}
+.btn.danger{color:var(--bad);border-color:#E3C3BD}
+.btn.ghost{border-color:transparent}
+.btn.ghost:hover{background:var(--sunk)}
+.btn svg{width:15px;height:15px}
+.icon-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.icon-btn:hover{background:var(--sunk);color:var(--ink)}
+.icon-btn svg{width:17px;height:17px}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:1px 7px;border-radius:5px;background:var(--sunk);color:var(--ink-2);white-space:nowrap}
+.tag.feishu{background:#E4ECF7;color:#2F5A93} .tag.weixin{background:#E3F1E7;color:#2E6E45} .tag.term{background:#ECE9E3;color:#5E5547}
+.tag.web{background:var(--qing-soft);color:var(--qing)}
+.path{font:12px/1.4 var(--mono);color:var(--muted)}
+.muted{color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.status.on i{background:var(--ok)} .status.busy i{background:var(--huang)} .status.err i{background:var(--bad)}
+.status.busy{color:#7A6216}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:380px;padding:40px 20px}
+.empty h2{font:600 22px/1.3 var(--song);color:var(--ink);margin:0 0 8px}
+
+/* ---------- 对话 ---------- */
+.chat-head{display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--line)}
+.chat-head .name{font:600 16px/1.3 var(--song)}
+.chat-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.chat-head .grow{flex:1;min-width:0}
+.notice{margin:12px 22px 0;padding:9px 12px;border-radius:8px;background:#F4F1E6;color:#6B5A27;font-size:13px}
+.thread{flex:1;overflow:auto;padding:22px 0 10px}
+.msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
+.msg.me{display:flex;justify-content:flex-end}
+.msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
+.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg-acts{display:flex;gap:2px;margin-top:4px;opacity:0;transition:opacity .15s}
+.msg:hover .msg-acts,.msg:focus-within .msg-acts{opacity:1}
+@media (hover:none){.msg-acts{opacity:1}}
+.msg-acts button{display:flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted)}
+.msg-acts button:hover{background:var(--sunk);color:var(--ink)}
+.msg-acts svg{width:14px;height:14px}
+/* 分叉出来的对话：从上面那个对话的印章下面引一条线，每个分支一个拐角，最后一个到拐角为止 */
+.kids{margin:-2px 0 2px 26px}
+.kids>.node{position:relative;padding-left:16px}
+.kids>.node::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1.5px solid var(--line-strong)}
+.kids>.node:last-child::before{display:none}
+.kids>.node::after{content:"";position:absolute;left:0;top:0;width:11px;height:17px;border-left:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong);border-bottom-left-radius:7px}
+.kids>.node:first-child::before{top:-8px}
+.kids>.node:first-child::after{top:-8px;height:25px}   /* 第一条接到印章底下 */
+.kids .kids{margin-left:10px}
+.item.child{padding:6px 10px;align-items:center}
+.item.child .title{font-weight:400;font-size:13.5px}
+.msg.wide{max-width:1180px}
+.dirs{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:1px}
+.dirs .dir{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.dirs .dir:hover{background:var(--sunk)}
+.dirs .dir svg{width:15px;height:15px;color:var(--muted)}
+.dirs .dir.up{color:var(--muted)}
+.tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px}
+.tag.mach.off{color:var(--faint);background:var(--sunk)}
+.approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
+.approve .pw:focus{border-color:var(--ink-2)}
+.box .rcpt:empty{display:none}
+.fork-from{font-size:12px;color:var(--muted);text-decoration:none}
+.fork-from:hover{color:var(--ink)}
+.msg.me .from{display:none}
+.from-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.from-row b{font:600 14px var(--song)}
+.from-row .tag{margin-left:2px}
+.answer{line-height:1.75}
+.answer p{margin:0 0 10px}
+.answer code{font:12.5px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
+.answer pre{font:12.5px/1.6 var(--mono);background:#1F242C;color:#E4E7EB;padding:12px 14px;border-radius:8px;overflow:auto}
+.steps{border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;font-size:13px}
+.steps>button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;color:var(--ink-2)}
+.steps>button .chev{margin-left:auto;transition:transform .15s}
+.steps.open>button .chev{transform:rotate(90deg)}
+.steps ol{display:none;margin:0;padding:2px 12px 10px 34px;color:var(--muted)}
+.steps.open ol{display:block}
+.steps li{padding:2px 0}
+.steps li code{font:12px var(--mono);color:var(--ink-2)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--huang);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cursor::after{content:"";display:inline-block;width:7px;height:15px;background:var(--ink-2);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.approve{border:1px solid #E6D7AE;background:#FBF7EA;border-radius:10px;padding:12px 14px;margin:4px 0 12px}
+.approve .q{font-weight:600;margin-bottom:4px}
+.approve pre{margin:6px 0 10px;font:12.5px var(--mono);background:#fff;border:1px solid #EFE5C8;padding:8px 10px;border-radius:6px;white-space:pre-wrap}
+.approve .acts{display:flex;gap:8px;flex-wrap:wrap}
+.approve.done{background:var(--paper);border-color:var(--line)}
+.files{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;justify-content:flex-end}
+.file{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+
+.composer{max-width:760px;width:100%;margin:0 auto 18px;padding:0 22px}
+.box{border:1px solid var(--line-strong);border-radius:14px;background:var(--panel);box-shadow:0 1px 0 rgba(29,34,43,.03)}
+.box:focus-within{border-color:var(--qing)}
+.box textarea{width:100%;border:0;outline:none;resize:none;padding:12px 14px 4px;min-height:52px;max-height:200px;background:none}
+.box .bar{display:flex;align-items:center;gap:4px;padding:6px 8px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:7px;font-size:12px;color:var(--ink-2)}
+.chip:hover{background:var(--sunk)}
+.chip svg{width:12px;height:12px}
+.send{margin-left:auto;width:32px;height:32px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center}
+.send:disabled{background:var(--line-strong);cursor:default}
+.send.stop{background:var(--ink)}
+.send svg{width:16px;height:16px}
+.hint{font-size:12px;color:var(--faint);text-align:center;margin-top:6px}
+
+.pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px;overflow-y:auto;overscroll-behavior:contain}
+.pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop button:hover{background:var(--sunk)}
+.pop button .ck{margin-left:auto;color:var(--qing)}
+.pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
+.pop .desc{font-size:12px;color:var(--muted)}
+.pop svg{width:15px;height:15px;flex:none}
+
+.newchat{margin:auto;width:min(800px,100%);padding:0 22px 12vh}
+.newchat h2{font:600 26px/1.3 var(--song);margin:0 0 16px}
+.seg.mini{padding:2px}
+.seg.mini button{padding:3px 9px;font-size:12px}
+.chip .path{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.or{margin-top:22px;font-size:13px;color:var(--muted)}
+.link{color:var(--qing);text-decoration:underline;text-underline-offset:3px}
+.pop{max-height:60vh;overflow:auto}
+
+.select{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 10px;border-radius:8px;
+  border:1px solid var(--line-strong);background:var(--panel);text-align:left}
+.select:hover{border-color:var(--ink-2)}
+.select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
+.select svg{width:14px;height:14px;color:var(--muted);flex:none}
+
+/* ---------- 项目 ---------- */
+.pmark{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 16px var(--song);
+  color:var(--ink-2);background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.item.on .pmark{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.stack{display:flex;flex:none}
+.stack .seal{box-shadow:0 0 0 2px var(--paper),inset 0 0 0 2px rgba(255,255,255,.18)}
+.stack .seal+.seal{margin-left:-9px}
+.stack.lg .seal{width:34px;height:34px}
+.item .stack{width:58px}
+.at{display:inline-flex;align-items:center;gap:3px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:0 6px;font-size:13px;white-space:nowrap}
+.at button{color:var(--qing);font-size:11px;opacity:.7}
+.bubble .at{background:#fff}
+.meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
+.quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
+.quote.in-box{margin:8px 10px 0}
+.quote .icon-btn{margin-left:auto;width:22px;height:22px;flex:none}
+.rcpt{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;min-height:24px}
+.from-row .status{margin-left:6px}
+.acts-row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.compare .col{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.compare .col.chosen{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.branch{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--ink-2);margin-bottom:8px}
+.proj-body{flex:1;min-height:0;display:flex}
+.proj-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.proj-main .msg,.proj-main .composer{max-width:1180px}
+.proj-main .msg:has(.compare){max-width:none}          /* 对比几栏并排：用满宽度 */
+.members{width:280px;flex:none;border-left:1px solid var(--line);padding:16px;overflow:auto;background:var(--paper)}
+.mem{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mem .title,.mem .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mem .sub{font-size:12px;color:var(--muted)}
+.danger-link{color:var(--bad)}
+
+.diff .d-add{color:#9FE6A0}.diff .d-del{color:#F2A49B}.diff .d-hunk{color:#8FB8E8}
+.acts-row a.link{text-decoration:underline;text-underline-offset:3px}
+
+/* ---------- 定时任务 ---------- */
+.run{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
+.run-head{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;text-align:left}
+.run-head .chev{margin-left:auto;transition:transform .15s}
+.run.open .run-head .chev{transform:rotate(90deg)}
+.run-body{display:none;padding:0 14px 12px;border-top:1px solid var(--line)}
+.run.open .run-body{display:block;padding-top:10px}
+.weekdays{display:inline-flex;gap:4px}
+.weekdays button{width:32px;height:32px;border-radius:50%;border:1px solid var(--line-strong);font-size:13px;color:var(--ink-2)}
+.weekdays button.on{background:var(--qing);border-color:var(--qing);color:#fff}
+.checks{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px}
+.check{display:inline-flex;align-items:center;gap:8px;color:var(--ink-2)}
+.check svg{width:18px;height:18px;padding:2px;border-radius:5px;border:1.5px solid var(--line-strong);color:transparent;box-sizing:border-box}
+.check.on svg{background:var(--qing);border-color:var(--qing);color:#fff}
+.check.locked{color:var(--muted)}
+.check.locked svg{background:var(--faint);border-color:var(--faint)}
+.kv dd{white-space:pre-wrap}
+
+/* ---------- 弹窗 ---------- */
+.scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:grid;place-items:center;z-index:20}
+.dialog{background:var(--panel);border-radius:16px;width:min(620px,94vw);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(29,34,43,.25)}
+.dialog header{padding:18px 22px 4px;display:flex;align-items:center}
+.dialog header h2{font:600 19px var(--song);margin:0;flex:1}
+.dialog .body{padding:10px 22px 20px}
+.dialog footer{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.form .seg{justify-self:start}
+.seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;gap:2px}
+.seg button{padding:5px 14px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:12px}
+.pick{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid var(--line);text-align:left}
+.pick:hover{border-color:var(--ink-2)}
+.pick.on{border-color:var(--qing);box-shadow:0 0 0 1px var(--qing)}
+.pick .nm{font-weight:500} .pick .ds{font-size:12px;color:var(--muted)}
+
+/* ---------- 表单 ---------- */
+.form{display:grid;grid-template-columns:120px 1fr;gap:16px 18px;align-items:start}
+.form>label,.form>.sub>label{padding-top:7px;color:var(--ink-2)}
+.form>.sub{display:contents}
+.form .help{font-size:12px;color:var(--muted);margin-top:4px}
+.input,.textarea{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);outline:none}
+.input:focus,.textarea:focus{border-color:var(--qing)}
+.textarea{min-height:96px;resize:vertical;line-height:1.6}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swatches{display:flex;gap:6px}
+.swatches button{width:22px;height:22px;border-radius:6px;background:var(--c)}
+.swatches button.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--c)}
+
+/* ---------- Agent ---------- */
+.agent-page{overflow:auto;flex:1}
+.agent-top{display:flex;gap:18px;align-items:center;padding:26px 32px 20px;border-bottom:1px solid var(--line)}
+.agent-top h2{font:600 24px/1.25 var(--song);margin:0}
+.agent-top .role{color:var(--muted);margin-top:2px;max-width:560px}
+.agent-top .grow{flex:1;min-width:0}
+.tabs{display:flex;gap:4px;padding:0 26px;border-bottom:1px solid var(--line)}
+.tabs button{padding:10px 8px;margin:0 6px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-color:var(--ink)}
+.pane{padding:22px 32px 40px;max-width:900px}
+.sect{margin-bottom:28px}
+.sect h3{font:600 15px var(--song);margin:0 0 10px}
+.channel{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+.channel .ci{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 13px var(--sans)}
+.channel .ci.feishu{background:#E4ECF7;color:#2F5A93} .channel .ci.weixin{background:#E3F1E7;color:#2E6E45}
+.channel .grow{flex:1;min-width:0}
+.channel.add{border-style:dashed;color:var(--muted)}
+.channel.add:hover{border-color:var(--ink-2);color:var(--ink)}
+.channel svg{width:16px;height:16px;flex:none}
+.chat-row{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.chat-row:hover .tt{color:var(--qing)}
+.chat-row .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:10px 18px}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.working{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#7A6216;margin-top:2px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
+
+@media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
+/* 窄窗口、手机：导航缩成窄栏一直在；列表变成浮在内容上的抽屉，选了就收起 */
+@media (max-width:760px){
+  .app,.app.list-off{grid-template-columns:56px 1fr}
+  .rail{padding:12px 0}
+  .rail a{width:48px;font-size:11px;padding:7px 0 5px}
+  .brand{margin-bottom:10px;font-size:13px}
+  .rail .unfold{display:grid}
+  .list{position:fixed;left:56px;top:0;bottom:0;width:min(320px,calc(100vw - 56px));z-index:15;background:var(--paper);
+    box-shadow:8px 0 30px rgba(29,34,43,.18)}
+  .app.list-off .list{display:none}
+  .newchat{padding:0 14px 8vh}
+  .chat-head{padding:10px 14px}
+  .msg,.composer{padding:0 14px}
+  .agent-top{padding:18px 16px 14px;flex-wrap:wrap}
+  .pane{padding:16px}
+  .form{grid-template-columns:1fr;gap:6px 0}
+  .form>label,.form>.sub>label{padding-top:10px}
+  .members{position:fixed;right:0;top:0;bottom:0;z-index:15;box-shadow:-8px 0 30px rgba(29,34,43,.18)}
+}
+/* ---------- 正式版补充 ---------- */
+.answer{min-width:0;overflow-wrap:anywhere}
+.answer table{display:block;max-width:100%;overflow-x:auto;overflow-wrap:normal}
+.answer th,.answer td{min-width:3.5em}
+.answer pre{max-width:100%;white-space:pre}
+.answer code{overflow-wrap:anywhere}
+.compare{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)) !important}
+.compare .col{min-width:0}
+/* 中间那栏列表可以收起 */
+.app.list-off{grid-template-columns:76px 1fr}
+.app.list-off .list{display:none}
+.fold{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--muted)}
+.fold:hover{background:var(--sunk);color:var(--ink)}
+.fold svg{width:16px;height:16px}
+.rail .unfold{display:none;margin-top:6px}
+.app.list-off .rail .unfold{display:grid}
+.answer h1,.answer h2,.answer h3{font:600 16px/1.4 var(--song);margin:14px 0 6px}
+.answer ul,.answer ol{margin:0 0 10px;padding-left:22px}
+.answer li{margin:2px 0}
+.answer table{border-collapse:collapse;margin:6px 0 12px;font-size:13px}
+.answer th,.answer td{border:1px solid var(--line);padding:5px 9px;text-align:left}
+.answer th{background:var(--paper)}
+.answer hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+.answer blockquote{margin:0 0 10px;padding:2px 12px;border-left:3px solid var(--line-strong);color:var(--muted)}
+.answer a{color:var(--qing)}
+.answer img{max-width:100%;border-radius:8px}
+.note{max-width:760px;margin:-8px auto 18px;padding:0 22px;font-size:13px;color:var(--muted)}
+.note .answer{line-height:1.6}
+.card-done{font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:4px 0 12px}
+.sentfile{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
+  text-decoration:none;color:inherit;margin:2px 0 10px}
+.sentfile:hover{border-color:var(--ink-2)}
+.sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
+.pending{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 0}
+.pending .file button{color:var(--muted);margin-left:2px}
+.pending .thumb{position:relative;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.pending .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pending .thumb.up img{opacity:.45}
+.pending .thumb button{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
+.pending .thumb button svg{width:12px;height:12px}
+.files .shot img{display:block;max-width:240px;max-height:180px;border-radius:10px;border:1px solid var(--line)}
+.box.drag{border-color:var(--qing);background:var(--qing-soft)}
+.state-err{color:var(--bad)}
+.qr{width:220px;height:220px;margin:8px auto;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.qr svg{width:100%;height:100%}
+.logs{font:12px/1.5 var(--mono);background:#1F242C;color:#E4E7EB;padding:12px;border-radius:8px;max-height:60vh;overflow:auto;white-space:pre-wrap}
+.loading{margin:auto;color:var(--faint)}
+.chip,.seg button,.btn,.tag{white-space:nowrap}
+.box .bar{flex-wrap:nowrap;align-items:flex-end;gap:6px}
+.box .bar .opts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;flex:1;min-width:0}
+.box .bar .chip{padding:4px 7px}
+.dflt{font-size:11px;color:var(--faint);margin-left:4px}
+.chat-head .meta .path{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
+.retry{color:var(--bad);font-size:13px}
+
+/* ---------- 原型新增：按电脑切换 ---------- */
+.machines{display:flex;flex-direction:column;gap:6px;padding-bottom:12px;margin-bottom:6px;border-bottom:1px solid var(--line);width:56px;align-items:center}
+.mchip{position:relative;width:44px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--sunk);color:var(--muted);font-size:12px;font-weight:600}
+.mchip:hover{color:var(--ink)}
+.mchip.on{background:var(--qing);color:#fff}
+.mchip.off .mlabel{opacity:.55}
+.mchip i{position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;background:var(--faint);border:2px solid var(--paper)}
+.mchip i.on{background:var(--ok)}
+.where-row{display:flex;align-items:center;gap:6px;padding:0 18px 10px;font-size:12.5px;color:var(--muted);margin-top:-4px}
+.app{grid-template-columns:76px 320px 1fr}
+.list-head .btn{margin-left:auto}
+.filter-row{padding:0 16px 8px}
+.mfilter{display:flex;align-items:center;gap:7px;width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;color:var(--ink-2)}
+.mfilter span{flex:1;text-align:left}
+.mfilter:hover{border-color:var(--line-strong)}
+.mfilter.off{color:var(--faint)}
+.mgroup{margin-top:6px}
+.mhead{display:flex;align-items:center;gap:6px;width:100%;padding:8px 8px 6px;border-radius:8px;font-size:12.5px;color:var(--ink-2)}
+.mhead:hover{background:var(--sunk)}
+.mhead .caret{display:grid;place-items:center;width:14px;color:var(--faint);transition:transform .15s}
+.mhead .caret.open{transform:rotate(90deg)}
+.mhead .mname{font-weight:600;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me{font-weight:400;font-size:11px;color:var(--faint);margin-left:6px}
+.mstate{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--faint)}
+.mstate i{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.mstate.on{color:var(--ok)}
+.mstate.on i{background:var(--ok)}
+.count{font-size:11.5px;color:var(--faint);min-width:18px;text-align:right}
+.mgroup.off .mhead .mname{color:var(--muted)}
+.item{position:relative}
+.item.dim{opacity:.55}
+.item .side{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.pinbtn{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:6px;display:none;place-items:center;color:var(--faint);background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item:hover .pinbtn{display:grid}
+.item:hover .side{visibility:hidden}
+.pinbtn.on{color:var(--qing)}
+.pinbtn:hover{color:var(--ink)}
+.sep{height:1px;background:var(--line);margin:8px 10px}
+.pad{padding:10px}
+.item .working{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px}
+.tag.mach.off{color:var(--faint);background:var(--sunk)}
+.offline-note{font-size:12px;color:var(--muted);background:var(--sunk);border-radius:8px;padding:8px 10px;margin:4px 6px 8px}
+.pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px}
+.pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop button:hover{background:var(--sunk)}
+.pop .desc{font-size:12px;color:var(--muted)}
+.pop .ck{margin-left:auto;color:var(--qing)}
+.psep{height:1px;background:var(--line);margin:4px 6px}
+.pmark.sched{font-size:15px}
+.pane-new{padding:40px 48px;max-width:720px}
+.pane-new h2{font:600 22px var(--song);margin:0 0 20px}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="主导航">
+    <div class="brand">ccim</div>
+    <div class="machines" id="machines" aria-label="切换电脑"></div>
+    <a data-nav="chats" onclick="go('chats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a data-nav="projects" onclick="go('projects')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c.8-3 2.8-4.5 5-4.5s4.2 1.5 5 4.5M13 15.2c.9-.5 1.9-.7 3-.7 2.2 0 4.2 1.5 5 4.5"/></svg>项目</a>
+    <a data-nav="schedules" onclick="go('schedules')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
+    <a data-nav="agents" onclick="go('agents')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
+  </nav>
+  <section class="list" id="list"></section>
+  <main class="main" id="main"></main>
+</div>
+<script>
+// ================= 假数据 =================
+const MACHINES = [
+  {id: "pro", name: "Jone的MacBook Pro", short: "Pro", me: true, online: true},
+  {id: "air", name: "蔡婷的MacBook Air", short: "Air", online: true},
+  {id: "mini", name: "公司 Mac mini", short: "mini", online: false},
+];
+const COLORS = {qing:"#2B4C6F", lu:"#3F7A5E", zhe:"#9A5B34", huang:"#B8902A", zhu:"#B5402F", dai:"#4A4F6B"};
+const A = (id, name, seal, color, m, base, ago, ch = [], busy) => ({id, name, seal, color, machine: m, base, ago, ch, busy});
+const AGENTS = [
+  A("ccim", "ccim", "C", "qing", "pro", "Claude Code", 1, ["飞书"], "改多台电脑的列表"),
+  A("mt", "0527-美团长期项目", "美团", "zhu", "pro", "Claude Code", 3, ["飞书"]),
+  A("ai", "AI摩登时代", "摩登", "lu", "pro", "Claude Code", 30, ["飞书"]),
+  A("zmt", "AI自媒体选题", "自媒", "qing", "pro", "Claude Code", 60),
+  A("qd", "Opus5.5-奇点-1002", "奇点", "dai", "pro", "Claude Code", 900, ["飞书"]),
+  A("cx", "codex测试", "测试", "huang", "pro", "Codex", 1500, ["微信"]),
+  A("wx1", "ccim-weixin-test", "C", "zhe", "pro", "Claude Code", 2000, ["微信"]),
+  A("jl", "jonelee", "J", "dai", "pro", "Claude Code", 4000, ["微信"]),
+  A("hy", "0827-HoYgent底座一期", "底座", "lu", "pro", "Claude Code", 6000),
+  A("jj", "竞价参谋", "竞价", "zhu", "air", "Claude Code", 5, [], "整理连锁账号的需求"),
+  A("xhs", "小红书运营", "红书", "zhe", "air", "Claude Code", 200),
+  A("pb", "破局打卡", "打卡", "huang", "air", "Codex", 3000),
+  A("erp", "ERP 后台", "ER", "qing", "mini", "Claude Code", 1440),
+  A("bi", "BI 报表", "报表", "lu", "mini", "Claude Code", 2880),
+  A("crm", "CRM 对接", "CR", "dai", "mini", "Codex", 5000),
+  A("ops", "运维巡检", "运维", "zhu", "mini", "Claude Code", 7000),
+  A("doc", "文档助手", "文档", "huang", "mini", "Claude Code", 9000),
+];
+const PROJECTS = [
+  {id: "p1", name: "官网改版", machine: "pro", members: ["ccim", "zmt"], ago: 20, busy: true},
+  {id: "p2", name: "美团活动插件", machine: "pro", members: ["mt", "hy"], ago: 300},
+  {id: "p3", name: "饿了么折扣价", machine: "air", members: ["jj", "xhs"], ago: 90},
+  {id: "p4", name: "季度报表", machine: "mini", members: ["bi", "erp", "doc"], ago: 4000},
+  {id: "p5", name: "客户迁移", machine: "mini", members: ["crm"], ago: 8000},
+];
+const SCHEDULES = [
+  {id: "s1", name: "每天早报", machine: "pro", freq: "每天 09:00", next: "明天 09:00"},
+  {id: "s2", name: "周报汇总", machine: "pro", freq: "每周五 18:00", next: "周五 18:00"},
+  {id: "s3", name: "竞品价格巡检", machine: "air", freq: "工作日 10:00", next: "周一 10:00"},
+  {id: "s4", name: "服务器巡检", machine: "mini", freq: "每天 03:00", next: "连上后补跑", off: true},
+];
+const CHATS = [
+  {id: "c1", title: "多台电脑的列表怎么排", agent: "ccim", machine: "pro", ago: 2, src: "网页"},
+  {id: "c2", title: "连锁账号的竞价规则", agent: "jj", machine: "air", ago: 6, src: "网页", busy: true},
+  {id: "c3", title: "推送远端，账号密码记一下", agent: "mt", machine: "pro", ago: 40, src: "飞书"},
+  {id: "c4", title: "这周小红书选题", agent: "xhs", machine: "air", ago: 200, src: "网页"},
+  {id: "c5", title: "介绍下自己", agent: null, machine: "pro", ago: 300, src: "网页"},
+  {id: "c6", title: "季度报表口径", agent: "bi", machine: "mini", ago: 1500, src: "网页"},
+  {id: "c7", title: "当前目录？", agent: "cx", machine: "pro", ago: 3000, src: "微信"},
+  {id: "c8", title: "ERP 导出慢", agent: "erp", machine: "mini", ago: 4000, src: "飞书"},
+];
+
+// ================= 状态 =================
+const store = {
+  get(k, d){ try { const v = localStorage.getItem("proto." + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem("proto." + k, JSON.stringify(v)); } catch {} },
+};
+let view = "agents", sel = null, filter = store.get("machine", "pro"), query = "";
+let folded = new Set(store.get("folded", ["mini"]));      // 离线的默认收起
+let pinned = new Set(store.get("pinned", ["ccim", "jj"]));
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const mOf = id => MACHINES.find(m => m.id === id);
+const agentOf = id => AGENTS.find(a => a.id === id);
+const ago = m => m < 60 ? `${m} 分钟前` : m < 1440 ? `${Math.round(m / 60)} 小时前` : m < 2880 ? "昨天" : `${Math.round(m / 1440)} 天前`;
+const ICON = {
+  down: '<svg class="dn" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+  chev: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 6 6 6-6 6"/></svg>',
+  plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  pin: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v6"/></svg>',
+  mac: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 20h8"/></svg>',
+};
+function seal(a){
+  const t = a ? a.seal : "临", c = a ? COLORS[a.color] : "#8A8F87", chars = [...t].slice(0, 2);
+  const dot = a ? `<i class="dot ${a.busy ? "busy" : mOf(a.machine).online ? "on" : ""}"></i>` : "";
+  return `<span class="seal ${chars.length === 1 ? "one" : "vert"}" style="--c:${c}">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${dot}</span>`;
+}
+function where(mid){   // 看「所有电脑」又没分组时（对话、常用、搜索结果），在副标题里写上在哪台电脑
+  const m = mOf(mid);
+  return esc(m.name) + (m.online ? "" : "（离线）");
+}
+
+// ================= 列表 =================
+const TITLES = {chats: "对话", projects: "项目", schedules: "定时任务", agents: "Agent"};
+function rowsOf(v){ return {chats: CHATS, projects: PROJECTS, schedules: SCHEDULES, agents: AGENTS}[v]; }
+function nameOf(v, x){ return v === "chats" ? x.title : x.name; }
+
+function renderList(){
+  const m = filter === "all" ? null : mOf(filter);
+  $("#list").innerHTML = `
+    <div class="list-head"><h1>${TITLES[view]}</h1><button class="btn primary" onclick="newItem()">${ICON.plus}新建</button></div>
+    <div class="where-row"><span class="mstate ${m.online ? "on" : ""}"><i></i></span>${esc(m.name)}${m.online ? "" : "（离线）"}</div>
+    <label class="search">${ICON.search}<input placeholder="搜索${TITLES[view]}" value="${esc(query)}" oninput="query=this.value.trim().toLowerCase();renderList();const i=$('.search input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></label>
+    <div class="scroll">${listBody()}</div>`;
+}
+
+function listBody(){
+  let rows = rowsOf(view).filter(x => x.machine === filter);
+  if (query) rows = rows.filter(x => nameOf(view, x).toLowerCase().includes(query) || (agentOf(x.agent)?.name || "").toLowerCase().includes(query));
+  const note = mOf(filter).online ? "" : `<div class="offline-note">这台电脑现在离线，显示的是它上次在线时的内容。</div>`;
+  if (!rows.length) return note + `<p class="muted pad">${query ? "没有找到。" : `这台电脑上还没有${TITLES[view]}。`}</p>`;
+  if (view === "chats" && !query) {
+    const g = [["今天", rows.filter(x => x.ago < 1440)], ["更早", rows.filter(x => x.ago >= 1440)]];
+    return note + g.filter(([, r]) => r.length).map(([t, r]) => `<div class="group">${t}</div>` + r.map(x => item(x)).join("")).join("");
+  }
+  return note + rows.sort(byRecent).map(x => item(x)).join("");
+}
+const byRecent = (a, b) => (a.ago ?? 1e9) - (b.ago ?? 1e9);
+function empty(){ return `<p class="muted pad">这台电脑上还没有${TITLES[view]}。</p>`; }
+function pinList(rows){
+  if (view !== "agents") return "";
+  const p = rows.filter(x => pinned.has(x.id));
+  return p.length ? `<div class="group">常用</div>` + p.map(x => item(x, filter === "all")).join("") + `<div class="sep"></div>` : "";
+}
+
+function item(x, tag){
+  const on = sel === x.id ? "on" : "";
+  const off = !mOf(x.machine).online;
+  if (view === "agents") {
+    const sub = x.busy ? `<span class="working"><span class="spin"></span>${esc(x.busy)}</span>` : `<span class="sub">${tag ? where(x.machine) + " · " : ""}${esc(x.base)}</span>`;
+    return `<div class="item ${on} ${off ? "dim" : ""}" onclick="pick('${x.id}')">${seal(x)}
+      <span class="t"><span class="title">${esc(x.name)}</span>${sub}</span>
+      <span class="side"><span class="when">${ago(x.ago)}</span><span>${x.ch.map(c => `<span class="tag ${c === "微信" ? "weixin" : "feishu"}">${c}</span>`).join("")}</span></span>
+</div>`;
+  }
+  if (view === "projects") {
+    const names = x.members.map(m => agentOf(m)?.name).filter(Boolean);
+    return `<div class="item ${on} ${off ? "dim" : ""}" onclick="pick('${x.id}')"><span class="pmark">${esc([...x.name][0])}</span>
+      <span class="t"><span class="title">${esc(x.name)}</span>${x.busy ? `<span class="working"><span class="spin"></span>有任务在做</span>` : `<span class="sub">${tag ? where(x.machine) + " · " : ""}${esc(names.slice(0, 3).join("、"))}</span>`}</span>
+      <span class="side"><span class="when">${ago(x.ago)}</span></span></div>`;
+  }
+  if (view === "schedules") {
+    return `<div class="item ${on} ${off ? "dim" : ""}" onclick="pick('${x.id}')"><span class="pmark sched">⏱</span>
+      <span class="t"><span class="title">${esc(x.name)}</span><span class="sub">${tag ? where(x.machine) + " · " : ""}${esc(x.freq)}</span></span>
+      <span class="side"><span class="when">${esc(x.next)}</span></span></div>`;
+  }
+  const a = agentOf(x.agent);
+  const sub = x.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span class="sub">${esc(a ? a.name : "临时对话")}${tag ? " · " + where(x.machine) : ""}</span>`;
+  return `<div class="item ${on} ${off ? "dim" : ""}" onclick="pick('${x.id}')">${seal(a)}
+    <span class="t"><span class="title">${esc(x.title)}</span>${sub}</span>
+    <span class="side"><span class="when">${ago(x.ago)}</span><span><span class="tag ${x.src === "飞书" ? "feishu" : x.src === "微信" ? "weixin" : "web"}">${x.src}</span></span></span></div>`;
+}
+
+// ================= 交互 =================
+function pickMachine(e){
+  e.stopPropagation(); closePop();
+  const btn = e.currentTarget.getBoundingClientRect();
+  const p = document.createElement("div"); p.className = "pop";
+  const opt = (v, label, desc, dis) => `<button ${dis ? "" : ""} onclick="setFilter('${v}')"><span><div>${label}</div>${desc ? `<div class="desc">${desc}</div>` : ""}</span>${filter === v ? `<span class="ck">✓</span>` : ""}</button>`;
+  p.innerHTML = opt("all", "所有电脑", `${MACHINES.length} 台`) + `<div class="psep"></div>` +
+    MACHINES.map(m => opt(m.id, esc(m.name) + (m.me ? `<span class="me">这台</span>` : ""),
+      `${m.online ? "在线" : "离线"} · ${AGENTS.filter(a => a.machine === m.id).length} 个 Agent`)).join("");
+  document.body.append(p);
+  p.style.left = btn.left + "px"; p.style.top = btn.bottom + 6 + "px"; p.style.minWidth = Math.max(240, btn.width) + "px";
+  p.onclick = ev => ev.stopPropagation();
+}
+function closePop(){ document.querySelectorAll(".pop").forEach(p => p.remove()); }
+addEventListener("click", closePop);
+addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
+function setFilter(v){ filter = v; store.set("machine", v); sel = null; closePop(); renderRail(); renderList(); renderMain(); }
+function renderRail(){
+  $("#machines").innerHTML = MACHINES.map(m => `<button class="mchip ${filter === m.id ? "on" : ""} ${m.online ? "" : "off"}" title="${esc(m.name)}${m.online ? "" : "（离线）"}" onclick="setFilter('${m.id}')">
+    <span class="mlabel">${esc(m.short)}</span><i class="${m.online ? "on" : ""}"></i></button>`).join("");
+}
+function toggleGroup(id){ folded.has(id) ? folded.delete(id) : folded.add(id); store.set("folded", [...folded]); renderList(); }
+function togglePin(id){ pinned.has(id) ? pinned.delete(id) : pinned.add(id); store.set("pinned", [...pinned]); renderList(); }
+function pick(id){ sel = id; renderList(); renderMain(); }
+function go(v){ view = v; sel = null; query = ""; document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === v)); renderList(); renderMain(); }
+function newItem(){ sel = "__new"; renderList(); renderMain(); }
+
+function renderMain(){
+  if (sel === "__new") {
+    const def = mOf(filter);
+    $("#main").innerHTML = `<div class="pane-new"><h2>新建${TITLES[view]}</h2>
+      <div class="form"><label>在哪台电脑</label><div class="seg">${MACHINES.map(m => `<button class="${m.id === def.id ? "on" : ""}" ${m.online ? "" : "disabled"}>${esc(m.name)}</button>`).join("")}</div>
+      <label>名字</label><input class="input" placeholder="比如：前端开发"></div></div>`;
+    return;
+  }
+  const x = sel && rowsOf(view).find(r => r.id === sel);
+  if (!x) {
+    const m = mOf(filter);
+    $("#main").innerHTML = `<div class="empty"><h2>${esc(m.name)}</h2>
+      <p>${m.online ? "在线" : "离线"}，${AGENTS.filter(a => a.machine === m.id).length} 个 Agent、${PROJECTS.filter(p => p.machine === m.id).length} 个项目</p></div>`;
+    return;
+  }
+  const m = mOf(x.machine);
+  $("#main").innerHTML = `<div class="empty"><h2>${esc(nameOf(view, x))}</h2><p>在 ${esc(m.name)}${m.online ? "" : "（离线）"}</p></div>`;
+}
+
+renderRail();
+go("agents");
+
+</script>
+</body>
+</html>

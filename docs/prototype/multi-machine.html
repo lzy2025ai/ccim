@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccim · 多台电脑（视觉稿）</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1;
+  --ok:#3F7A5E; --warn:#B8902A; --bad:#B5402F;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:2px solid var(--qing);outline-offset:2px;border-radius:4px}
+
+.app{display:grid;grid-template-columns:76px 1fr;height:100vh}
+.app.detail{grid-template-columns:76px 280px 1fr}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);margin-bottom:18px}
+.rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);text-decoration:none;font-size:12px;cursor:pointer}
+.rail a svg{width:20px;height:20px}
+.rail a:hover{background:var(--sunk);color:var(--ink)}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.rail .spacer{flex:1}
+
+/* ---------- 总览页 ---------- */
+.overview{min-width:0;display:flex;flex-direction:column;background:var(--panel);overflow:hidden}
+.ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
+.ov-head h1{font:600 24px/1.2 var(--song);margin:0}
+.ov-head .grow{flex:1}
+.search{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--sunk);color:var(--muted);width:220px}
+.search input{border:0;background:none;outline:none;flex:1;min-width:0}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;border:1px solid var(--line-strong);background:var(--panel);font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.btn svg{width:14px;height:14px}
+
+/* 电脑 Tab */
+.tabs{display:flex;gap:4px;padding:18px 32px 0;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;gap:7px;padding:9px 14px 11px;border-radius:9px 9px 0 0;color:var(--muted);white-space:nowrap;position:relative;font-size:13.5px}
+.tab:hover{color:var(--ink);background:var(--paper)}
+.tab.on{color:var(--ink);font-weight:600}
+.tab.on::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;border-radius:2px;background:var(--qing)}
+.tab .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.tab .dot.off{background:var(--line-strong)}
+.tab .n{font-size:12px;color:var(--faint);font-weight:400}
+.tab .me{font-size:11px;color:var(--faint);font-weight:400}
+
+.ov-body{flex:1;overflow:auto;padding:22px 32px 48px}
+.section{margin-bottom:30px}
+.section-head{display:flex;align-items:center;gap:8px;margin:0 0 12px;color:var(--ink-2);font-size:13px}
+.section-head b{font:600 15px var(--song);color:var(--ink)}
+.section-head .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.section-head .dot.off{background:var(--line-strong)}
+.section-head .muted{color:var(--faint)}
+.offline-note{color:var(--faint);font-size:12.5px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+
+/* 卡片 */
+.card{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px 16px 12px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:border-color .15s, box-shadow .15s}
+.card:hover{border-color:var(--line-strong);box-shadow:0 6px 18px rgba(29,34,43,.07)}
+.card.off{background:#FAFAF8}
+.card.off .seal,.card.off .pmark{filter:grayscale(.85) opacity(.65)}
+.card .top{display:flex;gap:12px;align-items:flex-start}
+.card .name{font:600 16px/1.3 var(--song);margin:1px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .role{font-size:12.5px;color:var(--muted);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
+.card .t{flex:1;min-width:0}
+.card .pin{position:absolute;top:12px;right:12px;color:var(--faint);opacity:0}
+.card:hover .pin,.card .pin.on{opacity:1}
+.card .pin.on{color:var(--warn)}
+.card .pin svg{width:15px;height:15px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--sunk);color:var(--ink-2)}
+.tag.feishu{background:#E3EAF1;color:#2B4C6F}
+.tag.weixin{background:#E4F0E9;color:#3F7A5E}
+.path{font:12px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.foot .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted)}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--line-strong)}
+.status.on i{background:var(--ok)}
+.status.busy{color:var(--qing)}
+.status.busy i{background:var(--qing);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.go{color:var(--qing);font-weight:500;white-space:nowrap}
+.card.add{border-style:dashed;align-items:center;justify-content:center;color:var(--muted);min-height:170px;gap:6px;background:transparent}
+.card.add:hover{color:var(--qing);border-color:var(--qing);box-shadow:none}
+.card.add svg{width:20px;height:20px}
+
+/* 印章 */
+.seal{--c:var(--qing);flex:none;width:42px;height:42px;border-radius:9px;background:var(--c);color:#fff;
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;place-items:center;padding:4px;
+  font:700 14px/1 var(--song);box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+.seal.one{grid-template-columns:1fr;grid-template-rows:1fr;font-size:19px}
+.seal.vert{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+.seal.sm{width:24px;height:24px;border-radius:6px;font-size:10px;padding:2px}
+.seal.sm.one{font-size:12px}
+.pmark{flex:none;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:var(--qing-soft);color:var(--qing);font:700 19px var(--song);box-shadow:inset 0 0 0 1px #CCD8E4}
+.stack{display:flex}
+.stack .seal{box-shadow:0 0 0 2px var(--panel)}
+.stack .seal+.seal{margin-left:-6px}
+.task-line{font-size:12.5px;color:var(--ink-2);display:flex;gap:6px;align-items:baseline;min-width:0}
+.task-line .who{color:var(--qing);white-space:nowrap}
+.task-line .what{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 进入详情后：左边窄列表 + 右边内容 ---------- */
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.list-head{padding:16px 14px 6px;display:flex;align-items:center;gap:8px}
+.back{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:13px}
+.back:hover{color:var(--ink)}
+.back svg{width:15px;height:15px}
+.machine-pick{margin:4px 14px 10px;display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:8px;background:var(--sunk);font-size:13px}
+.machine-pick .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.machine-pick svg{width:13px;height:13px;margin-left:auto;color:var(--muted)}
+.scroll{overflow:auto;flex:1;padding:0 8px 16px}
+.item{display:flex;gap:10px;padding:8px 10px;border-radius:10px;align-items:center;cursor:pointer}
+.item:hover{background:var(--sunk)}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .seal,.item .pmark{width:30px;height:30px;font-size:11px;border-radius:7px}
+.item .pmark{font-size:14px}
+.item .seal.one{font-size:14px}
+.item .t{flex:1;min-width:0}
+.item .title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.item .sub{font-size:12px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-main{background:var(--panel);min-width:0;display:flex;flex-direction:column}
+.crumb{padding:18px 28px 0;font-size:12.5px;color:var(--faint)}
+.crumb b{color:var(--muted);font-weight:500}
+.d-head{display:flex;gap:14px;align-items:center;padding:10px 28px 18px;border-bottom:1px solid var(--line)}
+.d-head h2{font:600 22px/1.2 var(--song);margin:0}
+.d-head .grow{flex:1}
+.d-body{padding:22px 28px;color:var(--muted)}
+.ghost{border:1px dashed var(--line-strong);border-radius:12px;height:260px;display:grid;place-items:center;color:var(--faint)}
+
+/* Agent 详情：左边和它的对话，右边对话窗口 */
+.app.agent{grid-template-columns:76px 280px 1fr}
+.agent-card{margin:4px 12px 10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);display:flex;gap:10px;align-items:center}
+.agent-card .t{flex:1;min-width:0}
+.agent-card .name{font:600 15px/1.3 var(--song);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-card .sub{font-size:12px;color:var(--muted)}
+.agent-card .gear{color:var(--muted);padding:4px;border-radius:6px}
+.agent-card .gear:hover{background:var(--sunk);color:var(--ink)}
+.agent-card .gear svg{width:16px;height:16px}
+.newchat-btn{margin:0 12px 8px;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:9px;border:1px dashed var(--line-strong);color:var(--ink-2);font-size:13px}
+.newchat-btn:hover{border-color:var(--qing);color:var(--qing)}
+.newchat-btn svg{width:14px;height:14px}
+.group{font-size:12px;color:var(--faint);padding:10px 10px 4px}
+.src{font-size:11px;padding:0 6px;border-radius:4px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.src.feishu{background:#E3EAF1;color:#2B4C6F}.src.weixin{background:#E4F0E9;color:#3F7A5E}
+.item .when{font-size:11.5px;color:var(--faint);white-space:nowrap}
+.chat{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.chat-head{display:flex;align-items:center;gap:10px;padding:14px 26px;border-bottom:1px solid var(--line)}
+.chat-head .grow{flex:1;min-width:0}
+.chat-head .ttl{font:600 16px/1.3 var(--song)}
+.chat-head .sub{font-size:12px;color:var(--muted)}
+.thread{flex:1;overflow:auto;padding:22px 0}
+.msg{max-width:720px;margin:0 auto 18px;padding:0 26px}
+.msg.me{display:flex;justify-content:flex-end}
+.bubble{background:var(--sunk);padding:8px 13px;border-radius:14px 14px 4px 14px;max-width:80%}
+.from{display:flex;align-items:center;gap:8px;margin-bottom:5px;font:600 13.5px var(--song)}
+.answer{line-height:1.75;color:var(--ink-2)}
+.composer{max-width:720px;width:100%;margin:0 auto 18px;padding:0 26px}
+.composer .box{border:1px solid var(--line-strong);border-radius:14px;padding:12px 14px;color:var(--faint);display:flex;justify-content:space-between;align-items:center}
+.composer .send{width:30px;height:30px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center}
+.composer .send svg{width:15px;height:15px}
+
+/* 项目成员面板 */
+.members{border-left:1px solid var(--line);padding:16px;width:270px;flex:none}
+.members h3{font:600 15px var(--song);margin:0 0 10px}
+.mem{display:flex;gap:10px;align-items:center;padding:8px 0}
+.mem .seal{width:30px;height:30px;font-size:11px;border-radius:7px}
+.mem .seal.one{font-size:14px}
+.mem .t{flex:1;min-width:0}
+.mem .title{display:block;font-weight:500}
+.mem .sub{display:block;font-size:12px;color:var(--muted)}
+.where{font-size:11px;padding:0 6px;border-radius:4px;background:#F3EEDC;color:#7A6320;white-space:nowrap}
+.mem .hint{display:block;font-size:11.5px;color:var(--faint)}
+.proj-wrap{flex:1;display:flex;min-height:0}
+.feed{flex:1;overflow:auto;padding:22px 0;min-width:0}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.col{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.col .from{font-size:13px}
+.st{font-size:12px;color:var(--muted);margin-bottom:6px}
+
+/* 原型说明条：只在视觉稿里 */
+.proto{position:fixed;right:16px;bottom:16px;background:var(--ink);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;display:flex;gap:10px;align-items:center;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.proto button{color:#fff;opacity:.6;padding:2px 6px;border-radius:5px}
+.proto button.on{opacity:1;background:rgba(255,255,255,.14)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="rail">
+    <div class="brand">ccim</div>
+    <a data-v="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a data-v="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 14c3 0 6 1.5 6 4.5"/></svg>项目</a>
+    <a data-v="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>定时</a>
+    <a data-v="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 10h8M8 14h5"/></svg>Agent</a>
+    <div class="spacer"></div>
+    <a data-v="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>设置</a>
+  </nav>
+  <div id="view" style="display:contents"></div>
+</div>
+<div class="proto">视觉稿　<button data-p="agents" class="on">Agent</button><button data-p="agent">进入 Agent 后</button><button data-p="projects">项目</button><button data-p="detail">进入项目后</button><button data-p="chats">对话</button></div>
+
+<script>
+const C = {qing:"#2B4C6F", lu:"#3F7A5E", zhe:"#9A5B34", huang:"#B8902A", zhu:"#B5402F", dai:"#4A4F6B"};
+const M = [
+  {id:"pro", name:"Jone的MacBook Pro", me:true, online:true},
+  {id:"air", name:"蔡婷的MacBook Air", online:true},
+  {id:"mini", name:"公司 Mac mini", online:false, seen:"昨天 18:40"},
+];
+const A = [
+  {m:"pro", name:"ccim", seal:"C", c:"qing", role:"维护 ccim 本身：飞书、微信接入，网页平台。改完先跑测试再提交。", base:"Claude Code", ch:["飞书"], dir:"~/Desktop/李琼个人主义/ccim", st:"busy", doing:"改分组展示", at:"刚刚", pin:true},
+  {m:"pro", name:"0527-美团长期项目", seal:"美团", c:"zhu", role:"美团外卖商家后台的长期迭代，竞价、改价、活动插件。", base:"Claude Code", ch:["飞书"], dir:"~/Desktop/SD-订单管理/0527-美团长期项目", st:"idle", at:"10 分钟前", pin:true},
+  {m:"pro", name:"AI摩登时代", seal:"摩登", c:"huang", role:"公众号选题和稿件，偏 AI 工具测评。", base:"Claude Code", ch:["飞书"], dir:"~/Documents/AI摩登时代", st:"idle", at:"2 小时前"},
+  {m:"pro", name:"AI自媒体选题", seal:"自媒", c:"qing", role:"挖掘 AI 赛道的自媒体选题，按平台给写法。", base:"Claude Code", ch:[], dir:"", st:"idle", at:"昨天"},
+  {m:"pro", name:"codex测试", seal:"测试", c:"huang", role:"", base:"Codex", ch:["飞书", "微信"], dir:"~/Desktop/李琼个人主义/codex测试", st:"idle", at:"10月14日"},
+  {m:"air", name:"竞价参谋", seal:"竞价", c:"lu", role:"连锁账号的竞价参谋：拉报表、给出调价建议。", base:"Claude Code", ch:[], dir:"~/Projects/bid-advisor", st:"busy", doing:"适配连锁账号", at:"刚刚"},
+  {m:"air", name:"牵牛花活动插件", seal:"牵牛", c:"zhe", role:"浏览器插件，双平台改价日志、饿了么折扣价。", base:"Claude Code", ch:["微信"], dir:"~/Projects/qianniuhua", st:"idle", at:"1 小时前"},
+  {m:"air", name:"周报助手", seal:"周报", c:"dai", role:"每周五汇总两台电脑上的进展，发到飞书。", base:"Codex", ch:[], dir:"", st:"idle", at:"上周五"},
+  {m:"mini", name:"数据看板", seal:"看板", c:"qing", role:"公司内部数据看板的前端。", base:"Claude Code", ch:["飞书"], dir:"~/work/dashboard", st:"off", at:"昨天"},
+  {m:"mini", name:"测试机", seal:"测", c:"zhe", role:"", base:"Claude Code", ch:[], dir:"~/work/qa", st:"off", at:"3 天前"},
+];
+const P = [
+  {m:"pro", name:"官网改版", dir:"~/Desktop/site", who:["ccim", "AI摩登时代"], last:{to:"ccim", what:"首页换成卡片布局", st:"busy"}, at:"刚刚"},
+  {m:"pro", name:"选题周会", dir:"", who:["AI摩登时代", "AI自媒体选题"], last:{to:"AI自媒体选题", what:"本周 10 个候选选题，按热度排", st:"done"}, at:"昨天"},
+  {m:"air", name:"美团二期", dir:"~/Projects/meituan-2", who:["竞价参谋", "牵牛花活动插件", "周报助手"], last:{to:"竞价参谋", what:"连锁账号的软件内和报表适配", st:"busy"}, at:"5 分钟前"},
+  {m:"air", name:"插件发版", dir:"~/Projects/qianniuhua", who:["牵牛花活动插件"], last:{to:"牵牛花活动插件", what:"打包 1.4.2，写更新说明", st:"done"}, at:"10月15日"},
+  {m:"mini", name:"看板重构", dir:"~/work/dashboard", who:["数据看板", "测试机"], last:{to:"测试机", what:"回归测试", st:"done"}, at:"昨天"},
+];
+const agentBy = n => A.find(a => a.name === n);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ICON = {
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6L2.5 9.3l6.6-.8z"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+};
+function seal(a, size = ""){
+  const chars = [...a.seal].slice(0, 2);
+  return `<span class="seal ${size} ${chars.length === 1 ? "one" : "vert"}" style="--c:${C[a.c]}">${chars.map(x => `<span>${esc(x)}</span>`).join("")}</span>`;
+}
+const pmark = p => `<span class="pmark">${esc([...p.name][0])}</span>`;
+let tab = "all", page = "agents", q = "";
+
+function tabs(items){
+  const count = id => items.filter(x => id === "all" || x.m === id).length;
+  return `<div class="tabs" role="tablist">
+    <button class="tab ${tab === "all" ? "on" : ""}" data-tab="all">所有电脑 <span class="n">${count("all")}</span></button>
+    ${M.map(m => `<button class="tab ${tab === m.id ? "on" : ""}" data-tab="${m.id}"><i class="dot ${m.online ? "" : "off"}"></i>${esc(m.name)}${m.me ? `<span class="me">这台</span>` : ""} <span class="n">${count(m.id)}</span></button>`).join("")}
+  </div>`;
+}
+function statusOf(a){
+  if (a.st === "off") return `<span class="status"><i></i>电脑离线</span>`;
+  if (a.st === "busy") return `<span class="status busy"><i></i>${esc(a.doing)}</span>`;
+  return `<span class="status on"><i></i>空闲</span>`;
+}
+function agentCard(a){
+  return `<div class="card ${a.st === "off" ? "off" : ""}" tabindex="0">
+    <button class="pin ${a.pin ? "on" : ""}" aria-label="置顶" title="${a.pin ? "取消置顶" : "置顶"}">${ICON.pin}</button>
+    <div class="top">${seal(a)}<div class="t"><div class="name">${esc(a.name)}</div>
+      <div class="meta"><span class="tag">${a.base}</span>${a.ch.map(c => `<span class="tag ${c === "飞书" ? "feishu" : "weixin"}">${c}</span>`).join("")}</div></div></div>
+    <div class="role">${esc(a.role || "还没写角色说明")}</div>
+    <div class="path">${esc(a.dir || "自己的工作区")}</div>
+    <div class="foot"><span class="grow">${statusOf(a)}</span><span>${esc(a.at)}</span>${a.st === "off" ? "" : `<span class="go">对话</span>`}</div>
+  </div>`;
+}
+function projectCard(p){
+  const off = !M.find(m => m.id === p.m).online;
+  return `<div class="card ${off ? "off" : ""}" tabindex="0" data-open="${esc(p.name)}">
+    <div class="top">${pmark(p)}<div class="t"><div class="name">${esc(p.name)}</div><div class="path">${esc(p.dir || "各 Agent 在自己的工作区")}</div></div></div>
+    <div class="stack">${p.who.map(n => seal(agentBy(n), "sm")).join("")}<span style="margin-left:8px;font-size:12.5px;color:var(--muted)">${p.who.length} 个 Agent</span></div>
+    <div class="task-line"><span class="who">@${esc(p.last.to)}</span><span class="what">${esc(p.last.what)}</span></div>
+    <div class="foot"><span class="grow">${off ? `<span class="status"><i></i>电脑离线</span>` : p.last.st === "busy" ? `<span class="status busy"><i></i>有任务在做</span>` : `<span class="status on"><i></i>都做完了</span>`}</span><span>${esc(p.at)}</span></div>
+  </div>`;
+}
+function overview(){
+  const items = page === "agents" ? A : P;
+  const title = page === "agents" ? "Agent" : "项目";
+  const card = page === "agents" ? agentCard : projectCard;
+  const match = x => !q || x.name.toLowerCase().includes(q);
+  const sections = (tab === "all" ? M : M.filter(m => m.id === tab)).map(m => {
+    let rows = items.filter(x => x.m === m.id && match(x));
+    if (page === "agents") rows = rows.sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0));
+    const head = tab === "all" ? `<div class="section-head"><i class="dot ${m.online ? "" : "off"}"></i><b>${esc(m.name)}</b><span class="muted">${rows.length} 个</span>
+      ${m.online ? "" : `<span class="offline-note">· 离线，上次在线 ${esc(m.seen)}</span>`}</div>` : (!m.online ? `<div class="section-head"><span class="offline-note">这台电脑离线（上次在线 ${esc(m.seen)}），连上后才能对话、派活。</span></div>` : "");
+    const add = m.online ? `<div class="card add">${ICON.plus}在「${esc(m.name)}」上新建${title}</div>` : "";
+    return `<div class="section">${head}<div class="grid">${rows.map(card).join("")}${tab === "all" ? "" : add}</div></div>`;
+  }).join("");
+  return `<main class="overview">
+    <div class="ov-head"><h1>${title}</h1><span class="grow"></span>
+      <label class="search">${ICON.search}<input placeholder="搜索${title}" value="${esc(q)}" id="q"></label>
+      <button class="btn primary">${ICON.plus}新建${title}</button></div>
+    ${tabs(items)}
+    <div class="ov-body">${sections}</div></main>`;
+}
+function agentDetail(){
+  const a = A[0];
+  const chats = [
+    ["今天", [["改分组展示：卡片 + 电脑标签", "网页", "刚刚", true], ["多台电脑配对失败排查", "网页", "01:20"], ["模型名显示成英文", "飞书", "00:41"]]],
+    ["更早", [["@ 多个 Agent 一起回答", "网页", "昨天"], ["分叉后的标题", "网页", "昨天"], ["定时任务三期", "飞书", "10月14日"], ["微信接入", "微信", "10月11日"], ["handoff 转到飞书", "终端", "10月3日"]]],
+  ];
+  return `<aside class="list">
+      <div class="list-head"><button class="back" data-back-agents>${ICON.back}所有 Agent</button></div>
+      <div class="agent-card">${seal(a)}<div class="t"><div class="name">${esc(a.name)}</div><div class="sub">Claude Code · 飞书 · 这台电脑</div></div>
+        <button class="gear" aria-label="设置" title="设置：角色、渠道、工作目录">${ICON.gear}</button></div>
+      <button class="newchat-btn">${ICON.plus}和它开个新对话</button>
+      <div class="scroll">${chats.map(([g, rows]) => `<div class="group">${g}</div>` + rows.map(([t, src, at, on]) =>
+        `<div class="item ${on ? "on" : ""}"><span class="t"><span class="title">${esc(t)}</span></span>
+          ${src !== "网页" ? `<span class="src ${src === "飞书" ? "feishu" : src === "微信" ? "weixin" : ""}">${src}</span>` : ""}<span class="when">${at}</span></div>`).join("")).join("")}</div>
+    </aside>
+    <main class="chat">
+      <div class="chat-head">${seal(a, "sm")}<div class="grow"><div class="ttl">改分组展示：卡片 + 电脑标签</div><div class="sub">${esc(a.dir)}</div></div></div>
+      <div class="thread">
+        <div class="msg me"><div class="bubble">项目和 Agent 页改成卡片，顶部按电脑分标签</div></div>
+        <div class="msg"><div class="from">${seal(a, "sm")}ccim</div><div class="answer">好，先出一版视觉稿给你看……</div></div>
+      </div>
+      <div class="composer"><div class="box">给 ccim 发消息<span class="send">${ICON.up}</span></div></div>
+    </main>`;
+}
+function projectDetail(){
+  const p = P[0], m = M.find(x => x.id === p.m);
+  const mem = [[agentBy("ccim"), null], [agentBy("AI摩登时代"), null], [agentBy("竞价参谋"), "蔡婷的MacBook Air"]];
+  return `<aside class="list">
+      <div class="list-head"><button class="back" data-back>${ICON.back}所有项目</button></div>
+      <div class="machine-pick"><i class="dot"></i>${esc(m.name)}${ICON.down}</div>
+      <div class="scroll">${P.filter(x => x.m === p.m).map(x => `<div class="item ${x === p ? "on" : ""}">${pmark(x)}<span class="t"><span class="title">${esc(x.name)}</span><span class="sub">${x.who.length} 个 Agent · ${esc(x.at)}</span></span></div>`).join("")}</div>
+    </aside>
+    <main class="detail-main">
+      <div class="d-head">${pmark(p)}<div class="grow"><h2>${esc(p.name)}</h2><div class="path">${esc(p.dir)}</div></div>
+        <div class="stack">${mem.map(([a]) => seal(a, "sm")).join("")}</div><button class="btn">成员 3</button></div>
+      <div class="proj-wrap">
+        <div class="feed">
+          <div class="msg me"><div class="bubble"><b style="color:var(--qing)">@ccim @竞价参谋</b> 首页改成卡片布局，各出一个方案</div></div>
+          <div class="msg" style="max-width:none;padding:0 26px"><div class="cols">
+            <div class="col"><div class="from">${seal(agentBy("ccim"), "sm")}ccim</div><div class="st"><span class="status busy"><i></i>正在改 index.html</span></div><div class="answer">……</div></div>
+            <div class="col"><div class="from">${seal(agentBy("竞价参谋"), "sm")}竞价参谋 <span class="where">在 Air 上</span></div><div class="st"><span class="status on"><i></i>完成，用时 1 分 12 秒</span></div>
+              <div class="answer">建议首页分三块：……</div></div>
+          </div></div>
+        </div>
+        <aside class="members"><h3>成员</h3>
+          ${mem.map(([a, where]) => `<div class="mem">${seal(a)}<span class="t"><span class="title">${esc(a.name)} ${where ? `<span class="where">在 Air 上</span>` : ""}</span>
+            <span class="sub">${a.base}${a.st === "busy" ? "，正在干活" : ""}</span>${where ? `<span class="hint">在自己的电脑上干活，看不到这个项目的文件</span>` : ""}</span></div>`).join("")}
+          <button class="btn" style="margin-top:8px">${ICON.plus}拉人</button>
+        </aside>
+      </div>
+    </main>`;
+}
+function chatsPage(){
+  const temps = [["今天", [["介绍下自己", "02:49", true], ["你知道 Ego 浏览器这个东西吗", "01:10"]]], ["更早", [["当前目录？", "10月14日"], ["你好", "10月14日"]]]];
+  return `<aside class="list">
+      <div class="list-head" style="justify-content:space-between"><b style="font:600 19px var(--song)">对话</b><button class="btn primary">${ICON.plus}新对话</button></div>
+      <div class="scroll">${temps.map(([g, rows]) => `<div class="group">${g}</div>` + rows.map(([t, at, on]) =>
+        `<div class="item ${on ? "on" : ""}"><span class="seal one" style="--c:#8A8F87;width:30px;height:30px;font-size:13px;border-radius:7px"><span>临</span></span><span class="t"><span class="title">${esc(t)}</span><span class="sub">临时对话</span></span><span class="when">${at}</span></div>`).join("")).join("")}</div>
+    </aside>
+    <main class="chat"><div class="chat-head"><div class="grow"><div class="ttl">介绍下自己</div><div class="sub">临时对话 · 没有工作目录</div></div></div>
+      <div class="thread"><div class="msg me"><div class="bubble">介绍下自己</div></div><div class="msg"><div class="answer">……</div></div></div>
+      <div class="composer"><div class="box">给 Claude Code 发消息<span class="send">${ICON.up}</span></div></div></main>`;
+}
+function draw(){
+  const app = document.getElementById("app");
+  app.classList.toggle("detail", page === "detail" || page === "chats");
+  app.classList.toggle("agent", page === "agent");
+  document.getElementById("view").innerHTML = page === "detail" ? projectDetail() : page === "agent" ? agentDetail() : page === "chats" ? chatsPage() : overview();
+  document.querySelectorAll(".rail a").forEach(a => a.classList.toggle("on", a.dataset.v === ({detail: "projects", agent: "agents"}[page] || page)));
+  document.querySelectorAll("[data-back-agents]").forEach(b => b.onclick = () => { page = "agents"; draw(); });
+  if (page === "agents") document.querySelectorAll(".card:not(.add)").forEach(c => c.onclick = () => { page = "agent"; draw(); });
+  document.querySelectorAll(".proto button").forEach(b => b.classList.toggle("on", b.dataset.p === page));
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
+  document.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { page = "detail"; draw(); });
+  document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { page = "projects"; draw(); });
+  const s = document.getElementById("q");
+  if (s) s.oninput = () => { q = s.value.toLowerCase(); draw(); const n = document.getElementById("q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+}
+document.querySelectorAll(".proto button").forEach(b => b.onclick = () => { page = b.dataset.p; draw(); });
+document.querySelectorAll(".rail a").forEach(a => a.onclick = () => { if (["agents", "projects", "chats"].includes(a.dataset.v)) { page = a.dataset.v; draw(); } });
+draw();
+</script>
+</body>
+</html>

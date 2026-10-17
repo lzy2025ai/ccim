@@ -262,6 +262,7 @@ class Platform:
         self.loop = None
         self.store = Store(home)
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
+        self.peer_results = {}                # 别的电脑派来的活：编号 → 结果（还没做完是 None）
         self.background = set()
         from .projects import Projects
         from .schedules import Schedules
@@ -447,6 +448,7 @@ class Platform:
         return {"id": cid, "title": m.get("title") or self._fork_title(cid, m) or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
+                "mention_of": m.get("mention_of"),
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
@@ -576,6 +578,51 @@ class Platform:
             if r.get("type") in ("user", "answer", "file", "note", "mention"):
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
+
+    async def peer_task(self, cid, aid, prompt, title, project):
+        """别的电脑上的项目派给这台电脑的 Agent：在这里开（或接着）一个对话做完，把结果交回去。"""
+        from .session import Task
+        if not agents.get(aid):
+            raise Problem("这台电脑上没有这个 Agent。")
+        if not re.fullmatch(r"p-[\w-]+", cid or ""):
+            raise Problem("对话编号不对。")
+        self.store.deleted.discard(cid)
+        chats = self.chats()
+        if cid not in chats:
+            chats[cid] = {"type": "p2p", "agent": aid, "project": project, "remote_project": True, "title": title,
+                          "created": registry.now(), "last_active": registry.now()}
+            self.store.write(chats)
+        start = time.time()
+        b = self._bridge(cid)
+        chat = b.chat(cid, "p2p")
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": prompt, "files": []}))
+        task = Task(prompt)
+        chat.submit(task)
+        token = uuid.uuid4().hex
+        self.peer_results[token] = None       # 活可能做很久：先回个编号，那边隔一会儿来问结果
+
+        async def wait():
+            try:
+                state, answer = await task.future
+            except Exception as e:
+                state, answer = "error", str(e)
+            state = {"ok": "done"}.get(state, state)
+            last = next((r for r in reversed(self.channel.logs.read(cid))
+                         if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
+            self.peer_results[token] = {"done": True, "state": state, "text": answer or last.get("text") or "",
+                                        "steps": last.get("steps") or [], "elapsed": last.get("elapsed")}
+        t = asyncio.ensure_future(wait())
+        self.background.add(t)
+        t.add_done_callback(self.background.discard)
+        return {"token": token}
+
+    def peer_result(self, token):
+        if token not in self.peer_results:
+            raise Problem("unknown")
+        r = self.peer_results[token]
+        if r is not None:
+            self.peer_results.pop(token, None)
+        return r or {"done": False}
 
     def run(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
@@ -758,6 +805,10 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
+                "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
+                                                              b("project") or "")),
+                "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
+                "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
                 "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),
                 "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
                 "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run"), bool(self.headers.get("X-From-Peer"))),

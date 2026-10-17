@@ -30,7 +30,8 @@ SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
 STATE_TIMEOUT = 5
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
-QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs"}
+QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
+         "/api/peer/result"}
 QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
 
 
@@ -365,6 +366,19 @@ class Peers:
         out["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
         out["machines"], out["me"], out["machine_info"] = machines, me, extra
         return out
+
+    def agent_home(self, aid):
+        """这个 Agent 在哪台电脑上（本机的直接认；别的电脑看上次汇总的，没有就现问一遍）。找不到返回 None。"""
+        from . import agents
+        if agents.get(aid):
+            return self.me["id"]
+        for again in (False, True):
+            if again:
+                self.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
+            for mid, s in list(self.cache.items()):
+                if any(a.get("id") == aid for a in s.get("agents") or []):
+                    return mid
+        return None
 
     # ----- 离线时先存着的消息 -----
 

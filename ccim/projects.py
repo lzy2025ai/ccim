@@ -10,7 +10,7 @@
 目录 ~/.ccim/worktrees/<项目>/），在新对话里做，做完把改动提交到分支上；「用这个」= 把那个分支 squash 合并进项目目录当前分支，
 记成一次提交。项目目录有没提交的改动时不合并。不是 git 仓库的就一起在项目目录里做。
 """
-import asyncio, os, re, subprocess, time, uuid
+import asyncio, json, os, re, subprocess, time, uuid
 
 from . import agents, registry
 
@@ -72,7 +72,7 @@ class Projects:
             d = os.path.realpath(os.path.expanduser(d))
             if not os.path.isdir(d):
                 raise Problem("找不到这个工作目录。")
-        members = [m for m in (members or []) if agents.get(m)]
+        members = [m for m in (members or []) if agents.get(m) or self.pf.peers.agent_home(m)]   # 也可以是别的电脑上的
         data = self.all()
         if pid:
             if pid not in data:
@@ -88,7 +88,19 @@ class Projects:
 
     async def stop(self, pid, tid, aid):
         """停下某一件：排着队的从队里拿掉；正在做的只打断这一件，后面排着的照常做。"""
-        cid, task = self.tasks.get(f"{tid}:{aid}", (None, None))
+        rid = f"{tid}:{aid}"
+        hit = self.tasks.get(rid, (None, None))
+        if hit and hit[0] == "remote":        # 别的电脑上的：在那边停下；还在等它上线的直接不做了
+            _, mid, cid = hit
+            self.running.discard(rid)
+            from .peers import Offline
+            try:
+                await asyncio.to_thread(self.pf.peers.forward, mid, "POST", "/api/chat/stop",
+                                        json.dumps({"id": cid}).encode(), {"Content-Type": "application/json"})
+            except Offline:
+                pass
+            return {"stopped": True}
+        cid, task = hit
         if not task:
             return {"stopped": False}
         for b in self.pf.bridges.values():
@@ -128,7 +140,7 @@ class Projects:
             raise Problem("找不到这个项目。")
         ms = list(p.get("members") or [])
         if add and add not in ms:
-            if not agents.get(add):
+            if not agents.get(add) and not self.pf.peers.agent_home(add):
                 raise Problem("找不到这个 Agent。")
             ms.append(add)
         if remove:
@@ -147,8 +159,10 @@ class Projects:
         out = []
         for pid, p in self.all().items():
             busy = any(cid.startswith(f"p-{pid}-") and c.get("busy") for cid, c in self.pf.chats().items())
+            last = next((r for r in reversed(self.pf.channel.logs.read(self._log(pid))) if r.get("type") == "task"), None)
             out.append({"id": pid, "name": p["name"], "dir": p.get("dir"), "members": p.get("members") or [],
-                        "busy": busy, "last_active": p.get("last_active")})
+                        "busy": busy, "last_active": p.get("last_active"),
+                        "last_task": {"to": last.get("to") or [], "text": last.get("text") or ""} if last else None})
         out.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return out
 
@@ -174,6 +188,12 @@ class Projects:
             raise Problem("先 @ 选派给谁。")
         compare = bool(compare) and len(to) > 1
         isolate = compare and is_git(p.get("dir"))
+        me = self.pf.peers.me["id"]
+        home = {aid: me if agents.get(aid) else await asyncio.to_thread(self.pf.peers.agent_home, aid) for aid in to}
+        for aid, h in home.items():
+            if not h:
+                raise Problem("有一个 Agent 找不到了（可能它所在的电脑移除了），先把它移出项目。")
+        local = [aid for aid in to if home[aid] == me]
         q = None
         if isinstance(quote, dict) and quote.get("task") and quote.get("agent"):
             r = next((x for x in self.pf.channel.logs.read(self._log(pid))
@@ -184,7 +204,7 @@ class Projects:
         trees = {}
         if isolate:                           # 先把每个人的副本都开好（在线程里，git 可能慢），有一个开不了就都撤掉，不留半截
             try:
-                for aid in to:
+                for aid in local:            # 别的电脑上的 Agent 看不到项目目录，不开副本，只出文字结果
                     trees[aid] = await asyncio.to_thread(self._worktree, p, tid, aid)
             except Problem:
                 for wt, branch, _ in trees.values():
@@ -199,6 +219,16 @@ class Projects:
         for aid in to:
             rid = f"{tid}:{aid}"
             branch = wt = None
+            if home[aid] != me:               # 在别的电脑上：交给那台电脑开对话做
+                cid = f"p-{pid}-{aid}"
+                self.running.add(rid)
+                rec = {"type": "reply", "id": rid, "task": tid, "agent": aid, "chat": cid, "state": "queued",
+                       "machine": home[aid]}
+                self._emit(pid, self.pf.channel.logs.append(self._log(pid), rec))
+                t = asyncio.create_task(self._run_remote(pid, rid, cid, prompt, home[aid], aid, p["name"]))
+                self.pf.background.add(t)
+                t.add_done_callback(self.pf.background.discard)
+                continue
             if isolate:
                 wt, branch, cwd = trees[aid]
                 cid = f"p-{pid}-{aid}-{tid}"
@@ -245,6 +275,56 @@ class Projects:
                        elapsed=last.get("elapsed"))
             if wt and state == "done":
                 upd["changed"] = await asyncio.to_thread(self._commit, wt, branch, pdir, rid)
+        except Exception as e:
+            upd.update(state="error", text=str(e))
+        finally:
+            self.running.discard(rid)
+            self.tasks.pop(rid, None)
+        self._emit(pid, self.pf.channel.logs.append(self._log(pid), upd))
+
+    async def _run_remote(self, pid, rid, cid, prompt, mid, aid, pname):
+        """派给别的电脑上的 Agent：那台电脑开对话做完把结果交回来；离线就等它上线（最多 12 小时）。"""
+        from .peers import Offline
+        upd = {"type": "reply", "id": rid}
+        self.tasks[rid] = ("remote", mid, cid)
+        body = json.dumps({"chat": cid, "agent": aid, "prompt": prompt, "title": pname, "project": pid}).encode()
+        deadline = time.time() + 12 * 3600
+        hdr = {"Content-Type": "application/json"}
+
+        async def call(path, payload):
+            status, _, data = await asyncio.to_thread(self.pf.peers.forward, mid, "POST", path, payload, hdr)
+            return status, json.loads(data or b"{}")
+        try:
+            token = None
+            while token is None:              # 交过去：那台电脑离线就等它上线
+                if rid not in self.running:
+                    upd.update(state="stopped", text="")
+                    break
+                try:
+                    status, r = await call("/api/peer/task", body)
+                except Offline:
+                    if time.time() > deadline:
+                        upd.update(state="error", text="那台电脑一直没上线，这件活没做。")
+                        break
+                    await asyncio.sleep(15)
+                    continue
+                if status != 200:
+                    upd.update(state="error", text=r.get("error") or f"出错了（{status}）")
+                    break
+                token = r["token"]
+            while token:                      # 做的过程中隔一会儿问一次结果（进度靠推送实时过来）
+                await asyncio.sleep(5)
+                try:
+                    status, r = await call("/api/peer/result", json.dumps({"token": token}).encode())
+                except Offline:
+                    continue
+                if status != 200:
+                    upd.update(state="error", text="那台电脑重启过，这件活没做完。")
+                    break
+                if r.get("done"):
+                    upd.update(state=r.get("state") or "done", text=r.get("text") or "", steps=r.get("steps") or [],
+                               elapsed=r.get("elapsed"))
+                    break
         except Exception as e:
             upd.update(state="error", text=str(e))
         finally:

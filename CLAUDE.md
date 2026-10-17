@@ -95,6 +95,11 @@
   先存 outbox.json，连上再发。从别的电脑来的密码请求一律拒绝，只能选「在那台 Mac 上弹授权窗口」（admin.DIALOG）；/api/pick、/api/reveal
   不接受别的电脑来的。网页按 id 找东西在哪台电脑（`ownerOf`），找不到用 ctxMachine（当前打开的东西所在的电脑）。
   测试：两个临时 HOME 各跑一个平台进程（registry.HOME、registry.REG、peers.PEER_PORT 都要改掉，REG 不改会写进真的登记表），一个 join 另一个
+- 界面布局（#14，视觉稿 docs/prototype/multi-machine.html）：Agent、项目没选中具体哪个时是卡片总览（`.app.cards` 去掉中间那列），
+  顶部电脑标签（machineTab，localStorage 记住）。进入 Agent：#/agents/<编号>/<对话>，左边是它的对话（/api/agent 详情里的 chats，含终端，
+  去掉项目、定时、@ 子对话），设置在 #/agents/<编号>/settings；对话页只放临时对话，打开 Agent 的对话会跳到 Agent 页。Agent 置顶存 agents.json 的 pinned。
+  项目可以拉别的电脑上的 Agent：dispatch 时 `peers.agent_home` 找到它在哪台，`_run_remote` 调那台的 /api/peer/task（开对话 p-<项目>-<Agent>，
+  马上回一个编号），再隔 5 秒问 /api/peer/result；进度靠推送实时过来。那台离线就等它上线（12 小时），它看不到项目目录、不参与 git 副本
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

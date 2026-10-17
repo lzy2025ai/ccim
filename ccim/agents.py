@@ -13,7 +13,7 @@ import contextlib, fcntl, json, os, re, tempfile, time, uuid
 from . import registry
 
 COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
-FIELDS = ("name", "seal", "color", "base", "model", "effort", "role", "dir")
+FIELDS = ("name", "seal", "color", "base", "model", "effort", "role", "dir", "pinned")
 SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role"}   # Agent 字段 → 登记里的字段
 
 
@@ -81,6 +81,8 @@ def _clean(fields):
         out["dir"] = os.path.realpath(os.path.expanduser(out["dir"]))
     if "base" in out and out["base"] not in ("claude", "codex"):
         out["base"] = "claude"
+    if "pinned" in out:
+        out["pinned"] = bool(out["pinned"])
     if "color" in out and out["color"] not in COLORS:
         out["color"] = COLORS[0]
     return out

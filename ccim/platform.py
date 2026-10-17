@@ -281,6 +281,11 @@ class Platform:
         from .peers import Peers
         self.peers = Peers(self)
         self.peers.start()
+        try:                                  # 项目复制成群聊（只做一次）
+            from . import groups
+            groups.migrate_projects(self)
+        except Exception:
+            log.exception("项目复制成群聊出错")
         self.background.add(asyncio.ensure_future(self._models()))
 
     async def _models(self):
@@ -371,8 +376,9 @@ class Platform:
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
-        if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上
-            text = self.mentions.unseen(cid) + text if text else text
+        if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
+            from . import groups
+            text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + text if text else text
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file")
         await b.on_message(inc)
@@ -449,6 +455,7 @@ class Platform:
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
                 "mention_of": m.get("mention_of"),
+                "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
@@ -579,23 +586,24 @@ class Platform:
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
-    async def peer_task(self, cid, aid, prompt, title, project):
-        """别的电脑上的项目派给这台电脑的 Agent：在这里开（或接着）一个对话做完，把结果交回去。"""
+    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None):
+        """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""
         from .session import Task
         if not agents.get(aid):
             raise Problem("这台电脑上没有这个 Agent。")
-        if not re.fullmatch(r"p-[\w-]+", cid or ""):
+        if not re.fullmatch(r"[pm]-[\w-]+", cid or ""):
             raise Problem("对话编号不对。")
         self.store.deleted.discard(cid)
         chats = self.chats()
         if cid not in chats:
-            chats[cid] = {"type": "p2p", "agent": aid, "project": project, "remote_project": True, "title": title,
-                          "created": registry.now(), "last_active": registry.now()}
+            chats[cid] = {"type": "p2p", "agent": aid, "title": title, "remote_project": True,
+                          "created": registry.now(), "last_active": registry.now(),
+                          **({"mention_of": of} if kind == "mention" else {"project": project})}
             self.store.write(chats)
         start = time.time()
         b = self._bridge(cid)
         chat = b.chat(cid, "p2p")
-        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": prompt, "files": []}))
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": shown or prompt, "files": []}))
         task = Task(prompt)
         chat.submit(task)
         token = uuid.uuid4().hex
@@ -681,6 +689,7 @@ def _defaults(base, path):
 def _handler(pf):
     from . import web as console
     from . import projects as projects_mod
+    from . import groups as groups_mod
     from . import schedules as schedules_mod
 
     class Handler(BaseHTTPRequestHandler):
@@ -806,7 +815,9 @@ def _handler(pf):
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
-                                                              b("project") or "")),
+                                                              b("project") or "", b("kind"), b("of"), b("shown"))),
+                "/api/chat/members": lambda: {"members": pf.call(groups_mod.set_members, pf, b("id"), b("add") or [], b("remove") or [])},
+                "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
                 "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
                 "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),

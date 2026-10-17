@@ -5,6 +5,8 @@
 对话记录里：用户消息带 to；每个 Agent 一条 mention（id = <消息>:<Agent>，同一个 id 后来的覆盖前面的）。
 之后不带 @ 接着聊时，原来的助手还没看过的回答拼在消息前面交给它（mention_seen 记到哪了）。
 对话有工作目录时被 @ 的 Agent 在这个目录里干活，没有就在它自己的工作区。
+群聊（#15）也走这里：被 @ 的不在群里就顺手拉进来；在别的电脑上的 Agent 交给那台电脑开子对话（/api/peer/task），
+各人上次看到哪（ctx_upto）记在主对话的 meta 里，本机、别的电脑一样。
 """
 import asyncio, os, time, uuid
 
@@ -24,9 +26,19 @@ class Mentions:
     def sub(cid, aid):
         return f"m-{cid}-{aid}"
 
+    def _agent_name(self, aid):
+        a = agents.get(aid)
+        if a:
+            return a["name"]
+        for s in self.pf.peers.cache.values():
+            for x in s.get("agents") or []:
+                if x.get("id") == aid:
+                    return x.get("name")
+        return "另一个 Agent"
+
     def _name(self, m, rec):
         if rec.get("type") == "mention":
-            return (agents.get(rec.get("agent")) or {}).get("name") or "另一个 Agent"
+            return self._agent_name(rec.get("agent"))
         a = agents.get(m.get("agent")) if m.get("agent") else None
         return a["name"] if a else "助手"
 
@@ -56,16 +68,26 @@ class Mentions:
 
     async def send(self, cid, text, to, files=()):
         """在主循环里调。"""
+        from . import groups
         m = self.pf.meta(cid)
-        to = [a for a in dict.fromkeys(to or []) if agents.get(a)]
+        to = [a for a in dict.fromkeys(to or []) if a != m.get("agent")]
+        me = self.pf.peers.me["id"]
+        home = {}
+        for a in to:
+            home[a] = me if agents.get(a) else await asyncio.to_thread(self.pf.peers.agent_home, a)
+        to = [a for a in to if home[a]]
         if not to:
             from .platform import Problem
             raise Problem("找不到要 @ 的 Agent。")
+        if m.get("agent"):                    # Agent 的对话：@ 到的不在群里就顺手拉进来，这个对话就成了群聊
+            groups.set_members(self.pf, cid, add=[a for a in to if a not in groups.members(m)])
         view = self.pf.chat_view(cid)
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         # 之前的内容在记下这条消息之前取，不把它自己算进去
-        ctx = {aid: self._context(cid, (self.pf.chats().get(self.sub(cid, aid)) or {}).get("ctx_upto", 0)) for aid in to}
+        upto = m.get("ctx_upto") or {}
+        ctx = {aid: self._context(cid, upto.get(aid) or (self.pf.chats().get(self.sub(cid, aid)) or {}).get("ctx_upto", 0))
+               for aid in to}
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to})
         self.pf.channel._emit(cid, user)
@@ -77,15 +99,26 @@ class Mentions:
                 chats[cid]["title"] = text[:30] or "新对话"
             self.pf.store.write(chats)
         title = (chats.get(cid) or m).get("title") or "新对话"
+        chats = self.pf.chats()
+        if cid in chats:                      # 各人看到哪了
+            chats[cid]["ctx_upto"] = dict(chats[cid].get("ctx_upto") or {}, **{aid: user["at"] for aid in to})
+            self.pf.store.write(chats)
         for aid in to:
-            sub = self._ensure(cid, aid, view.get("dir"), title)
-            prompt = (f"（下面是这个对话之前的内容，供参考）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
+            sub = self.sub(cid, aid)
+            prompt = groups.note_prefix(self.pf, cid, aid) + \
+                (f"（下面是这个对话之前的内容，供参考）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
                 f"[用户在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)
+            remote = home[aid] != me
             self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid, "msg": mid, "agent": aid,
-                                                        "chat": sub, "state": "queued"}))
-            t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text))
+                                                        "chat": sub, "state": "queued",
+                                                        **({"machine": home[aid]} if remote else {})}))
+            if remote:                        # 在别的电脑上：交给那台电脑开子对话
+                t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text))
+            else:
+                self._ensure(cid, aid, view.get("dir"), title)
+                t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text))
             self.pf.background.add(t)
             t.add_done_callback(self.pf.background.discard)
         return {"id": mid}
@@ -121,8 +154,68 @@ class Mentions:
         if cid in self.pf.chats():
             self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
 
+    async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text):
+        import json
+        from .peers import Offline
+        upd = {"type": "mention", "id": rid}
+        self.tasks[rid] = ("remote", (mid, sub))
+        hdr = {"Content-Type": "application/json"}
+
+        async def call(path, payload):
+            status, _, data = await asyncio.to_thread(self.pf.peers.forward, mid, "POST", path,
+                                                      json.dumps(payload).encode(), hdr)
+            return status, json.loads(data or b"{}")
+        try:
+            token, deadline = None, time.time() + 12 * 3600
+            while token is None and rid in self.running:   # 那台电脑离线就等它上线
+                try:
+                    status, r = await call("/api/peer/task", {"chat": sub, "agent": aid, "prompt": prompt, "title": title,
+                                                              "kind": "mention", "of": cid, "shown": text})
+                except Offline:
+                    if time.time() > deadline:
+                        raise RuntimeError("那台电脑一直没上线。")
+                    await asyncio.sleep(15)
+                    continue
+                if status != 200:
+                    raise RuntimeError(r.get("error") or f"出错了（{status}）")
+                token = r["token"]
+            if token is None:
+                upd.update(state="stopped", text="")
+            while token:
+                await asyncio.sleep(4)
+                try:
+                    status, r = await call("/api/peer/result", {"token": token})
+                except Offline:
+                    continue
+                if status != 200:
+                    raise RuntimeError("那台电脑重启过，没做完。")
+                if r.get("done"):
+                    upd.update(state=r.get("state") or "done", text=r.get("text") or "", steps=r.get("steps") or [],
+                               elapsed=r.get("elapsed"))
+                    break
+        except Exception as e:
+            upd.update(state="error", text=str(e))
+        finally:
+            upd["done_at"] = time.time()
+            self.running.discard(rid)
+            self.tasks.pop(rid, None)
+        if cid in self.pf.chats():
+            self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
+
     async def stop(self, rid):
-        sub, task = self.tasks.get(rid, (None, None))
+        hit = self.tasks.get(rid, (None, None))
+        if hit[0] == "remote":                # 别的电脑上的：在那边停；还在等它上线的不等了
+            import json
+            from .peers import Offline
+            mid, sub = hit[1]
+            self.running.discard(rid)
+            try:
+                await asyncio.to_thread(self.pf.peers.forward, mid, "POST", "/api/chat/stop",
+                                        json.dumps({"id": sub}).encode(), {"Content-Type": "application/json"})
+            except Offline:
+                pass
+            return True
+        sub, task = hit
         if not task:
             return False
         for b in self.pf.bridges.values():
@@ -140,7 +233,8 @@ class Mentions:
 
     async def stop_all(self, cid):
         hit = False
-        for rid in [r for r in list(self.tasks) if r.startswith("u-") and self.tasks[r][0].startswith(f"m-{cid}-")]:
+        mine = lambda r: (self.tasks[r][1][1] if self.tasks[r][0] == "remote" else self.tasks[r][0]).startswith(f"m-{cid}-")
+        for rid in [r for r in list(self.tasks) if r.startswith("u-") and mine(r)]:
             hit = await self.stop(rid) or hit
         return hit
 

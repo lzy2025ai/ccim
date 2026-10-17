@@ -100,6 +100,11 @@
   去掉项目、定时、@ 子对话），设置在 #/agents/<编号>/settings；对话页只放临时对话，打开 Agent 的对话会跳到 Agent 页。Agent 置顶存 agents.json 的 pinned。
   项目可以拉别的电脑上的 Agent：dispatch 时 `peers.agent_home` 找到它在哪台，`_run_remote` 调那台的 /api/peer/task（开对话 p-<项目>-<Agent>，
   马上回一个编号），再隔 5 秒问 /api/peer/result；进度靠推送实时过来。那台离线就等它上线（12 小时），它看不到项目目录、不参与 git 副本
+- `ccim/groups.py`：群聊（#15，取代项目入口；项目页还在，只是导航里没有了）。群聊 = Agent 的网页对话 meta 里有 members（除主 Agent）、
+  note（群聊说明，note_at）。不 @ 时主 Agent 回答；@ 走 mentions（@ 到不在群里的顺手拉进来，别的电脑上的走 /api/peer/task kind=mention），
+  各人看到哪记在主对话 meta 的 ctx_upto。群聊说明改过后各人下一次被问到时在消息前面带上（note_seen）。
+  启动时 `migrate_projects` 把每个项目复制成群聊（只做一次，state 的 groups_from_projects）：第一个本机成员当主 Agent 并 fork 它在项目里的会话，
+  记录转成 user / answer / mention，指向项目的定时任务改成 kind=group
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

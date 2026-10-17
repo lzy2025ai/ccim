@@ -91,7 +91,14 @@ class Schedules:
         if not prompt:
             raise Problem("写上要它做什么。")
         t = f.get("target") or {}
-        if t.get("kind") == "project":
+        if t.get("kind") == "group":          # 群聊：不选人就是交给主 Agent
+            g = self.pf.chats().get(t.get("id") or "")
+            if not g or not g.get("agent"):
+                raise Problem("找不到这个群聊。")
+            from . import groups
+            who = [a for a in (t.get("agents") or []) if a in groups.members(g)]
+            target = {"kind": "group", "id": t["id"], "agents": who}
+        elif t.get("kind") == "project":
             p = self.pf.projects.all().get(t.get("id"))
             if not p:
                 raise Problem("找不到这个项目。")
@@ -244,7 +251,9 @@ class Schedules:
         upd = {"type": "run", "id": rid}
         prompt = f"[定时任务「{s['name']}」] {s['prompt']}"
         try:
-            if s["target"]["kind"] == "project":
+            if s["target"]["kind"] == "group":
+                upd.update(await self._run_group(s, prompt))
+            elif s["target"]["kind"] == "project":
                 upd.update(await self._run_project(s, prompt))
             else:
                 upd.update(await self._run_agent(sid, rid, s, prompt))
@@ -295,13 +304,43 @@ class Schedules:
                         "elapsed": round(time.time() - start, 1)}
         return {"state": "error", "text": "等了太久还没做完，去项目里看看。", "project": t["id"], "task": tid}
 
+    async def _run_group(self, s, prompt):
+        """交给群聊：选了人就在群里 @ 他们，等各人做完；没选就交给主 Agent。"""
+        t, start = s["target"], time.time()
+        cid = t["id"]
+        if t.get("agents"):
+            r = await self.pf.mentions.send(cid, prompt, t["agents"])
+            while time.time() - start < PROJECT_WAIT:
+                await asyncio.sleep(5)
+                rs = [x for x in self.pf.channel.logs.read(cid) if x.get("type") == "mention" and x.get("msg") == r["id"]]
+                if rs and all(x.get("state") not in ("queued", "working") for x in rs):
+                    ok = all(x.get("state") == "done" for x in rs)
+                    text = "\n\n".join(f"**{self.pf.mentions._agent_name(x['agent'])}**：{x.get('text') or ''}" for x in rs)
+                    return {"state": "done" if ok else "error", "text": text, "chat": cid, "elapsed": round(time.time() - start, 1)}
+            return {"state": "error", "text": "等了太久还没做完，去群聊里看看。", "chat": cid}
+        from .session import Task
+        b = self.pf._bridge(cid)
+        chat = b.chat(cid, "p2p")
+        self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, {"type": "user", "text": prompt, "files": []}))
+        from . import groups
+        task = Task(groups.note_prefix(self.pf, cid, groups.MAIN) + self.pf.mentions.unseen(cid) + prompt)
+        chat.submit(task)
+        state, answer = await task.future
+        state = {"ok": "done"}.get(state, state)
+        last = next((r for r in reversed(self.pf.channel.logs.read(cid))
+                     if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
+        return {"state": state, "text": answer or last.get("text") or "", "steps": last.get("steps") or [],
+                "elapsed": last.get("elapsed") or round(time.time() - start, 1), "chat": cid}
+
     async def _deliver(self, s, text):
         """把结果用这个 Agent 接的飞书、微信机器人私聊主人。发不出去不影响这次运行的结果。"""
         from .channels import load, send_once
-        if s["target"]["kind"] != "agent":
+        t = s["target"]
+        aid = t["id"] if t["kind"] == "agent" else (self.pf.chats().get(t["id"]) or {}).get("agent") if t["kind"] == "group" else None
+        if not aid:
             return
         msg = f"【定时任务「{s['name']}」】\n\n{text}"
-        for kind, proc, path in agents.linked_paths(s["target"]["id"]):
+        for kind, proc, path in agents.linked_paths(aid):
             if kind not in s["deliver"]:
                 continue
             try:
@@ -315,6 +354,12 @@ class Schedules:
         """先试跑一次（不保存）：给 Agent 的开一个普通网页对话发出去，给项目的直接派到项目里。返回去哪看。"""
         f = self._clean(fields)
         prompt = f"[定时任务「{f['name']}」试跑] {f['prompt']}"
+        if f["target"]["kind"] == "group":
+            if f["target"]["agents"]:
+                await self.pf.mentions.send(f["target"]["id"], prompt, f["target"]["agents"])
+            else:
+                await self.pf.send(f["target"]["id"], prompt)
+            return {"chat": f["target"]["id"]}
         if f["target"]["kind"] == "project":
             await self.pf.projects.dispatch(f["target"]["id"], prompt, f["target"]["agents"], compare=False)
             return {"project": f["target"]["id"]}

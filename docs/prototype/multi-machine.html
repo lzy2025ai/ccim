@@ -191,6 +191,26 @@ button{cursor:pointer;border:0;background:none;padding:0}
 .col .from{font-size:13px}
 .st{font-size:12px;color:var(--muted);margin-bottom:6px}
 
+/* 群聊 */
+.group-item .stackmini{display:flex}
+.group-item .stackmini .seal{width:16px;height:16px;border-radius:4px;font-size:8px;padding:1px;box-shadow:0 0 0 1.5px var(--paper)}
+.group-item .stackmini .seal+.seal{margin-left:-4px}
+.chat-head .btn{padding:5px 10px}
+.gpanel{width:290px;flex:none;border-left:1px solid var(--line);padding:16px 18px;overflow:auto}
+.gpanel h3{font:600 14px var(--song);margin:0 0 8px;display:flex;align-items:center;justify-content:space-between}
+.gpanel h3 button{font:400 12.5px var(--sans);color:var(--qing)}
+.gdesc{font-size:13px;line-height:1.7;color:var(--ink-2);background:var(--paper);border-radius:10px;padding:10px 12px;margin-bottom:20px}
+.gmem{display:flex;gap:10px;align-items:center;padding:7px 0}
+.gmem .seal{width:30px;height:30px;font-size:11px;border-radius:7px}
+.gmem .seal.one{font-size:14px}
+.gmem .t{flex:1;min-width:0}
+.gmem .title{display:block;font-weight:500;font-size:13.5px}
+.gmem .sub{display:block;font-size:12px;color:var(--muted)}
+.owner{font-size:11px;padding:0 6px;border-radius:4px;background:var(--qing-soft);color:var(--qing);font-weight:400}
+.at{color:var(--qing);font-weight:600}
+.gwrap{flex:1;display:flex;min-height:0}
+.gmain{flex:1;display:flex;flex-direction:column;min-width:0}
+
 /* 原型说明条：只在视觉稿里 */
 .proto{position:fixed;right:16px;bottom:16px;background:var(--ink);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;display:flex;gap:10px;align-items:center;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .proto button{color:#fff;opacity:.6;padding:2px 6px;border-radius:5px}
@@ -202,7 +222,6 @@ button{cursor:pointer;border:0;background:none;padding:0}
   <nav class="rail">
     <div class="brand">ccim</div>
     <a data-v="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
-    <a data-v="projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 14c3 0 6 1.5 6 4.5"/></svg>项目</a>
     <a data-v="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>定时</a>
     <a data-v="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 10h8M8 14h5"/></svg>Agent</a>
     <div class="spacer"></div>
@@ -210,7 +229,7 @@ button{cursor:pointer;border:0;background:none;padding:0}
   </nav>
   <div id="view" style="display:contents"></div>
 </div>
-<div class="proto">视觉稿　<button data-p="agents" class="on">Agent</button><button data-p="agent">进入 Agent 后</button><button data-p="projects">项目</button><button data-p="detail">进入项目后</button><button data-p="chats">对话</button></div>
+<div class="proto">视觉稿　<button data-p="agents" class="on">Agent</button><button data-p="agent">进入 Agent 后</button><button data-p="group">群聊</button><button data-p="chats">对话</button></div>
 
 <script>
 const C = {qing:"#2B4C6F", lu:"#3F7A5E", zhe:"#9A5B34", huang:"#B8902A", zhu:"#B5402F", dai:"#4A4F6B"};
@@ -323,7 +342,7 @@ function agentDetail(){
           ${src !== "网页" ? `<span class="src ${src === "飞书" ? "feishu" : src === "微信" ? "weixin" : ""}">${src}</span>` : ""}<span class="when">${at}</span></div>`).join("")).join("")}</div>
     </aside>
     <main class="chat">
-      <div class="chat-head">${seal(a, "sm")}<div class="grow"><div class="ttl">改分组展示：卡片 + 电脑标签</div><div class="sub">${esc(a.dir)}</div></div></div>
+      <div class="chat-head">${seal(a, "sm")}<div class="grow"><div class="ttl">改分组展示：卡片 + 电脑标签</div><div class="sub">${esc(a.dir)}</div></div><button class="btn">${ICON.plus}拉人</button></div>
       <div class="thread">
         <div class="msg me"><div class="bubble">项目和 Agent 页改成卡片，顶部按电脑分标签</div></div>
         <div class="msg"><div class="from">${seal(a, "sm")}ccim</div><div class="answer">好，先出一版视觉稿给你看……</div></div>
@@ -359,6 +378,46 @@ function projectDetail(){
       </div>
     </main>`;
 }
+function groupPage(){
+  const a = A[1], m1 = agentBy("竞价参谋"), m2 = agentBy("AI摩登时代");
+  const stackmini = [a, m1, m2].map(x => seal(x, "sm")).join("");
+  const chats = [
+    ["今天", [["四期需求排期", "群", "刚刚", true], ["商品改价接口联调", "", "11:20"]]],
+    ["更早", [["竞价参谋 适配连锁账号", "群", "昨天"], ["饿了么接口调研", "", "10月15日"], ["推送远端", "飞书", "10月14日"]]],
+  ];
+  return `<aside class="list">
+      <div class="list-head"><button class="back" data-back-agents>${ICON.back}所有 Agent</button></div>
+      <div class="agent-card">${seal(a)}<div class="t"><div class="name">${esc(a.name)}</div><div class="sub">Claude Code · 飞书 · 这台电脑</div></div>
+        <button class="gear" aria-label="设置">${ICON.gear}</button></div>
+      <button class="newchat-btn">${ICON.plus}和它开个新对话</button>
+      <div class="scroll">${chats.map(([g, rows]) => `<div class="group">${g}</div>` + rows.map(([t, kind, at, on]) =>
+        `<div class="item group-item ${on ? "on" : ""}"><span class="t"><span class="title">${esc(t)}</span></span>
+          ${kind === "群" ? `<span class="stackmini">${stackmini}</span>` : kind ? `<span class="src feishu">${kind}</span>` : ""}<span class="when">${at}</span></div>`).join("")).join("")}</div>
+    </aside>
+    <main class="chat">
+      <div class="chat-head">${seal(a, "sm")}<div class="grow"><div class="ttl">四期需求排期</div><div class="sub">${esc(a.dir)}</div></div>
+        <div class="stack">${[a, m1, m2].map(x => seal(x, "sm")).join("")}</div><button class="btn">成员 3</button><button class="btn">${ICON.plus}拉人</button></div>
+      <div class="gwrap"><div class="gmain">
+      <div class="thread">
+        <div class="msg me"><div class="bubble">把四期的需求按优先级排一下</div></div>
+        <div class="msg"><div class="from">${seal(a, "sm")}0527-美团长期项目</div><div class="answer">按影响面和工作量，建议顺序是：1. 单商品双平台改价日志 …</div></div>
+        <div class="msg me"><div class="bubble"><span class="at">@竞价参谋 @AI摩登时代</span> 各自看看第 2 条，你们那边要改什么</div></div>
+        <div class="msg" style="max-width:none;padding:0 26px"><div class="cols">
+          <div class="col"><div class="from">${seal(m1, "sm")}竞价参谋 <span class="where">在 Air 上</span></div><div class="st"><span class="status busy"><i></i>正在看报表接口</span></div><div class="answer">……</div></div>
+          <div class="col"><div class="from">${seal(m2, "sm")}AI摩登时代</div><div class="st"><span class="status on"><i></i>完成，用时 40 秒</span></div><div class="answer">我这边只需要改一篇稿子……</div></div>
+        </div></div>
+      </div>
+      <div class="composer"><div class="box">给 0527-美团长期项目 发消息，@ 叫群里其他 Agent<span class="send">${ICON.up}</span></div></div>
+      </div>
+      <aside class="gpanel">
+        <h3>群聊说明 <button>编辑</button></h3>
+        <div class="gdesc">四期需求：牵牛花插件改价日志、饿了么折扣价、竞价参谋适配连锁账号。代码在美团长期项目目录；改完先给我看，不要直接推送。</div>
+        <h3>成员 3 <button>${"拉人"}</button></h3>
+        ${[[a, "群主"], [m1, "Air"], [m2, ""]].map(([x, tag]) => `<div class="gmem">${seal(x)}<span class="t"><span class="title">${esc(x.name)} ${tag === "群主" ? `<span class="owner">主 Agent</span>` : tag ? `<span class="where">在 Air 上</span>` : ""}</span>
+          <span class="sub">${x.base}${x.st === "busy" ? "，正在干活" : ""}</span></span>${tag === "群主" ? "" : `<button style="font-size:12px;color:var(--bad)">移出</button>`}</div>`).join("")}
+      </aside></div>
+    </main>`;
+}
 function chatsPage(){
   const temps = [["今天", [["介绍下自己", "02:49", true], ["你知道 Ego 浏览器这个东西吗", "01:10"]]], ["更早", [["当前目录？", "10月14日"], ["你好", "10月14日"]]]];
   return `<aside class="list">
@@ -373,9 +432,9 @@ function chatsPage(){
 function draw(){
   const app = document.getElementById("app");
   app.classList.toggle("detail", page === "detail" || page === "chats");
-  app.classList.toggle("agent", page === "agent");
-  document.getElementById("view").innerHTML = page === "detail" ? projectDetail() : page === "agent" ? agentDetail() : page === "chats" ? chatsPage() : overview();
-  document.querySelectorAll(".rail a").forEach(a => a.classList.toggle("on", a.dataset.v === ({detail: "projects", agent: "agents"}[page] || page)));
+  app.classList.toggle("agent", page === "agent" || page === "group");
+  document.getElementById("view").innerHTML = page === "detail" ? projectDetail() : page === "agent" ? agentDetail() : page === "group" ? groupPage() : page === "chats" ? chatsPage() : overview();
+  document.querySelectorAll(".rail a").forEach(a => a.classList.toggle("on", a.dataset.v === ({detail: "projects", agent: "agents", group: "agents"}[page] || page)));
   document.querySelectorAll("[data-back-agents]").forEach(b => b.onclick = () => { page = "agents"; draw(); });
   if (page === "agents") document.querySelectorAll(".card:not(.add)").forEach(c => c.onclick = () => { page = "agent"; draw(); });
   document.querySelectorAll(".proto button").forEach(b => b.classList.toggle("on", b.dataset.p === page));

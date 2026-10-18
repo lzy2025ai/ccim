@@ -362,7 +362,8 @@ class Chat:
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
-                               "mcp__ccim__run_as_admin"],                          # 它自己会让用户确认，不再弹审批
+                               "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
+                               "mcp__ccim__ask_agents"],                            # 只是在群里 @ 人，用户看得到
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
@@ -662,9 +663,45 @@ class Chat:
             return {"content": [{"type": "text", "text": text}], **({} if ok else {"is_error": True})}
 
         tools = [send_file]
+        pf = getattr(chat.b.channel, "platform", None)
+        if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent"):
+            tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += _look_around(chat) + [run_as_admin]
         return create_sdk_mcp_server("ccim", tools=tools)
+
+
+ASK_WAIT = 20 * 60                            # ask_agents 最多等这么久，没回完的回答之后出现在对话里
+
+
+def _ask_agents(chat, pf):
+    @tool("ask_agents", "在当前群聊里 @ 一位或几位群成员，请他们回答或帮忙做事；消息会显示在群里，"
+          "等他们都回答完再把回答交给你。to 写成员的名字。他们看得到这个群聊之前的内容，但看不到你的工作目录以外的文件。",
+          {"type": "object", "properties": {"to": {"type": "array", "items": {"type": "string"}, "description": "群成员的名字"},
+                                             "text": {"type": "string", "description": "要对他们说的话"}},
+           "required": ["to", "text"]})
+    async def ask_agents(args):
+        to = args.get("to") or []
+        if isinstance(to, str):
+            to = [to]
+        text = (args.get("text") or "").strip()
+        if not to or not text:
+            return _err("to 和 text 都要写。")
+        aid = (pf.chats().get(chat.chat_id) or {}).get("agent")
+        try:
+            rows = await pf.mentions.ask(chat.chat_id, aid, text, to, ASK_WAIT)
+        except Exception as e:
+            return _err(str(e))
+        parts = []
+        for name, state, answer in rows:
+            if state == "done":
+                parts.append(f"【{name}】\n{answer or '（没有回答）'}")
+            elif state == "waiting":
+                parts.append(f"【{name}】还没回答完，回答出来后会显示在群里。")
+            else:
+                parts.append(f"【{name}】没有回答成功（{ {'stopped': '被停下了', 'error': '出错了'}.get(state, state) }）：{answer}")
+        return {"content": [{"type": "text", "text": "\n\n".join(parts)}]}
+    return ask_agents
 
 
 def _look_around(chat):

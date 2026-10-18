@@ -103,6 +103,7 @@ body{overflow:hidden}
 .msg.me{display:flex;justify-content:flex-end}
 .msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
 .bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg:not(.me)>.bubble{display:inline-block;max-width:80%;margin-top:6px;border-radius:14px 14px 14px 4px}
 .msg-acts{display:flex;gap:2px;margin-top:4px;opacity:0;transition:opacity .15s}
 .msg:hover .msg-acts,.msg:focus-within .msg-acts{opacity:1}
 @media (hover:none){.msg-acts{opacity:1}}
@@ -889,6 +890,11 @@ function canFork(i, r){
   return i === last || (!!r.fork && detail.base !== "codex");
 }
 function recHtml(r, i, src = "log"){
+  if (r.type === "user" && r.by){           // 群里的 Agent 自己 @ 的人
+    const a = agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
+    return `<div class="msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b></div>
+      <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div></div>${src === "log" ? mentionGroup(r.id) : ""}`;
+  }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     return `<div class="msg me"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}

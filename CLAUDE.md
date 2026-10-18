@@ -82,6 +82,8 @@
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删
+  群聊里的 Agent 自己也能 @ 群成员：`ask_agents` 工具（session.py `_ask_agents`，只给网页里 Agent 的 w- 对话）→ `Mentions.ask`，
+  记录带 by（网页显示成它说的），等各人回答完（waiters，最多 20 分钟）把回答作为工具结果交回，所以 unseen 不再重复带
 - `ccim/admin.py`：管理员权限（#12）。私聊里给 Claude 一个 `run_as_admin` 工具（在 allowed_tools 里，它自己让用户确认）。
   渠道有 `ask_secret`（只有网页：本机）时弹卡片看命令、输开机密码，密码从标准输入交给 `sudo -S -k`（每次都要输），
   不进记录、不进日志、不回给 Claude；卡片 type=secret 按 id 合并，平台重启后没处理的显示作废。

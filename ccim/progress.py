@@ -31,6 +31,8 @@ def describe_tool(name, inp):
         return None
     if name.startswith("mcp__ccim__run_as_admin"):
         return "用管理员权限执行：" + short(inp.get("command"), 60)
+    if name.startswith("mcp__ccim__ask_agents"):
+        return "请 " + "、".join("@" + str(x) for x in (inp.get("to") or [])) + " 帮忙：" + short(inp.get("text"), 40)
     if name.startswith("mcp__ccim__send_file"):
         return f"发送文件 {base(inp.get('path'))}"
     if name.startswith("mcp__"):

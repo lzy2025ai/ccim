@@ -21,6 +21,7 @@ class Mentions:
         self.pf = pf
         self.running = set()                  # 正在做或排着队的 mention id
         self.tasks = {}                       # mention id → (子对话, session.Task)
+        self.waiters = {}                     # mention id → future，Agent 自己 @ 别人时等回答（ask_agents 工具）
 
     @staticmethod
     def sub(cid, aid):
@@ -50,7 +51,7 @@ class Mentions:
             if r.get("at", 0) <= since or not (r.get("text") or "").strip():
                 continue
             if r.get("type") == "user":
-                lines.append(f"用户：{r['text']}")
+                lines.append(f"{self._agent_name(r['by']) if r.get('by') else '用户'}：{r['text']}")
             elif r.get("type") == "answer" or (r.get("type") == "mention" and r.get("state") == "done"):
                 lines.append(f"{self._name(m, r)}：{r['text']}")
         text = "\n\n".join(lines)
@@ -66,8 +67,8 @@ class Mentions:
             self.pf.store.write(chats)
         return sub
 
-    async def send(self, cid, text, to, files=()):
-        """在主循环里调。"""
+    async def send(self, cid, text, to, files=(), by=None):
+        """在主循环里调。by：是对话里的 Agent 自己 @ 的（ask_agents 工具），不是用户。"""
         from . import groups
         m = self.pf.meta(cid)
         to = [a for a in dict.fromkeys(to or []) if a != m.get("agent")]
@@ -89,7 +90,8 @@ class Mentions:
         ctx = {aid: self._context(cid, upto.get(aid) or (self.pf.chats().get(self.sub(cid, aid)) or {}).get("ctx_upto", 0))
                for aid in to}
         log = self.pf.channel.logs
-        user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to})
+        user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
+                                **({"by": by} if by else {})})
         self.pf.channel._emit(cid, user)
         att = "".join(f"\n（附件：{f['key']}）" for f in files)
         chats = self.pf.chats()
@@ -107,12 +109,12 @@ class Mentions:
             sub = self.sub(cid, aid)
             prompt = groups.note_prefix(self.pf, cid, aid) + \
                 (f"（下面是这个对话之前的内容，供参考）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                f"[用户在对话里 @ 了你] {text}{att}"
+                f"[{self._agent_name(by) if by else '用户'}在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)
             remote = home[aid] != me
             self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid, "msg": mid, "agent": aid,
-                                                        "chat": sub, "state": "queued",
+                                                        "chat": sub, "state": "queued", **({"by": by} if by else {}),
                                                         **({"machine": home[aid]} if remote else {})}))
             if remote:                        # 在别的电脑上：交给那台电脑开子对话
                 t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text))
@@ -121,7 +123,45 @@ class Mentions:
                 t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text))
             self.pf.background.add(t)
             t.add_done_callback(self.pf.background.discard)
-        return {"id": mid}
+            if by:
+                self.waiters[rid] = asyncio.get_running_loop().create_future()
+        return {"id": mid, "rids": [f"{mid}:{aid}" for aid in to]}
+
+    async def ask(self, cid, by, text, names, timeout):
+        """对话里的 Agent 自己 @ 群里的人（ask_agents 工具）：等各人回答完，返回 [(名字, 状态, 回答)]；没等到的状态是 waiting。"""
+        from . import groups
+        m = self.pf.meta(cid)
+        ms = groups.members(m)
+        if not ms:
+            raise ValueError("这个对话里没有别的成员。要找谁帮忙，请用户先把那个 Agent 拉进来。")
+        pick = {}
+        for n in names:
+            n = (n or "").strip().lstrip("@")
+            hit = [a for a in ms if a == n or self._agent_name(a) == n]
+            if not hit:
+                raise ValueError(f"群里没有「{n}」。群成员：" + "、".join(self._agent_name(a) for a in ms))
+            pick[hit[0]] = True
+        r = await self.send(cid, text, list(pick), by=by)
+        futs = [self.waiters[x] for x in r["rids"]]
+        await asyncio.wait(futs, timeout=timeout)
+        out = []
+        for rid, f in zip(r["rids"], futs):
+            if f.done():
+                self.waiters.pop(rid, None)
+                u = f.result()
+                out.append((self._agent_name(rid.split(":", 1)[1]), u.get("state"), u.get("text") or ""))
+            else:
+                out.append((self._agent_name(rid.split(":", 1)[1]), "waiting", ""))
+        return out
+
+    def _settle(self, cid, upd):
+        if cid in self.pf.chats():
+            self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
+        f = self.waiters.get(upd["id"])
+        if f and not f.done():
+            f.set_result(upd)
+        elif f:
+            self.waiters.pop(upd["id"], None)
 
     async def _run(self, cid, rid, sub, prompt, upto, text):
         from .session import Task
@@ -151,8 +191,7 @@ class Mentions:
             upd["done_at"] = time.time()
             self.running.discard(rid)
             self.tasks.pop(rid, None)
-        if cid in self.pf.chats():
-            self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
+        self._settle(cid, upd)
 
     async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text):
         import json
@@ -199,8 +238,7 @@ class Mentions:
             upd["done_at"] = time.time()
             self.running.discard(rid)
             self.tasks.pop(rid, None)
-        if cid in self.pf.chats():
-            self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
+        self._settle(cid, upd)
 
     async def stop(self, rid):
         hit = self.tasks.get(rid, (None, None))
@@ -245,7 +283,8 @@ class Mentions:
         seen = m.get("mention_seen", 0)
         m_ = self.pf.meta(cid)
         rows = [r for r in self.pf.channel.logs.read(cid)
-                if r.get("type") == "mention" and r.get("state") == "done" and r.get("text") and r.get("done_at", 0) > seen]
+                if r.get("type") == "mention" and r.get("state") == "done" and r.get("text") and r.get("done_at", 0) > seen
+                and not r.get("by")]           # 它自己 @ 的，回答已经交给它了
         if not rows:
             return ""
         if cid in chats:

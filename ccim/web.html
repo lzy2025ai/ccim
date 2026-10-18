@@ -125,6 +125,9 @@ body{overflow:hidden}
 #main{position:relative}
 #main.with-panel .thread,#main.with-panel .composer,#main.with-panel .notice{margin-right:300px}
 .gpanel{position:absolute;right:0;top:var(--head-h,65px);bottom:0;width:300px;border-left:1px solid var(--line);background:var(--panel);padding:16px 18px;overflow:auto;z-index:2}
+.gpanel .gp-top{display:flex;align-items:center;justify-content:space-between;margin:-6px -6px 10px 0}
+.gpanel .gp-top b{font:600 15px var(--song)}
+.chat-head .btn.on{border-color:var(--ink-2)}
 .gpanel h3{font:600 14px var(--song);margin:0 0 8px;display:flex;align-items:center;justify-content:space-between}
 .gpanel h3 .link{font:400 12.5px var(--sans)}
 .gdesc{font-size:13px;line-height:1.7;color:var(--ink-2);background:var(--paper);border-radius:10px;padding:10px 12px;margin-bottom:20px;white-space:pre-wrap}
@@ -942,12 +945,13 @@ function forkFrom(c){
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
 }
 // ---- 群聊（#15）：Agent 的对话里拉人进来 ----
-let showGroup = false;
+let showGroup = (() => { try { return localStorage.getItem("ccim.groupPanel") !== "0"; } catch { return true; } })();
+function toggleGroup(on){ showGroup = on; try { localStorage.setItem("ccim.groupPanel", on ? "1" : "0"); } catch {} drawChat(); }
 function groupHead(c){
   if (c.readonly || !c.agent) return "";
   const ms = c.members || [];
   const stack = ms.length ? `<span class="stack" style="margin-right:2px">${[c.agent, ...ms].map(agentOf).filter(Boolean).slice(0, 5).map(x => seal(x, "sm", false)).join("")}</span>
-    <button class="btn" onclick="showGroup=!showGroup;drawChat()">成员 ${ms.length + 1}</button>` : "";
+    <button class="btn ${showGroup ? "on" : ""}" onclick="toggleGroup(!showGroup)">成员 ${ms.length + 1}</button>` : "";
   return `${stack}<button class="btn" onclick="pullMenu(event)">${ICON.plus}拉人</button>`;
 }
 function groupPanel(c){
@@ -960,6 +964,7 @@ function groupPanel(c){
       <span class="sub">${BASE[x.base || "claude"]}${x.busy ? "，正在干活" : ""}</span></span>
       ${main ? "" : `<button class="link danger-link" onclick="removeMember(${q(aid)})">移出</button>`}</div>`; };
   return `<aside class="gpanel">
+    <div class="gp-top"><b>群聊</b><button class="icon-btn" aria-label="收起" title="收起" onclick="toggleGroup(false)">${ICON.x}</button></div>
     <h3>群聊说明 <button class="link" onclick="editNote()">${c.note ? "编辑" : "写一段"}</button></h3>
     ${c.note ? `<div class="gdesc">${esc(c.note)}</div>` : `<p class="muted" style="font-size:13px;margin:0 0 20px">这个群在做什么、有什么约定。群里每个 Agent 回答时都会照着做。</p>`}
     <h3>成员 ${ms.length + 1} <button class="link" onclick="pullMenu(event)">拉人</button></h3>
@@ -969,14 +974,21 @@ function pullMenu(e){
   const c = detail, home = ctxMachine || S.me;
   const list = S.agents.filter(a => a.id !== c.agent && !(c.members || []).includes(a.id))
     .sort((x, y) => ((y.machine || S.me) === home ? 1 : 0) - ((x.machine || S.me) === home ? 1 : 0));
-  if (!list.length) return toast("没有别的 Agent 了，先去 Agent 页新建一个");
   const pp = pop(e, `<div class="sec">拉进这个对话</div>` + list.map(a =>
-    `<button data-a="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, home)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
+    `<button data-a="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, home)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join("")
+    + `<button onclick="closePop();quickAgentForChat()">${ICON.plus}新建一个 Agent 拉进来</button>`, true);
   pp.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     closePop();
     await act(() => api("/api/chat/members", {id: detail.id, add: [b.dataset.a]}), "已拉进来，@ 它就能让它回答");
     showGroup = true; await reloadChat();
   });
+}
+function quickAgentForChat(){
+  const cid = detail.id;
+  quickAgent({title: "新建 Agent，拉进这个对话", done: async (id, name) => {
+    await act(() => api("/api/chat/members", {id: cid, add: [id]}));
+    closeDialog(); await loadState(); showGroup = true; await reloadChat(); toast(`「${name}」已拉进来，@ 它就能让它回答`);
+  }});
 }
 async function removeMember(aid){
   const a = agentOf(aid) || {name: ""};
@@ -1023,15 +1035,15 @@ function drawChat(){
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
-          ${c.readonly ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}</div>
+          ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}</div>
           <button class="send" id="send"></button>
         </div>
       </div>
       <div class="hint">Enter 发送，Shift + Enter 换行；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
     </div>`;
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt();
-  const head = document.querySelector(".chat-head");
-  if (head) $("#main").style.setProperty("--head-h", head.offsetHeight + "px");
+  const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
+  if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const input = $("#input");
   if (!c.readonly) input.addEventListener("input", atTyped);
@@ -1146,11 +1158,15 @@ function drawChatRcpt(){
 function chatAt(e){
   const own = detail && detail.agent, here = (detail ? ownerOf(detail.id) || ctxMachine : draft.machine) || S.me;
   const ms = (detail && detail.members) || [];
-  const list = S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here))   // 临时对话只能 @ 同一台电脑上的
-    .sort((x, y) => (ms.includes(y.id) ? 1 : 0) - (ms.includes(x.id) ? 1 : 0));
+  const group = ms.length > 0;               // 群聊：只能 @ 群里的人；要加人用「拉人」
+  const list = group ? ms.map(agentOf).filter(Boolean)
+    : S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
   if (!list.length) return toast("还没有建好的 Agent，先去 Agent 页建一个");
-  const pp = pop(e, `<div class="sec">让谁回答（可以多选）</div>` + list.map(a =>
+  const all = group && list.length > 1 ? `<button data-all="1"><span><div>所有人</div><div class="desc">${list.length} 个 Agent</div></span></button>` : "";
+  const pp = pop(e, `<div class="sec">${group ? "@ 群里的 Agent（可以多选）" : "让谁回答（可以多选）"}</div>` + all + list.map(a =>
     `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${ms.includes(a.id) ? "，群成员" : ""}${a.busy ? "，正在干活" : ""}</div></span>${chatRcpt.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
+  const dropAt = () => { const i = $("#input"); if (i && /[@＠]$/.test(i.value)) { i.value = i.value.slice(0, -1); draftText = i.value; } };
+  pp.querySelectorAll("[data-all]").forEach(b => b.onclick = () => { chatRcpt = list.map(a => a.id); dropAt(); closePop(); drawChatRcpt(); $("#input")?.focus(); });
   pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
     const m = b.dataset.m;
     chatRcpt = chatRcpt.includes(m) ? chatRcpt.filter(x => x !== m) : [...chatRcpt, m];
@@ -1162,7 +1178,7 @@ function chatAt(e){
   setTimeout(() => addEventListener("click", done, {once: true}), 0);
 }
 function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent
-  if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#chip-at"), stopPropagation(){}}), 0);
+  if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#chip-at") || $("#box"), stopPropagation(){}}), 0);
 }
 function liveOfMention(r){
   if (r.state !== "queued") return null;
@@ -1865,12 +1881,15 @@ function addMemberMenu(e){
     closePop(); await act(() => api("/api/project/member", {id: proj.id, add: b.dataset.a}), "已拉进来"); await loadState(); openProject(proj.id);
   });
 }
-function quickAgent(){
+function quickAgent(opts){
   closePop();
+  opts = opts || {title: `新建 Agent，拉进「${proj.name}」`,
+    done: async (id, name) => { await act(() => api("/api/project/member", {id: proj.id, add: id}));
+      closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`); }};
   let base = "claude", model = "", effort = "";
   const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model), model, v => model = v)}</div>
       <label>默认思考深度</label><div>${dd("q-effort", effortOpts(base, "跟随全局设置"), effort, v => effort = v)}</div>`;
-  dialog(`新建 Agent，拉进「${proj.name}」`, `<div class="form">
+  dialog(opts.title, `<div class="form">
       <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">
       <label for="q-role">角色说明</label><textarea id="q-role" class="textarea" placeholder="它负责什么、有什么要求"></textarea>
       <label>底座</label><div class="seg" id="q-base"><button class="on" data-b="claude">Claude Code</button><button data-b="codex" ${S.codex ? "" : "disabled"}>Codex</button></div>
@@ -1887,8 +1906,7 @@ function quickAgent(){
   $("#q-ok").onclick = async () => {
     const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
     const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name), model: model || null, effort: effort || null}}));
-    await act(() => api("/api/project/member", {id: proj.id, add: id}));
-    closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`);
+    await opts.done(id, name);
   };
 }
 function whereTag(aid, home){   // 不在项目那台电脑上的 Agent：标上在哪

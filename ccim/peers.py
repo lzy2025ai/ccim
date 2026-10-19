@@ -63,16 +63,18 @@ def _save(name, data):
 def identity():
     """这台电脑：编号（第一次生成）和名字（系统里的电脑名）。"""
     m = _load("machine.json", {})
-    if not m.get("id"):
+    changed = not os.path.exists(_file("machine.json"))
+    if not m.get("id"):                       # 编号一旦生成就不能变（别的电脑靠它认）
         m["id"] = "m" + uuid.uuid4().hex[:8]
+        changed = True
     if not m.get("name"):
         try:
             m["name"] = subprocess.run(["scutil", "--get", "ComputerName"], capture_output=True, text=True,
                                        timeout=5).stdout.strip() or socket.gethostname()
         except Exception:
             m["name"] = socket.gethostname()
-        _save("machine.json", m)
-    elif not os.path.exists(_file("machine.json")):
+        changed = True
+    if changed:
         _save("machine.json", m)
     return m
 

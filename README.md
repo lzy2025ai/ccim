@@ -2,11 +2,11 @@
 
 # ccim
 
-**在飞书里和你电脑上的 Claude Code 对话**
+**把你电脑上的 Claude Code / Codex 接到飞书、微信，再用一个网页管好几台电脑上的 Agent**
 
-每个项目一个飞书机器人。手机上发一句话，Claude 就在那个项目目录里动手干活。
+手机上发一句话，Claude 就在那台电脑的项目目录里动手干活。
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-飞书%20%2F%20Lark-3370FF) ![Claude Code](https://img.shields.io/badge/Claude%20Code-required-D97757)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-飞书%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-微信-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
 
 简体中文 · [English](README.en.md)
 
@@ -14,34 +14,49 @@
 
 ---
 
-## 能做什么
+## 一览
 
-> 现在 ccim 还有一个网页版：运行 `ccim web`，像 Claude / Codex 桌面版一样在浏览器里和 Agent 对话，
-> 建好的 Agent 也能接到飞书、微信，在手机上找到它。见下文「网页」。
+ccim 由四部分组成，按需要用，前面的不依赖后面的：
 
-- 📱 **随时随地用 Claude Code**：在飞书里发消息，就等于在项目目录里用 Claude Code。项目的 CLAUDE.md、skill、斜杠命令都能用，用的是你本机 `claude` 的登录。
-- ⚡ **扫码就能用**：第一次运行扫一下码，自动在你的飞书账号下建好机器人，不用去开放平台配置，也不需要公网地址。
-- 👀 **看得见进度**：Claude 干活时有一张实时刷新的「工作中」卡片，读了什么、改了什么、在跑什么命令一目了然。
-- ✋ **关键操作你拍板**：需要批准的操作会弹出审批卡片，点一下就行。
-- 🧵 **话题不打扰主对话**：对某条消息开话题，回复都留在话题里，每个话题是主对话的一个分支。
+| | 怎么用 | 能做什么 |
+|---|---|---|
+| **接到聊天软件** | `ccim`（飞书）、`ccim --weixin`（微信），扫码就行 | 在飞书、微信里和电脑上的 Claude Code / Codex 对话、派活、看进度、传文件、批准操作 |
+| **网页** | `ccim web` | 在浏览器里建 Agent（名字、角色、底座、工作目录）、和它对话；拉几个 Agent 进来就是群聊；定时任务；对话能分叉、引用 |
+| **多台电脑（局域网）** | 另一台电脑 `ccim join 地址 配对码` | 在一个网页里管几台电脑上的 Agent 和对话，群聊里可以拉另一台电脑上的 Agent |
+| **放到服务器上** | 服务器上 `ccim hub`，各台电脑 `ccim join https://服务器地址 配对码` | 在哪都能用浏览器（手机、iPad 也行）登录，统一管理所有电脑上的 Agent |
+
+不管从哪里发起，**活都在 Agent 所在的那台电脑上干**：代码、对话记录、Claude Code 的登录都留在那台电脑上；
+网页、服务器只负责显示和转发。
+
+```mermaid
+flowchart LR
+    IM["飞书 · 微信<br/>（手机）"] <--> A
+    B["浏览器<br/>电脑 · 手机 · iPad"] <-->|"HTTPS + 登录"| H["ccim hub<br/>你的服务器（可选）"]
+    H <--> A
+    H <--> M2
+    subgraph A["你的 Mac"]
+        direction TB
+        CA["ccim"] <--> CC["Claude Code / Codex<br/>在项目目录里干活"]
+    end
+    subgraph M2["另一台 Mac"]
+        direction TB
+        CB["ccim"] <--> CD["Claude Code / Codex"]
+    end
+```
+
+没有服务器时，其中一台 Mac 当总控，另一台在局域网里连它；只用一台 Mac 时，`ccim web` 在本机打开就行。
+
+## 在飞书、微信里能做什么
+
+- 📱 **随时随地用 Claude Code / Codex**：在飞书、微信里发消息，就等于在项目目录里用它。项目的 CLAUDE.md、skill、斜杠命令都能用，用的是你本机的登录。
+- ⚡ **扫码就能用**：飞书第一次运行扫一下码，自动在你的飞书账号下建好机器人，不用去开放平台配置，也不需要公网地址；微信扫码登录 ClawBot，一个微信号可以管好几个项目。
+- 👀 **看得见进度**：Claude 干活时有一张实时刷新的「工作中」卡片，读了什么、改了什么、在跑什么命令一目了然（飞书）。
+- ✋ **关键操作你拍板**：需要批准的操作会弹出审批卡片，点一下就行（微信里回复 y / n）。
+- 🧵 **话题不打扰主对话**：对某条消息开话题，回复都留在话题里，每个话题是主对话的一个分支（飞书）。
 - 📎 **双向传文件**：发图片、文件给它看；让它把截图、视频、成品发回给你。
 - 🔁 **电脑和手机无缝切换**：桌面端或终端里聊到一半要出门，一句话转到飞书接着聊；回到电脑前再接回终端。
 - 🛡️ **只听你的**：只响应你本人；群聊里别人能不能用由你决定。密钥存在 macOS 钥匙串里。
 - ♻️ **稳定常驻**：开机自启，崩溃、断网后自动恢复；网络抖动时自动重发，不丢回答。
-
-## 工作原理
-
-```mermaid
-flowchart LR
-    F["飞书<br/>私聊 · 群聊 · 话题"] <-->|"长连接"| C
-    subgraph Mac["你的 Mac"]
-        direction LR
-        C["ccim<br/>每个项目一个机器人"] <--> S["Claude Code<br/>在项目目录里工作"]
-        S <-.->|"可互相接着聊"| T["终端里的 claude"]
-    end
-```
-
-ccim 运行在你自己的 Mac 上。飞书消息通过长连接送到 ccim，ccim 再交给这个项目目录下的 Claude Code。每个聊天、群、话题各对应一个独立的对话。
 
 ## 快速开始
 

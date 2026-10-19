@@ -2,11 +2,11 @@
 
 # ccim
 
-**Chat with the Claude Code on your Mac — from Feishu / Lark**
+**Connect the Claude Code / Codex on your Macs to Feishu and WeChat — and manage agents on all your computers from one web page**
 
-One bot per project. Send a message from your phone, and Claude gets to work in that project's directory.
+Send a message from your phone, and Claude gets to work in the project directory on that computer.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-Feishu%20%2F%20Lark-3370FF) ![Claude Code](https://img.shields.io/badge/Claude%20Code-required-D97757)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-Feishu%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-WeChat-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
 
 [简体中文](README.md) · English
 
@@ -14,31 +14,49 @@ One bot per project. Send a message from your phone, and Claude gets to work in 
 
 ---
 
-## Features
+## At a glance
 
-- 📱 **Claude Code wherever you are**: a message in Feishu is like typing into Claude Code in your project directory. Your CLAUDE.md, skills and slash commands all work, using the `claude` login already on your Mac.
-- ⚡ **Set up with one scan**: on first run, scan a QR code and a bot is created under your Feishu account. No developer-console setup, no public URL.
-- 👀 **See what it's doing**: a live "Working" card shows what Claude is reading, editing and running.
-- ✋ **You approve what matters**: operations that need your sign-off show up as an approval card — one tap to decide.
-- 🧵 **Threads stay out of the way**: start a thread on any message and the replies stay in that thread. Each thread branches off the main conversation.
+ccim has four parts. Use what you need — each works without the ones after it:
+
+| | How | What you get |
+|---|---|---|
+| **Chat apps** | `ccim` (Feishu), `ccim --weixin` (WeChat) — just scan a QR code | Talk to Claude Code / Codex on your computer from Feishu or WeChat: assign work, watch progress, send files, approve operations |
+| **Web** | `ccim web` | Create agents (name, role, base, working folder) and chat with them in the browser; add more agents to a chat to make it a group; scheduled tasks; fork and quote messages |
+| **Several computers (LAN)** | On the other computer: `ccim join <address> <code>` | Manage agents and chats on several computers from one page; a group chat can include an agent from another computer |
+| **On a server** | `ccim hub` on your server; `ccim join https://<server> <code>` on each computer | Log in from any browser (phone and iPad too) and manage the agents on all your computers |
+
+Wherever you start it from, **the work runs on the computer the agent lives on**: code, conversation history and the
+Claude Code login stay there. The web page and the server only display and relay.
+
+```mermaid
+flowchart LR
+    IM["Feishu · WeChat<br/>(phone)"] <--> A
+    B["Browser<br/>computer · phone · iPad"] <-->|"HTTPS + login"| H["ccim hub<br/>your server (optional)"]
+    H <--> A
+    H <--> M2
+    subgraph A["Your Mac"]
+        direction TB
+        CA["ccim"] <--> CC["Claude Code / Codex<br/>working in the project"]
+    end
+    subgraph M2["Another Mac"]
+        direction TB
+        CB["ccim"] <--> CD["Claude Code / Codex"]
+    end
+```
+
+Without a server, one Mac acts as the hub and the other joins it over the LAN; with a single Mac, just open `ccim web` locally.
+
+## In Feishu and WeChat
+
+- 📱 **Claude Code / Codex wherever you are**: a message in Feishu or WeChat is like typing into it in your project directory. Your CLAUDE.md, skills and slash commands all work, using the login already on your Mac.
+- ⚡ **Set up with one scan**: in Feishu, scan a QR code on first run and a bot is created under your account — no developer-console setup, no public URL. In WeChat, scan to log in to ClawBot; one WeChat account can serve several projects.
+- 👀 **See what it's doing**: a live "Working" card shows what Claude is reading, editing and running (Feishu).
+- ✋ **You approve what matters**: operations that need your sign-off show up as an approval card — one tap to decide (reply y / n in WeChat).
+- 🧵 **Threads stay out of the way**: start a thread on any message and the replies stay in that thread. Each thread branches off the main conversation (Feishu).
 - 📎 **Files both ways**: send it images and files; ask it to send back screenshots, videos or results.
 - 🔁 **Switch between computer and phone**: heading out mid-conversation in Claude Desktop or the terminal? One sentence moves it to Feishu; pick it back up in the terminal when you return.
 - 🛡️ **Answers only to you**: it responds to you alone, and you decide whether others in a group can use it. Secrets live in the macOS Keychain.
 - ♻️ **Always on**: starts at login and recovers from crashes and network loss. Messages are retried on flaky networks, so replies don't get lost.
-
-## How it works
-
-```mermaid
-flowchart LR
-    F["Feishu / Lark<br/>DMs · groups · threads"] <-->|"persistent connection"| C
-    subgraph Mac["Your Mac"]
-        direction LR
-        C["ccim<br/>one bot per project"] <--> S["Claude Code<br/>in the project directory"]
-        S <-.->|"continue from either side"| T["claude in your terminal"]
-    end
-```
-
-ccim runs on your own Mac. Feishu messages arrive over a persistent connection, and ccim hands them to Claude Code in the project directory. Every DM, group and thread gets its own conversation.
 
 ## Quick start
 

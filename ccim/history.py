@@ -19,6 +19,9 @@ def _ts(iso):
         return None
 
 
+SYS_BLOCK = re.compile(r"<(system-reminder|task-notification|local-command-stdout|local-command-caveat)>[\s\S]*?</\1>")
+
+
 def claude(session_id, cwd=None, limit=200):
     path = handoff.transcript_path(session_id, cwd)
     if not path:
@@ -34,8 +37,9 @@ def claude(session_id, cwd=None, limit=200):
                 continue
             at = _ts(r.get("timestamp", ""))
             if handoff._is_prompt(r):
-                text = handoff._text(r).strip()
-                if text.startswith("<") and text.endswith(">"):     # 斜杠命令等系统塞进来的
+                # 系统塞进来的提醒、后台任务通知不是用户说的话，去掉；剩下的整段是标签（斜杠命令等）也跳过
+                text = SYS_BLOCK.sub("", handoff._text(r)).strip()
+                if not text or (text.startswith("<") and text.endswith(">")):
                     continue
                 out.append({"type": "user", "text": text, "files": [], "at": at})
                 continue

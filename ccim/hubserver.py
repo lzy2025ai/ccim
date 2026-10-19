@@ -231,14 +231,16 @@ class Hub:
 
 # ---------- HTTP ----------
 
-LOGIN_PAGE = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+LOGIN_PAGE = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="ccim"><meta name="theme-color" content="#F1F2EE">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>ccim</title><style>
 :root{--paper:#F1F2EE;--panel:#fff;--line:#DCDFD8;--ink:#1D222B;--muted:#6C7169;--qing:#2B4C6F;--bad:#B5402F}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--paper);color:var(--ink);
 font:15px/1.6 -apple-system,"PingFang SC","Hiragino Sans GB",sans-serif}
 .box{width:min(380px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px 26px}
 h1{font:600 22px "Songti SC","STSong",serif;margin:0 0 4px}p{color:var(--muted);margin:0 0 18px;font-size:13.5px}
-label{display:block;font-size:13px;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid #C9CDC4;border-radius:10px;font:inherit;outline:none}
+label{display:block;font-size:13px;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid #C9CDC4;border-radius:10px;font:inherit;font-size:16px;outline:none}
 input:focus{border-color:var(--qing)}button{width:100%;margin-top:20px;padding:11px;border:0;border-radius:10px;background:var(--qing);color:#fff;font:inherit;cursor:pointer}
 .err{color:var(--bad);font-size:13px;min-height:20px;margin-top:10px}.qr{width:200px;margin:6px auto}.qr svg{width:100%;height:auto}
 code{font:12px "SF Mono",Menlo,monospace;word-break:break-all;color:var(--muted)}
@@ -340,6 +342,10 @@ def _handler(hub):
                 return self._send(403, b"forbidden", "text/plain")
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            from .platform import static_file
+            st = static_file(u.path)
+            if st:
+                return self._send(200, st[0], st[1])
             if u.path == "/setup":
                 return self._send(200, _page(SETUP_BODY, SETUP_SCRIPT), "text/html; charset=utf-8")
             if u.path in ("/", "/index.html"):

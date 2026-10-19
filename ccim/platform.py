@@ -26,6 +26,16 @@ log = logging.getLogger("ccim.platform")
 PORT = 8977
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
+STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
+          "/icon-192.png": "image/png", "/icon-512.png": "image/png"}    # 添加到主屏幕用（#17）
+
+
+def static_file(path):
+    """图标、manifest：不用登录也能取（手机「添加到主屏幕」时浏览器自己来拿）。"""
+    if path not in STATIC:
+        return None
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:
+        return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
 MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
@@ -772,6 +782,11 @@ def _handler(pf):
                     return self._send(403, b"forbidden", "text/plain")
                 with open(PAGE, "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
+            if u.path in STATIC:
+                if not self._host_ok():
+                    return self._send(403, b"forbidden", "text/plain")
+                data, ctype = static_file(u.path)
+                return self._send(200, data, ctype)
             if u.path == "/api/events":
                 return self._events()
             if u.path == "/api/file":

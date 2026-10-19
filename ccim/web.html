@@ -2,7 +2,15 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F1F2EE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ccim">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <title>ccim</title>
 <style>
 :root{
@@ -402,25 +410,74 @@ body{overflow:hidden}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
 
 @media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
-/* 窄窗口、手机：导航缩成窄栏一直在；列表变成浮在内容上的抽屉，选了就收起 */
+/* 手机（#17）：底部标签栏；列表和内容一屏一个（.phone-main 时看内容，否则看列表），进去左上角有返回 */
+.pback{display:none}
 @media (max-width:760px){
-  .app,.app.list-off{grid-template-columns:56px 1fr}
-  .rail{padding:12px 0}
-  .rail a{width:48px;font-size:11px;padding:7px 0 5px}
-  .brand{margin-bottom:10px;font-size:13px}
-  .rail .unfold{display:grid}
-  .list{position:fixed;left:56px;top:0;bottom:0;width:min(320px,calc(100vw - 56px));z-index:15;background:var(--paper);
-    box-shadow:8px 0 30px rgba(29,34,43,.18)}
-  .app.list-off .list{display:none}
+  html,body{height:100%}
+  .app,.app.list-off,.app.cards,.app.cards.list-off{display:block;height:100dvh;padding-top:env(safe-area-inset-top)}
+  .rail{position:fixed;left:0;right:0;bottom:0;z-index:12;flex-direction:row;justify-content:space-around;align-items:stretch;gap:0;
+    padding:4px 6px calc(4px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);background:rgba(241,242,238,.96);backdrop-filter:blur(10px)}
+  .rail .brand,.rail .unfold,.rail .spacer{display:none}
+  .rail a{width:auto;flex:1;padding:6px 0 4px;font-size:11px;border-radius:10px}
+  .rail a.on{box-shadow:none;background:none}
+  .list,.app.list-off .list{position:static;display:flex;width:auto;height:calc(100dvh - env(safe-area-inset-top));box-shadow:none;border-right:0;
+    padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .list .fold{display:none}
+  .main{height:calc(100dvh - env(safe-area-inset-top))}
+  .app:not(.phone-main) .main{display:none}
+  .app.phone-main .list{display:none!important}
+  .app.phone-main .rail{display:none}
+  .app.cards .main,.app.cards.phone-main .main{display:flex;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .app.cards .rail{display:flex}
+  .app.cards .list{display:none!important}
+  .pback{display:grid;place-items:center;position:fixed;top:calc(8px + env(safe-area-inset-top));left:6px;z-index:11;width:36px;height:36px;border-radius:10px;color:var(--ink)}
+  .pback svg{width:22px;height:22px}
+  .app:not(.phone-main) .pback,.app.cards .pback{display:none}
+  .app.phone-main .chat-head,.app.phone-main .agent-top,.app.phone-main .d-head{padding-left:48px}
+  .chat-head{padding:8px 12px;gap:8px;flex-wrap:wrap}
+  .chat-head{flex-wrap:nowrap}
+  .chat-head > .seal{display:none}
+  .chat-head .grow{min-width:0}
+  .chat-head .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chat-head .meta .tag,.chat-head .meta .path,.chat-head .meta .fork-from,.chat-head .meta .muted:not(a){display:none}
+  .chat-head .stack{display:none}
+  .chat-head .btn{padding:6px 9px}
+  .dflt{display:none}
+  .ccard .role{min-height:0}
+  .msg,.composer{padding:0 12px}
+  .bubble{max-width:100%}
+  .composer{margin-bottom:calc(8px + env(safe-area-inset-bottom))}
+  .composer .hint{display:none}
+  textarea,input,.input,.textarea{font-size:16px!important}          /* iPhone 上小于 16px 的输入框一点就放大页面 */
   .newchat{padding:0 14px 8vh}
-  .chat-head{padding:10px 14px}
-  .msg,.composer{padding:0 14px}
-  .agent-top{padding:18px 16px 14px;flex-wrap:wrap}
-  .pane{padding:16px}
+  .agent-top{padding:14px 14px 12px;flex-wrap:wrap}
+  .pane{padding:14px}
   .form{grid-template-columns:1fr;gap:6px 0}
   .form>label,.form>.sub>label{padding-top:10px}
+  .ov-head{padding:14px 16px 0;flex-wrap:wrap}
+  .ov-head .search{width:100%;order:3}
+  .mtabs{padding:10px 12px 0}
+  .ov-body{padding:14px 12px 24px}
+  .cgrid{grid-template-columns:1fr}
+  .item{padding:11px 10px}
+  .chip,.wchip{padding:7px 10px}
+  .icon-btn{width:36px;height:36px}
+  /* 弹出的选择菜单：从底部弹出 */
+  .pop{left:0!important;right:0!important;top:auto!important;bottom:0!important;max-height:72dvh!important;min-width:0!important;
+    border-radius:16px 16px 0 0;padding:8px 8px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(29,34,43,.22)}
+  .pop button{padding:12px 12px}
+  .dialog{width:100vw;max-height:92dvh;border-radius:16px 16px 0 0;align-self:end}
+  .scrim{place-items:end center}
+  /* 群聊成员栏：全屏 */
+  .gpanel{position:fixed;inset:0;top:0;width:auto;z-index:25;padding:calc(14px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
   .members{position:fixed;right:0;top:0;bottom:0;z-index:15;box-shadow:-8px 0 30px rgba(29,34,43,.18)}
+  .compare{grid-template-columns:1fr!important}
+  .toast{bottom:calc(80px + env(safe-area-inset-bottom))}
 }
+/* iPad 竖屏这类中等宽度：列表里「网页」这种来源标签不显示，给标题留地方 */
+@media (max-width:1100px){.list .tag.web{display:none}}
+/* 触屏（手机、iPad）：没有鼠标悬停，悬停才出现的按钮一直显示 */
+@media (hover:none){.ccard .pin{opacity:.7}.item .fold{opacity:1}}
 /* ---------- 正式版补充 ---------- */
 .answer{min-width:0;overflow-wrap:anywhere}
 .answer table{display:block;max-width:100%;overflow-x:auto;overflow-wrap:normal}
@@ -491,6 +548,7 @@ body{overflow:hidden}
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
   </nav>
+  <button class="pback" id="pback" aria-label="返回" onclick="phoneBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>
   <section class="list" id="list"></section>
   <main class="main" id="main"></main>
 </div>
@@ -766,6 +824,20 @@ function connectEvents(){
 
 // ================= 路由 =================
 function narrow(){ return innerWidth <= 760; }
+function portrait(){ return innerWidth > 760 && innerWidth <= 900; }
+// 手机：现在该看内容还是看列表
+function phoneMain(){
+  if (!current.id) return false;
+  if (current.view === "agents" && current.id !== "new") return !!current.sub;   // 进了 Agent 先看它的对话列表
+  return true;
+}
+function phoneBack(){
+  const v = current.view, id = current.id;
+  const to = v === "agents" ? (current.sub && id !== "new" ? `#/agents/${encodeURIComponent(id)}` : "#/agents")
+    : v === "schedules" && id && id.startsWith("edit-") ? `#/schedules/${encodeURIComponent(id.slice(5))}`
+    : `#/${v}`;
+  location.hash = to;
+}
 function route(){
   const parts = location.hash.slice(2).split("/");
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null};
@@ -776,7 +848,8 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects") && (!current.id || current.id === "new"));
-  if (narrow()) document.querySelector(".app").classList.toggle("list-off", !!current.id);   // 窄屏：打开了某一项就收起列表
+  if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
+  else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   closePop();
   renderList();
@@ -789,6 +862,7 @@ function route(){
     else if (!current.id) renderAgentCards();
     else if (current.sub === "settings") renderAgent(current.id);
     else if (current.sub) openChat(current.sub);
+    else if (narrow()) renderAgentSide();
     else openAgentLatest(current.id);
   }
   else if (current.view === "settings") current.id === "machines" || S.hub ? renderMachines() : renderSettings();
@@ -1603,8 +1677,9 @@ function renderAgentForm(){
 // ================= 设置 =================
 function renderSettingsList(){
   const onMachines = current.id === "machines" || (S.hub && current.id !== "account");
+  const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
-    ${S.hub ? "" : `<a class="item ${!onMachines ? "on" : ""}" href="#/settings" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>`}
+    ${S.hub ? "" : `<a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>`}
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "在这里管另一台电脑上的 Agent"}</span></span></a>
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
 }
@@ -2188,12 +2263,14 @@ function toggleList(on){
 }
 
 let wasNarrow = narrow();
-addEventListener("resize", () => {             // 跨过窄屏线时：变窄按当前页面收起，变宽恢复原来的习惯
+addEventListener("resize", () => {             // 跨过手机宽度：变窄按当前页面一屏一个，变宽恢复原来的折叠习惯
   if (narrow() === wasNarrow) return;
   wasNarrow = narrow();
-  let off = !!current.id;
-  if (!wasNarrow) { try { off = !!localStorage.getItem("ccim.listOff"); } catch { off = false; } }
-  document.querySelector(".app").classList.toggle("list-off", off);
+  const app = document.querySelector(".app");
+  app.classList.toggle("phone-main", wasNarrow && phoneMain());
+  let off = false;
+  if (!wasNarrow) { try { off = !!localStorage.getItem("ccim.listOff"); } catch {} }
+  app.classList.toggle("list-off", off);
 });
 
 // ================= 启动 =================

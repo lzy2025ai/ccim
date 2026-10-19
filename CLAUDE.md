@@ -107,6 +107,13 @@
   各人看到哪记在主对话 meta 的 ctx_upto。群聊说明改过后各人下一次被问到时在消息前面带上（note_seen）。
   启动时 `migrate_projects` 把每个项目复制成群聊（只做一次，state 的 groups_from_projects）：第一个本机成员当主 Agent 并 fork 它在项目里的会话，
   记录转成 user / answer / mention，指向项目的定时任务改成 kind=group
+- `ccim/hubserver.py`：服务器上的总控（#16，`ccim hub --url https://IP`）。只做网页、登录、转发：Peers(server=True) 不把自己算一台电脑，
+  /peer/* 和网页各听 127.0.0.1 的 8978 / 8977，前面 nginx 做 HTTPS（Let's Encrypt IP 证书，acme.sh shortlived 自动续）。
+  登录：密码 scrypt + TOTP（同一个码不能用两次），第一次用 setup 链接（`ccim hub setup-link`）设置；Cookie 只存摘要，接口还要 X-CCIM 头；
+  输错锁定（同地址 15 分钟 5 次、全部一小时 20 次）。/api/state 拼各台电脑的（me 是第一台在线的电脑，hub 字段标明在服务器上），
+  其余接口按 X-Machine 转发；开机密码、选文件夹、在访达里显示一律不经过服务器。网页里 S.hub 时每台电脑都按「别的电脑」处理。
+  电脑那边 `ccim join https://IP 配对码`（hub.json 里 server=true，_conn 走 HTTPS、用 certifi 的根证书）。
+  部署（OpenClaw 150.158.91.156）：~/ccim-hub/venv（pip install --no-deps 源码 + qrcode、certifi），systemd ccim-hub，nginx sites-available/ccim-hub
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

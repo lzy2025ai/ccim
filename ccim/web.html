@@ -122,6 +122,13 @@ body{overflow:hidden}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .msg.wide{max-width:1180px}
+/* 新对话：在哪台电脑、哪个目录干活，放在输入框上面（名字、路径再长也不挤输入框下面那一行） */
+.where-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.wchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;color:var(--ink-2)}
+.wchip:hover{border-color:var(--line-strong);color:var(--ink)}
+.wchip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wchip span.path{font:12.5px var(--mono);color:inherit}
+.wchip svg{width:14px;height:14px;flex:none}
 /* 群聊 */
 #main{position:relative}
 #main.with-panel .thread,#main.with-panel .composer,#main.with-panel .notice{margin-right:300px}
@@ -211,7 +218,7 @@ body{overflow:hidden}
 .dirs .dir:hover{background:var(--sunk)}
 .dirs .dir svg{width:15px;height:15px;color:var(--muted)}
 .dirs .dir.up{color:var(--muted)}
-.tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px}
+.tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px;display:inline-block;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .tag.mach.off{color:var(--faint);background:var(--sunk)}
 .approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
 .approve .pw:focus{border-color:var(--ink-2)}
@@ -502,6 +509,7 @@ const ICON = {
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
   stop:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+  monitor:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   star:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6L2.5 9.3l6.6-.8z"/></svg>',
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>',
@@ -1288,6 +1296,10 @@ function renderNewChat(){
   $("#main").innerHTML = `
     <div class="newchat">
       <h2>新对话</h2>
+      <div class="where-row">
+        ${multi() ? `<button class="wchip" onclick="pickMachine(event)" title="在哪台电脑上干活">${ICON.monitor}<span>${esc((machineOf(d.machine) || {}).name || "")}</span>${ICON.down}</button>` : ""}
+        <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(tilde(d.dir)) : "不选工作目录"}</span>${ICON.down}</button>
+      </div>
       <div class="composer" style="margin:0;padding:0">
         <div class="box" id="box">
           <div class="rcpt" id="rcpt-chat"></div>
@@ -1299,7 +1311,6 @@ function renderNewChat(){
             <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
-            <button class="chip" onclick="pickDir(event)">${ICON.folder}${isRemote(d.machine) ? esc((machineOf(d.machine) || {}).name || "") + "：" : ""}${d.dir ? `<span class="path" style="color:inherit">${esc(tilde(d.dir))}</span>` : "不选工作目录"}${ICON.down}</button>
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
@@ -1321,13 +1332,15 @@ function draftPick(e, k){
   const opts = k === "model" ? modelOpts(draft.base, "跟随默认", draft.model) : effortOpts(draft.base, "跟随默认");
   pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}=${q(v)};closePop();renderNewChat()`));
 }
+function pickMachine(e){
+  pop(e, `<div class="sec">在哪台电脑上</div>` + S.machines.map(m => `<button ${m.online ? "" : "disabled"} onclick="draft.machine=${q(m.id)};draft.dir='';draft.model='';closePop();renderNewChat()"><span><div>${esc(m.name)}${m.me ? "（这台）" : ""}</div>${m.online ? "" : `<div class="desc">离线</div>`}</span>${draft.machine === m.id ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+}
 async function pickDir(e){
   const anchor = e.currentTarget, ev = {currentTarget: anchor, stopPropagation(){}};
   e.stopPropagation();
   let recent = [];
   try { recent = (await api("/api/recent", undefined, draft.machine)).folders; } catch {}
-  const mm = multi() ? `<div class="sec">在哪台电脑上</div>` + S.machines.map(m => `<button ${m.online ? "" : "disabled"} onclick="draft.machine=${q(m.id)};draft.dir='';draft.model='';closePop();renderNewChat()"><span><div>${esc(m.name)}${m.me ? "（这台）" : ""}</div>${m.online ? "" : `<div class="desc">离线</div>`}</span>${draft.machine === m.id ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "";
-  pop(ev, mm + `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
+  pop(ev, `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
     + (recent.length ? `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir=${q(r.path)};closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(r.home)}</span>${draft.dir === r.path ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "")
     + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();}, draft.machine)">${ICON.folder}选择其他文件夹…</button>`);
 }

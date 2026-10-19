@@ -138,9 +138,25 @@ def local_request(pf, method, path, body=b"", headers=None, timeout=CALL_TIMEOUT
         c.close()
 
 
+def _conn(url, timeout):
+    """连总控：http 或 https（服务器上的总控，证书按系统 / certifi 的根证书验证）。"""
+    u = urlparse(url)
+    if u.scheme == "https":
+        import ssl
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            ctx = ssl.create_default_context()
+        return http.client.HTTPSConnection(u.hostname, u.port or 443, timeout=timeout, context=ctx)
+    return http.client.HTTPConnection(u.hostname, u.port or PEER_PORT, timeout=timeout)
+
+
 class Peers:
-    def __init__(self, pf):
+    def __init__(self, pf, server=False, public_url=None):
         self.pf = pf
+        self.server_hub = server                      # 服务器上的总控：自己不是一台干活的电脑
+        self.public_url = public_url
         self.me = identity()
         self.lock = threading.RLock()
         self.nonces = Nonces()
@@ -165,7 +181,7 @@ class Peers:
             for fn in (self._poll_loop, self._push_loop, self._outbox_loop):
                 threading.Thread(target=fn, name=fn.__name__, daemon=True).start()
         else:
-            if self.nodes:
+            if self.nodes or self.server_hub:
                 self.serve()
             threading.Thread(target=self._fanout_loop, name="fanout", daemon=True).start()
             threading.Thread(target=self._outbox_loop, name="outbox", daemon=True).start()
@@ -175,12 +191,13 @@ class Peers:
             if self.server:
                 return
             try:
-                self.server = ThreadingHTTPServer(("0.0.0.0", PEER_PORT), _handler(self))
+                # 服务器上的总控在 nginx 后面，只听本机；局域网的总控要让别的电脑连进来
+                self.server = ThreadingHTTPServer(("127.0.0.1" if self.server_hub else "0.0.0.0", PEER_PORT), _handler(self))
             except OSError as e:
                 raise RuntimeError(f"端口 {PEER_PORT} 被占用了，别的电脑连不进来：{e}")
             self.server.daemon_threads = True
             threading.Thread(target=self.server.serve_forever, name="peers", daemon=True).start()
-            log.info("等别的电脑连进来：%s 端口 %d", ", ".join(lan_ips()) or "本机", PEER_PORT)
+            log.info("等别的电脑连进来：%s 端口 %d", "127.0.0.1（前面是 nginx）" if self.server_hub else ", ".join(lan_ips()) or "本机", PEER_PORT)
 
     def stop(self):
         self.stopping = True
@@ -204,12 +221,12 @@ class Peers:
     def machines(self):
         """[{id, name, me, hub, online}]，第一个是总控。"""
         if self.is_hub():
-            out = [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
+            out = [] if self.server_hub else [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
             out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()]
         else:
             out = [dict(m) for m in self.machines_from_hub] or \
-                [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True},
-                 {"id": self.me["id"], "name": self.me["name"], "hub": False}]
+                ([] if self.hub.get("server") else [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True}]) + \
+                [{"id": self.me["id"], "name": self.me["name"], "hub": False}]
         for m in out:
             m["me"] = m["id"] == self.me["id"]
             m["online"] = self.online(m["id"])
@@ -225,6 +242,8 @@ class Peers:
         with self.lock:
             self.codes = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
             self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0}
+        if self.public_url:                   # 服务器上的总控：给公网地址
+            return {"code": code, "minutes": CODE_TTL // 60, "hosts": [self.public_url], "port": None}
         return {"code": code, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
 
     def pair(self, body):
@@ -245,7 +264,8 @@ class Peers:
             self.nodes[mid] = {"name": str(body.get("name") or mid)[:40], "key": key, "added": registry.now()}
             _save("peers.json", self.nodes)
         self._emit_machines()
-        return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL}
+        return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL,
+                "server": self.server_hub}
 
     def remove(self, mid):
         if not self.is_hub():
@@ -365,6 +385,8 @@ class Peers:
                 pass
         out["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
         out["machines"], out["me"], out["machine_info"] = machines, me, extra
+        if self.hub:
+            out["hub_name"] = self.hub.get("hub_name")
         return out
 
     def agent_home(self, aid):
@@ -452,8 +474,7 @@ class Peers:
     # ----- 加入的电脑：和总控说话 -----
 
     def _hub_request(self, path, body=b"", headers=None, timeout=30):
-        u = urlparse(self.hub["url"])
-        c = http.client.HTTPConnection(u.hostname, u.port or PEER_PORT, timeout=timeout)
+        c = _conn(self.hub["url"], timeout)
         ts, nonce = str(int(time.time())), secrets.token_hex(12)
         h = dict(headers or {}, **{"X-Node": self.me["id"], "X-Ts": ts, "X-Nonce": nonce,
                                    "X-Sig": _sign(self.hub["key"], "POST", path, ts, nonce, _digest(body))})
@@ -626,25 +647,33 @@ def leave():
 
 
 def join(host, code):
-    """加入另一台电脑（总控）。返回总控的名字。"""
-    if ":" not in host.split("//")[-1]:
-        host = f"{host}:{PEER_PORT}"
-    url = host if host.startswith("http") else "http://" + host
+    """加入另一台电脑或服务器上的总控。返回总控的名字。https:// 开头的是服务器（端口默认 443）。"""
+    if host.startswith("https://"):
+        url = host.rstrip("/")
+    else:
+        if ":" not in host.split("//")[-1]:
+            host = f"{host}:{PEER_PORT}"
+        url = host if host.startswith("http") else "http://" + host
     me = identity()
     u = urlparse(url)
-    c = http.client.HTTPConnection(u.hostname, u.port or PEER_PORT, timeout=15)
+    c = _conn(url, 15)
     try:
         c.request("POST", "/peer/pair", body=json.dumps({"code": code, "id": me["id"], "name": me["name"]}).encode(),
                   headers={"Content-Type": "application/json"})
         r = c.getresponse()
-        data = json.loads(r.read() or b"{}")
+        raw = r.read()
+        try:
+            data = json.loads(raw or b"{}")
+        except ValueError:
+            data = {}
     except OSError as e:
-        raise SystemExit(f"连不上 {u.hostname}:{u.port or PEER_PORT}（{e}）。确认两台电脑在同一个网络里，"
-                         f"那台电脑的网页「设置」里生成过配对码，而且系统防火墙允许 ccim 接收连接。")
+        where = "服务器" if u.scheme == "https" else "那台电脑"
+        raise SystemExit(f"连不上 {u.hostname}（{e}）。确认地址对、{where}上的 ccim 在运行"
+                         + ("，而且两台电脑在同一个网络里、系统防火墙允许 ccim 接收连接。" if u.scheme != "https" else "。"))
     finally:
         c.close()
     if r.status != 200:
         raise SystemExit(data.get("error") or f"加入失败（{r.status}）")
     _save("hub.json", {"url": url, "hub_id": data["hub_id"], "hub_name": data["hub_name"], "key": data["key"],
-                       "joined": registry.now()})
+                       "server": bool(data.get("server")), "joined": registry.now()})
     return data["hub_name"]

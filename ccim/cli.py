@@ -783,13 +783,23 @@ def cmd_join(args):
         print("已断开。网页里只显示这台电脑自己的东西了。")
     else:
         if not args.host or not args.code:
-            raise SystemExit("用法：ccim join 那台电脑的地址 配对码（配对码在那台电脑的网页「设置」→「电脑」里生成）")
+            raise SystemExit("用法：ccim join 地址 配对码（配对码在总控网页的「设置」→「电脑」里生成，地址也在那里）")
         name = peers.join(args.host, args.code)
         print(f"已加入「{name}」。")
     if daemon.running(h):
         daemon.stop(h)
     daemon.start_always(h, "web")
     print(f"在这台电脑上打开 {platform.url()} 就能看到{'两台' if not args.leave else '这台'}电脑的 Agent 和对话。")
+
+
+def cmd_hub(args):
+    """服务器上的总控（#16）：网页、登录、把请求转给各台电脑。前面用 nginx 做 HTTPS。"""
+    from . import hubserver
+    if args.action == "setup-link":
+        link = hubserver.Hub(args.url, args.port).setup_link()
+        print(link or "已经设置过登录了。忘了密码的话删掉 ~/.ccim/hub/auth.json 再运行这个命令。")
+        return
+    hubserver.run(args.url, args.port, args.peer_port)
 
 
 def cmd_unpair(args):
@@ -875,6 +885,12 @@ def parser():
     s.add_argument("--port", type=int, default=8977, help="端口（默认 8977，被占用就往后找）")
     s.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     s.set_defaults(fn=cmd_web)
+    s = sub.add_parser("hub", help="在服务器上运行总控：各台电脑连上来，用浏览器登录后在哪都能管")
+    s.add_argument("action", nargs="?", choices=["run", "setup-link"], default="run")
+    s.add_argument("--url", help="对外的地址，比如 https://1.2.3.4")
+    s.add_argument("--port", type=int, default=8977, help="网页端口（只听本机，前面用 nginx）")
+    s.add_argument("--peer-port", type=int, default=8978, help="电脑连进来的端口（只听本机，前面用 nginx）")
+    s.set_defaults(fn=cmd_hub)
     s = sub.add_parser("join", help="加入另一台电脑：在一个网页里管理几台电脑的 Agent 和对话")
     s.add_argument("host", nargs="?", help="那台电脑的地址（局域网 IP）")
     s.add_argument("code", nargs="?", help="配对码：在那台电脑的网页「设置」→「电脑」里生成")
@@ -897,7 +913,7 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run):
+    if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run, cmd_hub):
         from . import agents, weixin_hub
         weixin_hub.migrate()
         agents.migrate()                      # 以前的「项目」变成 Agent

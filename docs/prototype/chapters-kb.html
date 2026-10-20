@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccim · 章节、退回、知识库、归档清理（视觉稿）</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1; --lu:#3F7A5E; --zhe:#9A5B34; --huang:#B8902A; --zhu:#B5402F;
+  --ok:#3F7A5E; --warn:#B8902A; --bad:#B5402F;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+svg{flex:none}
+.app{display:grid;grid-template-columns:76px 280px 1fr;height:100vh}
+.app.wide{grid-template-columns:76px 1fr}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);margin-bottom:18px}
+.rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);text-decoration:none;font-size:12px}
+.rail a svg{width:20px;height:20px}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.rail .new{position:relative}
+.rail .new::after{content:"";position:absolute;top:6px;right:12px;width:6px;height:6px;border-radius:50%;background:var(--zhu)}
+.rail .spacer{flex:1}
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.list-head{display:flex;align-items:center;gap:8px;padding:16px 14px 8px}
+.list-head h1{font:600 18px/1.2 var(--song);margin:0;flex:1}
+.group{font-size:12px;color:var(--faint);padding:12px 14px 4px}
+.item{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:0 6px;border-radius:9px}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.when{font-size:12px;color:var(--faint);white-space:nowrap}
+.left{font-size:12px;color:var(--warn);white-space:nowrap}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);white-space:nowrap}
+.btn.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn svg{width:15px;height:15px}
+.icon-btn{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.icon-btn svg{width:17px;height:17px}
+.icon-btn.on{background:var(--qing-soft);color:var(--qing)}
+.seal{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font:600 13px/1 var(--song);background:var(--qing);flex:none}
+.seal.sm{width:22px;height:22px;border-radius:6px;font-size:11px}
+.seal.zhe{background:var(--zhe)} .seal.lu{background:var(--lu)}
+
+/* ---------- 对话页 ---------- */
+.main{background:var(--panel);display:flex;flex-direction:column;min-width:0;position:relative}
+.chat-head{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line)}
+.chat-head .name{font:600 17px/1.3 var(--song)}
+.chat-head .meta{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.chat-body{flex:1;display:grid;grid-template-columns:1fr 210px;min-height:0}
+.chat-body.notoc{grid-template-columns:1fr}
+.thread{overflow:auto;padding:22px 34px 30px}
+.msg{max-width:720px;margin:0 auto 22px}
+.msg.me{display:flex;flex-direction:column;align-items:flex-end}
+.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;max-width:80%}
+.from{display:flex;align-items:center;gap:8px;font:600 13px/1 var(--song);margin-bottom:8px}
+.answer p{margin:0 0 8px}
+.answer ul{margin:0 0 8px;padding-left:20px}
+.chapter{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--qing);background:var(--qing-soft);padding:2px 9px 2px 7px;border-radius:6px;margin-bottom:8px}
+.chapter svg{width:13px;height:13px}
+.acts{display:flex;gap:2px;margin-top:6px;color:var(--muted);font-size:12.5px;flex-wrap:wrap}
+.acts button{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:6px}
+.acts button:hover,.acts button.hl{background:var(--sunk);color:var(--ink)}
+.acts button.hl{box-shadow:inset 0 0 0 1.5px var(--qing);color:var(--qing);background:var(--qing-soft)}
+.acts svg{width:14px;height:14px}
+.sel{background:#CFE0F3;border-radius:2px}
+.seltool{position:absolute;display:flex;gap:2px;background:var(--ink);color:#fff;border-radius:8px;padding:3px;font-size:12.5px;box-shadow:0 8px 20px rgba(0,0,0,.18)}
+.seltool button{padding:4px 9px;border-radius:6px;display:inline-flex;gap:5px;align-items:center}
+.seltool button:hover{background:rgba(255,255,255,.14)}
+.seltool svg{width:14px;height:14px}
+.toc{border-left:1px solid var(--line);padding:18px 14px;overflow:auto;background:var(--panel)}
+.toc h3{font-size:12px;color:var(--faint);font-weight:500;margin:0 0 10px;display:flex;align-items:center}
+.toc h3 span{flex:1}
+.toc ol{list-style:none;margin:0;padding:0;border-left:1.5px solid var(--line)}
+.toc li{padding:5px 0 5px 12px;margin-left:-1.5px;border-left:1.5px solid transparent;font-size:13px;color:var(--ink-2);cursor:pointer;line-height:1.4}
+.toc li .t{display:block}
+.toc li .d{display:block;font-size:11.5px;color:var(--faint)}
+.toc li.on{border-left-color:var(--qing);color:var(--qing);font-weight:500}
+.composer{border-top:1px solid var(--line);padding:12px 22px 16px}
+.box{max-width:720px;margin:0 auto;border:1px solid var(--line-strong);border-radius:14px;padding:10px 12px;min-height:76px;position:relative}
+.box .ph{color:var(--faint)}
+.box .send{position:absolute;right:10px;bottom:10px;width:30px;height:30px;border-radius:8px;background:var(--qing);color:#fff;display:flex;align-items:center;justify-content:center}
+.box .send svg{width:16px;height:16px}
+.where{max-width:720px;margin:0 auto 8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:7px;border:1px solid var(--line);color:var(--ink-2);background:var(--panel)}
+.chip svg{width:13px;height:13px;color:var(--muted)}
+.chip.mount{border-color:#C8D6E6;background:var(--qing-soft);color:var(--qing)}
+.chip.mount svg{color:var(--qing)}
+.chip.add{border-style:dashed;color:var(--muted)}
+.chip .x{opacity:.6;margin-left:2px}
+
+/* ---------- 弹框 ---------- */
+.scrim{position:fixed;inset:0;background:rgba(29,34,43,.28);display:flex;align-items:center;justify-content:center;z-index:20}
+.dialog{width:440px;max-width:calc(100vw - 32px);background:var(--panel);border-radius:14px;box-shadow:0 20px 50px rgba(29,34,43,.25)}
+.dialog header{display:flex;align-items:center;padding:16px 18px 6px}
+.dialog h2{font:600 16px/1.3 var(--song);margin:0;flex:1}
+.dialog .body{padding:6px 18px 4px}
+.dialog footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px 16px}
+.quote{border-left:3px solid var(--line-strong);padding:4px 10px;color:var(--ink-2);font-size:13px;margin:6px 0 12px;background:var(--paper);border-radius:0 6px 6px 0}
+.check{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.check .box2{width:17px;height:17px;border-radius:5px;background:var(--qing);color:#fff;display:flex;align-items:center;justify-content:center;margin-top:2px;flex:none}
+.check .box2 svg{width:12px;height:12px}
+.check .s{font-size:12.5px;color:var(--muted)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px}
+.input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel)}
+.select{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--qing);background:var(--panel)}
+.select svg{width:14px;height:14px;color:var(--muted)}
+.pop{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;margin-top:4px}
+.pop .opt{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px}
+.pop .opt.on{background:var(--sunk)}
+.pop .opt .n{margin-left:auto;font-size:12px;color:var(--faint)}
+.pop .opt .ck{color:var(--qing)}
+.pop .opt.new{color:var(--qing)}
+.pop .opt svg{width:15px;height:15px}
+
+/* ---------- 知识库 ---------- */
+.overview{background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.ov-head{padding:22px 32px 6px;display:flex;align-items:center;gap:12px}
+.ov-head h1{font:600 24px/1.2 var(--song);margin:0;flex:1}
+.search{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--sunk);color:var(--muted);width:240px}
+.search svg{width:15px;height:15px}
+.ov-sub{padding:0 32px 14px;color:var(--muted);font-size:13px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:6px 32px 32px;overflow:auto}
+.ccard{border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--panel);min-height:168px}
+.ccard .nm{font:600 16px/1.3 var(--song);display:flex;align-items:center;gap:8px}
+.ccard .nm .bk{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff}
+.ccard .nm .bk svg{width:15px;height:15px}
+.ccard .ds{color:var(--muted);font-size:13px;flex:1}
+.ccard .ft{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--faint);border-top:1px solid var(--line);padding-top:8px}
+.ccard .ft .go{margin-left:auto;color:var(--qing);font-size:13px}
+.ccard.add{border-style:dashed;align-items:center;justify-content:center;color:var(--muted)}
+.ccard.add svg{width:22px;height:22px}
+.sync{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ok)}
+.sync i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+
+.kb{display:grid;grid-template-columns:340px 1fr;min-height:0;flex:1}
+.kb-list{border-right:1px solid var(--line);overflow:auto;padding:8px 10px}
+.entry{padding:10px 12px;border-radius:10px;margin-bottom:2px}
+.entry.on{background:var(--paper);box-shadow:0 0 0 1px var(--line)}
+.entry .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry .p{font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.entry .m{font-size:11.5px;color:var(--faint);margin-top:3px}
+.reader{overflow:auto;padding:24px 40px}
+.reader h2{font:600 20px/1.35 var(--song);margin:0 0 6px}
+.src{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.src a{color:var(--qing);text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.src a svg{width:13px;height:13px}
+.src .gone{color:var(--faint);text-decoration:line-through}
+.reader .content p{margin:0 0 10px}
+.reader .content ul{padding-left:20px;margin:0 0 10px}
+.reader .acts2{display:flex;gap:8px;margin-top:18px}
+
+/* ---------- 设置 ---------- */
+.settings{background:var(--panel);overflow:auto;padding:22px 40px}
+.settings h1{font:600 22px/1.2 var(--song);margin:0 0 18px}
+.sect{max-width:640px;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.sect h3{margin:0 0 10px;font:600 15px/1.3 var(--song)}
+.row{display:flex;align-items:center;gap:12px}
+.row .grow{flex:1}
+.row .s{font-size:12.5px;color:var(--muted)}
+.seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px}
+.seg button{padding:4px 12px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* ---------- 视觉稿切换 ---------- */
+.switch{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:2px;background:var(--ink);padding:4px;border-radius:11px;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100vw - 20px);overflow:auto}
+.switch a{color:#C9CDC4;text-decoration:none;font-size:12.5px;padding:5px 10px;border-radius:8px;white-space:nowrap}
+.switch a.on{background:#fff;color:var(--ink)}
+.screen{display:none}
+.screen.on{display:contents}
+.note{position:fixed;right:16px;top:12px;background:#FFF8E6;border:1px solid #EAD9A8;color:#7A5E16;font-size:12.5px;padding:6px 10px;border-radius:8px;z-index:30;max-width:340px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 5h16v11H9l-5 4z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v4l3 2M9 2h6" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-agent" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-kb" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 24 24"><path d="M4 7h7M4 12h11M4 17h7M18 14v5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="19" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4h11l-1.5 4L16 12H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 14 4 9l5-5"/><path fill="none" stroke="currentColor" stroke-width="2" d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L19 7" fill="none" stroke="currentColor" stroke-width="3"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-mon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></symbol>
+</svg>
+
+<!-- 左边导航（各页共用，按页面换高亮） -->
+<template id="rail">
+  <nav class="rail"><div class="brand">ccim</div>
+    <a data-k="chat"><svg><use href="#i-chat"/></svg>对话</a>
+    <a data-k="clock"><svg><use href="#i-clock"/></svg>定时</a>
+    <a data-k="agent"><svg><use href="#i-agent"/></svg>Agent</a>
+    <a data-k="kb" class="new"><svg><use href="#i-kb"/></svg>知识库</a>
+    <div class="spacer"></div>
+    <a data-k="gear"><svg><use href="#i-gear"/></svg>设置</a>
+  </nav>
+</template>
+
+<!-- ============ 1. 对话：章节目录 ============ -->
+<section class="screen" id="s-chat">
+<div class="app">
+  <nav data-rail="agent"></nav>
+  <aside class="list">
+    <div class="list-head"><h1>官网改版</h1></div>
+    <div class="group">今天</div>
+    <div class="item on"><span class="title">首页改版方案</span><span class="when">10:42</span></div>
+    <div class="item"><span class="title">导航栏交互细节</span><span class="when">09:15</span></div>
+    <div class="group">更早</div>
+    <div class="item"><span class="title">接口限流方案</span><span class="when">昨天</span></div>
+    <div class="item"><span class="title">图片懒加载排查</span><span class="when">10月16日</span></div>
+    <div class="group">已归档 3</div>
+    <div class="item"><span class="title">旧版首页埋点</span><span class="left">还有 3 天删除</span></div>
+    <div class="item"><span class="title">图标替换</span><span class="when">10月2日</span></div>
+    <div class="item"><span class="title">发布清单</span><span class="when">9月28日</span></div>
+  </aside>
+  <main class="main">
+    <div class="chat-head"><span class="seal">前端</span>
+      <div style="flex:1"><div class="name">首页改版方案</div><div class="meta">前端开发<span class="tag">Claude Code</span></div></div>
+      <button class="icon-btn on" title="章节"><svg><use href="#i-list"/></svg></button>
+      <button class="icon-btn"><svg><use href="#i-more"/></svg></button>
+    </div>
+    <div class="chat-body">
+      <div class="thread">
+        <div class="msg me"><div class="bubble">首页首屏太长了，帮我列一下可以砍掉哪些模块</div></div>
+        <div class="msg"><div class="from"><span class="seal sm">前</span>前端开发</div>
+          <div class="answer"><p>看了一下首屏的 7 个模块，按点击数据和重要性分三档：保留（主视觉、产品入口）、合并（三个案例卡片合成一个轮播）、移到二屏（合作伙伴墙、新闻、下载区）。</p></div></div>
+
+        <div class="msg"><div class="chapter"><svg><use href="#i-flag"/></svg>方案定稿</div>
+          <div class="from"><span class="seal sm">前</span>前端开发</div>
+          <div class="answer"><p>按你确认的方向，最终方案如下：</p>
+            <ul><li>首屏只留主视觉 + 产品入口，高度控制在一屏内</li>
+            <li>案例改成可横滑的轮播，<span class="sel">移动端每次露出 1.2 张，提示还能往后滑</span></li>
+            <li>合作伙伴墙、新闻、下载区下移到第二屏</li></ul>
+            <p>改动集中在 <code>Home.vue</code> 和 <code>CaseCarousel.vue</code>，预计半天。</p></div>
+          <div class="acts"><button><svg><use href="#i-copy"/></svg>复制</button><button><svg><use href="#i-quote"/></svg>引用</button><button><svg><use href="#i-branch"/></svg>分叉</button><button class="hl"><svg><use href="#i-flag"/></svg>章节名：方案定稿</button><button><svg><use href="#i-save"/></svg>存到知识库</button></div>
+        </div>
+        <div class="seltool" style="left:330px;top:338px"><button><svg><use href="#i-save"/></svg>存到知识库</button><button><svg><use href="#i-quote"/></svg>引用</button><button><svg><use href="#i-copy"/></svg>复制</button></div>
+
+        <div class="msg me"><div class="bubble">好，开始改吧</div>
+          <div class="acts"><button><svg><use href="#i-copy"/></svg>复制</button><button><svg><use href="#i-flag"/></svg>标为章节</button><button><svg><use href="#i-undo"/></svg>退回到这里</button></div></div>
+        <div class="msg"><div class="chapter"><svg><use href="#i-flag"/></svg>开始改代码</div>
+          <div class="from"><span class="seal sm">前</span>前端开发</div>
+          <div class="answer"><p>已改完首屏结构，轮播组件也换好了，本地跑过一遍，截图在下面……</p></div></div>
+      </div>
+      <aside class="toc">
+        <h3><span>章节</span></h3>
+        <ol>
+          <li><span class="t">需求：首屏太长</span><span class="d">10:02</span></li>
+          <li class="on"><span class="t">方案定稿</span><span class="d">10:21</span></li>
+          <li><span class="t">开始改代码</span><span class="d">10:30</span></li>
+          <li><span class="t">移动端适配问题</span><span class="d">10:38</span></li>
+        </ol>
+      </aside>
+    </div>
+    <div class="composer"><div class="box"><span class="ph">接着聊…</span><span class="send"><svg><use href="#i-up"/></svg></span></div></div>
+  </main>
+</div>
+<div class="note">右边是章节目录，点一下跳过去；顶部的目录按钮可以收起。选中一段文字会浮出「存到知识库」。</div>
+</section>
+
+<!-- ============ 2. 退回 ============ -->
+<section class="screen" id="s-undo">
+<div class="app">
+  <nav data-rail="agent"></nav>
+  <aside class="list"><div class="list-head"><h1>官网改版</h1></div><div class="group">今天</div>
+    <div class="item on"><span class="title">首页改版方案</span><span class="when">10:42</span></div></aside>
+  <main class="main"><div class="chat-head"><span class="seal">前端</span><div style="flex:1"><div class="name">首页改版方案</div></div></div>
+    <div class="chat-body notoc"><div class="thread" style="opacity:.55"><div class="msg me"><div class="bubble">好，开始改吧</div></div></div></div></main>
+</div>
+<div class="scrim"><div class="dialog">
+  <header><h2>退回到这条消息之前？</h2></header>
+  <div class="body">
+    <div class="quote">好，开始改吧</div>
+    <p style="margin:0 0 12px;color:var(--ink-2)">这条消息和之后的 3 轮对话会撤掉，原文放回输入框，可以改了再发。</p>
+    <div class="check"><span class="box2"><svg><use href="#i-check"/></svg></span>
+      <div><div>同时撤销这之后改过的文件</div><div class="s">Home.vue、CaseCarousel.vue 等 4 个文件回到这条消息之前的样子</div></div></div>
+  </div>
+  <footer><button class="btn">取消</button><button class="btn danger">退回</button></footer>
+</div></div>
+</section>
+
+<!-- ============ 3. 存到知识库 ============ -->
+<section class="screen" id="s-save">
+<div class="app">
+  <nav data-rail="agent"></nav>
+  <aside class="list"><div class="list-head"><h1>官网改版</h1></div><div class="group">今天</div>
+    <div class="item on"><span class="title">首页改版方案</span><span class="when">10:42</span></div></aside>
+  <main class="main"><div class="chat-head"><span class="seal">前端</span><div style="flex:1"><div class="name">首页改版方案</div></div></div>
+    <div class="chat-body notoc"><div class="thread" style="opacity:.55"><div class="msg"><div class="answer"><p>按你确认的方向，最终方案如下……</p></div></div></div></div></main>
+</div>
+<div class="scrim"><div class="dialog" style="width:480px">
+  <header><h2>存到知识库</h2></header>
+  <div class="body">
+    <div class="field"><label>标题</label><input class="input" value="首页改版：最终方案"></div>
+    <div class="field"><label>内容</label><div class="quote" style="margin:0;max-height:96px;overflow:hidden">按你确认的方向，最终方案如下：首屏只留主视觉 + 产品入口，高度控制在一屏内；案例改成可横滑的轮播……</div></div>
+    <div class="field"><label>存进</label>
+      <button class="select">官网改版<svg><use href="#i-down"/></svg></button>
+      <div class="pop">
+        <div class="opt on"><span>官网改版</span><span class="n">12 条</span><span class="ck">✓</span></div>
+        <div class="opt"><span>接口与后端约定</span><span class="n">31 条</span></div>
+        <div class="opt"><span>踩坑记录</span><span class="n">8 条</span></div>
+        <div class="opt new"><svg><use href="#i-plus"/></svg>新建知识库…</div>
+      </div>
+    </div>
+  </div>
+  <footer><button class="btn">取消</button><button class="btn primary">存进去</button></footer>
+</div></div>
+</section>
+
+<!-- ============ 4. 知识库总览 ============ -->
+<section class="screen" id="s-kb">
+<div class="app wide">
+  <nav data-rail="kb"></nav>
+  <main class="overview">
+    <div class="ov-head"><h1>知识库</h1><label class="search"><svg><use href="#i-search"/></svg>搜索所有知识库</label><button class="btn primary"><svg><use href="#i-plus"/></svg>新建知识库</button></div>
+    <div class="ov-sub"><span class="sync"><i></i>2 台电脑已同步</span></div>
+    <div class="cgrid">
+      <div class="ccard"><div class="nm"><span class="bk" style="background:var(--qing)"><svg><use href="#i-kb"/></svg></span>官网改版</div>
+        <div class="ds">首页、导航、移动端的方案和定下来的规则</div>
+        <div class="ft"><span>12 条</span><span>昨天更新</span><span class="go">打开</span></div></div>
+      <div class="ccard"><div class="nm"><span class="bk" style="background:var(--zhe)"><svg><use href="#i-kb"/></svg></span>接口与后端约定</div>
+        <div class="ds">字段命名、错误码、分页和限流的约定</div>
+        <div class="ft"><span>31 条</span><span>10月16日更新</span><span class="go">打开</span></div></div>
+      <div class="ccard"><div class="nm"><span class="bk" style="background:var(--lu)"><svg><use href="#i-kb"/></svg></span>踩坑记录</div>
+        <div class="ds">排查过的问题和最后的解法</div>
+        <div class="ft"><span>8 条</span><span>9月30日更新</span><span class="go">打开</span></div></div>
+      <button class="ccard add"><svg><use href="#i-plus"/></svg>新建知识库</button>
+    </div>
+  </main>
+</div>
+</section>
+
+<!-- ============ 5. 知识库里的条目 ============ -->
+<section class="screen" id="s-entry">
+<div class="app wide">
+  <nav data-rail="kb"></nav>
+  <main class="overview">
+    <div class="ov-head"><h1>官网改版</h1><label class="search"><svg><use href="#i-search"/></svg>在这个知识库里搜</label><button class="btn primary"><svg><use href="#i-chat"/></svg>和这个知识库对话</button><button class="icon-btn"><svg><use href="#i-more"/></svg></button></div>
+    <div class="ov-sub">首页、导航、移动端的方案和定下来的规则 · 12 条</div>
+    <div class="kb" style="border-top:1px solid var(--line)">
+      <div class="kb-list">
+        <div class="entry on"><div class="t">首页改版：最终方案</div><div class="p">首屏只留主视觉 + 产品入口，高度控制在一屏内；案例改成可横滑的轮播……</div><div class="m">今天 10:44 · 来自「首页改版方案」</div></div>
+        <div class="entry"><div class="t">移动端轮播露出 1.2 张</div><div class="p">移动端每次露出 1.2 张，提示还能往后滑</div><div class="m">今天 10:45 · 选中的一段</div></div>
+        <div class="entry"><div class="t">导航栏吸顶规则</div><div class="p">滚过首屏后吸顶，高度从 64 缩到 52，Logo 换成小号……</div><div class="m">昨天 · 来自「导航栏交互细节」</div></div>
+        <div class="entry"><div class="t">图片懒加载的坑</div><div class="p">iOS 15 以下 IntersectionObserver 在横滑容器里不触发，改用……</div><div class="m">10月16日 · 原对话已删除</div></div>
+      </div>
+      <div class="reader">
+        <h2>首页改版：最终方案</h2>
+        <div class="src">来自 <a href="#"><svg><use href="#i-link"/></svg>前端开发 ·「首页改版方案」</a> 的第 3 条回答 · 这台电脑 · 今天 10:44 存</div>
+        <div class="content">
+          <p>按你确认的方向，最终方案如下：</p>
+          <ul><li>首屏只留主视觉 + 产品入口，高度控制在一屏内</li>
+          <li>案例改成可横滑的轮播，移动端每次露出 1.2 张，提示还能往后滑</li>
+          <li>合作伙伴墙、新闻、下载区下移到第二屏</li></ul>
+          <p>改动集中在 Home.vue 和 CaseCarousel.vue，预计半天。</p>
+        </div>
+        <div class="acts2"><button class="btn">编辑</button><button class="btn">移到别的知识库</button><button class="btn">删除</button></div>
+        <div class="src" style="margin-top:28px;border:0;padding:0">原对话删除后：<span class="gone">前端开发 ·「图片懒加载排查」</span>原对话已删除</div>
+      </div>
+    </div>
+  </main>
+</div>
+</section>
+
+<!-- ============ 6. 新对话挂知识库 ============ -->
+<section class="screen" id="s-new">
+<div class="app">
+  <nav data-rail="chat"></nav>
+  <aside class="list"><div class="list-head"><h1>对话</h1></div><div class="group">今天</div>
+    <div class="item"><span class="title">周报整理</span><span class="when">09:10</span></div></aside>
+  <main class="main">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 22px">
+      <h2 style="text-align:center;font:600 22px/1.3 var(--song);margin:0 0 20px">想聊点什么</h2>
+      <div class="where">
+        <span class="chip"><svg><use href="#i-mon"/></svg>这台电脑</span>
+        <span class="chip"><svg><use href="#i-folder"/></svg>~/work/website</span>
+        <span class="chip mount"><svg><use href="#i-kb"/></svg>官网改版<span class="x">×</span></span>
+        <span class="chip mount"><svg><use href="#i-kb"/></svg>接口与后端约定<span class="x">×</span></span>
+        <span class="chip add"><svg><use href="#i-plus"/></svg>挂知识库</span>
+      </div>
+      <div class="box" style="width:100%"><span class="ph">比如：按知识库里定下的规则，检查一下新做的活动页有没有违反的地方</span><span class="send"><svg><use href="#i-up"/></svg></span></div>
+    </div>
+  </main>
+</div>
+<div class="note">挂上的知识库会在对话顶部一直显示；回答里引用了哪条，会带上条目链接。</div>
+</section>
+
+<!-- ============ 7. 归档自动清理 ============ -->
+<section class="screen" id="s-set">
+<div class="app">
+  <nav data-rail="gear"></nav>
+  <aside class="list"><div class="list-head"><h1>设置</h1></div>
+    <div class="item"><span class="title">默认模型</span></div>
+    <div class="item on"><span class="title">对话</span></div>
+    <div class="item"><span class="title">电脑</span></div>
+  </aside>
+  <main class="settings">
+    <div class="sect"><h3>归档的对话</h3>
+      <div class="row"><div class="grow">归档后多久没有新消息就删除<div class="s">存进知识库的内容会保留</div></div>
+        <div class="seg"><button>7 天</button><button class="on">30 天</button><button>90 天</button><button>不删除</button></div></div>
+    </div>
+  </main>
+</div>
+<div class="note">最后一周在对话列表里标出「还有 N 天删除」（见第 1 屏左下）。</div>
+</section>
+
+<nav class="switch" id="switch">
+  <a href="#chat">1 章节目录</a><a href="#undo">2 退回</a><a href="#save">3 存到知识库</a><a href="#kb">4 知识库</a><a href="#entry">5 条目和来源</a><a href="#new">6 新对话挂知识库</a><a href="#set">7 归档清理</a>
+</nav>
+<script>
+const rail = document.getElementById("rail").innerHTML;
+document.querySelectorAll("[data-rail]").forEach(n => {
+  const k = n.dataset.rail; n.outerHTML = rail.replace(`data-k="${k}"`, `data-k="${k}" class="on"`).replace('class="on" class="new"', 'class="on"');
+});
+function show(k){
+  k = k || (location.hash || "#chat").slice(1);
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === "s-" + k));
+  document.querySelectorAll("#switch a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + k));
+}
+addEventListener("hashchange", () => show()); show();
+document.querySelectorAll("#switch a").forEach(a => a.onclick = e => { e.preventDefault(); show(a.getAttribute("href").slice(1)); try { history.replaceState(null, "", a.getAttribute("href")); } catch {} });
+</script>
+</body>
+</html>

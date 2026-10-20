@@ -1210,6 +1210,7 @@ def _handler(pf):
                 "/api/kb/export": lambda: kb_mod.export(b("keys")),
                 "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
+                "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
@@ -1416,7 +1417,8 @@ def state(pf):
     from . import models
     from . import web as console
     g = registry.global_config()
-    return {"agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
+    from . import upgrade
+    return {"ccim": upgrade.status(), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
             "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
             "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                       "codex": _defaults("codex", os.path.expanduser("~"))},
@@ -1471,6 +1473,19 @@ def connect_agent(aid, channel):
     if job.get("id") in console.JOBS:
         console.JOBS[job["id"]].agent_id = aid
     return job
+
+
+def start_upgrade(force):
+    """网页上点了升级（#37）：有对话在干活先问一句。"""
+    from . import upgrade
+    if not force:
+        b = upgrade.busy()
+        if b:
+            return {"busy": b}
+    try:
+        return {"job": upgrade.start()}
+    except ValueError as e:
+        raise Problem(str(e))
 
 
 def kb_write(pf, fn, *args):

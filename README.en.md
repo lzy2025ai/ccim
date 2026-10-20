@@ -142,7 +142,9 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   this one, and run `ccim join <this Mac's address> <code>` there (both on the same network). From then on the web UI on
   either Mac shows and controls the agents, chats, projects and scheduled tasks of both, each labelled with its computer;
   work still runs on the computer it belongs to and files are not copied across. Messages to a computer that is offline
-  are kept and sent when it reconnects. `ccim join --leave` disconnects.
+  are kept and sent when it reconnects. `ccim join --leave` disconnects. 设置 → 电脑 also shows each computer's ccim
+  version; ones that are behind get an upgrade button that upgrades and restarts ccim on that computer, and goes back to
+  the previous version if the new one doesn't start (for installs made with `uv tool install`).
 
 ## In Feishu
 

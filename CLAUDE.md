@@ -107,6 +107,11 @@
   （HTML 还有样式表、脚本）由 `docs.view` 打包成 data: 地址，所以别的电脑、服务器上也能显示，HTML 放 sandbox iframe 的 srcdoc。
   Markdown 用 `docMd`（比聊天的 md() 全，每块带 data-l 原文行号）。保存（/api/doc/save）带打开时的 mtime，文件被改过就拒绝；
   记一条 type=edit，对话 meta 的 doc_edits 在下一次发消息时拼在前面告诉助手。Word 自己转（`docx_html`），只能看
+- `ccim/upgrade.py`：版本和网页上升级（#37）。`info` 认出是开发版（代码目录，git 提交）、稳定版（~/.ccim/stable 目录名）、
+  发布版（uv tool 装的，direct_url.json 里的提交）还是服务器（~/ccim-hub/deployed.txt）；发布版和 GitHub 上最新提交比（后台问，一小时一次）。
+  state 里的 ccim → machine_info 带到网页。升级由独立进程（`python -m ccim.upgrade run`）做：uv tool upgrade → 用新装的 python 问新提交 →
+  逐个 safe_restart 在跑的项目（平台最后）→ 平台没起来就 `uv tool install --force git+…@旧提交` 再重启。uv 会换掉整个环境，
+  所以这个进程开头就把 daemon、registry、runtime 都导入好。结果在 ~/.ccim/upgrade.json
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

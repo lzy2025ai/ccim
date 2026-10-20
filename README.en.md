@@ -21,7 +21,7 @@ ccim has four parts. Use what you need — each works without the ones after it:
 | | How | What you get |
 |---|---|---|
 | **Chat apps** | `ccim` (Feishu), `ccim --weixin` (WeChat) — just scan a QR code | Talk to Claude Code / Codex on your computer from Feishu or WeChat: assign work, watch progress, send files, approve operations |
-| **Web** | `ccim web` | Create agents (name, role, base, working folder) and chat with them in the browser; add more agents to a chat to make it a group; scheduled tasks; fork and quote messages |
+| **Web** | `ccim web` | Create agents (name, role, base, working folder) and chat with them in the browser; add more agents to a chat to make it a group; knowledge bases; scheduled tasks; fork, quote and rewind messages |
 | **Several computers (LAN)** | On the other computer: `ccim join <address> <code>` | Manage agents and chats on several computers from one page; a group chat can include an agent from another computer |
 | **On a server** | `ccim hub` on your server; `ccim join https://<server> <code>` on each computer | Log in from any browser (phone and iPad too) and manage the agents on all your computers |
 
@@ -114,7 +114,12 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   (optional) below the input box. Answers stream in, each step can be expanded, approvals are buttons, and you can attach
   images and files. Chats from Feishu, WeChat and the terminal show up too; continuing one here starts a branch and
   leaves the original untouched. Messages can be copied and quoted; "分叉" (fork) starts a new chat from any answer,
-  and forks are nested under the original in the list. The model list matches Claude Code's own, with older versions
+  and forks are nested under the original in the list (chats forked in the terminal are nested too). "退回到这里"
+  (rewind) removes a message and everything after it and puts the text back in the input box; files it changed with its
+  edit tools can be restored too (changes made through shell commands can't). Important messages can be marked as
+  chapters, listed on the right for jumping back. Chats in the list can be renamed, pinned, archived, marked with an icon
+  and color, or deleted; archived chats with no new messages for a set number of days (30 by default) are deleted
+  automatically. The model list matches Claude Code's own, with older versions
   under "更多模型" (more models). Type @ to have one or more agents answer too, shown side by side; the chat's own
   assistant sees their answers afterwards. Commands that need admin rights (sudo) show a card with the exact command and
   run only after you enter your Mac password there (every time, never stored); in Feishu / WeChat the Mac shows the
@@ -128,7 +133,11 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
 - **Scheduled tasks**: have an agent (or several agents in a project) do something on a schedule — daily, on workdays,
   on certain weekdays, monthly, or once. Results stay in the web UI and can also be sent through the agent's Feishu /
   WeChat bot. A run missed while the Mac was asleep runs once when it wakes up.
-- **Settings**: default model and effort level for Claude Code and for Codex.
+- **Knowledge bases**: save a useful answer (or a selected part of it) with "存到知识库"; each entry links back to its
+  chat. Shared by all your computers and synced automatically; the server stores nothing. Attach one or more knowledge
+  bases when starting a chat (Claude Code only) and it checks them before answering and names the entries it used,
+  or start a chat from the knowledge base page.
+- **Settings**: default model and effort level for Claude Code and for Codex; how long archived chats are kept.
 - **Two computers**: install ccim on the other Mac, create a pairing code under 设置 → 电脑 (Settings → Computers) on
   this one, and run `ccim join <this Mac's address> <code>` there (both on the same network). From then on the web UI on
   either Mac shows and controls the agents, chats, projects and scheduled tasks of both, each labelled with its computer;

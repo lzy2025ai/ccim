@@ -391,8 +391,10 @@ class Chat:
             return
         tries = [(self.session_id, False)] if self.session_id else [(self.fork_from, True)] if self.fork_from else []
         snapshots = bool(getattr(self.b.channel, "live", False))   # 网页里能退回：记下文件快照，让它回显我们发的消息（带编号）
+        from . import kb
+        kbs = kb.dirs(getattr(self.b.channel, "kbs_of", lambda c: [])(self.chat_id))    # 挂在这个对话上的知识库（#27）
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots,
+            opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={"replay-user-messages": None} if snapshots else {},fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
@@ -401,7 +403,7 @@ class Chat:
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agents"],                            # 只是在群里 @ 人，用户看得到
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -787,6 +789,15 @@ def _look_around(chat):
         return {"content": [{"type": "text", "text": head + text}]}
 
     return [list_chats, read_chat]
+
+
+def kb_note(kbs):
+    if not kbs:
+        return ""
+    lines = "\n".join(f"  - 「{n}」：{d}" for n, d in kbs)
+    return ("\n- 用户给这个对话挂了知识库，每条是一个 Markdown 文件（第一行注释里有来源，不用管）：\n" + lines +
+            "\n  回答前先用 Grep / Glob / Read 在这些目录里查相关的条目，按条目里的内容回答；用到了哪条，在回答里写出它的标题。"
+            "知识库里没有的再按自己的知识回答，并说明这部分不是来自知识库。不要改知识库里的文件。")
 
 
 def role_note(entry):

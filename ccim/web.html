@@ -151,16 +151,14 @@ body{overflow:hidden}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
 .udot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--zhu);margin-right:6px;vertical-align:2px;flex:none}
 .item.new .title{font-weight:700;color:var(--ink)}
-/* 刚回答完、还没看（#54）：浅色底 + 左侧色条 + 「新回答」，让人想点开 */
-.item.new:not(.on){background:linear-gradient(90deg,var(--qing-soft),color-mix(in srgb,var(--qing-soft) 35%,transparent));box-shadow:inset 3px 0 0 var(--qing)}
+/* 刚回答完、还没看（#54）：像邮件的未读，标题加粗 + 小圆点，第二行前面一个字的提示，不加底色和色条 */
 .item.new .sub{color:var(--ink-2)}
-.newtag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;margin-right:6px;border-radius:5px;background:var(--qing);color:#fff;font-weight:500;vertical-align:1px}
-.udot{animation:udot 2s ease-out 3}
-@keyframes udot{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--zhu) 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
-@media (prefers-reduced-motion:reduce){.udot{animation:none}}
-.brow.fresh{background:linear-gradient(90deg,var(--qing-soft),var(--panel) 70%);border-color:color-mix(in srgb,var(--qing) 35%,var(--line));box-shadow:inset 3px 0 0 var(--qing)}
+.newtag{color:var(--qing);font-weight:600;margin-right:6px}
+.newtag.ask{color:#8A6A12}
+.newtag.err{color:var(--bad)}
+.brow.fresh .btitle{font-weight:700}
 .brow.fresh .bprog{color:var(--ink)}
-.bagent{font-weight:600;color:var(--qing);white-space:nowrap;flex:none}
+.bagent{font-weight:500;color:var(--ink-2);white-space:nowrap;flex:none}
 .bagent::after{content:"·";color:var(--faint);margin-left:8px;font-weight:400}
 .wait{display:inline-flex;align-items:center;gap:6px;color:var(--zhu);font-weight:500}
 .wait i{width:7px;height:7px;border-radius:50%;background:var(--zhu)}
@@ -1293,7 +1291,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
+        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }

@@ -102,6 +102,11 @@
   （正在干活的进度除外）就标 dirty、下次现问。history.read 按文件大小和修改时间缓存；`_external` 用最近列表里的那行，不再列一遍所有对话。
   网页：api() 有请求超过 150 毫秒显示顶部进度条，按下的按钮进入处理中（防连点）；发消息先把自己那条显示出来（sending），
   推送到了再换掉；新对话 `starting` 防重复创建；长对话先画最近 60 条（SHOW_RECENT），跳转到更早的会先展开；列表宽度 --list-w 可拖动
+- 文档预览（#34，`ccim/docs.py`）：对话里的 .md / .html / .docx（Agent 发的、用户上传的）点开在右侧面板（手机全屏，`DOC`、`drawDoc`）。
+  Agent 每发一次存副本（日志目录 snaps/<对话>/，记录里的 snap），面板切版本；最新的一版读原文件。文档里相对路径引用的图片
+  （HTML 还有样式表、脚本）由 `docs.view` 打包成 data: 地址，所以别的电脑、服务器上也能显示，HTML 放 sandbox iframe 的 srcdoc。
+  Markdown 用 `docMd`（比聊天的 md() 全，每块带 data-l 原文行号）。保存（/api/doc/save）带打开时的 mtime，文件被改过就拒绝；
+  记一条 type=edit，对话 meta 的 doc_edits 在下一次发消息时拼在前面告诉助手。Word 自己转（`docx_html`），只能看
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

@@ -505,6 +505,65 @@ body{overflow:hidden}
 .working{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#7A6216;margin-top:2px}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
 
+/* 文档预览（#34）：对话里发来的 Markdown、网页、Word 在右侧打开，能看能改 */
+.docfile{display:inline-flex;align-items:center;gap:10px;padding:9px 14px 9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-align:left;max-width:100%}
+.docfile:hover{border-color:var(--line-strong)}
+.docfile .di{width:30px;height:30px;border-radius:7px;background:var(--qing-soft);color:var(--qing);display:grid;place-items:center;flex:none}
+.docfile .t{min-width:0}
+.docfile b{display:block;font-weight:500;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.docfile small{display:block;font-size:12px;color:var(--muted)}
+.file.doc{cursor:pointer}
+.file.doc:hover{border-color:var(--line-strong)}
+.doc-edit{text-align:right;font-size:12.5px;color:var(--muted);margin:-6px 0 14px}
+.doc-edit button{color:var(--qing)}
+.docpane{position:fixed;top:0;right:0;bottom:0;width:var(--doc-w);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 34px rgba(29,34,43,.12);z-index:15;display:flex;flex-direction:column}
+body{--doc-w:min(52vw,780px)}
+@media (min-width:1280px){body.doc-open .app{margin-right:var(--doc-w)}body.doc-open .docpane{box-shadow:none}}
+.doc-top{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);min-height:56px}
+.doc-top .nm{flex:1;min-width:0;font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-top .nm .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--qing);margin-left:6px;vertical-align:2px}
+.doc-top .vbtn{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;font-size:12.5px;color:var(--ink-2)}
+.doc-top .vbtn:hover{background:var(--sunk)}
+.doc-top .vbtn svg{width:14px;height:14px}
+.doc-top .seg button{padding:4px 12px}
+.doc-old{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;background:#FBF6E7;border-bottom:1px solid #EFE5C8;font-size:13px;color:#7A6216}
+.doc-old .sp{flex:1}
+.doc-body{flex:1;min-height:0;overflow:auto;position:relative}
+.doc-body iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.doc-body textarea{display:block;width:100%;height:100%;border:0;outline:0;resize:none;padding:24px 28px 80px;font:15px/1.8 var(--sans);color:var(--ink);background:var(--panel)}
+.doc-body textarea.code{font:13px/1.7 var(--mono)}
+.doc-md{max-width:720px;margin:0 auto;padding:30px 34px 80px;font-size:15.5px;line-height:1.85;color:var(--ink);overflow-wrap:anywhere}
+.doc-md>:first-child{margin-top:0}
+.doc-md h1,.doc-md h2,.doc-md h3,.doc-md h4,.doc-md h5,.doc-md h6{font-family:var(--song);line-height:1.4;margin:1.6em 0 .7em}
+.doc-md h1{font-size:26px}.doc-md h2{font-size:21px}.doc-md h3{font-size:18px}.doc-md h4,.doc-md h5,.doc-md h6{font-size:16px}
+.doc-md p{margin:0 0 1.1em}
+.doc-md ul,.doc-md ol{margin:0 0 1.1em;padding-left:1.5em}
+.doc-md li{margin:.25em 0}
+.doc-md li>ul,.doc-md li>ol{margin:.25em 0 0}
+.doc-md li.task{list-style:none;margin-left:-1.3em}
+.doc-md li.task .tick{display:inline-block;width:1.3em;color:var(--muted)}
+.doc-md img{max-width:100%;height:auto;border-radius:6px;vertical-align:middle}
+.doc-md figure{margin:1.4em 0;text-align:center}
+.doc-md figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+.doc-md blockquote{margin:0 0 1.1em;padding:2px 0 2px 16px;border-left:3px solid var(--line-strong);color:var(--ink-2)}
+.doc-md blockquote>:last-child{margin-bottom:0}
+.doc-md code{font:.88em var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
+.doc-md pre{font:13px/1.65 var(--mono);background:#1F242C;color:#E4E7EB;padding:14px 16px;border-radius:8px;overflow:auto;margin:0 0 1.2em}
+.doc-md pre code{background:none;padding:0;color:inherit;font:inherit}
+.doc-md table{border-collapse:collapse;margin:0 0 1.2em;display:block;max-width:100%;overflow-x:auto;font-size:14px;line-height:1.6}
+.doc-md th,.doc-md td{border:1px solid var(--line);padding:6px 11px;min-width:3em}
+.doc-md th{background:var(--paper);font-weight:600}
+.doc-md td p,.doc-md th p{margin:0}
+.doc-md hr{border:0;border-top:1px solid var(--line);margin:2em 0}
+.doc-md a{color:var(--qing)}
+.doc-md .miss{display:inline-block;padding:2px 8px;border:1px dashed var(--line-strong);border-radius:6px;font-size:12.5px;color:var(--muted)}
+.doc-loading{padding:40px;text-align:center;color:var(--muted)}
+@media (max-width:760px){
+  .docpane{left:0;width:auto;z-index:26;border-left:0;box-shadow:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .doc-md{padding:22px 18px 60px;font-size:16px}
+  .doc-body textarea{padding:18px 16px 60px;font-size:16px}
+  .doc-top{padding:8px 8px 8px 6px}
+}
 @media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
 /* 手机（#17）：底部标签栏；列表和内容一屏一个（.phone-main 时看内容，否则看列表），进去左上角有返回 */
 .pback{display:none}
@@ -843,7 +902,13 @@ function pop(e, html, below){
   return p;
 }
 addEventListener("click", closePop);
-addEventListener("keydown", e => { if (e.key === "Escape") { closePop(); [...document.querySelectorAll(".scrim")].pop()?.remove(); } });   // 只关最上面那层
+addEventListener("keydown", e => {   // 只关最上面那层
+  if (e.key !== "Escape") return;
+  const top = document.querySelector(".pop") || [...document.querySelectorAll(".scrim")].pop();
+  closePop();
+  if (top && top.classList.contains("scrim")) top.remove();
+  else if (!top && DOC) closeDoc();
+});
 const DD = {};
 function dd(id, opts, value, onpick){
   DD[id] = {opts, value, onpick};
@@ -944,6 +1009,7 @@ function connectEvents(){
         if (own >= 0) detail.log[own] = rec;
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
+        if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
       }
     }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
@@ -1122,6 +1188,7 @@ function renderChatEmpty(){
 async function openChat(id){
   $("#main").innerHTML = `<div class="loading">…</div>`;
   if (!detail || detail.id !== id) chatRcpt = [];
+  if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
   pendingFiles = [];
@@ -1204,6 +1271,7 @@ function recHtml(r, i, src = "log"){
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
+          : f.path && docKind(f.name) ? `<button class="file doc" onclick="openDoc(${q(f.path)})">${ICON.file}${esc(f.name)}</button>`
           : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
       }).join("")}</div>` : ""}
       ${r.text ? msgActs(src, i, r) : ""}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
@@ -1222,10 +1290,12 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "file"){
     const src = fileUrl(detail.id, r.path);
-    const img = isImg(r.name);
+    const img = isImg(r.name), dk = docKind(r.name);
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
+      : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
       : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
+  if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
 }
 function liveHtml(){
@@ -2905,6 +2975,204 @@ async function trySchedule(){
   const href = r.chat ? `#/chats/${encodeURIComponent(r.chat)}` : `#/projects/${encodeURIComponent(r.project)}`;
   dialog("试跑开始了", `<p>这次试跑不会保存成定时任务。可以先去看看效果，回来接着改。</p>`,
     `<button class="btn" onclick="closeDialog()">留在这里</button><a class="btn primary" href="${href}" target="_blank" style="text-decoration:none" onclick="closeDialog()">在新标签页里看</a>`);
+}
+
+// ================= 文档预览和编辑（#34） =================
+const DOC_KIND = {md: "md", markdown: "md", html: "html", htm: "html", docx: "docx"};
+const DOC_LABEL = {md: "Markdown 文档", html: "网页", docx: "Word 文档"};
+function docKind(name){ const m = /\.([a-z]+)$/i.exec(name || ""); return m ? DOC_KIND[m[1].toLowerCase()] || null : null; }
+
+// 文档用的 Markdown：比聊天里的全（各级标题、图片、嵌套列表、任务、对齐的表格）。
+// 每块带 data-l="起-止"（原文行号），之后在排好版的页面上改哪一段就知道对应原文哪几行。
+function docMd(src, assets = {}, nested){
+  const L = String(src || "").replace(/\r/g, "").split("\n"), out = [];
+  const isFence = l => /^\s{0,3}(```|~~~)/.test(l);
+  const isHead = l => /^\s{0,3}#{1,6}(\s|$)/.test(l);
+  const isHr = l => /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
+  const isList = l => /^\s*([-*+]|\d+[.)])\s+/.test(l);
+  const isQuote = l => /^\s{0,3}>/.test(l);
+  const isTable = k => /\|/.test(L[k] || "") && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(L[k + 1] || "");
+  const at = (a, b) => nested ? "" : ` data-l="${a}-${b}"`;
+  let i = 0;
+  while (i < L.length){
+    const l = L[i], a = i;
+    if (!l.trim()){ i++; continue; }
+    if (isFence(l)){
+      const mark = l.trim().slice(0, 3), lang = l.trim().slice(3).trim(), buf = []; i++;
+      while (i < L.length && !L[i].trim().startsWith(mark)) buf.push(L[i++]);
+      i++;
+      out.push(`<pre${at(a, i - 1)}><code${lang ? ` data-lang="${esc(lang)}"` : ""}>${esc(buf.join("\n"))}</code></pre>`); continue;
+    }
+    if (isHead(l)){
+      const m = l.trim().match(/^(#{1,6})\s*(.*?)\s*#*\s*$/);
+      out.push(`<h${m[1].length}${at(a, a)}>${mdInline(m[2], assets)}</h${m[1].length}>`); i++; continue;
+    }
+    if (isHr(l)){ out.push(`<hr${at(a, a)}>`); i++; continue; }
+    if (isTable(i)){
+      const row = s => s.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, "|"));
+      const head = row(L[i]), align = row(L[i + 1]).map(c => /^:-+:$/.test(c) ? "center" : /-:$/.test(c) ? "right" : "");
+      const cell = (tag, c, k) => `<${tag}${align[k] ? ` style="text-align:${align[k]}"` : ""}>${mdInline(c, assets)}</${tag}>`;
+      i += 2; const body = [];
+      while (i < L.length && L[i].trim() && /\|/.test(L[i])) body.push(row(L[i++]));
+      out.push(`<table${at(a, i - 1)}><thead><tr>${head.map((c, k) => cell("th", c, k)).join("")}</tr></thead><tbody>${body.map(r => `<tr>${head.map((_, k) => cell("td", r[k] || "", k)).join("")}</tr>`).join("")}</tbody></table>`);
+      continue;
+    }
+    if (isQuote(l)){
+      const buf = [];
+      while (i < L.length && L[i].trim() && (isQuote(L[i]) || !(isFence(L[i]) || isHead(L[i]) || isList(L[i])))) buf.push(L[i++].replace(/^\s{0,3}>\s?/, ""));
+      out.push(`<blockquote${at(a, i - 1)}>${docMd(buf.join("\n"), assets, true)}</blockquote>`); continue;
+    }
+    if (isList(l)){
+      const items = [];
+      while (i < L.length){
+        const x = L[i];
+        if (!x.trim()){
+          let k = i; while (k < L.length && !L[k].trim()) k++;
+          if (k < L.length && (isList(L[k]) || /^\s{2,}\S/.test(L[k]))) { i = k; continue; }
+          break;
+        }
+        const m = x.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if (m && items.length && m[1].length <= items[0].ind && /\d/.test(m[2]) !== items[0].ord) break;   // 有序、无序换了：另起一个列表
+        if (m) items.push({ind: m[1].replace(/\t/g, "    ").length, ord: /\d/.test(m[2]), start: parseInt(m[2]) || 1, text: m[3]});
+        else if (items.length && (/^\s+\S/.test(x) || !(isFence(x) || isHead(x) || isQuote(x) || isHr(x)))) items[items.length - 1].text += "\n" + x.trim();
+        else break;
+        i++;
+      }
+      out.push(mdList(items, assets).replace(/^<(ul|ol)/, `<$1${at(a, i - 1)}`)); continue;
+    }
+    const buf = [];
+    while (i < L.length && L[i].trim() && !isFence(L[i]) && !isHead(L[i]) && !isHr(L[i]) && !isQuote(L[i]) && !isTable(i) && !isList(L[i])) buf.push(L[i++]);
+    const text = buf.join("\n");
+    const one = text.trim().match(/^!\[([^\]]*)\]\(([^)]*)\)$/);    // 单独一行的图片：图注用它的说明文字
+    out.push(one && one[1].trim() ? `<figure${at(a, i - 1)}>${mdInline(text.trim(), assets)}<figcaption>${esc(one[1])}</figcaption></figure>` : `<p${at(a, i - 1)}>${mdInline(text, assets)}</p>`);
+  }
+  return out.join("");
+}
+function mdList(items, assets){
+  if (!items.length) return "";
+  const base = items[0].ind, ord = items[0].ord, html = [];
+  let k = 0;
+  while (k < items.length){
+    const it = items[k++], kids = [];
+    while (k < items.length && items[k].ind > base) kids.push(items[k++]);
+    const task = it.text.match(/^\[([ xX])\]\s+/);
+    const body = mdInline(task ? it.text.slice(task[0].length) : it.text, assets);
+    html.push(task ? `<li class="task"><span class="tick">${task[1] === " " ? "☐" : "☑"}</span>${body}${mdList(kids, assets)}</li>` : `<li>${body}${mdList(kids, assets)}</li>`);
+  }
+  return ord ? `<ol${items[0].start !== 1 ? ` start="${items[0].start}"` : ""}>${html.join("")}</ol>` : `<ul>${html.join("")}</ul>`;
+}
+function mdInline(s, assets = {}){
+  const keep = [], put = h => `\u0000${keep.push(h) - 1}\u0000`;
+  const src = u => { u = (u || "").trim().replace(/^<|>$/g, ""); return assets[u] || (/^(https?:|data:image\/)/i.test(u) ? u : ""); };
+  const href = u => /^(https?:|mailto:|#)/i.test(u) ? u : "";
+  const img = (alt, u) => { const v = src(u); return put(v ? `<img src="${esc(v)}" alt="${esc(alt)}">` : `<span class="miss">图片没找到：${esc(u.replace(/^<|>$/g, ""))}</span>`); };
+  const fmt = t => t
+    .replace(/\*\*(?=\S)(.+?)\*\*/g, "<b>$1</b>").replace(/__(?=\S)(.+?)__/g, "<b>$1</b>")
+    .replace(/~~(?=\S)(.+?)~~/g, "<s>$1</s>")
+    .replace(/(^|[^*\w])\*(?=[^\s*])(.+?)\*(?![\w*])/g, "$1<i>$2</i>");
+  s = String(s)
+    .replace(/\\([\\`*_{}\[\]()#+\-.!|~<>])/g, (_, c) => put(esc(c)))
+    .replace(/`([^`]+)`/g, (_, c) => put(`<code>${esc(c)}</code>`))
+    .replace(/!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/g, (_, alt, u) => img(alt, u))
+    .replace(/\[([^\]]+)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/g, (m, t, u) => { const h = href(u.replace(/^<|>$/g, "")); return h ? put(`<a href="${esc(h)}" target="_blank" rel="noopener">${fmt(esc(t)).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n])}</a>`) : t; })
+    .replace(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, (m, u) => { const a = m.match(/\balt\s*=\s*["']([^"']*)["']/i); return img(a ? a[1] : "", u); })
+    .replace(/<br\s*\/?>/gi, () => put("<br>"))
+    .replace(/(^|[^"'(\w])(https?:\/\/[^\s<>）)\]，。]+)/g, (_, p, u) => p + put(`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`))
+    .replace(/( {2,}|\\)\n/g, () => put("<br>"))
+    .replace(/([　-〿一-鿿＀-￯])\n(?=[　-〿一-鿿＀-￯])/g, "$1");   // 中文之间的换行不要变成空格
+  return fmt(esc(s)).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]);
+}
+
+let DOC = null;   // 打开的文档：{chat, machine, path, d（接口给的）, mode: view / edit, draft, dirty}
+async function openDoc(path, v, chat){
+  chat = chat || (DOC && DOC.path === path ? DOC.chat : detail && detail.id);
+  if (DOC && DOC.dirty && !(DOC.path === path && v == null) && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  const machine = DOC && DOC.chat === chat ? DOC.machine : ctxMachine;
+  if (!DOC || DOC.path !== path) { DOC = {chat, machine, path, d: null, mode: "view", draft: "", dirty: false}; drawDoc(); }
+  let d;
+  try { d = await api(`/api/doc?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}${v != null ? "&v=" + v : ""}`, undefined, machine); }
+  catch (e) { toast(e.message); if (DOC && !DOC.d) closeDoc(true); return; }
+  if (!DOC || DOC.path !== path) return;
+  DOC = {...DOC, d, draft: d.text || "", dirty: false, mode: DOC.mode === "edit" && d.latest && d.editable ? "edit" : "view"};
+  drawDoc();
+}
+async function closeDoc(force){
+  if (!DOC) return;
+  if (!force && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，关掉就丢掉了。", "丢掉")) return;
+  DOC = null; drawDoc();
+}
+function docBody(){
+  const d = DOC.d;
+  if (!d) return `<div class="doc-loading">…</div>`;
+  if (DOC.mode === "edit") return `<textarea id="doc-ta" class="${d.kind === "html" ? "code" : ""}" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
+  if (d.kind === "md") return `<article class="doc-md">${docMd(DOC.draft, d.assets)}</article>`;
+  if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
+  const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
+  return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
+}
+function verLabel(x, k){
+  const t = x.at ? new Date(x.at * 1000) : null, p = n => String(n).padStart(2, "0");
+  return `第 ${k + 1} 版 · ${x.by === "me" ? "你改的" : "Agent 发的"}${t ? ` · ${t.getMonth() + 1}月${t.getDate()}日 ${p(t.getHours())}:${p(t.getMinutes())}` : ""}`;
+}
+function drawDoc(){
+  let el = $("#docpane");
+  if (!DOC){ el?.remove(); document.body.classList.remove("doc-open"); return; }
+  if (!el){ el = document.createElement("aside"); el.id = "docpane"; el.className = "docpane"; el.setAttribute("aria-label", "文档"); document.body.append(el); }
+  document.body.classList.add("doc-open");
+  const d = DOC.d, vs = d ? d.versions : [];
+  const name = d ? d.name : DOC.path.split("/").pop();
+  el.innerHTML = `<div class="doc-top">
+      <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
+      <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
+      ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
+      ${d && d.editable && d.latest ? `<span class="seg mini"><button class="${DOC.mode === "view" ? "on" : ""}" onclick="docMode('view')">预览</button><button class="${DOC.mode === "edit" ? "on" : ""}" onclick="docMode('edit')">编辑</button></span>` : ""}
+      ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
+    </div>
+    ${d && !d.latest ? `<div class="doc-old"><span>${esc(verLabel(vs[d.v], d.v))}</span><span class="sp"></span>
+      ${d.editable ? `<button class="btn" onclick="docRestore()">用这一版的内容</button>` : ""}<button class="btn" onclick="openDoc(DOC.path)">看最新的</button></div>` : ""}
+    <div class="doc-body">${docBody()}</div>`;
+}
+function docVersions(e){
+  const vs = DOC.d.versions;
+  pop(e, vs.map((x, k) => `<button role="option" aria-selected="${k === DOC.d.v}" onclick="closePop();openDoc(DOC.path,${k === vs.length - 1 ? "null" : k})"><span>${esc(verLabel(x, k))}</span>${k === DOC.d.v ? `<span class="ck">✓</span>` : ""}</button>`).reverse().join(""), true);
+}
+function docMode(m){
+  if (!DOC || DOC.mode === m) return;
+  DOC.mode = m; drawDoc();
+  if (m === "edit") $("#doc-ta")?.focus();
+}
+function docInput(ta){
+  DOC.draft = ta.value;
+  if (!DOC.dirty){ DOC.dirty = true; $("#doc-save")?.removeAttribute("hidden"); $("#docpane .nm")?.insertAdjacentHTML("beforeend", `<span class="dot" title="没保存"></span>`); }
+}
+function docKey(e){
+  if ((e.metaKey || e.ctrlKey) && e.key === "s"){ e.preventDefault(); docSave(); }
+  if (e.key === "Escape") e.stopPropagation();
+}
+async function docSave(){
+  if (!DOC || !DOC.dirty || DOC.saving) return;
+  DOC.saving = true;
+  const {chat, path, draft, machine} = DOC;
+  try {
+    const d = await api("/api/doc/save", {chat, path, text: draft, mtime: DOC.d.mtime}, machine);
+    if (DOC && DOC.path === path){ DOC.d = d; DOC.dirty = DOC.draft !== d.text; if (DOC.mode !== "edit") drawDoc(); else { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); } }
+    toast("已保存");
+  } catch (e) { toast(e.message); }
+  finally { if (DOC) DOC.saving = false; }
+}
+async function docRestore(){   // 看旧版本时：把它的内容拿到最新版里编辑，保存了才算
+  const text = DOC.d.text;
+  await openDoc(DOC.path);
+  if (!DOC || !DOC.d || !DOC.d.latest) return;
+  DOC.draft = text; DOC.dirty = text !== DOC.d.text; DOC.mode = "edit"; drawDoc();
+}
+function docChanged(rec, chat){   // 对话里来了这个文件的新版本
+  if (!DOC || DOC.chat !== chat || rec.path !== DOC.path || !DOC.d) return;
+  if (DOC.dirty) { toast("这个文件有新版本了，保存前先看看"); return; }
+  if (DOC.d.latest) openDoc(DOC.path);
+}
+function docChip(path, name, sub){
+  return `<button class="docfile" onclick="openDoc(${q(path)})"><span class="di">${ICON.file}</span><span class="t"><b>${esc(name)}</b><small>${esc(sub)}</small></span></button>`;
 }
 
 // ================= 对话框 =================

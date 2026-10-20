@@ -150,7 +150,18 @@ body{overflow:hidden}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
 .udot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--zhu);margin-right:6px;vertical-align:2px;flex:none}
-.item.new .title{font-weight:700}
+.item.new .title{font-weight:700;color:var(--ink)}
+/* 刚回答完、还没看（#54）：浅色底 + 左侧色条 + 「新回答」，让人想点开 */
+.item.new:not(.on){background:linear-gradient(90deg,var(--qing-soft),color-mix(in srgb,var(--qing-soft) 35%,transparent));box-shadow:inset 3px 0 0 var(--qing)}
+.item.new .sub{color:var(--ink-2)}
+.newtag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;margin-right:6px;border-radius:5px;background:var(--qing);color:#fff;font-weight:500;vertical-align:1px}
+.udot{animation:udot 2s ease-out 3}
+@keyframes udot{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--zhu) 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.udot{animation:none}}
+.brow.fresh{background:linear-gradient(90deg,var(--qing-soft),var(--panel) 70%);border-color:color-mix(in srgb,var(--qing) 35%,var(--line));box-shadow:inset 3px 0 0 var(--qing)}
+.brow.fresh .bprog{color:var(--ink)}
+.bagent{font-weight:600;color:var(--qing);white-space:nowrap;flex:none}
+.bagent::after{content:"·";color:var(--faint);margin-left:8px;font-weight:400}
 .wait{display:inline-flex;align-items:center;gap:6px;color:var(--zhu);font-weight:500}
 .wait i{width:7px;height:7px;border-radius:50%;background:var(--zhu)}
 .board{overflow:auto;height:100%;background:var(--panel)}
@@ -923,6 +934,13 @@ function seal(a, size = "", dot = true){
   return `<span class="${cls}" style="--c:${c}" aria-hidden="true">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${img}${d}</span>`;
 }
 
+// 触屏（iPad、手机）上 Enter 换行，点发送按钮才发；有键盘的电脑上 Enter 发送（#54）
+const TOUCH = matchMedia("(hover: none) and (pointer: coarse)").matches || navigator.maxTouchPoints > 1 && /Macintosh|iPad/.test(navigator.userAgent);
+function sendKey(e){
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return false;
+  return TOUCH ? (e.metaKey || e.ctrlKey) : !e.shiftKey;
+}
+function sendHint(){ return TOUCH ? "点右边的按钮发送，Enter 换行" : "Enter 发送，Shift + Enter 换行"; }
 // 临时对话的图标：聊天气泡，给对话选了颜色就跟着变（#52）
 function chatIcon(c, size = ""){
   const col = (c && MARK_COLORS[c.color]) || "var(--muted)";
@@ -1275,7 +1293,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
+        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
@@ -1603,7 +1621,7 @@ function drawChat(){
           <button class="send" id="send"></button>
         </div>
       </div>
-      <div class="hint">Enter 发送，Shift + Enter 换行；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
+      <div class="hint">${sendHint()}；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
     </div>`;
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow();
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
@@ -1612,7 +1630,7 @@ function drawChat(){
   const input = $("#input");
   if (!c.readonly) input.addEventListener("input", atTyped);
   input.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
+    if (sendKey(e)) { e.preventDefault(); sendChat(); }
   });
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
@@ -1964,7 +1982,7 @@ function renderNewChat(){
   const i = $("#input"); i.value = draftText; i.focus();
   i.addEventListener("input", e => { draftText = i.value; atTyped(e); });
   i.addEventListener("keydown", ev => {
-    if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); startTemp(); }
+    if (sendKey(ev)) { ev.preventDefault(); startTemp(); }
   });
   i.addEventListener("paste", ev => { const fs = [...(ev.clipboardData?.files || [])]; if (fs.length) { ev.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
@@ -2087,13 +2105,13 @@ const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], er
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
 function boardRow(c, kind){
   const a = c.agent ? agentOf(c.agent) : null;
-  const who = [a ? a.name : "临时对话", (c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
+  const who = [(c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
   const prog = kind === "work" ? `<span class="working"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "干活中")}</span>` : esc(c.brief || "");
   const r = REASON[c.attention];
   const btn = c.attention === "ask" ? `<a class="btn primary" href="${boardHref(c)}" style="text-decoration:none">去批准</a>`
     : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
-  return `<a class="brow ${kind === "recent" ? "quiet" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
-    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention === "done" || c.attention === "err" ? "fresh" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
+    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;
 }

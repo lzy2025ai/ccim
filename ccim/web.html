@@ -2589,7 +2589,13 @@ async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
   const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, avatar: fd.avatar || null, base: fd.base || "claude",
                   model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null};
-  const r = await act(() => api("/api/agent/save", {id, fields}, id ? ownerOf(id) || ctxMachine : fd.machine), id ? "已保存" : "已新建");
+  const where = id ? ownerOf(id) || ctxMachine : fd.machine;
+  let r = await act(() => api("/api/agent/save", {id, fields}, where));
+  if (r.confirm === "home") {            // 工作目录是用户主目录：说明影响，确认后再存
+    if (!await confirmBox("用整个主目录当工作目录？", "它能读写主目录下的所有文件（桌面、文档、各个项目和配置）；找文件、搜内容会比较慢；在终端里从主目录开的对话也会算到它名下。只是写作、调研的话，工作目录留空更合适。", "仍然使用主目录")) return;
+    r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
+  }
+  toast(id ? "已保存" : "已新建");
   agentTab = "overview"; await loadState();
   if (id) renderAgent(id); else location.hash = `#/agents/${encodeURIComponent(r.id)}`;
 }

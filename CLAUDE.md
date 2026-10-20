@@ -177,15 +177,21 @@
 - ccim 自己的测试机器人（项目 ccim）跑开发版；其他项目跑稳定版。你很可能就运行在 ccim 测试机器人里。
 - 改完想让用户在飞书里体验：先提交，再 `ccim restart --safe ccim`，然后回复用户（重启会断掉当前这一轮，默认 15 秒后才重启，
   留时间把回复发出去）。新版本起不来会自动用稳定版顶上，飞书里会收到通知，回来接着修。
-- 用户说验收通过，再 `ccim promote` 升级其他项目；不要直接 `ccim restart` 别的项目到开发版。
+- 用户说验收通过，合并 PR 后 `ccim promote` 升级其他项目；不要直接 `ccim restart` 别的项目到开发版。
 - **同一个机器人里可能有好几个对话（私聊主对话、各个话题）同时在改这个仓库。** 提交时只 `git add` 自己改的文件，
   不要 `git add -A`：会把别的对话改到一半的代码一起提交、一起重启上线。
 - **重启前先看别的对话是不是正在干活**（`ccim show` 里的对话、state.json 的 busy），正在干活的会被打断；必要时先问用户。
 
-## 需求管理（GitHub issue）
+## 需求管理（GitHub issue + 分支 + PR，#19）
 
 - 用户确认要做的需求，提一个 issue（仓库 lzy2025ai/ccim）：写清做什么、第一版要有的（勾选清单）、先不做的。
-- 做的时候提交说明里带 `#编号`；用户验收通过后，推送时在提交说明里写 `Closes #编号`，issue 自动关闭。没验收的不关。
+- 每个 issue 从 main 开分支 `issue-<编号>-<简称>`，在分支上改，提交说明带 `#编号`；推上去开 PR，PR 描述写 `Closes #编号`。
+  开发版跑的是仓库目录里的代码，所以验收时仓库目录要在这个分支上（同时做两个需求时一个做完、提交了再切）。
+- 用户说验收通过：合并 PR（squash），issue 自动关闭；没验收的不合并。合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）
+  先用 Python 3.11 检查，再把服务器上的总控更新到这个版本；同时 `ccim promote` 更新本机其他项目。别的电脑暂时要各自更新、重启。
+- 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑
+  ~/ccim-hub/hub-update.sh（仓库里的 deploy/hub-update.sh，改了要手动拷上去），新版本起不来就装回上一个，版本记在 deployed.txt。
+  仓库 Secrets：DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS；变量 DEPLOY_HOST。只有 lzy2025ai/ccim 会部署，fork 不会
 - 用 gh 操作前先 `gh auth switch --user lzy2025ai`，做完切回 `gh auth switch --user flowstart`（推送同理）。
 
 ## 约定

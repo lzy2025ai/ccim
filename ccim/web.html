@@ -134,6 +134,19 @@ body{overflow:hidden}
 .chap svg{width:13px;height:13px}
 .chap.me{text-align:right}
 .when.left{color:var(--warn)}
+.rtabs{display:inline-flex;gap:2px;margin-left:10px;background:var(--sunk);border-radius:8px;padding:2px}
+.rtabs button{padding:2px 10px;border-radius:6px;font-size:12.5px;font-weight:400;color:var(--muted)}
+.rtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.chaticon{width:34px;height:34px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--ic);background:color-mix(in srgb, var(--ic) 12%, var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ic) 28%, transparent)}
+.chaticon svg{width:20px;height:20px}
+.chaticon.sm{width:24px;height:24px;border-radius:6px}
+.chaticon.sm svg{width:15px;height:15px}
+.chaticon.lg{width:44px;height:44px;border-radius:11px}
+.chaticon.lg svg{width:26px;height:26px}
+.item:not(.today) .title{color:var(--ink-2)}
+.item:not(.today):not(.new) .title{font-weight:400}
+.item.today .title{color:var(--ink)}
+.item.today .when{color:var(--qing);font-weight:500}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
 .udot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--zhu);margin-right:6px;vertical-align:2px;flex:none}
@@ -910,6 +923,13 @@ function seal(a, size = "", dot = true){
   return `<span class="${cls}" style="--c:${c}" aria-hidden="true">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${img}${d}</span>`;
 }
 
+// 临时对话的图标：聊天气泡，给对话选了颜色就跟着变（#52）
+function chatIcon(c, size = ""){
+  const col = (c && MARK_COLORS[c.color]) || "var(--muted)";
+  return `<span class="chaticon ${size}" style="--ic:${col}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke-width="2.4" stroke-linecap="round"/></svg></span>`;
+}
+const iconOf = (c, a, size = "", dot = false) => a ? seal(a, size, dot) : chatIcon(c, size);
+
 // ---- Markdown（只认常见写法，先转义再排版） ----
 function md(src){
   const lines = String(src || "").replace(/\r/g, "").split("\n"), out = [];
@@ -1240,20 +1260,22 @@ function whenTag(c){   // 归档的对话最后一周显示还剩几天删除
 function moreBtn(c){
   return `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();itemMenu(event,${q(c.id)})">${ICON.more}</button>`;
 }
+const isToday = ts => { if (!ts) return false; const d = new Date(ts.replace(" ", "T")), n = new Date(); return d.toDateString() === n.toDateString(); };
 function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层，再往下的排在同一层
   const a = c.agent ? agentOf(c.agent) : null;
+  const today = isToday(c.last_active) ? "today" : "";     // 今天聊过的：标题实一些，时间用主色（#52）
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
-    const me = `<a class="item child ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>
+    const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>
       <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
-    ? `<a class="item child ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
+    ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
-    : `<a class="item ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        ${seal(a, "", false)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
+    : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
+        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
@@ -1300,7 +1322,7 @@ function stepsHtml(steps, open, head){
 }
 function fromRow(){
   const a = detail.agent ? agentOf(detail.agent) : null;
-  return `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
+  return `<div class="from-row">${iconOf(detail, a, "sm")}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
 }
 function msgActs(src, i, r){
   if (r.sending) return "";
@@ -1552,7 +1574,7 @@ async function reloadChat(){
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
   $("#main").innerHTML = `
-    <div class="chat-head">${seal(a)}
+    <div class="chat-head">${a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}
@@ -2035,6 +2057,21 @@ async function markSeen(id){
   try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
 }
 let boardStats = null, boardStatsAt = 0, showAllRecent = false;
+let recentTab = (() => { try { return localStorage.getItem("ccim.recentTab") || "chats"; } catch { return "chats"; } })();
+function setRecentTab(t){ recentTab = t; try { localStorage.setItem("ccim.recentTab", t); } catch {} renderBoard(true); }
+function recentAgents(recent){   // 最近在跟的按 Agent 合起来：几个对话、最近那个是什么
+  const by = {};
+  for (const c of recent) { if (!c.agent) continue; (by[c.agent] = by[c.agent] || []).push(c); }
+  return Object.entries(by).map(([aid, cs]) => [aid, cs]).sort((x, y) => ((y[1][0].last_active || "") > (x[1][0].last_active || "") ? 1 : -1));
+}
+function agentRecentRow([aid, cs]){
+  const a = agentOf(aid); if (!a) return "";
+  const c = cs[0];
+  return `<a class="brow quiet" href="#/agents/${encodeURIComponent(aid)}">${seal(a, "sm", false)}
+    <span class="bmain"><span class="btop"><span class="btitle">${esc(a.name)}</span><span class="bwho">${cs.length} 个对话${multi() ? " · " + esc((machineOf(c.machine) || {}).name || "") : ""}</span></span>
+    <span class="bprog">最近：${esc(c.title)}${c.brief ? `　${esc(c.brief)}` : ""}</span></span>
+    <span class="bmeta">${when(c.last_active)}</span></a>`;
+}
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
   const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
@@ -2055,7 +2092,7 @@ function boardRow(c, kind){
   const r = REASON[c.attention];
   const btn = c.attention === "ask" ? `<a class="btn primary" href="${boardHref(c)}" style="text-decoration:none">去批准</a>`
     : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
-  return `<a class="brow ${kind === "recent" ? "quiet" : ""}" href="${boardHref(c)}">${seal(a, kind === "recent" ? "sm" : "", false)}
+  return `<a class="brow ${kind === "recent" ? "quiet" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
     <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;
@@ -2109,7 +2146,14 @@ async function renderBoard(quick){
     <div class="bgrid"><div class="bleft">
       ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? wait.map(c => boardRow(c, "wait")).join("") : `<p class="bempty">没有在等你的事。</p>`)}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
-      ${sec("最近在跟", "var(--faint)", recent.length, recent.length ? shown.map(c => boardRow(c, "recent")).join("") + (recent.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${recent.length - 5} 件</button>` : "") : `<p class="bempty">最近 7 天没有别的对话。</p>`)}
+      ${(() => {
+        const ags = recentAgents(recent);
+        const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${recent.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${ags.length}</button></span>`;
+        const body = recentTab === "agents"
+          ? (ags.length ? ags.map(agentRecentRow).join("") : `<p class="bempty">最近 7 天没和 Agent 聊过。</p>`)
+          : (recent.length ? shown.map(c => boardRow(c, "recent")).join("") + (recent.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${recent.length - 5} 件</button>` : "") : `<p class="bempty">最近 7 天没有别的对话。</p>`);
+        return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
+      })()}
     </div><div class="bright">
       <div class="bsec"><h2>活跃度</h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
       <div class="bsec"><h2>本周各 Agent</h2>${ags.length ? ags.map(([id, v]) => { const a = agentOf(id); return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(v.turns / maxT * 100)}%"></i></span><span class="acnt">${v.turns} 条</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
@@ -2540,8 +2584,14 @@ async function connectAgent(aid, channel){
 }
 
 let fd = null;
+function freeAvatar(){   // 新建 Agent 默认用图片头像：挑一个还没人用的（#52）
+  const used = new Set((S.agents || []).map(a => a.avatar));
+  const free = AVATARS.filter(([id]) => !used.has(id));
+  const pool = free.length ? free : AVATARS;
+  return pool[Math.floor(Math.random() * pool.length)][0];
+}
 function formHtml(a){
-  fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", ...(agentDraftFrom || {})};
+  fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", avatar: freeAvatar(), ...(agentDraftFrom || {})};
   agentDraftFrom = null;
   fd.machine = (a && ownerOf(a.id)) || fd.machine || ctxMachine || S.me;
   ctxMachine = fd.machine;
@@ -3015,7 +3065,7 @@ function quickAgent(opts){
   $("#q-name").focus();
   $("#q-ok").onclick = async () => {
     const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
-    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name), model: model || null, effort: effort || null}}));
+    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name), avatar: freeAvatar(), model: model || null, effort: effort || null}}));
     await opts.done(id, name);
   };
 }

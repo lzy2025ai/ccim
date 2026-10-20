@@ -2466,6 +2466,10 @@ function liveOf(r){
 }
 function stateLabel(r, live){
   if (live) return `<span class="status busy"><i></i>干活中</span>`;
+  if (r.type === "mention" && r.state === "queued" && detail && detail.log) {     // 只有前面真有它没做完的活才算排队；轮到它了、进度还没到时是准备中
+    const first = detail.log.find(x => x.type === "mention" && x.chat === r.chat && x.state === "queued");
+    if (!first || first.id === r.id) return `<span class="status busy"><i></i>准备中</span>`;
+  }
   return {done: `<span class="status on"><i></i>完成${r.elapsed ? `，用时 ${fmtSec(r.elapsed)}` : ""}</span>`,
           queued: `<span class="status"><i></i>排队中，前面的做完就开始</span>`,
           error: `<span class="status err"><i></i>出错了</span>`, stopped: `<span class="status"><i></i>停下了</span>`,

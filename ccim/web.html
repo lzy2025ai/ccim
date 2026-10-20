@@ -2437,7 +2437,8 @@ function verLine(m){
   return ` · ${[kind, v.version, v.commit].filter(Boolean).map(esc).join(" ")}`;
 }
 function upgradeBox(m){
-  const v = verOf(m); if (!v) return "";
+  const v = verOf(m);
+  if (!v) return m.online ? `<span class="upg new" title="在那台电脑的终端里运行：uv tool upgrade ccim，再运行 ccim restart 网页">版本较旧，在那台电脑上运行 uv tool upgrade ccim</span>` : "";
   const j = v.job || {};
   if (j.state === "running" && Date.now() / 1000 - j.at < 900) { if (!window._upw) setTimeout(watchUpgrade); return `<span class="upg busy"><span class="spin"></span>正在升级：${esc(j.step || "")}</span>`; }
   const recent = j.at && Date.now() / 1000 - j.at < 86400;

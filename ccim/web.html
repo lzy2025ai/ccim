@@ -32,7 +32,18 @@ button{cursor:pointer;border:0;background:none;padding:0}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* ---------- 骨架 ---------- */
-.app{display:grid;grid-template-columns:76px 300px 1fr;height:100vh;overflow:hidden}
+.app{display:grid;grid-template-columns:76px var(--list-w,300px) 1fr;height:100vh;overflow:hidden;position:relative;--rail-w:76px}
+.resizer{position:absolute;top:0;bottom:0;left:calc(var(--rail-w) + var(--list-w,300px) - 4px);width:8px;cursor:col-resize;z-index:15;touch-action:none}
+.resizer::after{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent;transition:background .15s}
+.resizer:hover::after,.resizer.drag::after{background:var(--qing)}
+.app.list-off .resizer,.app.cards .resizer{display:none}
+body.resizing{cursor:col-resize;user-select:none}
+.topbar{position:fixed;top:0;left:0;right:0;height:2px;z-index:60;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .2s}
+.topbar.on{opacity:1}
+.topbar::after{content:"";position:absolute;top:0;left:-40%;width:40%;height:100%;background:var(--qing);animation:topbar 1s ease-in-out infinite}
+@keyframes topbar{to{left:100%}}
+button.pending,.btn.pending{opacity:.6;pointer-events:none;cursor:progress}
+.msg.me.sending .bubble{opacity:.65}
 body{overflow:hidden}
 .rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
 .brand{font:700 15px/1 var(--song);letter-spacing:.5px;margin-bottom:18px;color:var(--ink)}
@@ -154,6 +165,8 @@ body{overflow:hidden}
 .pick-list{display:grid;gap:6px}
 .pick-list .pick{width:100%}
 .anc{display:block;height:0;scroll-margin-top:12px}
+.show-more{display:block;margin:0 auto 18px;padding:5px 14px;border-radius:8px;border:1px solid var(--line);color:var(--muted);font-size:13px}
+.show-more:hover{color:var(--ink);border-color:var(--line-strong)}
 .msg.flash{animation:flash 1.6s ease}
 @keyframes flash{0%,40%{background:var(--qing-soft)}100%{background:transparent}}
 .chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
@@ -496,6 +509,7 @@ body{overflow:hidden}
 /* 手机（#17）：底部标签栏；列表和内容一屏一个（.phone-main 时看内容，否则看列表），进去左上角有返回 */
 .pback{display:none}
 @media (max-width:760px){
+  .resizer{display:none}
   html,body{height:100%}
   .app,.app.list-off,.app.cards,.app.cards.list-off{display:block;height:100dvh;padding-top:env(safe-area-inset-top)}
   .rail{position:fixed;left:0;right:0;bottom:0;z-index:12;flex-direction:row;justify-content:space-around;align-items:stretch;gap:0;
@@ -614,7 +628,7 @@ body{overflow:hidden}
 .box .bar .chip{padding:4px 7px}
 .dflt{font-size:11px;color:var(--faint);margin-left:4px}
 .chat-head .meta .path{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:1100px){.app{grid-template-columns:64px 240px 1fr}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
+@media (max-width:1100px){.app{grid-template-columns:64px var(--list-w,240px) 1fr;--rail-w:64px}.resizer{left:calc(var(--rail-w) + var(--list-w,240px) - 4px)}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
 .retry{color:var(--bad);font-size:13px}
 
 </style>
@@ -634,6 +648,8 @@ body{overflow:hidden}
   </nav>
   <button class="pback" id="pback" aria-label="返回" onclick="phoneBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>
   <section class="list" id="list"></section>
+  <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="拖动调整列表宽度" title="拖动调整宽度，双击恢复"></div>
+  <div class="topbar" id="topbar"></div>
   <main class="main" id="main"></main>
 </div>
 
@@ -687,7 +703,26 @@ function targetOf(path, body, machine){
   return ownerOf(u.searchParams.get("id")) || ownerOf(body && (body.id || body.agent)) || ctxMachine;
 }
 const remoteHeader = m => m && S.me && m !== S.me ? {"X-Machine": m} : {};
+// 有请求在路上：顶部细进度条（超过 150 毫秒才出现，快的看不到）；点下去的按钮进入处理中，防止连点（#32）
+let inflight = 0, barTimer = null;
+function busyBar(d){
+  inflight = Math.max(0, inflight + d);
+  const bar = $("#topbar");
+  if (!bar) return;
+  if (inflight && !barTimer && !bar.classList.contains("on")) barTimer = setTimeout(() => { barTimer = null; if (inflight) bar.classList.add("on"); }, 150);
+  if (!inflight) { clearTimeout(barTimer); barTimer = null; bar.classList.remove("on"); }
+}
+let lastBtn = null;
+addEventListener("pointerdown", e => { lastBtn = e.target.closest("button,.btn"); }, true);
 async function api(path, body, machine){
+  const btn = body !== undefined && lastBtn && document.contains(lastBtn) ? lastBtn : null;
+  lastBtn = null;
+  if (btn) { btn.classList.add("pending"); btn.setAttribute("aria-busy", "true"); }
+  busyBar(1);
+  try { return await api0(path, body, machine); }
+  finally { busyBar(-1); if (btn) { btn.classList.remove("pending"); btn.removeAttribute("aria-busy"); } }
+}
+async function api0(path, body, machine){
   const r = await fetch(path, {method: body === undefined ? "GET" : "POST",
                                headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(targetOf(path, body, machine))},
                                body: body === undefined ? undefined : JSON.stringify(body)});
@@ -902,7 +937,9 @@ function connectEvents(){
         drawThread(); drawComposerState();
       } else {
         const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
-        if (i >= 0) detail.log[i] = ev.type === "card" ? ev : {...detail.log[i], ...ev, at: detail.log[i].at}; else detail.log.push(ev);
+        const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
+        if (own >= 0) detail.log[own] = ev;
+        else if (i >= 0) detail.log[i] = ev.type === "card" ? ev : {...detail.log[i], ...ev, at: detail.log[i].at}; else detail.log.push(ev);
         drawThread();
       }
     }
@@ -1103,6 +1140,7 @@ function fromRow(){
   return `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
 }
 function msgActs(src, i, r){
+  if (r.sending) return "";
   const ref = `${q(src)},${i}`;
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
@@ -1159,7 +1197,7 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
-    return `<div class="msg me"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -1199,9 +1237,12 @@ function drawThread(){
   const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
   // 正在输的密码：重画前记下，重画后放回去（进度每零点几秒刷新一次）
   const typed = [...t.querySelectorAll("form[data-sid]")].map(f => [f.dataset.sid, f.pw.value, document.activeElement === f.pw]);
-  const earlier = (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
-  t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map((r, i) => `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
+  // 长对话先画最近的，更早的点一下再展开（#32）
+  const from = detail.showAll ? 0 : Math.max(0, detail.log.length - SHOW_RECENT);
+  const earlier = from ? "" : (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
+  const more = from ? `<button class="show-more" onclick="showEarlier()">显示更早的 ${from + (detail.earlier || []).length} 条</button>` : "";
+  t.innerHTML = more + (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
+    + detail.log.map((r, i) => i < from ? "" : `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();
@@ -1209,6 +1250,13 @@ function drawThread(){
   if (near) t.scrollTop = t.scrollHeight;
   drawToc();
 }
+const SHOW_RECENT = 60;
+function showEarlier(keep = true){
+  const t = $("#thread"), h = t ? t.scrollHeight - t.scrollTop : 0;
+  detail.showAll = true; drawThread();
+  if (keep && t) t.scrollTop = t.scrollHeight - h;     // 停在原来看的位置
+}
+function ensureShown(i){ if (!detail.showAll && i < detail.log.length - SHOW_RECENT) showEarlier(false); }
 // ---- 章节（#25）：给重要的消息起个名字，右边的目录点一下跳过去 ----
 let showToc = (() => { try { return localStorage.getItem("ccim.toc") !== "0"; } catch { return true; } })();
 const chapKey = r => (r.type === "user" || r.type === "answer") && r.at ? `${r.type}:${r.at}` : null;
@@ -1251,7 +1299,7 @@ function drawToc(){
   tocSpy();
 }
 function stamp(at){ if (!at) return ""; const d = new Date(at * 1000), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
-function jumpChapter(i){ closePop(); const el = $("#chap-" + i); if (el) el.scrollIntoView({block: "start", behavior: "smooth"}); }
+function jumpChapter(i){ closePop(); ensureShown(i); const el = $("#chap-" + i); if (el) el.scrollIntoView({block: "start", behavior: "smooth"}); }
 function tocSpy(){
   const t = $("#thread"), toc = $("#toc"); if (!t || !toc || toc.hidden) return;
   const top = t.getBoundingClientRect().top + 60;
@@ -1415,12 +1463,22 @@ async function sendChat(){
   }
   $("#input").value = ""; pendingFiles = []; drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
-    const {id} = await act(() => api("/api/chat/continue", {id: detail.id, text: v, files}));
-    await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`; return;
+    if (starting) return;
+    starting = true;
+    try {
+      const {id} = await act(() => api("/api/chat/continue", {id: detail.id, text: v, files}));
+      await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
+    } catch { $("#input").value = v; } finally { starting = false; }
+    return;
   }
+  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
+  detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
   if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: ""}; }
   drawThread(); drawComposerState();
-  const r = await act(() => api("/api/chat/send", {id: detail.id, text: v, files}));
+  const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
+  let r;
+  try { r = await act(() => api("/api/chat/send", {id: detail.id, text: v, files})); }
+  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; $("#input").value = v; drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -1760,10 +1818,16 @@ function pickAgent(e){
   if (!S.agents.length) return toast("还没有 Agent，先去 Agent 页新建一个。");
   pop(e, `<div class="sec">和 Agent 对话</div>` + S.agents.map(a => `<button onclick="closePop();startAgent(${q(a.id)})">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join(""), true);
 }
+let starting = false;
 async function startTemp(){
+  if (starting) return;                  // 连点只建一个对话
   const v = $("#input").value.trim(), files = pendingFiles.filter(f => f.key);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return $("#input").focus();
+  starting = true;
+  try { await startTemp0(v, files); } finally { starting = false; }
+}
+async function startTemp0(v, files){
   const m = draft.machine || S.me;
   const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}, m));
   if (draft.base === "claude" && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
@@ -1856,6 +1920,7 @@ function doJump(){                     // 从知识库回到原对话：滚到�
   if (!jumpTo || !detail || detail.id !== jumpTo.chat) return;
   const i = detail.log.findIndex(r => r.at === jumpTo.at);
   jumpTo = null;
+  if (i >= 0) ensureShown(i);
   const el = i >= 0 && $("#rec-" + i);
   if (!el) return;
   el.scrollIntoView({block: "start"});
@@ -2860,6 +2925,30 @@ function toggleList(on){
   try { localStorage.setItem("ccim.listOff", on ? "" : "1"); } catch {}
 }
 
+// 列表和内容之间的分隔线：拖动改宽度，记住；双击恢复默认（#32）
+(function(){
+  const app = document.querySelector(".app"), rz = $("#resizer");
+  try { const w = +localStorage.getItem("ccim.listW"); if (w) app.style.setProperty("--list-w", w + "px"); } catch {}
+  let start = null;
+  rz.addEventListener("pointerdown", e => {
+    e.preventDefault();                      // 不然浏览器开始选文字，拖动就断了
+    start = {x: e.clientX, w: $("#list").getBoundingClientRect().width};
+    rz.classList.add("drag"); document.body.classList.add("resizing");
+  });
+  addEventListener("pointermove", e => {
+    if (!start) return;
+    const w = Math.round(Math.min(Math.max(start.w + e.clientX - start.x, 200), Math.min(620, innerWidth - 420)));
+    app.style.setProperty("--list-w", w + "px");
+  });
+  const end = () => {
+    if (!start) return;
+    start = null; rz.classList.remove("drag"); document.body.classList.remove("resizing");
+    try { localStorage.setItem("ccim.listW", Math.round($("#list").getBoundingClientRect().width)); } catch {}
+    drawToc && drawToc();
+  };
+  addEventListener("pointerup", end); addEventListener("pointercancel", end);
+  rz.addEventListener("dblclick", () => { app.style.removeProperty("--list-w"); try { localStorage.removeItem("ccim.listW"); } catch {} });
+})();
 let wasNarrow = narrow();
 addEventListener("resize", () => {             // 跨过手机宽度：变窄按当前页面一屏一个，变宽恢复原来的折叠习惯
   if (narrow() === wasNarrow) return;

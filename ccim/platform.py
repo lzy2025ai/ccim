@@ -743,11 +743,16 @@ class Platform:
                     r.pop("_extra", None)
         marks = registry.read_state(self.home).get("marks") or {}
         out = []
+        seen = getattr(self, "_ext_seen", None)
+        if seen is None:
+            seen = self._ext_seen = {}
+        now = time.time()
         for r in rows:
             mk = marks.get(r["id"]) or {}
             if mk.get("hidden"):
                 continue
             r.update({k: v for k, v in mk.items() if k not in ("hidden", "chapters")})
+            seen[r["id"]] = (now, dict(r))
             if mk.get("archived"):
                 r["delete_at"] = delete_at({**mk, "last_active": r.get("last_active")}, archive_days())
             out.append(r)
@@ -773,6 +778,9 @@ class Platform:
 
     def _external(self, cid):
         sid = cid[2:]
+        hit = getattr(self, "_ext_seen", {}).get(cid)      # 列表里刚列过的直接用，不再把所有 Agent 的对话列一遍（#32）
+        if hit and time.time() - hit[0] < 120:
+            return dict(hit[1])
         for r in self.external_chats(terminal=True):
             if r["sid"] == sid:
                 return r

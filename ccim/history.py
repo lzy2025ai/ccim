@@ -186,5 +186,22 @@ def title(base, session_id, cwd=None):
     return _titles[key]
 
 
+_READ = {}                                   # (底座, 对话) → (文件大小, 修改时间, 记录)：没变就不重读（#32）
+
+
 def read(base, session_id, cwd=None):
-    return codex(session_id) if base == "codex" else claude(session_id, cwd)
+    path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+    try:
+        st = os.stat(path) if path else None
+    except OSError:
+        st = None
+    key, sig = (base, session_id), (st.st_size, st.st_mtime) if st else None
+    hit = _READ.get(key)
+    if sig and hit and hit[0] == sig:
+        return [dict(r) for r in hit[1]]
+    rows = codex(session_id) if base == "codex" else claude(session_id, cwd)
+    if sig:
+        if len(_READ) > 50:
+            _READ.clear()
+        _READ[key] = (sig, rows)
+    return [dict(r) for r in rows]

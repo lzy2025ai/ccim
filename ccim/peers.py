@@ -29,6 +29,8 @@ ONLINE_WINDOW = 45                            # 这么久没来轮询就算离�
 SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
 STATE_TIMEOUT = 5
+STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
+STATE_REFRESH = 10                            # 超过这么久，返回缓存的同时后台再取一次
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
 QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
          "/api/peer/result"}
@@ -174,6 +176,9 @@ class Peers:
         self.hub_ok = 0                               # 最近一次连上总控的时间
         self.machines_from_hub = []
         self.cache = _load("peer-cache.json", {})     # 各台电脑上次的 state，离线时显示
+        self.cache_at = {}                    # 上次从那台电脑取 state 的时间：新的直接用，不每次都现问（#32）
+        self.dirty = set()                    # 刚往那台电脑发过操作、或它有了新动静：下次要现问
+        self.refreshing = set()
         self.stopping = False
 
     # ----- 启动 -----
@@ -291,8 +296,16 @@ class Peers:
 
     # ----- 转交请求 -----
 
+    def _touched(self, ev):
+        """别的电脑上有了变化（正在干活的进度不算）：它的 state 下次要现问。"""
+        mid = ev.get("_m")
+        if mid and not (ev.get("type") == "progress" and ev.get("state") == "working"):
+            self.dirty.add(mid)
+
     def forward(self, mid, method, path, body=b"", headers=None):
         """把一个接口请求交给另一台电脑执行，返回 (状态码, 内容类型, 内容)。连不上抛 Offline。"""
+        if method == "POST":
+            self.dirty.add(mid)
         if mid == self.me["id"]:
             return local_request(self.pf, method, path, body, headers)
         if not self.online(mid):
@@ -358,11 +371,35 @@ class Peers:
             except Exception:
                 pass
 
-        threads = [threading.Thread(target=fetch, args=(m,)) for m in machines if not m["me"] and m["online"]]
+        now = time.time()
+        others = [m for m in machines if not m["me"] and m["online"]]
+        # 刚操作过、有新动静、或者太久没取的现问；其余用上次取的，后台再更新一下
+        now_ = [m for m in others if m["id"] in self.dirty or m["id"] not in self.cache or now - self.cache_at.get(m["id"], 0) > STATE_FRESH]
+        later = [m for m in others if m not in now_ and now - self.cache_at.get(m["id"], 0) > STATE_REFRESH
+                 and m["id"] not in self.refreshing]
+        for m in now_:
+            self.dirty.discard(m["id"])
+        threads = [threading.Thread(target=fetch, args=(m,)) for m in now_]
         for t in threads:
             t.start()
         for t in threads:
             t.join(STATE_TIMEOUT + 1)
+        for m in later:
+            self.refreshing.add(m["id"])
+
+            def bg(m=m):
+                try:
+                    status, _, data = self.forward(m["id"], "GET", "/api/state?local=1")
+                    if status == 200:
+                        self.cache[m["id"]], self.cache_at[m["id"]] = json.loads(data), time.time()
+                except Exception:
+                    pass
+                finally:
+                    self.refreshing.discard(m["id"])
+            threading.Thread(target=bg, daemon=True).start()
+        for mid in results:
+            self.cache_at[mid] = time.time()
+        fresh = {m["id"] for m in others if m not in now_}       # 用的是缓存，也算在线
         changed = False
         for m in machines:
             if m["me"]:
@@ -373,7 +410,7 @@ class Peers:
                 changed = True
             else:
                 s = self.cache.get(m["id"])
-                m["online"] = False if m["id"] not in results else m["online"]
+                m["online"] = m["online"] and m["id"] in fresh
             if not s:
                 continue
             for k in ("agents", "chats", "projects", "schedules"):
@@ -511,6 +548,7 @@ class Peers:
                 self.machines_from_hub = msg.get("machines") or self.machines_from_hub
                 for m in msg.get("msgs") or []:
                     if m["kind"] == "ev":
+                        self._touched(m["ev"])
                         self.pf.channel.events.publish(m["ev"])
                     elif m["kind"] == "req":
                         threading.Thread(target=self._serve_req, args=(m,), daemon=True).start()
@@ -592,6 +630,7 @@ def _handler(peers):
                     return self._reply(200, {}, key, nonce)
                 if path == "/peer/push":
                     for ev in json.loads(body or b"[]"):
+                        peers._touched(dict(ev, _m=mid))
                         peers.pf.channel.events.publish(dict(ev, _m=mid))
                     return self._reply(200, {}, key, nonce)
                 if path == "/peer/call":

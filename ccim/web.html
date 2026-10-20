@@ -915,6 +915,9 @@ function connectEvents(){
   const es = new EventSource("/api/events");
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
+    const rec = {...ev};                  // 记录本身：外层的 chat 是「哪个对话的推送」，不是记录的字段（@ 回答自己的 chat 是它的子对话）
+    delete rec.chat; delete rec.rec_chat;
+    if (ev.rec_chat) rec.chat = ev.rec_chat;
     if (sched && ev.type === "schedule" && ev.schedule === sched.id){
       clearTimeout(window._st); window._st = setTimeout(() => { if (sched) openSchedule(sched.id); }, 300);
     }
@@ -938,8 +941,8 @@ function connectEvents(){
       } else {
         const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
-        if (own >= 0) detail.log[own] = ev;
-        else if (i >= 0) detail.log[i] = ev.type === "card" ? ev : {...detail.log[i], ...ev, at: detail.log[i].at}; else detail.log.push(ev);
+        if (own >= 0) detail.log[own] = rec;
+        else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
       }
     }

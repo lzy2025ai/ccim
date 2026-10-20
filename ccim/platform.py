@@ -176,7 +176,11 @@ class WebChannel(Channel):
             self.server.shutdown()
 
     def _emit(self, chat, rec):
-        self.events.publish(dict(rec, chat=chat))
+        # chat 是「哪个对话的推送」；记录自己也可能有 chat（@ 回答指向它的子对话），另放一个键，网页收到后还原
+        ev = dict(rec, chat=chat)
+        if rec.get("chat") and rec["chat"] != chat:
+            ev["rec_chat"] = rec["chat"]
+        self.events.publish(ev)
 
     async def progress(self, chat_id, snap):
         if snap["state"] == "working":

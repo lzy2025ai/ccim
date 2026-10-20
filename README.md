@@ -182,7 +182,8 @@ ccim web
 | `ccim stop [项目]` | 关停；常驻的同时取消常驻 |
 | `ccim restart [项目]` | 重启 |
 | `ccim restart --safe [项目]` | 安全重启：新版本起不来就用稳定版顶上，结果发到飞书 |
-| `ccim promote` | 开发 ccim 时用：把当前代码装成新的稳定版，逐个升级跑稳定版的项目，起不来的退回上一版 |
+| `ccim try 编号` | 开发 ccim 时用：验收某个需求时，把跑开发版的进程切到它的工作目录上；`ccim try main` 切回 |
+| `ccim promote` | 开发 ccim 时用：把最新的 main 装成新的稳定版，逐个升级跑稳定版的项目，起不来的退回上一版 |
 | `ccim web` | 在浏览器里打开 ccim：和 Claude Code / Codex 对话，管理 Agent，给 Agent 接飞书、微信 |
 | `ccim list` | 所有已配对的项目和在线状态 |
 | `ccim show [项目]` | 一个项目的详情：机器人、状态、模型、思考深度、各个对话 |

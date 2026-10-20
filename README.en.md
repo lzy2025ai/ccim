@@ -185,7 +185,8 @@ Any other slash command is passed to Claude as-is, so your project's skills and 
 | `ccim stop [project]` | Stop it (and turn off `--always`) |
 | `ccim restart [project]` | Restart |
 | `ccim restart --safe [project]` | Safe restart: if the new version won't start, the stable version takes over; the result is sent to Feishu |
-| `ccim promote` | For ccim development: install the current code as the new stable version and upgrade projects on stable one by one, rolling back any that won't start |
+| `ccim try <issue>` | For ccim development: when reviewing a change, switch the processes running the dev version to that change's worktree; `ccim try main` switches back |
+| `ccim promote` | For ccim development: install the latest main as the new stable version and upgrade projects on stable one by one, rolling back any that won't start |
 | `ccim list` | All paired projects and whether they're online |
 | `ccim show [project]` | Details for one project: bot, status, model, effort level, conversations |
 | `ccim handoff` | Run inside a Claude Code conversation: move that conversation to your Feishu DM |

@@ -554,6 +554,20 @@ def cmd_promote(args):
         print("没有跑稳定版的项目。")
 
 
+def cmd_try(args):
+    """验收时试某个需求（#42）：跑开发版的进程切到那个需求的工作目录上；ccim try main 切回。"""
+    if not args.what:
+        t = runtime.trying()
+        print(f"正在试 {t['label']}（{t['branch']}，{t['src']}）" if t else "没有在试别的需求，跑的是主目录的代码。")
+        for path, branch in runtime.worktrees()[1:]:
+            print(f"  {branch:32} {path}")
+        return
+    label, results = runtime.set_try(args.what)
+    print(f"切到 {label}：" if label != "main" else "切回 main：")
+    for line in results:
+        print("  " + line)
+
+
 def cmd_weixin(args):
     from . import weixin_hub
     act, name = args.action, args.name
@@ -896,7 +910,10 @@ def parser():
     s.add_argument("code", nargs="?", help="配对码：在那台电脑的网页「设置」→「电脑」里生成")
     s.add_argument("--leave", action="store_true", help="断开，不再加入别的电脑")
     s.set_defaults(fn=cmd_join)
-    s = sub.add_parser("promote", help="验收通过后：把当前代码装成稳定版，逐个升级跑稳定版的项目")
+    s = sub.add_parser("try", help="开发 ccim 时用：验收某个需求时把开发版切到它的工作目录上（ccim try 40），ccim try main 切回")
+    s.add_argument("what", nargs="?", help="需求编号、分支名或工作目录；main 切回；不写就列出能试的")
+    s.set_defaults(fn=cmd_try)
+    s = sub.add_parser("promote", help="验收通过后：把最新的 main 装成稳定版，逐个升级跑稳定版的项目")
     s.set_defaults(fn=cmd_promote)
     s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程
     s.add_argument("path")

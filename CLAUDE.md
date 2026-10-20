@@ -117,7 +117,7 @@
   输错锁定（同地址 15 分钟 5 次、全部一小时 20 次）。/api/state 拼各台电脑的（me 是第一台在线的电脑，hub 字段标明在服务器上），
   其余接口按 X-Machine 转发；开机密码、选文件夹、在访达里显示一律不经过服务器。网页里 S.hub 时每台电脑都按「别的电脑」处理。
   电脑那边 `ccim join https://IP 配对码`（hub.json 里 server=true，_conn 走 HTTPS、用 certifi 的根证书）。
-  部署（OpenClaw 150.158.91.156）：~/ccim-hub/venv（pip install --no-deps 源码 + qrcode、certifi），systemd ccim-hub，nginx sites-available/ccim-hub
+  部署（服务器地址等记在本机，不写进仓库）：~/ccim-hub/venv（pip install --no-deps 源码 + qrcode、certifi），systemd ccim-hub，nginx sites-available/ccim-hub
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json
@@ -177,15 +177,21 @@
 - ccim 自己的测试机器人（项目 ccim）跑开发版；其他项目跑稳定版。你很可能就运行在 ccim 测试机器人里。
 - 改完想让用户在飞书里体验：先提交，再 `ccim restart --safe ccim`，然后回复用户（重启会断掉当前这一轮，默认 15 秒后才重启，
   留时间把回复发出去）。新版本起不来会自动用稳定版顶上，飞书里会收到通知，回来接着修。
-- 用户说验收通过，再 `ccim promote` 升级其他项目；不要直接 `ccim restart` 别的项目到开发版。
+- 用户说验收通过，合并 PR 后 `ccim promote` 升级其他项目；不要直接 `ccim restart` 别的项目到开发版。
 - **同一个机器人里可能有好几个对话（私聊主对话、各个话题）同时在改这个仓库。** 提交时只 `git add` 自己改的文件，
   不要 `git add -A`：会把别的对话改到一半的代码一起提交、一起重启上线。
 - **重启前先看别的对话是不是正在干活**（`ccim show` 里的对话、state.json 的 busy），正在干活的会被打断；必要时先问用户。
 
-## 需求管理（GitHub issue）
+## 需求管理（GitHub issue + 分支 + PR，#19）
 
 - 用户确认要做的需求，提一个 issue（仓库 lzy2025ai/ccim）：写清做什么、第一版要有的（勾选清单）、先不做的。
-- 做的时候提交说明里带 `#编号`；用户验收通过后，推送时在提交说明里写 `Closes #编号`，issue 自动关闭。没验收的不关。
+- 每个 issue 从 main 开分支 `issue-<编号>-<简称>`，在分支上改，提交说明带 `#编号`；推上去开 PR，PR 描述写 `Closes #编号`。
+  开发版跑的是仓库目录里的代码，所以验收时仓库目录要在这个分支上（同时做两个需求时一个做完、提交了再切）。
+- 用户说验收通过：合并 PR（squash），issue 自动关闭；没验收的不合并。合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）
+  先用 Python 3.11 检查，再把服务器上的总控更新到这个版本；同时 `ccim promote` 更新本机其他项目。别的电脑暂时要各自更新、重启。
+- 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑
+  ~/ccim-hub/hub-update.sh（仓库里的 deploy/hub-update.sh，改了要手动拷上去），新版本起不来就装回上一个，版本记在 deployed.txt。
+  仓库 Secrets：DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS；变量 DEPLOY_HOST。只有 lzy2025ai/ccim 会部署，fork 不会
 - 用 gh 操作前先 `gh auth switch --user lzy2025ai`，做完切回 `gh auth switch --user flowstart`（推送同理）。
 
 ## 约定

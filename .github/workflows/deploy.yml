@@ -1,0 +1,49 @@
+# PR 和推送：用 Python 3.11 检查能不能装、能不能导入。合并进 main：部署服务器上的总控（#19）。
+# 部署只在 lzy2025ai/ccim 里跑；fork 的仓库没有部署钥匙，这一步直接跳过。
+name: 检查和部署
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安装
+        run: pip install -q .
+      - name: 检查
+        run: |
+          python -m compileall -q ccim
+          python -c "import ccim.cli, ccim.platform, ccim.hubserver, ccim.peers, ccim.groups, ccim.mentions, ccim.history"
+
+  deploy:
+    needs: check
+    if: github.repository == 'lzy2025ai/ccim' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 部署到服务器
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          git archive HEAD | ssh -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -i ~/.ssh/deploy \
+            "$HOST" "$GITHUB_SHA"

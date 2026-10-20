@@ -13,7 +13,10 @@ import contextlib, fcntl, json, os, re, tempfile, time, uuid
 from . import registry
 
 COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
-FIELDS = ("name", "seal", "color", "base", "model", "effort", "role", "dir", "pinned")
+AVATARS = ("01-navigator", "02-coder", "03-designer", "04-writer", "05-researcher", "06-analyst",
+           "07-engineer", "08-assistant", "09-explorer", "10-guardian", "11-maker", "12-planner",
+           "13-spark", "14-archivist", "15-buddy", "16-sprout")
+FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned")
 SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role"}   # Agent 字段 → 登记里的字段
 
 
@@ -85,6 +88,8 @@ def _clean(fields):
         out["pinned"] = bool(out["pinned"])
     if "color" in out and out["color"] not in COLORS:
         out["color"] = COLORS[0]
+    if "avatar" in out:
+        out["avatar"] = out["avatar"] if isinstance(out["avatar"], str) and out["avatar"] in AVATARS else None
     return out
 
 

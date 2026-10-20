@@ -158,6 +158,12 @@ body{overflow:hidden}
 .newtag.err{color:var(--bad)}
 .brow.fresh .btitle{font-weight:700}
 .brow.fresh .bprog{color:var(--ink)}
+.brow.work,.item.work{position:relative;border-color:transparent}
+.ants{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.ants rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:12px;ry:12px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:6 5;animation:ants 1s linear infinite}
+.item.work .ants rect{rx:10px;ry:10px;stroke-width:1.2;stroke-dasharray:5 4}
+@keyframes ants{to{stroke-dashoffset:-11}}
+@media (prefers-reduced-motion:reduce){.ants rect{animation:none}}
 .bagent{font-weight:500;color:var(--ink-2);white-space:nowrap;flex:none}
 .bagent::after{content:"·";color:var(--faint);margin-left:8px;font-weight:400}
 .wait{display:inline-flex;align-items:center;gap:6px;color:var(--zhu);font-weight:500}
@@ -1276,6 +1282,8 @@ function whenTag(c){   // 归档的对话最后一周显示还剩几天删除
 function moreBtn(c){
   return `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();itemMenu(event,${q(c.id)})">${ICON.more}</button>`;
 }
+// 正在干活：边框是一圈流动的虚线（#54）
+const ANTS = `<svg class="ants" aria-hidden="true"><rect/></svg>`;
 const isToday = ts => { if (!ts) return false; const d = new Date(ts.replace(" ", "T")), n = new Date(); return d.toDateString() === n.toDateString(); };
 function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层，再往下的排在同一层
   const a = c.agent ? agentOf(c.agent) : null;
@@ -1290,7 +1298,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
-    : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
+    : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${c.busy ? ANTS : ""}
         ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
@@ -2108,7 +2116,7 @@ function boardRow(c, kind){
   const r = REASON[c.attention];
   const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
     : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
-  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
+  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""} ${kind === "work" ? "work" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}${iconOf(c, a, kind === "recent" ? "sm" : "")}
     <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;

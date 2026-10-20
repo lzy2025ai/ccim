@@ -191,7 +191,7 @@
   先用 Python 3.11 检查，再把服务器上的总控更新到这个版本；同时 `ccim promote` 更新本机其他项目。别的电脑暂时要各自更新、重启。
 - 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑
   ~/ccim-hub/hub-update.sh（仓库里的 deploy/hub-update.sh，改了要手动拷上去），新版本起不来就装回上一个，版本记在 deployed.txt。
-  仓库 Secrets：DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS；变量 DEPLOY_HOST。只有 lzy2025ai/ccim 会部署，fork 不会
+  仓库 Secrets：DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS、DEPLOY_HOST（用户@地址；不能放仓库变量，变量会原样打印在公开的运行日志里）。只有 lzy2025ai/ccim 会部署，fork 不会
 - 用 gh 操作前先 `gh auth switch --user lzy2025ai`，做完切回 `gh auth switch --user flowstart`（推送同理）。
 
 ## 约定

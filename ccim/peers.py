@@ -360,7 +360,7 @@ class Peers:
             out[k] = [dict(x, machine=me) for x in local.get(k) or []]
         machines = self.machines()
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
-                      "home": local.get("home")}}
+                      "home": local.get("home"), "ccim": local.get("ccim")}}
         results = {}
 
         def fetch(m):
@@ -416,7 +416,7 @@ class Peers:
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
-                              "home": s.get("home")}
+                              "home": s.get("home"), "ccim": s.get("ccim")}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)

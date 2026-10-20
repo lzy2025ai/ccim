@@ -258,6 +258,7 @@ def build_stable():
     _git("fetch", "-q", "origin", "main")
     ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
     sha = _git("rev-parse", ref).stdout.strip()
+    _git("branch", "-f", "ccim-promote", sha)   # uv 从本地仓库取代码时只认分支上的提交，origin/main 不在任何本地分支上
     import tomllib                            # 版本号读那次提交里的 pyproject
     ver = tomllib.loads(_git("show", f"{sha}:pyproject.toml").stdout)["project"]["version"]
     label = f"{ver}-{sha[:7]}"

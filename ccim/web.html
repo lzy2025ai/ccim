@@ -149,6 +149,11 @@ body{overflow:hidden}
 .pop .marks button.on{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
 .pop .marks .sw i{display:block;width:14px;height:14px;border-radius:50%}
 .pop button.danger{color:var(--bad)}
+.quote-box{border-left:3px solid var(--line-strong);padding:4px 10px;color:var(--ink-2);margin:0 0 12px;background:var(--paper);border-radius:0 6px 6px 0;white-space:pre-wrap;max-height:120px;overflow:auto}
+.checkrow{display:flex;gap:9px;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;text-align:left}
+.checkrow .cb{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line-strong);display:flex;align-items:center;justify-content:center;color:transparent;flex:none}
+.checkrow .cb svg{width:12px;height:12px}
+.checkrow[aria-checked=true] .cb{background:var(--qing);border-color:var(--qing);color:#fff}
 @media (hover:none){.item .more{display:inline-flex}.item:hover .when,.item.on .when{display:inline}}
 .msg.wide{max-width:1180px}
 /* 新对话：在哪台电脑、哪个目录干活，放在输入框上面（名字、路径再长也不挤输入框下面那一行） */
@@ -602,6 +607,7 @@ const ICON = {
   quote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h7M4 12h11M4 17h7"/><path d="M18 14v5"/></svg>',
   branch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 5 5 9-10"/></svg>',
+  undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
@@ -1031,7 +1037,33 @@ function msgActs(src, i, r){
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (src === "log" && canFork(i, r)) btns.push(`<button onclick="forkAt(${i})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
+  if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
   return `<div class="msg-acts">${btns.join("")}</div>`;
+}
+let rewindFiles = true;
+function rewindAt(i){
+  const r = detail.log[i], info = (detail.rewind || {})[i];
+  if (!r || !info) return;
+  rewindFiles = info.files;
+  const later = info.turns - 1;
+  dialog("退回到这条消息之前？", `<div class="quote-box">${esc(r.text || "（文件）")}</div>
+    <p style="margin:0 0 12px">${later ? `这条消息和之后的 ${later} 轮对话会撤掉，` : "这条消息和它的回答会撤掉，"}原文放回输入框，可以改了再发。</p>
+    ${info.files ? `<button type="button" class="checkrow" role="checkbox" aria-checked="true" onclick="rewindFiles=!rewindFiles;this.setAttribute('aria-checked',rewindFiles)">
+      <span class="cb">${ICON.check}</span><span>同时撤销这之后改过的文件</span></button>` : ""}`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn danger" id="rw-ok" onclick="doRewind(${i})">退回</button>`);
+  $("#rw-ok").focus();
+}
+async function doRewind(i){
+  const b = $("#rw-ok"); b.disabled = true; b.textContent = "正在退回…";
+  let r;
+  try { r = await act(() => api("/api/chat/rewind", {id: detail.id, index: i, files: rewindFiles})); }
+  catch { b.disabled = false; b.textContent = "退回"; return; }
+  closeDialog();
+  toast(rewindFiles && detail.rewind[i].files ? "已退回，文件也恢复了" : "已退回");
+  detail = await api(`/api/chat?id=${encodeURIComponent(detail.id)}`);
+  drawChat();
+  const input = $("#input");
+  if (input) { input.value = r.text; input.focus(); input.dispatchEvent(new Event("input")); }
 }
 function canFork(i, r){
   if (r.type !== "answer" || r.state !== "done" || detail.readonly || detail.busy) return false;

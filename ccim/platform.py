@@ -130,6 +130,16 @@ class Logs:
             pass
         return out
 
+    def truncate(self, chat, n):
+        """只留前 n 条（按合并后的算）。"""
+        rows = self.read(chat)[:n]
+        with self.lock:
+            tmp = self._f(chat) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                for r in rows:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            os.replace(tmp, self._f(chat))
+
     def remove(self, chat):
         try:
             os.remove(self._f(chat))
@@ -184,6 +194,8 @@ class WebChannel(Channel):
                    "elapsed": done["elapsed"]}
             if done.get("fork"):
                 rec["fork"] = done["fork"]
+            if done.get("prompt"):
+                rec["prompt"] = done["prompt"]
         else:
             rec = {"type": "note", "text": markdown or ""}
         self._emit(chat_id, self.logs.append(chat_id, rec))
@@ -489,6 +501,7 @@ class Platform:
             return self.external_detail(cid)
         v = self.chat_view(cid)
         v["log"] = self.mentions.lost(self.channel.logs.read(cid))
+        v["rewind"] = self.rewindable(cid, v["log"])
         for r in v["log"]:                    # 平台重启过：没处理的密码卡片作废
             if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
                 r.update(state="expired")
@@ -679,6 +692,54 @@ class Platform:
             if r.get("type") in ("user", "answer", "file", "note", "mention"):
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
+
+    # ----- 退回（#24） -----
+
+    def _rewind_plan(self, rows, i, base):
+        """退回到第 i 条（自己发的消息）之前：返回 (文件恢复到哪条消息, 接到哪个会话, 接到哪条)；退不了返回 None。"""
+        if base == "codex" or not 0 <= i < len(rows) or rows[i].get("type") != "user" or rows[i].get("by"):
+            return None
+        prev = [r for r in rows[:i] if r.get("type") == "answer"]
+        sid = at = None
+        if prev:
+            f = prev[-1].get("fork") or {}
+            if not f.get("at"):
+                return None
+            sid, at = f.get("sid"), f["at"]
+        nxt = next((r for r in rows[i + 1:] if r.get("type") == "answer"), None)
+        return (nxt or {}).get("prompt"), sid, at
+
+    def rewindable(self, cid, rows):
+        m = self.meta(cid)
+        base = self._effective(m)["base"]
+        out = {}
+        for i, r in enumerate(rows):
+            if r.get("type") == "user":
+                p = self._rewind_plan(rows, i, base)
+                if p:
+                    out[i] = {"files": bool(p[0]), "turns": sum(1 for x in rows[i:] if x.get("type") == "user")}
+        return out
+
+    async def rewind_chat(self, cid, index, files):
+        m = self.meta(cid)
+        if m.get("busy"):
+            raise Problem("它还在回答，先停下再退回。")
+        rows = self.channel.logs.read(cid)
+        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"])
+        if not plan:
+            raise Problem("这条消息退不回去。")
+        files_at, sid, at = plan
+        c = self._bridge(cid).chat(cid, "p2p")
+        try:
+            await c.rewind(files_at if files else None, sid, at)
+        except RuntimeError as e:
+            raise Problem(str(e))
+        except Exception as e:
+            raise Problem(f"退回失败：{e}")
+        self.channel.logs.truncate(cid, index)
+        self.channel.progress_of.pop(cid, None)
+        r = rows[index]
+        return {"text": r.get("text") or "", "files": r.get("files") or []}
 
     async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None):
         """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""
@@ -914,6 +975,7 @@ def _handler(pf):
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
+                "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"))),
                 "/api/chat/members": lambda: {"members": pf.call(groups_mod.set_members, pf, b("id"), b("add") or [], b("remove") or [])},

@@ -83,6 +83,10 @@
   （`history.fork_parents`，读对话记录的消息编号，按文件只读新增部分并缓存；平台启动时 `_warm` 先读一遍）。终端对话取最近 40 个认分叉，
   只列最近 15 个和它们的上级。列表里的标记（重命名、置顶 pin 越小越靠上、归档、图标、颜色）：网页对话存在对话 meta 里，飞书 / 微信 / 终端的对话
   存平台 state 的 marks（删除 = hidden，只从列表里去掉）。分叉没单独置顶、归档时跟着原来那个在同一组；树最多缩进两层
+- 退回（#24）：网页里的 Claude 会话开着文件快照（enable_file_checkpointing）并让它回显我们发的消息（replay-user-messages），
+  每轮记下提问的编号（回答记录里的 prompt）。退回到第 i 条 = 文件 `rewind_files` 到第 i 条之后那个回答的 prompt，
+  对话接到第 i 条之前那个回答的 fork（另开分支，和分叉一样；之前没有回答就开新会话），记录截到第 i 条（`Logs.truncate`）。
+  连接、断开都在 worker 里，所以是往队列里放 REWIND 信号。Codex 不支持；之前那个回答没有 fork（没答完）的退不了
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

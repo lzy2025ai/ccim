@@ -23,6 +23,7 @@ SHOW_STEPS = 6
 TYPING_EVERY = 5            # 没有卡片的渠道（微信）每隔几秒续一次「正在输入」
 RESET = object()
 ATTACH = object()
+REWIND = object()
 END = object()                # 收件箱里：和 Claude 的连接断了
 AWAKE = object()              # 没人问，Claude 自己开了一轮（比如后台任务做完了）
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
@@ -100,6 +101,7 @@ class Turn:
         self.shown = None
         self.retry = None                     # 连不上 Claude 时第几次重试（api_retry），连上了就清掉
         self.uuid = None                      # 这一轮最后一条回答的编号（从这里分叉用）
+        self.prompt = None                    # 开始这一轮的那条消息的编号（退回时把文件恢复到它之前）
 
     def card(self, title, color):
         hidden = len(self.steps) - SHOW_STEPS
@@ -147,7 +149,7 @@ class Chat:
         self.queue.put_nowait((prompt, reply_to, react))
         if not self.worker or self.worker.done():
             self.worker = asyncio.create_task(self._work())
-        waiting = sum(1 for item in self.queue._queue if item[0] not in (RESET, ATTACH))   # 内部信号不算排队
+        waiting = sum(1 for item in self.queue._queue if item[0] not in (RESET, ATTACH, REWIND))   # 内部信号不算排队
         return waiting - 1 + (1 if self.turn else 0)
 
     @property
@@ -224,6 +226,18 @@ class Chat:
         else:
             self._attach(session_id, at)
 
+    async def rewind(self, files_at, session_id, at, dry=False):
+        """退回（#24）：文件恢复到 files_at 那条消息之前（None 不动文件），对话接到 session_id 的 at 为止（另开分支；
+        session_id 为 None 就从头开始）。dry：只算会恢复哪些文件，什么都不动。连接、断开都要在 worker 里做。
+        只有用编辑工具改的文件有快照，命令行改的恢复不了（Claude Code 本身如此）。"""
+        if self.turn:
+            raise RuntimeError("它还在回答，先停下再退回。")
+        fut = asyncio.get_running_loop().create_future()
+        self.queue.put_nowait((REWIND, (files_at, session_id, at, fut, dry), None))
+        if not self.worker or self.worker.done():
+            self.worker = asyncio.create_task(self._work())
+        return await fut
+
     def _attach(self, session_id, at=None):
         self._forget()
         self.fork_from, self.fork_at = session_id, at
@@ -265,6 +279,26 @@ class Chat:
                 if prompt is ATTACH:
                     await self._disconnect()
                     self._attach(*reply_to)
+                    continue
+                if prompt is REWIND:
+                    files_at, sid, at, fut, dry = reply_to
+                    try:
+                        if dry:
+                            await self._connect()
+                            r = await self.client._query._send_control_request(
+                                {"subtype": "rewind_files", "user_message_id": files_at, "dry_run": True})
+                            fut.done() or fut.set_result((r or {}).get("filesChanged") or [])
+                            continue
+                        if files_at:
+                            await self._connect()
+                            await self.client.rewind_files(files_at)
+                        await self._disconnect()
+                        self._attach(sid, at) if sid else self._forget()
+                        fut.done() or fut.set_result(None)
+                    except Exception as e:
+                        log.exception("[%s] 退回出错", self.chat_id[-6:])
+                        await self._disconnect()
+                        fut.done() or fut.set_exception(e)
                     continue
                 if self.reconnect and prompt is not AWAKE:
                     await self._disconnect()
@@ -356,8 +390,10 @@ class Chat:
         if self.client:
             return
         tries = [(self.session_id, False)] if self.session_id else [(self.fork_from, True)] if self.fork_from else []
+        snapshots = bool(getattr(self.b.channel, "live", False))   # 网页里能退回：记下文件快照，让它回显我们发的消息（带编号）
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(fork_session=fork, resume_session_at=self.fork_at if fork else None,
+            opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots,
+                extra_args={"replay-user-messages": None} if snapshots else {},fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
@@ -457,6 +493,9 @@ class Chat:
                             except Exception:
                                 log.warning("打断补充的那一轮失败", exc_info=True)
                     if isinstance(m, UserMessage):
+                        if (t.prompt is None and m.uuid and not m.parent_tool_use_id and not (
+                                isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content))):
+                            t.prompt = m.uuid         # 回显的这一轮的提问
                         if (isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content)
                                 and not self.stopping):    # 打断时那条「已中断」的工具结果不算
                             t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
@@ -550,6 +589,8 @@ class Chat:
                 "elapsed": round(time.monotonic() - t.start, 1)}
         if state == "done" and t.uuid and self.session_id:
             snap["fork"] = {"sid": self.session_id, "at": t.uuid}
+        if state != "working" and t.prompt:
+            snap["prompt"] = t.prompt
         return snap
 
     async def _tick(self, t, reply_to):

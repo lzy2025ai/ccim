@@ -1206,8 +1206,10 @@ function renderChatEmpty(){
 }
 
 // ================= 对话页 =================
+let quietOpen = null;
 async function openChat(id){
-  $("#main").innerHTML = `<div class="loading">…</div>`;
+  const quiet = quietOpen === id; quietOpen = null;
+  if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
   if (!detail || detail.id !== id) chatRcpt = [];
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
@@ -1555,14 +1557,24 @@ async function sendChat(){
     catch { $("#input").value = v; chatRcpt = to; drawChatRcpt(); }
     return;
   }
+  if (detail.readonly && starting) return;
   $("#input").value = ""; pendingFiles = []; drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
-    if (starting) return;
     starting = true;
+    const src = detail, mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
+    src.log.push(mine);                  // 新对话建好要一会儿：先把这条显示出来
+    drawThread();
+    const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
     try {
-      const {id} = await act(() => api("/api/chat/continue", {id: detail.id, text: v, files}));
-      await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
-    } catch { $("#input").value = v; } finally { starting = false; }
+      const {id} = await act(() => api("/api/chat/continue", {id: src.id, text: v, files}));
+      await loadState();
+      quietOpen = id;                    // 换到新对话时不清空页面，内容到了直接换上（#45）
+      location.hash = src.agent && current.view === "agents"
+        ? `#/agents/${encodeURIComponent(src.agent)}/${encodeURIComponent(id)}` : `#/chats/${encodeURIComponent(id)}`;
+    } catch {
+      src.log = src.log.filter(x => x !== mine);
+      if (detail === src) { drawThread(); $("#input").value = v; }
+    } finally { starting = false; }
     return;
   }
   const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};

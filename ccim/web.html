@@ -160,10 +160,10 @@ body{overflow:hidden}
 /* 等你处理：玻璃卡片。后面垫一层柔和的色块，卡片半透明 + 背景模糊 + 顶部高光 + 投影（#54） */
 .glass-bed{position:relative;isolation:isolate;padding:2px 0}
 .glass-bed::before{content:"";position:absolute;z-index:-1;inset:-10px -6px;border-radius:24px;pointer-events:none;
-  background:radial-gradient(40% 70% at 12% 30%,color-mix(in srgb,var(--qing) 22%,transparent),transparent 70%),
-             radial-gradient(35% 80% at 85% 70%,color-mix(in srgb,var(--zhu) 14%,transparent),transparent 70%),
-             radial-gradient(30% 60% at 55% 10%,color-mix(in srgb,var(--huang) 16%,transparent),transparent 70%);filter:blur(18px)}
-.glass-bed .brow{background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);
+  background:radial-gradient(40% 70% at 12% 30%,color-mix(in srgb,var(--qing) 36%,transparent),transparent 70%),
+             radial-gradient(35% 80% at 85% 70%,color-mix(in srgb,var(--zhu) 24%,transparent),transparent 70%),
+             radial-gradient(30% 60% at 55% 10%,color-mix(in srgb,var(--huang) 28%,transparent),transparent 70%);filter:blur(14px)}
+.glass-bed .brow{background:rgba(255,255,255,.42);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);
   border:1px solid rgba(255,255,255,.75);border-radius:14px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(29,34,43,.04),0 10px 28px -12px rgba(43,76,111,.35),0 2px 6px rgba(29,34,43,.06);
   transition:transform .18s ease,box-shadow .18s ease}

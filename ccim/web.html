@@ -84,6 +84,8 @@ body{overflow:hidden}
 .seal.sm{width:26px;height:26px;font-size:10px;border-radius:6px;padding:2px}
 .seal.sm.one{font-size:13px}
 .seal.off{background:transparent;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.seal.picture{padding:0;box-shadow:none}
+.seal.picture img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .seal .dot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--paper);background:var(--faint)}
 .seal .dot.on{background:var(--ok)} .seal .dot.busy{background:var(--huang)}
 
@@ -480,6 +482,16 @@ body{overflow:hidden}
 .swatches{display:flex;gap:6px}
 .swatches button{width:22px;height:22px;border-radius:6px;background:var(--c)}
 .swatches button.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--c)}
+.avatar-picker{min-width:0}
+.avatar-preview{margin-bottom:12px}
+.avatar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));gap:10px;max-width:600px;margin-top:14px}
+.avatar-choice{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 3px;border:2px solid transparent;border-radius:10px;font-size:11px;color:var(--muted)}
+.avatar-choice img{width:48px;height:48px;object-fit:cover;border-radius:9px}
+.avatar-choice:hover{background:var(--sunk)}
+.avatar-choice.on{border-color:var(--qing);background:var(--sunk);color:var(--ink)}
+.avatar-choice:focus-visible{outline:2px solid var(--qing);outline-offset:2px}
+.avatar-text{margin-top:16px}
+.avatar-text[hidden],.avatar-grid[hidden]{display:none}
 
 /* ---------- Agent ---------- */
 .agent-page{overflow:auto;flex:1}
@@ -718,6 +730,10 @@ body{--doc-w:min(52vw,780px)}
 <script>
 // ================= 基础 =================
 const COLORS = {qing:"#2B4C6F", lu:"#3F7A5E", zhe:"#9A5B34", huang:"#B8902A", zhu:"#B5402F", dai:"#4A4F6B"};
+const AVATARS = [["01-navigator","领航员"],["02-coder","程序员"],["03-designer","设计师"],["04-writer","写作者"],
+  ["05-researcher","研究员"],["06-analyst","分析师"],["07-engineer","工程师"],["08-assistant","小助理"],
+  ["09-explorer","探索者"],["10-guardian","守护者"],["11-maker","创造者"],["12-planner","规划师"],
+  ["13-spark","灵感家"],["14-archivist","知识管家"],["15-buddy","搭档"],["16-sprout","成长伙伴"]];
 const BASE = {claude:"Claude Code", codex:"Codex"};
 const CLAUDE_MODELS = [["opus","Opus","最强，复杂任务"],["sonnet","Sonnet","快，日常够用"],["haiku","Haiku","最快最省"],["fable","Fable",""]];
 const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
@@ -836,9 +852,11 @@ function seal(a, size = "", dot = true){
   const txt = a ? (a.seal || "新") : "临";
   const chars = [...txt].slice(0, 2);
   const c = a ? (COLORS[a.color] || COLORS.qing) : "#8A8F87";
-  const cls = ["seal", size, chars.length === 1 ? "one" : "vert"].join(" ");
+  const avatar = a && AVATARS.some(([id]) => id === a.avatar) ? a.avatar : null;
+  const cls = ["seal", size, chars.length === 1 ? "one" : "vert", avatar ? "picture" : ""].join(" ");
   const d = a && dot ? `<i class="dot ${a.busy ? "busy" : (a.channels || []).some(c => c.state === "online") || !(a.channels || []).length ? "on" : ""}"></i>` : "";
-  return `<span class="${cls}" style="--c:${c}" aria-hidden="true">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${d}</span>`;
+  const img = avatar ? `<img src="/avatars/${avatar}.webp" alt="" decoding="async" onerror="this.parentElement.classList.remove('picture');this.remove()">` : "";
+  return `<span class="${cls}" style="--c:${c}" aria-hidden="true">${chars.map(x => `<span>${esc(x)}</span>`).join("")}${img}${d}</span>`;
 }
 
 // ---- Markdown（只认常见写法，先转义再排版） ----
@@ -2351,12 +2369,16 @@ function formHtml(a){
   const hasCodex = ((S.machine_info || {})[fd.machine] || {}).codex ?? S.codex;
   const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => m.online).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), fd.machine,
     v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if (fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) fd.base = "claude"; redrawForm(); })}</div>` : "";
-  fd._sealSet = !!(a && a.seal);
+  fd._sealSet = fd._sealSet ?? !!(a && a.seal);
   return `<div class="form">${machineRow}
-    <label>头像</label><div class="row" id="seal-prev">${seal({...fd, seal: fd.seal || "新"}, "lg", false)}
-      <div><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="颜色" data-c="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal()"></button>`).join("")}</div>
-      <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input class="input" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;fd._sealSet=!!this.value;drawSeal()"></div></div></div>
-    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);this.closest('.form').querySelector('[maxlength]').value=fd.seal};drawSeal()">
+    <label>头像</label><div class="avatar-picker">
+      <div class="row avatar-preview"><span id="seal-prev">${seal({...fd, seal: fd.seal || "新"}, "lg", false)}</span>
+        <div class="seg" aria-label="头像类型"><button data-avatar-mode="picture" class="${fd.avatar ? "on" : ""}" aria-pressed="${!!fd.avatar}" onclick="chooseAvatar(fd.avatar || AVATARS[0][0])">图片头像</button>
+          <button data-avatar-mode="text" class="${fd.avatar ? "" : "on"}" aria-pressed="${!fd.avatar}" onclick="chooseAvatar(null)">文字印章</button></div></div>
+      <div class="avatar-grid" aria-label="选择图片头像" ${fd.avatar ? "" : "hidden"}>${AVATARS.map(([id, name]) => `<button class="avatar-choice ${fd.avatar === id ? "on" : ""}" data-avatar="${id}" aria-label="${name}" aria-pressed="${fd.avatar === id}" onclick="chooseAvatar('${id}')"><img src="/avatars/${id}.webp" alt="" width="48" height="48" decoding="async"><span>${name}</span></button>`).join("")}</div>
+      <div class="avatar-text" ${fd.avatar ? "hidden" : ""}><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="${{qing:'青',lu:'绿',zhe:'褐',huang:'黄',zhu:'朱',dai:'黛'}[k]}色" data-c="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal()"></button>`).join("")}</div>
+        <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input id="f-seal" class="input" aria-label="印章文字" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;fd._sealSet=!!this.value;drawSeal()"></div></div></div>
+    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};drawSeal()">
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
     <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
@@ -2370,15 +2392,23 @@ function formHtml(a){
   </div>`;
 }
 function autoSeal(name){ const cs = [...name].filter(c => !/[\s\-_·.()（）「」]/.test(c)); const han = cs.filter(c => /[一-鿿]/.test(c)); return (han.length ? han : cs).slice(0, 2).join(""); }
+function chooseAvatar(id){
+  fd.avatar = id;
+  drawSeal();
+}
 function drawSeal(){
   $("#seal-prev").firstElementChild.outerHTML = seal({...fd, seal: fd.seal || "新"}, "lg", false);
   document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b.dataset.c === fd.color));
+  document.querySelectorAll("[data-avatar]").forEach(b => { const on = b.dataset.avatar === fd.avatar; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  document.querySelectorAll("[data-avatar-mode]").forEach(b => { const on = (b.dataset.avatarMode === "picture") === !!fd.avatar; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  $(".avatar-grid").hidden = !fd.avatar;
+  $(".avatar-text").hidden = !!fd.avatar;
 }
 function redrawForm(){ const keep = {...fd}; const pane = document.querySelector(".pane") || $("#main"); agentDraftFrom = keep; const a = current.id !== "new" ? agentOf(current.id) : null;
   if (a) { const merged = {...a, ...keep}; pane.innerHTML = formHtml(merged); } else pane.innerHTML = formHtml(null); }
 async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
-  const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, base: fd.base || "claude",
+  const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, avatar: fd.avatar || null, base: fd.base || "claude",
                   model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null};
   const r = await act(() => api("/api/agent/save", {id, fields}, id ? ownerOf(id) || ctxMachine : fd.machine), id ? "已保存" : "已新建");
   agentTab = "overview"; await loadState();

@@ -86,7 +86,8 @@
 - 退回（#24）：网页里的 Claude 会话开着文件快照（enable_file_checkpointing）并让它回显我们发的消息（replay-user-messages），
   每轮记下提问的编号（回答记录里的 prompt）。退回到第 i 条 = 文件 `rewind_files` 到第 i 条之后那个回答的 prompt，
   对话接到第 i 条之前那个回答的 fork（另开分支，和分叉一样；之前没有回答就开新会话），记录截到第 i 条（`Logs.truncate`）。
-  连接、断开都在 worker 里，所以是往队列里放 REWIND 信号。Codex 不支持；之前那个回答没有 fork（没答完）的退不了
+  连接、断开都在 worker 里，所以是往队列里放 REWIND 信号。Codex 不支持；之前那个回答没有 fork（没答完）的退不了。
+  只有编辑工具（Write / Edit）改的文件有快照，命令行改的恢复不了；确认框先用 dry_run 算出会恢复哪些文件再列出来
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

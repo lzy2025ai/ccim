@@ -720,6 +720,22 @@ class Platform:
                     out[i] = {"files": bool(p[0]), "turns": sum(1 for x in rows[i:] if x.get("type") == "user")}
         return out
 
+    async def rewind_preview(self, cid, index):
+        """退回第 index 条时会恢复哪些文件（相对工作目录）。"""
+        m = self.meta(cid)
+        rows = self.channel.logs.read(cid)
+        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"])
+        if not plan or not plan[0] or m.get("busy"):
+            return {"files": []}
+        c = self._bridge(cid).chat(cid, "p2p")
+        try:
+            files = await c.rewind(plan[0], None, None, dry=True)
+        except Exception:
+            log.warning("算不出会恢复哪些文件", exc_info=True)
+            return {"files": []}
+        base = os.path.realpath(self._bridge(cid).path)
+        return {"files": [os.path.relpath(f, base) if os.path.realpath(f).startswith(base + os.sep) else f for f in files]}
+
     async def rewind_chat(self, cid, index, files):
         m = self.meta(cid)
         if m.get("busy"):
@@ -975,6 +991,7 @@ def _handler(pf):
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
+                "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"))),

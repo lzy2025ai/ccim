@@ -226,13 +226,14 @@ class Chat:
         else:
             self._attach(session_id, at)
 
-    async def rewind(self, files_at, session_id, at):
+    async def rewind(self, files_at, session_id, at, dry=False):
         """退回（#24）：文件恢复到 files_at 那条消息之前（None 不动文件），对话接到 session_id 的 at 为止（另开分支；
-        session_id 为 None 就从头开始）。连接、断开都要在 worker 里做。"""
+        session_id 为 None 就从头开始）。dry：只算会恢复哪些文件，什么都不动。连接、断开都要在 worker 里做。
+        只有用编辑工具改的文件有快照，命令行改的恢复不了（Claude Code 本身如此）。"""
         if self.turn:
             raise RuntimeError("它还在回答，先停下再退回。")
         fut = asyncio.get_running_loop().create_future()
-        self.queue.put_nowait((REWIND, (files_at, session_id, at, fut), None))
+        self.queue.put_nowait((REWIND, (files_at, session_id, at, fut, dry), None))
         if not self.worker or self.worker.done():
             self.worker = asyncio.create_task(self._work())
         return await fut
@@ -280,8 +281,14 @@ class Chat:
                     self._attach(*reply_to)
                     continue
                 if prompt is REWIND:
-                    files_at, sid, at, fut = reply_to
+                    files_at, sid, at, fut, dry = reply_to
                     try:
+                        if dry:
+                            await self._connect()
+                            r = await self.client._query._send_control_request(
+                                {"subtype": "rewind_files", "user_message_id": files_at, "dry_run": True})
+                            fut.done() or fut.set_result((r or {}).get("filesChanged") or [])
+                            continue
                         if files_at:
                             await self._connect()
                             await self.client.rewind_files(files_at)

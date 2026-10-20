@@ -153,6 +153,8 @@ body{overflow:hidden}
 .checkrow{display:flex;gap:9px;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;text-align:left}
 .checkrow .cb{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line-strong);display:flex;align-items:center;justify-content:center;color:transparent;flex:none}
 .checkrow .cb svg{width:12px;height:12px}
+.checkrow .files-list{display:block;font:12px/1.5 var(--mono);color:var(--muted);margin-top:4px;word-break:break-all}
+.checkrow .cb{align-self:flex-start;margin-top:2px}
 .checkrow[aria-checked=true] .cb{background:var(--qing);border-color:var(--qing);color:#fff}
 @media (hover:none){.item .more{display:inline-flex}.item:hover .when,.item.on .when{display:inline}}
 .msg.wide{max-width:1180px}
@@ -1041,25 +1043,34 @@ function msgActs(src, i, r){
   return `<div class="msg-acts">${btns.join("")}</div>`;
 }
 let rewindFiles = true;
-function rewindAt(i){
+let rewindHas = false;
+async function rewindAt(i){
   const r = detail.log[i], info = (detail.rewind || {})[i];
   if (!r || !info) return;
-  rewindFiles = info.files;
-  const later = info.turns - 1;
+  rewindFiles = true; rewindHas = false;
+  const later = info.turns - 1, id = detail.id;
   dialog("退回到这条消息之前？", `<div class="quote-box">${esc(r.text || "（文件）")}</div>
     <p style="margin:0 0 12px">${later ? `这条消息和之后的 ${later} 轮对话会撤掉，` : "这条消息和它的回答会撤掉，"}原文放回输入框，可以改了再发。</p>
-    ${info.files ? `<button type="button" class="checkrow" role="checkbox" aria-checked="true" onclick="rewindFiles=!rewindFiles;this.setAttribute('aria-checked',rewindFiles)">
-      <span class="cb">${ICON.check}</span><span>同时撤销这之后改过的文件</span></button>` : ""}`,
+    <div id="rw-files">${info.files ? `<p class="muted" style="margin:0;font-size:13px">正在查看改过的文件…</p>` : ""}</div>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn danger" id="rw-ok" onclick="doRewind(${i})">退回</button>`);
   $("#rw-ok").focus();
+  if (!info.files) return;
+  let files = [];
+  try { files = (await api("/api/chat/rewind_preview", {id, index: i})).files || []; } catch {}
+  const box = $("#rw-files");
+  if (!box || !detail || detail.id !== id) return;
+  rewindHas = files.length > 0;
+  box.innerHTML = files.length ? `<button type="button" class="checkrow" role="checkbox" aria-checked="true" onclick="rewindFiles=!rewindFiles;this.setAttribute('aria-checked',rewindFiles)">
+      <span class="cb">${ICON.check}</span><span>同时恢复它之后改过的 ${files.length} 个文件<span class="files-list">${files.slice(0, 5).map(esc).join("<br>")}${files.length > 5 ? `<br>等 ${files.length} 个` : ""}</span></span></button>` : "";
 }
 async function doRewind(i){
   const b = $("#rw-ok"); b.disabled = true; b.textContent = "正在退回…";
   let r;
-  try { r = await act(() => api("/api/chat/rewind", {id: detail.id, index: i, files: rewindFiles})); }
+  const files = rewindFiles && rewindHas;
+  try { r = await act(() => api("/api/chat/rewind", {id: detail.id, index: i, files})); }
   catch { b.disabled = false; b.textContent = "退回"; return; }
   closeDialog();
-  toast(rewindFiles && detail.rewind[i].files ? "已退回，文件也恢复了" : "已退回");
+  toast(files ? "已退回，文件也恢复了" : "已退回");
   detail = await api(`/api/chat?id=${encodeURIComponent(detail.id)}`);
   drawChat();
   const input = $("#input");

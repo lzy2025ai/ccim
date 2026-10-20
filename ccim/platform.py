@@ -37,6 +37,9 @@ def static_file(path):
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
+MARKS = ("title", "pin", "archived", "icon", "color", "hidden")          # 对话列表里用户加的标记
+ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
+COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
@@ -297,6 +300,14 @@ class Platform:
         except Exception:
             log.exception("项目复制成群聊出错")
         self.background.add(asyncio.ensure_future(self._models()))
+        threading.Thread(target=self._warm, daemon=True).start()
+
+    def _warm(self):
+        """先把终端对话读一遍（认分叉要读对话记录，第一次慢），打开 Agent 页时就快了。"""
+        try:
+            self.external_chats(terminal=True)
+        except Exception:
+            log.exception("读终端对话出错")
 
     async def _models(self):
         """能选的模型列表：启动时、之后每天问一次 Claude Code。"""
@@ -470,6 +481,7 @@ class Platform:
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
+                **{k: m.get(k) for k in MARKS if k != "title"},
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
@@ -496,6 +508,37 @@ class Platform:
             self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
+
+    # ----- 列表里的标记：重命名、置顶、归档、图标、颜色、从列表里去掉 -----
+
+    def mark_chat(self, cid, changes):
+        changes = {k: v for k, v in (changes or {}).items() if k in MARKS}
+        if "icon" in changes and changes["icon"] not in ICONS + [None]:
+            raise Problem("没有这个图标。")
+        if "color" in changes and changes["color"] not in COLORS + [None]:
+            raise Problem("没有这个颜色。")
+        if "title" in changes:
+            changes["title"] = " ".join((changes["title"] or "").split())[:60] or None
+        if changes.get("pin") is True:
+            changes["pin"] = -time.time()         # 新置顶的排在最上面
+        if cid.startswith("x:"):
+            marks = registry.read_state(self.home).get("marks") or {}
+            m = {**marks.get(cid, {}), **changes}
+            marks[cid] = {k: v for k, v in m.items() if v not in (None, False, "")}
+            registry.write_state(self.home, marks=marks)
+            return {}
+        if "hidden" in changes:
+            raise Problem("网页里的对话直接删除。")
+        chats = self.chats()
+        if cid not in chats:
+            raise Problem("找不到这个对话。")
+        for k, v in changes.items():
+            if v in (None, False, ""):
+                chats[cid].pop(k, None)
+            else:
+                chats[cid][k] = v
+        self.store.write(chats)
+        return self.chat_view(cid)
 
     # ----- 飞书、微信、终端里的对话 -----
 
@@ -528,19 +571,60 @@ class Platform:
             if terminal and base == "claude":
                 try:
                     from claude_agent_sdk import list_sessions
-                    sessions = list_sessions(directory=cwd, limit=15)
+                    sessions = list_sessions(directory=cwd, limit=40)
                 except Exception:
                     sessions = []
+                start, shown = len(rows), 0
                 for x in sessions:
                     if x.session_id in mine:
                         continue
                     mine.add(x.session_id)
+                    shown += 1
                     title = " ".join((x.custom_title or x.summary or x.first_prompt or "终端里的对话").split())[:30]
                     rows.append({"id": "x:" + x.session_id, "sid": x.session_id, "agent": a_id, "agent_name": a["name"],
                                  "source": "终端", "title": title, "base": base, "external": True, "busy": False,
                                  "last_active": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x.last_modified / 1000)),
-                                 "dir": a.get("dir")})
-        return rows
+                                 "dir": a.get("dir"), "_extra": shown > 15})
+                self._forks(a_id, cwd, rows)
+                # 只列最近 15 个，再加上它们是从哪个分出来的（整棵树）
+                byid = {r["id"]: r for r in rows[start:]}
+                keep = {r["id"] for r in rows[start:] if not r["_extra"]}
+                for cid in list(keep):
+                    seen = set()
+                    while cid in byid and cid not in seen:
+                        seen.add(cid)
+                        keep.add(cid)
+                        cid = byid[cid].get("parent")
+                rows[start:] = [r for r in rows[start:] if r["id"] in keep]
+                for r in rows[start:]:
+                    r.pop("_extra", None)
+        marks = registry.read_state(self.home).get("marks") or {}
+        out = []
+        for r in rows:
+            mk = marks.get(r["id"]) or {}
+            if mk.get("hidden"):
+                continue
+            r.update({k: v for k, v in mk.items() if k != "hidden"})
+            out.append(r)
+        return out
+
+    def _forks(self, aid, cwd, rows):
+        """终端里分叉出来的对话挂到原来那个下面（原来那个可能是网页对话）。"""
+        from . import history
+        ids = {r["sid"]: r["id"] for r in rows if r.get("agent") == aid}
+        for cid, c in self.chats().items():
+            if c.get("agent") == aid and c.get("session_id") and not c.get("project") and not c.get("schedule") \
+                    and not c.get("mention_of"):
+                ids.setdefault(c["session_id"], cid)
+        try:
+            parents = history.fork_parents(list(ids), cwd)
+        except Exception:
+            log.exception("认分叉出错")
+            return
+        for r in rows:
+            p = parents.get(r.get("sid")) if r.get("agent") == aid else None
+            if p and p in ids and ids[p] != r["id"]:
+                r["parent"] = ids[p]
 
     def _external(self, cid):
         sid = cid[2:]
@@ -828,6 +912,7 @@ def _handler(pf):
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
+                "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"))),

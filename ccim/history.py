@@ -4,7 +4,7 @@ Claude Code：~/.claude/projects/<目录>/<session_id>.jsonl（用户说的话�
 Codex：~/.codex/sessions/年/月/日/rollout-…-<thread_id>.jsonl，读 event_msg 里 item_completed 的
 UserMessage / AgentMessage / CommandExecution；用户消息开头 ccim 加的说明要去掉。
 """
-import calendar, glob, json, os, re, time
+import calendar, glob, json, os, re, threading, time
 
 from . import handoff
 from .progress import describe_tool
@@ -56,6 +56,75 @@ def claude(session_id, cwd=None, limit=200):
                 elif b.get("type") == "text" and b.get("text", "").strip():
                     ans["text"] = b["text"].strip()            # 一轮里最后一段文字就是回答
     return out[-limit:]
+
+
+_UUIDS = {}                                  # 对话记录 → [读到哪, 消息编号（按顺序）, 编号集合]，只读新增的部分
+_LOCK = threading.Lock()
+
+
+def _uuids(path):
+    with _LOCK:
+        return _read_uuids(path)
+
+
+def _read_uuids(path):
+    c = _UUIDS.get(path)
+    size = os.path.getsize(path)
+    if not c or size < c[0]:
+        c = _UUIDS[path] = [0, [], set()]
+    if size > c[0]:
+        with open(path, "rb") as f:
+            f.seek(c[0])
+            data = f.read()
+        end = data.rfind(b"\n") + 1               # 最后一行可能还没写完，下次再读
+        for line in data[:end].splitlines():
+            if b'"uuid"' not in line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and r.get("type") in ("user", "assistant") and not r.get("isSidechain") \
+                    and r.get("uuid") and r["uuid"] not in c[2]:
+                c[1].append(r["uuid"])
+                c[2].add(r["uuid"])
+        c[0] += end
+    return c
+
+
+def fork_parents(session_ids, cwd=None):
+    """终端里分叉出来的 Claude Code 对话是从哪个分出来的：分叉会把之前的消息原样（编号不变）复制到新对话，
+    所以开头的消息在别的对话里也有的就是分叉。从共用得最多的那个分出来；一样多时算最早的那个（原来的）。"""
+    info = {}
+    for sid in session_ids:
+        path = handoff.transcript_path(sid, cwd)
+        if not path:
+            continue
+        try:
+            st = os.stat(path)
+            info[sid] = (getattr(st, "st_birthtime", st.st_mtime), _uuids(path))
+        except OSError:
+            continue
+    out = {}
+    for b, (born, (_, seq, _s)) in info.items():
+        if not seq:
+            continue
+        best = None
+        for a, (a_born, (_, _q, aset)) in info.items():
+            if a == b or a_born >= born or seq[0] not in aset:
+                continue
+            n = 0
+            for u in seq:
+                if u not in aset:
+                    break
+                n += 1
+            if n == len(seq) and n == len(_q):       # 内容完全一样，分不出来
+                continue
+            if not best or n > best[0] or (n == best[0] and a_born < best[1]):
+                best = (n, a_born, a)
+        if best:
+            out[b] = best[2]
+    return out
 
 
 def codex_file(thread_id):

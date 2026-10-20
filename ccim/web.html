@@ -213,11 +213,16 @@ body{overflow:hidden}
 .ccard .foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:auto;font-size:12.5px;color:var(--muted)}
 .ccard .foot .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccard .go{color:var(--qing);font-weight:500}
-.ccard .pin{position:absolute;top:12px;right:12px;color:var(--faint);opacity:0;padding:2px}
+.ccard .pin{position:absolute;top:12px;right:40px;color:var(--faint);opacity:0;padding:2px}
 .ccard:hover .pin,.ccard .pin.on{opacity:1}
+.ccard .more{position:absolute;top:9px;right:9px;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--muted);opacity:0}
+.ccard .more svg{width:16px;height:16px}
+.ccard:hover .more{opacity:1}
+.ccard .more:hover{background:var(--sunk);color:var(--ink)}
 .ccard .pin.on{color:var(--warn)}
 .ccard .pin svg{width:15px;height:15px}
 .ccard.add{border-style:dashed;align-items:center;justify-content:center;color:var(--muted);min-height:170px;gap:6px;background:transparent}
+.ccard.add svg{width:22px;height:22px}
 .ccard.add:hover{color:var(--qing);border-color:var(--qing);box-shadow:none}
 .ccard .seal{width:42px;height:42px;border-radius:9px;font-size:14px}
 .ccard .seal.one{font-size:19px}
@@ -498,7 +503,7 @@ body{overflow:hidden}
 /* iPad 竖屏这类中等宽度：列表里「网页」这种来源标签不显示，给标题留地方 */
 @media (max-width:1100px){.list .tag.web{display:none}}
 /* 触屏（手机、iPad）：没有鼠标悬停，悬停才出现的按钮一直显示 */
-@media (hover:none){.ccard .pin{opacity:.7}.item .fold{opacity:1}}
+@media (hover:none){.ccard .pin{opacity:.7}.ccard .more{opacity:1}.item .fold{opacity:1}}
 /* ---------- 正式版补充 ---------- */
 .answer{min-width:0;overflow-wrap:anywhere}
 .answer table{display:block;max-width:100%;overflow-x:auto;overflow-wrap:normal}
@@ -1632,7 +1637,8 @@ function agentCard(a){
   const off = (machineOf(a.machine || S.me) || {online: true}).online === false;
   const st = off ? `<span class="status"><i></i>电脑离线</span>` : a.busy ? `<span class="status busy"><i></i>${esc(a.doing || "干活中")}</span>` : `<span class="status on"><i></i>空闲</span>`;
   const ch = (a.channels || []).map(c => `<span class="tag ${c.kind === "weixin" ? "weixin" : "feishu"}">${c.kind === "weixin" ? "微信" : "飞书"}</span>`).join("");
-  return `<a class="ccard ${off ? "off" : ""}" href="#/agents/${encodeURIComponent(a.id)}">
+  return `<a class="ccard ${off ? "off" : ""}" href="#/agents/${encodeURIComponent(a.id)}" oncontextmenu="agentMenu(event,${q(a.id)})">
+    <button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();agentMenu(event,${q(a.id)})">${ICON.more}</button>
     <button class="pin ${a.pinned ? "on" : ""}" aria-label="${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="event.preventDefault();event.stopPropagation();pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>
     <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${ch}</div></div></div>
     <div class="role">${esc(a.role || "还没写角色说明")}</div>
@@ -1654,6 +1660,41 @@ function newOn(view, mid){
   else newProject(m);
 }
 async function pinAgent(id, on){ await act(() => api("/api/agent/pin", {id, on})); await loadState(); if (!current.id) renderAgentCards(); }
+function agentMenu(e, id){
+  e.preventDefault(); e.stopPropagation();
+  const a = agentOf(id) || (agentSide && agentSide.id === id ? agentSide.a : null);
+  if (!a) return;
+  const at = e.type === "contextmenu"
+    ? {stopPropagation(){}, currentTarget: {getBoundingClientRect: () => ({left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0})}}
+    : e;
+  const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
+  pop(at, [
+    b(`agentTab='edit';location.hash=${q("#/agents/" + encodeURIComponent(id) + "/settings")};if(current.sub==='settings')renderAgent(${q(id)})`, "编辑"),
+    b(`renameAgent(${q(id)})`, "重命名"),
+    b(`pinAgent(${q(id)},${!a.pinned})`, a.pinned ? "取消置顶" : "置顶"),
+    b(`deleteAgent(${q(id)},${q(a.name)})`, "删除", "danger"),
+  ].join(""));
+}
+function renameAgent(id){
+  const a = agentOf(id);
+  if (!a) return;
+  dialog("重命名", `<input id="rn" class="input" maxlength="40" value="${esc(a.name)}">`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveAgentName(${q(id)})">保存</button>`);
+  const el = $("#rn"); el.focus(); el.select();
+  el.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) saveAgentName(id); };
+}
+async function saveAgentName(id){
+  const a = agentOf(id), name = $("#rn").value.trim();
+  if (!name) return $("#rn").focus();
+  closeDialog();
+  if (name === a.name) return;
+  const fields = {name};
+  if (!a.seal || a.seal === autoSeal(a.name)) fields.seal = autoSeal(name);   // 印章没单独改过的跟着名字变
+  await act(() => api("/api/agent/save", {id, fields}, ownerOf(id) || ctxMachine), "已改名");
+  await loadState();
+  if (current.view === "agents" && current.id) { renderList(); if (current.sub === "settings") renderAgent(current.id); }
+  else route();
+}
 
 // ---- 进入 Agent：左边是它的小卡片和对话列表，右边是对话 ----
 let agentSide = null;             // {id, chats}
@@ -1673,7 +1714,7 @@ function renderAgentSide(){
     <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
     <div class="side-card">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div>
       <div class="sub">${[BASE[a.base || "claude"], ...ch, multi() && m ? m.name : ""].filter(Boolean).join(" · ")}</div></div>
-      <a class="icon-btn" href="#/agents/${encodeURIComponent(id)}/settings" aria-label="设置" title="设置">${ICON.gear}</a></div>
+      <button class="icon-btn" aria-label="更多操作" title="更多操作" onclick="agentMenu(event,${q(id)})">${ICON.more}</button></div>
     <button class="side-new" onclick="startAgent(${q(id)})">${ICON.plus}和它开个新对话</button>
     <div class="scroll">${agentSide.error ? `<p class="muted" style="padding:10px">${esc(agentSide.error)}</p>` : rows.length ? chatSections(rows, id)
       : `<p class="muted" style="padding:10px">还没有对话。</p>`}</div>`;
@@ -1793,7 +1834,8 @@ async function saveAgent(id){
 }
 async function deleteAgent(id, name){
   if (!await confirmBox(`删除「${name}」？`, "它接的飞书、微信会一起断开；它的工作目录和工作区里的文件不会删。", "删除")) return;
-  await act(() => api("/api/agent/delete", {id}), "已删除"); await loadState(); location.hash = "#/agents";
+  await act(() => api("/api/agent/delete", {id}), "已删除"); await loadState();
+  if (current.id === id) location.hash = "#/agents"; else route();
 }
 function renderAgentForm(){
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>新建 Agent</h2><div class="role">给它起个名字、写清楚它负责什么。建好后可以直接对话，也可以接到飞书、微信。</div></div></div>

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>(3) ccim · 任务面板（视觉稿）</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1; --lu:#3F7A5E; --zhe:#9A5B34; --huang:#B8902A; --zhu:#B5402F; --dai:#4A4F6B;
+  --warn:#B8902A; --bad:#B5402F; --ok:#3F7A5E;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+svg{flex:none}
+.app{display:grid;grid-template-columns:76px 1fr;height:100vh}
+.app.list{grid-template-columns:76px 300px 1fr}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);margin-bottom:18px}
+.rail a{position:relative;width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:12px}
+.rail a svg{width:20px;height:20px}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.rail .badge{position:absolute;top:4px;right:9px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
+.rail .spacer{flex:1}
+.seal{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font:600 12.5px/1.05 var(--song);background:var(--qing);flex:none;text-align:center}
+.seal.zhe{background:var(--zhe)} .seal.lu{background:var(--lu)} .seal.dai{background:var(--dai)} .seal.zhu{background:var(--zhu)} .seal.huang{background:var(--huang)}
+.seal.sm{width:24px;height:24px;border-radius:6px;font-size:10.5px}
+
+/* ---- 任务面板 ---- */
+.inbox{background:var(--panel);overflow:auto}
+.ib-head{display:flex;align-items:baseline;gap:14px;padding:24px 36px 6px;max-width:1080px}
+.ib-head h1{font:600 24px/1.2 var(--song);margin:0}
+.ib-head .sum{color:var(--muted);font-size:13px}
+.ib-body{padding:4px 36px 40px;max-width:1080px}
+.sec{margin-top:22px}
+.sec h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 8px}
+.sec h2 .n{font-weight:400;color:var(--faint)}
+.sec h2 .dot{width:7px;height:7px;border-radius:50%}
+.row{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--panel)}
+.row:hover{border-color:var(--line-strong)}
+.row .main{min-width:0}
+.row .top{display:flex;align-items:center;gap:8px;min-width:0}
+.row .who{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.row .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .prog{color:var(--ink-2);font-size:13.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .prog b{font-weight:500}
+.row .meta{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;white-space:nowrap}
+.reason{font-size:11.5px;padding:1px 7px;border-radius:5px;white-space:nowrap}
+.reason.done{background:var(--qing-soft);color:var(--qing)}
+.reason.ask{background:#F6ECD3;color:#8A6A12}
+.reason.err{background:#F6DEDA;color:var(--bad)}
+.unread{width:8px;height:8px;border-radius:50%;background:var(--zhu);flex:none}
+.act{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:var(--ink-2);font-size:12.5px}
+.act svg{width:13px;height:13px}
+.act.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.working{display:inline-flex;align-items:center;gap:6px;color:var(--warn)}
+.spin{width:11px;height:11px;border-radius:50%;border:2px solid #E8DDBE;border-top-color:var(--warn);animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.row.quiet{background:transparent;border-color:transparent;padding:8px 14px;margin-bottom:2px}
+.row.quiet:hover{background:var(--paper)}
+.row.quiet .title{font-weight:500}
+.more-link{font-size:13px;color:var(--qing);padding:4px 14px}
+
+/* ---- 对话列表 / Agent 卡片 ---- */
+.side{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.list-head{display:flex;align-items:center;padding:16px 14px 8px}
+.list-head h1{font:600 18px/1.2 var(--song);margin:0}
+.group{font-size:12px;color:var(--faint);padding:12px 14px 4px}
+.item{display:flex;gap:10px;padding:9px 10px;margin:0 6px;border-radius:10px;align-items:flex-start}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .t{flex:1;min-width:0}
+.item .tt{display:flex;align-items:center;gap:6px}
+.item .title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.new .title{font-weight:700}
+.item .sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .when{font-size:12px;color:var(--faint);white-space:nowrap}
+.cards{background:var(--panel);overflow:auto;padding:24px 36px}
+.cards h1{font:600 24px/1.2 var(--song);margin:0 0 18px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;max-width:1080px}
+.ccard{border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.ccard .top{display:flex;gap:10px;align-items:center}
+.ccard .nm{font:600 16px/1.3 var(--song)}
+.ccard .role{color:var(--muted);font-size:13px;flex:1}
+.ccard .foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:8px;font-size:12.5px;color:var(--faint)}
+.wait{display:inline-flex;align-items:center;gap:6px;color:var(--zhu);font-weight:500}
+.wait i{width:7px;height:7px;border-radius:50%;background:var(--zhu)}
+
+/* ---- 手机 ---- */
+.phone-wrap{display:flex;gap:40px;justify-content:center;align-items:flex-start;padding:30px;height:100vh;overflow:auto;background:var(--paper)}
+.phone{width:390px;height:780px;border-radius:36px;background:var(--panel);border:10px solid #1d1f24;overflow:hidden;display:flex;flex-direction:column;position:relative;flex:none}
+.phone .ib-head{padding:18px 18px 4px}
+.phone .ib-head h1{font-size:21px}
+.phone .ib-body{padding:0 12px 80px;overflow:auto;flex:1}
+.phone .row{grid-template-columns:30px 1fr;padding:10px 12px}
+.phone .row .meta{grid-column:2;justify-content:space-between}
+.phone .seal{width:30px;height:30px}
+.tabbar{position:absolute;left:0;right:0;bottom:0;display:flex;border-top:1px solid var(--line);background:rgba(255,255,255,.96);padding:6px 0 18px}
+.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--muted);position:relative}
+.tabbar a.on{color:var(--qing)}
+.tabbar svg{width:22px;height:22px}
+.tabbar .badge{position:absolute;top:-2px;left:calc(50% + 6px);min-width:16px;height:16px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10px;line-height:16px;text-align:center;padding:0 4px}
+.cap{max-width:300px;color:var(--ink-2);font-size:13.5px;line-height:1.8;padding-top:20px}
+.cap h3{font:600 16px/1.3 var(--song);margin:0 0 8px}
+
+.switch{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:2px;background:var(--ink);padding:4px;border-radius:11px;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.switch a{color:#C9CDC4;font-size:12.5px;padding:5px 10px;border-radius:8px;white-space:nowrap;cursor:pointer}
+.switch a.on{background:#fff;color:var(--ink)}
+.screen{display:none}.screen.on{display:block}
+.note{position:fixed;right:16px;top:12px;background:#FFF8E6;border:1px solid #EAD9A8;color:#7A5E16;font-size:12.5px;padding:6px 10px;border-radius:8px;z-index:30;max-width:360px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13l2.5-8h11L20 13v6H4z M4 13h5l1 2h4l1-2h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 9v4l2.5 2M9 2h6" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-agent" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-kb" viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h10M9 8h5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L19 7" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+</svg>
+
+<template id="rail"><nav class="rail"><div class="brand">ccim</div>
+  <a data-k="inbox"><svg><use href="#i-inbox"/></svg>任务面板<span class="badge">3</span></a>
+  <a data-k="chat"><svg><use href="#i-chat"/></svg>对话</a>
+  <a data-k="clock"><svg><use href="#i-clock"/></svg>定时</a>
+  <a data-k="agent"><svg><use href="#i-agent"/></svg>Agent</a>
+  <a data-k="kb"><svg><use href="#i-kb"/></svg>知识库</a>
+  <div class="spacer"></div><a data-k="gear"><svg><use href="#i-gear"/></svg>设置</a></nav></template>
+
+<!-- ========== 1. 任务面板 ========== -->
+<section class="screen" id="s-inbox">
+<div class="app"><nav data-rail="inbox"></nav>
+<main class="inbox">
+  <div class="ib-head"><h1>任务面板</h1><span class="sum">3 件等你处理 · 2 个正在干活 · 最近在跟 5 件</span></div>
+  <div class="ib-body">
+    <div class="sec"><h2><span class="dot" style="background:var(--zhu)"></span>等你处理<span class="n">3</span></h2>
+      <div class="row"><span class="seal">前端</span>
+        <div class="main"><div class="top"><span class="unread"></span><span class="title">首页改版方案</span><span class="who">前端开发</span><span class="reason done">回答完了</span></div>
+          <div class="prog">方案已定稿：首屏只留主视觉和产品入口，<b>等你确认后开始改代码</b></div></div>
+        <div class="meta">3 分钟前<button class="act">这件事完了</button></div></div>
+      <div class="row"><span class="seal zhe">运维</span>
+        <div class="main"><div class="top"><span class="title">发布前检查</span><span class="who">运维助手</span><span class="reason ask">等你批准</span></div>
+          <div class="prog">要执行 <b>docker compose restart backend</b>，重启会断开约 10 秒</div></div>
+        <div class="meta">12 分钟前<button class="act primary">去批准</button></div></div>
+      <div class="row"><span class="seal lu">数据</span>
+        <div class="main"><div class="top"><span class="unread"></span><span class="title">十月销售周报</span><span class="who">数据分析</span><span class="reason err">出错停下了</span></div>
+          <div class="prog">导出表格时连不上数据库，<b>需要你检查一下网络或账号</b></div></div>
+        <div class="meta">1 小时前<button class="act">这件事完了</button></div></div>
+    </div>
+
+    <div class="sec"><h2><span class="dot" style="background:var(--warn)"></span>正在干活<span class="n">2</span></h2>
+      <div class="row"><span class="seal dai">写作</span>
+        <div class="main"><div class="top"><span class="title">公众号：多 Agent 协作实践</span><span class="who">写作助手</span></div>
+          <div class="prog"><span class="working"><span class="spin"></span>正在写第三部分「怎么分工」</span></div></div>
+        <div class="meta">已 4 分钟</div></div>
+      <div class="row"><span class="seal">前端</span>
+        <div class="main"><div class="top"><span class="title">导航栏吸顶</span><span class="who">前端开发 · 群聊 3 人</span></div>
+          <div class="prog"><span class="working"><span class="spin"></span>运行测试：npm run test</span></div></div>
+        <div class="meta">已 1 分钟</div></div>
+    </div>
+
+    <div class="sec"><h2><span class="dot" style="background:var(--faint)"></span>最近在跟<span class="n">5</span></h2>
+      <div class="row quiet"><span class="seal sm huang">选</span>
+        <div class="main"><div class="top"><span class="title">下周选题</span><span class="who">选题助手</span></div>
+          <div class="prog">列了 6 个候选，你选了 2 个，剩下的下周再定</div></div>
+        <div class="meta">昨天<button class="act">这件事完了</button></div></div>
+      <div class="row quiet"><span class="seal sm">前</span>
+        <div class="main"><div class="top"><span class="title">图片懒加载排查</span><span class="who">前端开发</span></div>
+          <div class="prog">定位到 iOS 15 的兼容问题，改法已确认，还没合并</div></div>
+        <div class="meta">2 天前<button class="act">这件事完了</button></div></div>
+      <div class="row quiet"><span class="seal sm zhe">运</span>
+        <div class="main"><div class="top"><span class="title">服务器证书续期</span><span class="who">运维助手</span></div>
+          <div class="prog">自动续期已配好，等下次到期时确认一下</div></div>
+        <div class="meta">3 天前<button class="act">这件事完了</button></div></div>
+      <div class="more-link">显示另外 2 件</div>
+    </div>
+  </div>
+</main></div>
+<div class="note">打开网页默认到这里。浏览器标签页标题显示「(3) ccim」，切到别的窗口也看得到。每行第二行是那个对话的一句话进度，每轮回答完自动更新。</div>
+</section>
+
+<!-- ========== 2. 列表和 Agent 卡片上的未读 ========== -->
+<section class="screen" id="s-list">
+<div class="app list"><nav data-rail="agent"></nav>
+<aside class="side">
+  <div class="list-head"><h1>前端开发</h1></div>
+  <div class="group">今天</div>
+  <div class="item new on"><div class="t"><div class="tt"><span class="unread"></span><span class="title">首页改版方案</span></div><div class="sub">方案已定稿，等你确认后开始改代码</div></div><span class="when">10:42</span></div>
+  <div class="item"><div class="t"><div class="tt"><span class="title">导航栏吸顶</span></div><div class="sub"><span class="working"><span class="spin"></span>运行测试</span></div></div><span class="when">10:30</span></div>
+  <div class="group">更早</div>
+  <div class="item"><div class="t"><div class="tt"><span class="title">图片懒加载排查</span></div><div class="sub">改法已确认，还没合并</div></div><span class="when">10月18日</span></div>
+  <div class="item"><div class="t"><div class="tt"><span class="title">接口限流方案</span></div><div class="sub">已上线，观察一周没有误拦</div></div><span class="when">10月16日</span></div>
+</aside>
+<main class="cards">
+  <h1>Agent</h1>
+  <div class="cgrid">
+    <div class="ccard"><div class="top"><span class="seal">前端</span><div class="nm">前端开发</div></div><div class="role">官网和小程序的前端</div>
+      <div class="foot"><span class="wait"><i></i>1 个对话等你</span><span style="margin-left:auto">1 个在干活</span></div></div>
+    <div class="ccard"><div class="top"><span class="seal zhe">运维</span><div class="nm">运维助手</div></div><div class="role">服务器、发布和证书</div>
+      <div class="foot"><span class="wait"><i></i>1 个等你批准</span><span style="margin-left:auto">12 分钟前</span></div></div>
+    <div class="ccard"><div class="top"><span class="seal dai">写作</span><div class="nm">写作助手</div></div><div class="role">公众号和长文</div>
+      <div class="foot"><span>空闲</span><span style="margin-left:auto">1 个在干活</span></div></div>
+    <div class="ccard"><div class="top"><span class="seal huang">选题</span><div class="nm">选题助手</div></div><div class="role">每周选题和资料收集</div>
+      <div class="foot"><span>空闲</span><span style="margin-left:auto">昨天</span></div></div>
+  </div>
+</main></div>
+<div class="note">没看过的回答：标题加粗、前面红点。列表第二行从「Agent 名字」换成一句话进度。Agent 卡片底部写着有几个对话在等你。</div>
+</section>
+
+<!-- ========== 3. 手机 ========== -->
+<section class="screen" id="s-phone">
+<div class="phone-wrap">
+  <div class="phone">
+    <div class="ib-head"><h1>任务面板</h1></div>
+    <div class="ib-body">
+      <div class="sec"><h2><span class="dot" style="background:var(--zhu)"></span>等你处理<span class="n">3</span></h2>
+        <div class="row"><span class="seal">前端</span><div class="main"><div class="top"><span class="unread"></span><span class="title">首页改版方案</span></div>
+          <div class="prog">方案已定稿，等你确认后开始改代码</div></div><div class="meta"><span class="reason done">回答完了</span>3 分钟前</div></div>
+        <div class="row"><span class="seal zhe">运维</span><div class="main"><div class="top"><span class="title">发布前检查</span></div>
+          <div class="prog">要执行 docker compose restart backend</div></div><div class="meta"><span class="reason ask">等你批准</span>12 分钟前</div></div>
+        <div class="row"><span class="seal lu">数据</span><div class="main"><div class="top"><span class="unread"></span><span class="title">十月销售周报</span></div>
+          <div class="prog">连不上数据库，需要你检查</div></div><div class="meta"><span class="reason err">出错停下了</span>1 小时前</div></div>
+      </div>
+      <div class="sec"><h2><span class="dot" style="background:var(--warn)"></span>正在干活<span class="n">2</span></h2>
+        <div class="row"><span class="seal dai">写作</span><div class="main"><div class="top"><span class="title">公众号：多 Agent 协作</span></div>
+          <div class="prog"><span class="working"><span class="spin"></span>正在写第三部分</span></div></div><div class="meta"><span></span>已 4 分钟</div></div>
+      </div>
+    </div>
+    <nav class="tabbar">
+      <a class="on"><svg><use href="#i-inbox"/></svg>任务面板<span class="badge">3</span></a>
+      <a><svg><use href="#i-chat"/></svg>对话</a><a><svg><use href="#i-agent"/></svg>Agent</a><a><svg><use href="#i-kb"/></svg>知识库</a><a><svg><use href="#i-gear"/></svg>设置</a>
+    </nav>
+  </div>
+  <div class="cap"><h3>手机上</h3>底部第一个就是「任务面板」，带数字。手机上最常做的就是「看看谁在等我」，所以把它放在打开就看到的位置。<br><br>「这件事完了」在手机上是向左滑或长按。</div>
+</div>
+</section>
+
+<nav class="switch" id="switch"><a data-s="inbox">1 任务面板</a><a data-s="list">2 列表和 Agent 卡片</a><a data-s="phone">3 手机</a></nav>
+<script>
+const rail = document.getElementById("rail").innerHTML;
+document.querySelectorAll("[data-rail]").forEach(n => { n.outerHTML = rail.replace(`data-k="${n.dataset.rail}"`, `data-k="${n.dataset.rail}" class="on"`); });
+function show(k){ document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === "s-" + k)); document.querySelectorAll("#switch a").forEach(a => a.classList.toggle("on", a.dataset.s === k)); }
+document.querySelectorAll("#switch a").forEach(a => a.onclick = () => show(a.dataset.s));
+show((location.hash || "#inbox").slice(1));
+</script>
+</body>
+</html>

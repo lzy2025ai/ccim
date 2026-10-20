@@ -134,6 +134,56 @@ body{overflow:hidden}
 .chap svg{width:13px;height:13px}
 .chap.me{text-align:right}
 .when.left{color:var(--warn)}
+.has-badge{position:relative}
+.nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
+.udot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--zhu);margin-right:6px;vertical-align:2px;flex:none}
+.item.new .title{font-weight:700}
+.wait{display:inline-flex;align-items:center;gap:6px;color:var(--zhu);font-weight:500}
+.wait i{width:7px;height:7px;border-radius:50%;background:var(--zhu)}
+.board{overflow:auto;height:100%;background:var(--panel)}
+.bhead{padding:24px 36px 4px}
+.bhead h1{font:600 24px/1.2 var(--song);margin:0}
+.bstats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 36px 4px;max-width:1240px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column}
+.stat b{font:600 24px/1.2 var(--song)}
+.stat span{font-size:12.5px;color:var(--muted)}
+.bgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;padding:6px 36px 48px;max-width:1240px}
+.bsec{margin-top:18px}
+.bsec h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 8px}
+.bsec h2 i{width:7px;height:7px;border-radius:50%}
+.bsec h2 .n{font-weight:400;color:var(--faint)}
+.bempty{color:var(--faint);font-size:13px;margin:4px 0 0}
+.brow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;text-decoration:none;color:inherit}
+.brow:hover{border-color:var(--line-strong)}
+.brow.quiet{border-color:transparent;padding:8px 14px;margin-bottom:2px}
+.brow.quiet:hover{background:var(--paper)}
+.bmain{min-width:0;display:flex;flex-direction:column}
+.btop{display:flex;align-items:center;gap:8px;min-width:0}
+.btitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow.quiet .btitle{font-weight:500}
+.bwho{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bprog{color:var(--ink-2);font-size:13.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bmeta{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;white-space:nowrap}
+.reason{font-size:11.5px;padding:1px 7px;border-radius:5px;white-space:nowrap;flex:none}
+.reason.done{background:var(--qing-soft);color:var(--qing)} .reason.ask{background:#F6ECD3;color:#8A6A12} .reason.err{background:#F6DEDA;color:var(--bad)}
+.heat{position:relative;padding-top:16px;overflow-x:auto}
+.hmonths{position:absolute;top:0;left:0;height:14px;font-size:11px;color:var(--faint)}
+.hmonths span{position:absolute;white-space:nowrap}
+.hgrid{display:flex;gap:2px}
+.hcol{display:flex;flex-direction:column;gap:2px}
+.heat i{width:10px;height:10px;border-radius:2px;display:block}
+.heat .l0{background:var(--sunk)} .heat .l1{background:#C7D5E4} .heat .l2{background:#8EA9C6} .heat .l3{background:#56789E} .heat .l4{background:var(--qing)}
+.hfoot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-top:8px;gap:8px;flex-wrap:wrap}
+.hlegend{display:inline-flex;align-items:center;gap:3px}
+.hlegend i{display:inline-block}
+.arow{display:grid;grid-template-columns:auto 90px 1fr auto;gap:8px;align-items:center;padding:6px 4px;text-decoration:none;color:inherit;font-size:13px;border-radius:8px}
+.arow:hover{background:var(--paper)}
+.an{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.abar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.abar i{display:block;height:100%;background:var(--qing);border-radius:3px}
+.acnt{font-size:12px;color:var(--muted);white-space:nowrap}
+@media (max-width:1100px){.bgrid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto 1fr}.bmeta{grid-column:2;justify-content:space-between}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
 .mem .btn{margin-right:12px}
@@ -717,6 +767,7 @@ body{--doc-w:min(52vw,780px)}
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
   </nav>
@@ -971,7 +1022,8 @@ async function loadState(){
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
     clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(current.id), 300);   // 它的对话列表（含终端里的）单独拉
   }
-  renderList();
+  renderList(); drawAttention();
+  if (current.view === "board") renderBoard(true);
   const c = detail && S.chats.find(x => x.id === detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
 }
@@ -1033,6 +1085,8 @@ function connectEvents(){
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
       }
     }
+    if (detail && ev.chat === detail.id && (ev.type === "answer" || ev.type === "mention") && document.visibilityState === "visible") markSeen(detail.id);
+    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) c.brief = ev.brief; }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
     else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
@@ -1067,7 +1121,7 @@ function route(){
   if (current.view === "chats" && current.id === "new" && draft.machine) ctxMachine = draft.machine;
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
-  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new"));
+  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb" || current.view === "board") && (!current.id || current.id === "new"));
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
@@ -1086,6 +1140,7 @@ function route(){
     else openAgentLatest(current.id);
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
+  else if (current.view === "board") renderBoard();
   else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
@@ -1105,6 +1160,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
+  if (current.view === "board") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -1188,16 +1244,16 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   const a = c.agent ? agentOf(c.agent) : null;
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
-    const me = `<a class="item child ${current.sub === c.id ? "on" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-      <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+    const me = `<a class="item child ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
-  const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.agent_name || "临时对话")}</span>`;
+  const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
-    : `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        ${seal(a, "", false)}<span class="t"><span class="title">${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
+    : `<a class="item ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
+        ${seal(a, "", false)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
         <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
@@ -1235,7 +1291,7 @@ async function openChat(id){
     document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === "agents"));
     renderList();
   }
-  drawChat(); doJump();
+  drawChat(); doJump(); markSeen(id);
 }
 function stepsHtml(steps, open, head){
   if (!steps || !steps.length) return "";
@@ -1963,6 +2019,103 @@ async function startAgent(aid){
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
 
+// ================= 任务面板（#48） =================
+const isTop = c => !c.mention_of && !c.project && !c.schedule && !c.external;
+function waiting(){ return (S.chats || []).filter(c => isTop(c) && c.attention); }
+function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
+function drawAttention(){
+  const n = waiting().length, b = $("#nav-board-n");
+  if (b) { b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
+  document.title = (n ? `(${n}) ` : "") + "ccim";
+}
+async function markSeen(id){
+  const c = (S.chats || []).find(x => x.id === id);
+  if (c && !c.attention) return;
+  if (c) { c.attention = null; drawAttention(); }
+  try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
+}
+let boardStats = null, boardStatsAt = 0, showAllRecent = false;
+async function loadBoardStats(){
+  const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
+  const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
+  const out = {heat: {}, turns_week: 0, done_week: 0, agents: {}, today: null};
+  for (const p of parts.filter(Boolean)) {
+    for (const [d, n] of Object.entries(p.heat || {})) out.heat[d] = (out.heat[d] || 0) + n;
+    out.turns_week += p.turns_week || 0; out.done_week += p.done_week || 0; out.today = out.today || p.today;
+    Object.assign(out.agents, p.agents || {});
+  }
+  boardStats = out; boardStatsAt = Date.now();
+}
+const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
+function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
+function boardRow(c, kind){
+  const a = c.agent ? agentOf(c.agent) : null;
+  const who = [a ? a.name : "临时对话", (c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
+  const prog = kind === "work" ? `<span class="working"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "干活中")}</span>` : esc(c.brief || "");
+  const r = REASON[c.attention];
+  const btn = c.attention === "ask" ? `<a class="btn primary" href="${boardHref(c)}" style="text-decoration:none">去批准</a>`
+    : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
+  return `<a class="brow ${kind === "recent" ? "quiet" : ""}" href="${boardHref(c)}">${seal(a, kind === "recent" ? "sm" : "", false)}
+    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+    ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
+    <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;
+}
+async function doneTask(id){
+  const c = (S.chats || []).find(x => x.id === id);
+  await act(() => api("/api/chat/mark", {id, changes: {archived: true}}, ownerOf(id) || ctxMachine), "已归档，从任务面板里拿掉了");
+  if (c) { c.archived = true; c.attention = null; }
+  drawAttention(); renderBoard(true); refreshSoon();
+}
+function heatHtml(heat, today){
+  const end = today ? new Date(today + "T00:00:00") : new Date(); end.setHours(0, 0, 0, 0);
+  const start = new Date(end); start.setDate(start.getDate() - 7 * 26 + 1 - ((end.getDay() + 6) % 7));   // 从 26 周前的周一开始
+  const max = Math.max(1, ...Object.values(heat));
+  const lv = n => !n ? 0 : n <= max * .25 ? 1 : n <= max * .5 ? 2 : n <= max * .75 ? 3 : 4;
+  const cols = [], months = [];
+  for (let d = new Date(start), w = 0; d <= end; w++) {
+    const col = [];
+    for (let i = 0; i < 7 && d <= end; i++, d.setDate(d.getDate() + 1)) {
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (d.getDate() <= 7 && i === 0) months.push([w, `${d.getMonth() + 1}月`]);
+      col.push(`<i class="l${lv(heat[k] || 0)}" title="${k}：${heat[k] || 0} 条"></i>`);
+    }
+    cols.push(`<span class="hcol">${col.join("")}</span>`);
+  }
+  const total = Object.values(heat).reduce((a, b) => a + b, 0);
+  return `<div class="heat"><div class="hmonths">${months.map(([w, m]) => `<span style="left:${w * 12}px">${m}</span>`).join("")}</div><div class="hgrid">${cols.join("")}</div>
+    <div class="hfoot"><span>近半年发了 ${total} 条消息</span><span class="hlegend">少<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>多</span></div></div>`;
+}
+async function renderBoard(quick){
+  if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
+  if (current.view !== "board") return;
+  const tops = (S.chats || []).filter(c => isTop(c) && !c.archived);
+  const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+  const work = tops.filter(c => c.busy && !c.attention);
+  const weekAgo = new Date(Date.now() - 7 * 86400000);
+  const recent = tops.filter(c => !c.attention && !c.busy && c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo)
+    .sort((a, b) => ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+  const st = boardStats || {heat: {}, agents: {}};
+  const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v.turns).sort((a, b) => b[1].turns - a[1].turns).slice(0, 6);
+  const maxT = Math.max(1, ...ags.map(([, v]) => v.turns));
+  const sec = (title, color, n, body) => `<div class="bsec"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
+  const shown = showAllRecent ? recent : recent.slice(0, 5);
+  $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
+    <div class="bstats">
+      <div class="stat"><b>${wait.length}</b><span>等你处理</span></div>
+      <div class="stat"><b>${work.length}</b><span>正在干活</span></div>
+      <div class="stat"><b>${boardStats ? st.turns_week : "…"}</b><span>本周发了几条</span></div>
+      <div class="stat"><b>${boardStats ? st.done_week : "…"}</b><span>本周完成</span></div>
+    </div>
+    <div class="bgrid"><div class="bleft">
+      ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? wait.map(c => boardRow(c, "wait")).join("") : `<p class="bempty">没有在等你的事。</p>`)}
+      ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
+      ${sec("最近在跟", "var(--faint)", recent.length, recent.length ? shown.map(c => boardRow(c, "recent")).join("") + (recent.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${recent.length - 5} 件</button>` : "") : `<p class="bempty">最近 7 天没有别的对话。</p>`)}
+    </div><div class="bright">
+      <div class="bsec"><h2>活跃度</h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
+      <div class="bsec"><h2>本周各 Agent</h2>${ags.length ? ags.map(([id, v]) => { const a = agentOf(id); return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(v.turns / maxT * 100)}%"></i></span><span class="acnt">${v.turns} 条</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
+    </div></div></div>`;
+}
+
 // ================= 知识库（#27） =================
 let kbCache = null, kbOpen = null, kbFilter = "";
 const KB_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", lu: "var(--lu)", zhu: "var(--zhu)", dai: "var(--dai)", huang: "var(--huang)"};
@@ -2239,7 +2392,7 @@ function agentCard(a){
     <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${ch}</div></div></div>
     <div class="role">${esc(a.role || "还没写角色说明")}</div>
     <span class="path">${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}</span>
-    <div class="foot"><span class="grow">${st}</span><span>${when(a.last_active)}</span>${off ? "" : `<span class="go">对话</span>`}</div></a>`;
+    <div class="foot"><span class="grow">${waitOf(a.id) ? `<span class="wait"><i></i>${waitOf(a.id)} 个对话等你</span>` : st}</span><span>${when(a.last_active)}</span>${off ? "" : `<span class="go">对话</span>`}</div></a>`;
 }
 function renderAgentCards(listOnly){
   if (listOnly) return;

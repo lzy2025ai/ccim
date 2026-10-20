@@ -37,7 +37,7 @@ def static_file(path):
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
-MARKS = ("title", "pin", "archived", "icon", "color", "hidden")          # 对话列表里用户加的标记
+MARKS = ("title", "pin", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
@@ -313,6 +313,51 @@ class Platform:
             log.exception("项目复制成群聊出错")
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
+        self.background.add(asyncio.ensure_future(self._cleanup_loop()))
+
+    # ----- 归档的对话到期删除（#26） -----
+
+    async def _cleanup_loop(self):
+        await asyncio.sleep(60)
+        while True:
+            try:
+                await self.cleanup_archived()
+            except Exception:
+                log.exception("清理归档的对话出错")
+            await asyncio.sleep(3600)
+
+    async def cleanup_archived(self):
+        days = archive_days()
+        if not days:
+            return
+        now = time.time()
+        chats = self.chats()                  # 以前归档的没记归档时间：从现在算起
+        if any(m.get("archived") and not m.get("archived_at") for m in chats.values()):
+            for m in chats.values():
+                if m.get("archived") and not m.get("archived_at"):
+                    m["archived_at"] = now
+            self.store.write(chats)
+        for cid, m in list(self.chats().items()):
+            if m.get("archived") and not m.get("busy") and (delete_at(m, days) or now + 1) <= now:
+                log.info("归档的对话到期，删除：%s", m.get("title") or cid)
+                await self.delete_chat(cid)
+        marks = registry.read_state(self.home).get("marks") or {}
+        if any(mk.get("archived") and not mk.get("archived_at") for mk in marks.values()):
+            for mk in marks.values():
+                if mk.get("archived") and not mk.get("archived_at"):
+                    mk["archived_at"] = now
+            registry.write_state(self.home, marks=marks)
+        due = [cid for cid, mk in marks.items() if mk.get("archived") and not mk.get("hidden")]
+        if due:
+            rows = {r["id"]: r for r in self.external_chats(terminal=True)}
+            changed = False
+            for cid in due:
+                at = delete_at({**marks[cid], "last_active": (rows.get(cid) or {}).get("last_active")}, days)
+                if at and at <= now:
+                    marks[cid]["hidden"] = True
+                    changed = True
+            if changed:
+                registry.write_state(self.home, marks=marks)
 
     def _warm(self):
         """先把终端对话读一遍（认分叉要读对话记录，第一次慢），打开 Agent 页时就快了。"""
@@ -493,7 +538,7 @@ class Platform:
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
-                **{k: m.get(k) for k in MARKS if k != "title"},
+                **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
@@ -535,6 +580,8 @@ class Platform:
             changes["title"] = " ".join((changes["title"] or "").split())[:60] or None
         if changes.get("pin") is True:
             changes["pin"] = -time.time()         # 新置顶的排在最上面
+        if "archived" in changes:
+            changes["archived_at"] = time.time() if changes["archived"] else None
         if cid.startswith("x:"):
             marks = registry.read_state(self.home).get("marks") or {}
             m = {**marks.get(cid, {}), **changes}
@@ -644,6 +691,8 @@ class Platform:
             if mk.get("hidden"):
                 continue
             r.update({k: v for k, v in mk.items() if k not in ("hidden", "chapters")})
+            if mk.get("archived"):
+                r["delete_at"] = delete_at({**mk, "last_active": r.get("last_active")}, archive_days())
             out.append(r)
         return out
 
@@ -1017,6 +1066,7 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
+                "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
@@ -1276,6 +1326,32 @@ def connect_agent(aid, channel):
     if job.get("id") in console.JOBS:
         console.JOBS[job["id"]].agent_id = aid
     return job
+
+
+def archive_days():
+    """归档的对话多少天没有新消息就删除；0 = 不删除。"""
+    v = registry.global_config().get("archive_days") or "30"
+    return 0 if v == "never" else int(v) if str(v).isdigit() else 30
+
+
+def delete_at(m, days):
+    """归档的对话什么时候删除（时间戳）：归档时、最后一条消息，取晚的那个，再过 days 天。没归档或不删除返回 None。"""
+    if not days or not m.get("archived"):
+        return None
+    last = 0
+    if m.get("last_active"):
+        try:
+            last = time.mktime(time.strptime(m["last_active"][:19], "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            pass
+    return max(m.get("archived_at") or time.time(), last) + days * 86400
+
+
+def set_archive_days(v):
+    if v not in ("7", "30", "90", "never"):
+        raise Problem("没有这个选项。")
+    registry.set_global(archive_days=v)
+    return {"archive_days": v}
 
 
 def save_global(body):

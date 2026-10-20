@@ -120,6 +120,7 @@ body{overflow:hidden}
 .chap button{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--qing);background:var(--qing-soft);padding:2px 9px 2px 7px;border-radius:6px}
 .chap svg{width:13px;height:13px}
 .chap.me{text-align:right}
+.when.left{color:var(--warn)}
 .chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
 .msg.me{display:flex;justify-content:flex-end}
@@ -915,7 +916,7 @@ function route(){
     else if (narrow()) renderAgentSide();
     else openAgentLatest(current.id);
   }
-  else if (current.view === "settings") current.id === "machines" || S.hub ? renderMachines() : renderSettings();
+  else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
@@ -988,6 +989,13 @@ function nest(c, me, kids, child, inAgent, depth){
   const tree = ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true, inAgent, depth + 1)).join("")}</div>` : "";
   return child ? `<div class="node">${me}${tree}</div>` : me + tree;
 }
+function whenTag(c){   // 归档的对话最后一周显示还剩几天删除
+  if (c.archived && c.delete_at) {
+    const d = Math.ceil((c.delete_at * 1000 - Date.now()) / 86400000);
+    if (d <= 7) return `<span class="when left">${d <= 1 ? "明天删除" : `还有 ${d} 天删除`}</span>`;
+  }
+  return `<span class="when">${when(c.last_active)}</span>`;
+}
 function moreBtn(c){
   return `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();itemMenu(event,${q(c.id)})">${ICON.more}</button>`;
 }
@@ -996,16 +1004,16 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${current.sub === c.id ? "on" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-      <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}<span class="when">${when(c.last_active)}</span>${moreBtn(c)}</a>`;
+      <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `<span class="when">${when(c.last_active)}</span>`}${moreBtn(c)}</a>`
+        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         ${seal(a, "", false)}<span class="t"><span class="title">${markOf(c)}${esc(c.title)}</span><span class="sub">${sub}</span></span>
-        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${when(c.last_active)}</span><span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
@@ -1963,10 +1971,12 @@ function renderAgentForm(){
 
 // ================= 设置 =================
 function renderSettingsList(){
-  const onMachines = current.id === "machines" || (S.hub && current.id !== "account");
+  const onChats = current.id === "chats";
+  const onMachines = !onChats && (current.id === "machines" || (S.hub && current.id !== "account"));
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     ${S.hub ? "" : `<a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>`}
+    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "在这里管另一台电脑上的 Agent"}</span></span></a>
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
 }
@@ -2016,6 +2026,22 @@ async function leaveHub(){
   setTimeout(() => location.reload(), 6000);
 }
 const gs = {};
+function renderChatSettings(){
+  const cur = (S.global || {}).archive_days || "30";
+  const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不删除"]];
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
+    <div class="pane"><div class="sect"><h3>归档的对话</h3>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">归档后多久没有新消息就删除<div class="muted" style="font-size:12.5px">存进知识库的内容会保留</div></div>
+        <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" onclick="setArchiveDays('${v}')">${l}</button>`).join("")}</div></div>
+    </div></div></div>`;
+}
+async function setArchiveDays(v){
+  const targets = multi() ? (S.machines || []).filter(m => m.online).map(m => m.id) : [S.me];   // 每台电脑各自清理，一起改
+  let fail = 0;
+  for (const mid of targets) { try { await api("/api/archive_days", {value: v}, mid); } catch { fail++; } }
+  toast(fail ? "有电脑没连上，那台下次再改" : "已保存");
+  await loadState(); renderChatSettings();
+}
 function renderSettings(){
   Object.assign(gs, {model: S.global.model || "", effort: S.global.effort || "", codex_model: S.global.codex_model || "", codex_effort: S.global.codex_effort || ""});
   const [cm, ce] = S.defaults.claude || [], [xm, xe] = S.defaults.codex || [];

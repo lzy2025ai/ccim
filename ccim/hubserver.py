@@ -215,7 +215,8 @@ class Hub:
         for k in ("global", "defaults", "models", "codex", "home"):   # 页面上这些按「当前那台」取
             info = (out.get("machine_info") or {}).get(out["me"]) or {}
             out.setdefault(k, info.get(k) or ({} if k in ("global", "defaults", "models") else None))
-        out["global"] = {}
+        g = ((out.get("machine_info") or {}).get(out["me"]) or {}).get("global") or {}
+        out["global"] = {k: g[k] for k in ("archive_days",) if g.get(k)}   # 默认模型各台电脑自己的，服务器上不显示
         return out
 
     def serve(self):

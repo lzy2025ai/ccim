@@ -2470,7 +2470,8 @@ function renderMachines(){
   const ms = S.machines || [], me = ms.find(m => m.me) || {}, hub = ms.find(m => m.hub) || {name: S.hub_name};
   const joined = S.hub ? false : !me.hub;     // 在服务器上打开：就是总控，可以加电脑、移除
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>电脑</h2>
-    <div class="role">把电脑加进来，各台电脑的 Agent、对话、定时任务都在这里管。活还是在各自的电脑上干，文件不会传到别的电脑。</div></div></div>
+    <div class="role">把电脑加进来，各台电脑的 Agent、对话、定时任务都在这里管。活还是在各自的电脑上干，文件不会传到别的电脑。</div>
+    ${latestOf() ? `<div class="role" style="margin-top:4px">最新版本 ${esc(latestOf())}</div>` : ""}</div></div>
     <div class="pane">
       <div class="sect">${ms.map(m => `<div class="mem" style="padding:10px 0">
         <span class="t" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
@@ -2492,6 +2493,11 @@ function verLine(m){
   const kind = v.kind === "dev" ? "开发版" : "";
   return ` · ${[kind, v.version, v.commit].filter(Boolean).map(esc).join(" ")}`;
 }
+function latestOf(){   // 最新版本：服务器上的（每次合并自动部署 main），没用服务器就看哪台电脑问到了 GitHub
+  if (S.hub && S.hub.commit) return S.hub.commit;
+  for (const m of S.machines || []) { const v = verOf(m); if (v && v.latest) return v.latest.commit; }
+  return null;
+}
 function upgradeBox(m){
   const v = verOf(m);
   if (!v) return m.online ? `<span class="upg new" title="在那台电脑的终端里运行：uv tool upgrade ccim，再运行 ccim restart 网页">版本较旧，在那台电脑上运行 uv tool upgrade ccim</span>` : "";
@@ -2499,21 +2505,24 @@ function upgradeBox(m){
   if (j.state === "running" && Date.now() / 1000 - j.at < 900) { if (!window._upw) setTimeout(watchUpgrade); return `<span class="upg busy"><span class="spin"></span>正在升级：${esc(j.step || "")}</span>`; }
   const recent = j.at && Date.now() / 1000 - j.at < 86400;
   const note = recent && j.state === "done" && j.to !== j.from ? `<span class="upg ok">已升级到 ${esc(j.to)}</span>`
+    : recent && j.state === "done" && j.note && Date.now() / 1000 - j.at < 600 ? `<span class="upg ok">${esc(j.note)}</span>`
     : recent && (j.state === "failed" || j.state === "rolled_back") ? `<span class="upg err" title="${esc(j.error || "")}">${j.state === "rolled_back" ? "新版本没起来，已装回原来的版本" : "升级失败"}</span>` : "";
   if (v.kind !== "release") return note;
-  if (v.latest && !v.update) return note || `<span class="upg">已是最新</span>`;
-  const label = v.latest ? `升级到 ${esc(v.latest.commit)}` : "升级到最新版";      // 查不到最新版（连不上 GitHub）也能点，装的时候自己会去取
-  const btn = m.online && v.can_upgrade ? `<button class="btn" onclick="upgradeMachine(${q(m.id)},${q(m.name)})">${label}</button>`
+  const lt = latestOf();
+  if (lt && v.commit === lt) return note || `<span class="upg">已是最新</span>`;
+  // 不知道最新版本（没用服务器、也连不上 GitHub）：「检查更新」，点了它自己去取，是最新就说已经是最新版
+  const label = lt ? `升级到 ${esc(lt)}` : "检查更新";
+  const btn = m.online && v.can_upgrade ? `<button class="btn" onclick="upgradeMachine(${q(m.id)},${q(m.name)},false,${lt ? "true" : "false"})">${label}</button>`
     : `<span class="upg">在那台电脑上运行 uv tool upgrade ccim</span>`;
-  return `${v.latest ? note || `<span class="upg new">有新版本</span>` : note}${btn}`;
+  return `${lt ? note || `<span class="upg new">有新版本</span>` : note}${btn}`;
 }
-async function upgradeMachine(mid, name, force){
+async function upgradeMachine(mid, name, force, known){
   const r = await act(() => api("/api/upgrade", {force: !!force}, mid));
   if (r.busy) {
-    if (!await confirmBox(`升级「${name}」？`, `升级要重启它上面的 ccim，正在干活的对话会被打断：${r.busy.slice(0, 3).join("、")}${r.busy.length > 3 ? ` 等 ${r.busy.length} 个` : ""}。`, "仍然升级")) return;
-    return upgradeMachine(mid, name, true);
+    if (!await confirmBox(`升级「${name}」？`, `有新版本的话要重启它上面的 ccim，正在干活的对话会被打断：${r.busy.slice(0, 3).join("、")}${r.busy.length > 3 ? ` 等 ${r.busy.length} 个` : ""}。`, "仍然升级")) return;
+    return upgradeMachine(mid, name, true, known);
   }
-  toast(`「${name}」开始升级，装好后会自动重启`);
+  toast(known ? `「${name}」开始升级，装好后会自动重启` : `「${name}」正在检查更新`);
   await loadState(); renderMachines(); watchUpgrade();
 }
 function watchUpgrade(){              // 有电脑在升级：每 4 秒刷新一次，直到都结束

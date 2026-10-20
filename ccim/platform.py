@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
+from . import docs
 from . import kb as kb_mod
 from .channels.base import CardAction, Channel, Incoming
 
@@ -146,6 +147,7 @@ class Logs:
             os.remove(self._f(chat))
         except OSError:
             pass
+        docs.remove_snaps(self.folder, chat)
 
 
 # ---------- 网页渠道 ----------
@@ -220,8 +222,11 @@ class WebChannel(Channel):
         pass
 
     async def send_file(self, chat_id, path):
-        self._emit(chat_id, self.logs.append(chat_id, {"type": "file", "path": os.path.realpath(path),
-                                                       "name": os.path.basename(path), "size": os.path.getsize(path)}))
+        rec = {"type": "file", "path": os.path.realpath(path), "name": os.path.basename(path), "size": os.path.getsize(path)}
+        snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
+        if snap:
+            rec["snap"] = snap
+        self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def download(self, message_id, kind, key, name, folder):
         """网页上传的文件先放在平台的 uploads 里，这里挪到项目的收件箱。"""
@@ -517,7 +522,7 @@ class Platform:
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
-            text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + text if text else text
+            text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file")
         await b.on_message(inc)
@@ -686,6 +691,62 @@ class Platform:
             chats[cid]["chapters"] = ch
             self.store.write(chats)
         return {"chapters": ch}
+
+    # ----- 文档预览和编辑（#34） -----
+
+    def doc_versions(self, cid, path):
+        """对话里这个文件的各版本：Agent 发的、用户上传的、用户在预览里改的。不在记录里的文件不给看。"""
+        out = []
+        for r in self.channel.logs.read(cid):
+            if r.get("type") in ("file", "edit") and r.get("path") == path:
+                out.append({"by": "me" if r["type"] == "edit" else "agent", "at": r.get("at"), "snap": r.get("snap")})
+            elif r.get("type") == "user":
+                out += [{"by": "me", "at": r.get("at"), "snap": f["path"]} for f in r.get("files") or [] if f.get("path") == path]
+        if not out:
+            raise Problem("找不到这个文件。")
+        return out
+
+    def doc_view(self, cid, path, v=None):
+        vs = self.doc_versions(cid, path)
+        src = path
+        if v not in (None, "") and int(v) < len(vs) - 1:      # 旧版本看副本；最新的看原文件
+            src = vs[int(v)].get("snap")
+            if not src or not os.path.isfile(src):
+                raise Problem("这一版没有留底。")
+        try:
+            out = docs.view(src, os.path.dirname(path))
+        except docs.Problem as e:
+            raise Problem(str(e))
+        out.update(name=os.path.basename(path), path=path, versions=[{"by": x["by"], "at": x["at"]} for x in vs],
+                   v=len(vs) - 1 if src == path else int(v), latest=src == path)
+        return out
+
+    def doc_save(self, cid, path, text, mtime):
+        self.doc_versions(cid, path)
+        if not isinstance(text, str):
+            raise Problem("内容不对。")
+        try:
+            docs.save(path, text, mtime)
+        except docs.Problem as e:
+            raise Problem(str(e))
+        rec = {"type": "edit", "path": path, "name": os.path.basename(path)}
+        snap = docs.snapshot(self.channel.logs.folder, cid, path)
+        if snap:
+            rec["snap"] = snap
+        self.channel._emit(cid, self.channel.logs.append(cid, rec))
+        chats = self.chats()
+        if cid in chats:                       # 下一次发消息时告诉助手
+            chats[cid]["doc_edits"] = sorted(set(chats[cid].get("doc_edits") or []) | {path})
+            self.store.write(chats)
+        return self.doc_view(cid, path)
+
+    def _doc_edits(self, cid):
+        chats = self.chats()
+        paths = (chats.get(cid) or {}).pop("doc_edits", None)
+        if not paths:
+            return ""
+        self.store.write(chats)
+        return "（我在预览里直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n"
 
     # ----- 飞书、微信、终端里的对话 -----
 
@@ -1106,6 +1167,7 @@ def _handler(pf):
                 "/api/kb/search": lambda: {"results": kb_mod.search(q.get("q", ""))},
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
+                "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
@@ -1149,6 +1211,7 @@ def _handler(pf):
                 "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
+                "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),

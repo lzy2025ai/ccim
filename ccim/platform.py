@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from . import agents, registry
 from . import docs
 from . import kb as kb_mod
+from . import board as board_mod
 from .channels.base import CardAction, Channel, Incoming
 
 log = logging.getLogger("ccim.platform")
@@ -207,6 +208,8 @@ class WebChannel(Channel):
         else:
             rec = {"type": "note", "text": markdown or ""}
         self._emit(chat_id, self.logs.append(chat_id, rec))
+        if rec["type"] == "answer" and getattr(self, "on_answer", None):
+            self.on_answer(chat_id)
 
     async def send_card(self, chat_id, card, reply_to=None):
         mid = "card-" + uuid.uuid4().hex[:10]
@@ -326,6 +329,15 @@ class Platform:
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
         channel.kbs_of = lambda cid: (self.chats().get(cid) or {}).get("kbs") or []   # 挂在对话上的知识库（#27）
+        from . import board                   # 任务面板（#48）：每轮回答完更新一句话进度
+        channel.on_answer = lambda cid: self.background.add(asyncio.ensure_future(board.refresh_brief(self, cid)))
+        st = registry.read_state(self.home)
+        if not st.get("board_seen_init"):    # 第一次：已有的对话都算看过
+            chats = self.chats()
+            for m in chats.values():
+                m.setdefault("seen_at", time.time())
+            self.store.write(chats)
+            registry.write_state(self.home, board_seen_init=True)
         self.kb_wake = threading.Event()
         threading.Thread(target=self._kb_sync_loop, daemon=True).start()
 
@@ -367,6 +379,14 @@ class Platform:
                     except Exception:
                         pass
         threading.Thread(target=go, daemon=True).start()
+
+    def mark_seen(self, cid):
+        """网页里看过这个对话了（任务面板的未读，#48）。"""
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["seen_at"] = time.time()
+            self.store.write(chats)
+        return {}
 
     def set_kbs(self, cid, ids):
         from . import kb
@@ -606,6 +626,8 @@ class Platform:
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
+                "attention": board_mod.attention(m, board_mod.summary(self.channel.logs, cid)) if board_mod.top_level(m) else None,
+                "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
@@ -1167,6 +1189,7 @@ def _handler(pf):
                 "/api/kb/entry": lambda: kb_mod.entry(q.get("lib", ""), q.get("id", "")),
                 "/api/kb/search": lambda: {"results": kb_mod.search(q.get("q", ""))},
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
+                "/api/board": lambda: pf.call(board_mod.stats, pf),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
@@ -1210,6 +1233,7 @@ def _handler(pf):
                 "/api/kb/entry/move": lambda: kb_write(pf, kb_mod.move_entry, b("lib"), b("id"), b("to")),
                 "/api/kb/export": lambda: kb_mod.export(b("keys")),
                 "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
+                "/api/chat/seen": lambda: pf.call(pf.mark_seen, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),

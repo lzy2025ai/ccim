@@ -113,6 +113,10 @@
   state 里的 ccim → machine_info 带到网页。升级由独立进程（`python -m ccim.upgrade run`）做：uv tool upgrade → 用新装的 python 问新提交 →
   逐个 safe_restart 在跑的项目（平台最后）→ 平台没起来就 `uv tool install --force git+…@旧提交` 再重启。uv 会换掉整个环境，
   所以这个进程开头就把 daemon、registry、runtime 都导入好。结果在 ~/.ccim/upgrade.json
+- `ccim/board.py`：任务面板（#48）。对话记录扫成摘要（最后回答的时间和状态、有没有等批准、每天发了几条，按文件大小和修改时间缓存）；
+  chat_view 带 attention（done / ask / err，回答晚于 meta 的 seen_at 算没看过；网页打开对话就 /api/chat/seen）、brief（一句话进度：
+  WebChannel 写了回答就 on_answer → `refresh_brief` 用 haiku 总结，推送 type=brief）、doing。第一次启动时已有对话都算看过（board_seen_init）。
+  /api/board 是概览（近 26 周每天条数、本周轮数和完成数、各 Agent 本周条数），网页逐台取再合起来；等你处理 / 在干活 / 最近在跟由 S.chats 算
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

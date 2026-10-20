@@ -98,6 +98,10 @@
   叫别的电脑马上来）问在线的其他电脑要清单（/api/kb/manifest），比自己新的用 /api/kb/export 拉过来（`wanted` / `apply`），后改的算数；
   服务器只转发。网页读写本机这份（S.me）。挂到对话：对话 meta 的 kbs → WebChannel.kbs_of → `Chat._connect` 里 add_dirs + `kb_note`
   （只有 Claude Code）；改了挂哪些要 reconnect。条目的 source 记来源对话（machine、chat、at），网页按 at 找到那条消息定位（`doJump`）
+- 响应速度（#32）：别的电脑的 state 用缓存（peers.cache_at，60 秒内直接用，超过 10 秒后台再取），往那台发过 POST 或收到它的推送
+  （正在干活的进度除外）就标 dirty、下次现问。history.read 按文件大小和修改时间缓存；`_external` 用最近列表里的那行，不再列一遍所有对话。
+  网页：api() 有请求超过 150 毫秒显示顶部进度条，按下的按钮进入处理中（防连点）；发消息先把自己那条显示出来（sending），
+  推送到了再换掉；新对话 `starting` 防重复创建；长对话先画最近 60 条（SHOW_RECENT），跳转到更早的会先展开；列表宽度 --list-w 可拖动
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

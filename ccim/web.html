@@ -1090,6 +1090,20 @@ function route(){
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
+// 列表每次都整个重画（点对话、状态推送、Agent 的对话拉回来），滚动区域是新建的，会回到顶上。
+// 滚动时记下位置，重画后在绘制前放回去；换了一个列表（另一个 Agent、另一个库）才从顶上开始（#45）
+const listKey = () => current.view === "agents" || current.view === "kb" || current.view === "projects" ? current.view + ":" + (current.id || "") : current.view;
+let listScroll = {key: null, top: 0};
+function watchListScroll(){
+  const list = $("#list"); if (!list) return;
+  list.addEventListener("scroll", e => {
+    if (e.target.classList && e.target.classList.contains("scroll")) listScroll = {key: listKey(), top: e.target.scrollTop};
+  }, true);
+  new MutationObserver(() => {
+    const s = list.querySelector(".scroll");
+    if (s && listScroll.key === listKey() && s.scrollTop !== listScroll.top) s.scrollTop = listScroll.top;
+  }).observe(list, {childList: true});
+}
 function renderList(){
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
@@ -3324,6 +3338,7 @@ addEventListener("resize", () => {             // 跨过手机宽度：变窄按
 
 // ================= 启动 =================
 (async () => {
+  watchListScroll();
   try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
   connectEvents();

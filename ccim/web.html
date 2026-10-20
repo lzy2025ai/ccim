@@ -695,6 +695,23 @@ body{--doc-w:min(52vw,780px)}
   .doc-body textarea{padding:18px 16px 60px;font-size:16px}
   .doc-top{padding:8px 8px 8px 6px}
 }
+/* 公众号排版（#35） */
+.wx-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--paper);border-bottom:1px solid var(--line)}
+.wx-bar .sp{flex:1}
+.wx-bar .select{width:auto;min-width:110px}
+#doc-save[hidden]{display:none}
+.wx-bar .btn svg{width:14px;height:14px}
+.wx-page{background:#fff;max-width:600px;margin:20px auto 60px;padding:28px 22px 50px;box-shadow:0 1px 4px rgba(29,34,43,.08);border-radius:4px}
+.doc-body:has(.wx-page){background:var(--paper)}
+.wx-imgbox{display:block;position:relative}
+.wx-img{display:flex;justify-content:center;gap:6px;margin:6px 0 0}
+.wx-img button{font-size:12px;color:var(--muted);padding:2px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.wx-img button:hover{color:var(--ink);border-color:var(--line-strong)}
+.can-edit [data-l]{cursor:text;border-radius:4px;transition:background .15s}
+.can-edit [data-l]:hover{background:rgba(43,76,111,.05);box-shadow:0 0 0 4px rgba(43,76,111,.05)}
+[data-l].editing,[data-l].editing:hover{outline:2px solid var(--qing);outline-offset:3px;background:none;box-shadow:none}
+textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;border:2px solid var(--qing);border-radius:6px;font:13px/1.7 var(--mono);resize:none;overflow:hidden;background:var(--panel);color:var(--ink)}
+@media (max-width:760px){.wx-page{margin:0;padding:22px 16px 50px;box-shadow:none;border-radius:0}.wx-bar{padding:8px 12px}}
 @media (max-width:980px){.app{grid-template-columns:64px 250px 1fr}.rail a{width:52px}}
 /* 手机（#17）：底部标签栏；列表和内容一屏一个（.phone-main 时看内容，否则看列表），进去左上角有返回 */
 .pback{display:none}
@@ -3717,7 +3734,7 @@ function mdInline(s, assets = {}){
   const keep = [], put = h => `\u0000${keep.push(h) - 1}\u0000`;
   const src = u => { u = (u || "").trim().replace(/^<|>$/g, ""); return assets[u] || (/^(https?:|data:image\/)/i.test(u) ? u : ""); };
   const href = u => /^(https?:|mailto:|#)/i.test(u) ? u : "";
-  const img = (alt, u) => { const v = src(u); return put(v ? `<img src="${esc(v)}" alt="${esc(alt)}">` : `<span class="miss">图片没找到：${esc(u.replace(/^<|>$/g, ""))}</span>`); };
+  const img = (alt, u) => { const v = src(u), raw = esc(u.trim().replace(/^<|>$/g, "")); return put(v ? `<img src="${esc(v)}" alt="${esc(alt)}" data-src="${raw}">` : `<span class="miss" data-src="${raw}">图片没找到：${raw}</span>`); };
   const fmt = t => t
     .replace(/\*\*(?=\S)(.+?)\*\*/g, "<b>$1</b>").replace(/__(?=\S)(.+?)__/g, "<b>$1</b>")
     .replace(/~~(?=\S)(.+?)~~/g, "<s>$1</s>")
@@ -3745,7 +3762,9 @@ async function openDoc(path, v, chat){
   try { d = await api(`/api/doc?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}${v != null ? "&v=" + v : ""}`, undefined, machine); }
   catch (e) { toast(e.message); if (DOC && !DOC.d) closeDoc(true); return; }
   if (!DOC || DOC.path !== path) return;
-  DOC = {...DOC, d, draft: d.text || "", dirty: false, mode: DOC.mode === "edit" && d.latest && d.editable ? "edit" : "view"};
+  const lastView = (() => { try { return localStorage.getItem("ccim.mdView"); } catch { return null; } })();
+  const mode = DOC.mode === "edit" && d.latest && d.editable ? "edit" : d.kind !== "md" ? "view" : DOC.d ? (DOC.mode === "edit" ? "view" : DOC.mode) : lastView === "wx" ? "wx" : "view";
+  DOC = {...DOC, d, draft: d.text || "", dirty: false, mode};
   drawDoc();
 }
 async function closeDoc(force){
@@ -3757,7 +3776,8 @@ function docBody(){
   const d = DOC.d;
   if (!d) return `<div class="doc-loading">…</div>`;
   if (DOC.mode === "edit") return `<textarea id="doc-ta" class="${d.kind === "html" ? "code" : ""}" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
-  if (d.kind === "md") return `<article class="doc-md">${docMd(DOC.draft, d.assets)}</article>`;
+  if (d.kind === "md" && DOC.mode === "wx") return wxView();
+  if (d.kind === "md") return `<article class="doc-md ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${docMd(DOC.draft, d.assets)}</article>`;
   if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
@@ -3777,12 +3797,14 @@ function drawDoc(){
       <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
-      ${d && d.editable && d.latest ? `<span class="seg mini"><button class="${DOC.mode === "view" ? "on" : ""}" onclick="docMode('view')">预览</button><button class="${DOC.mode === "edit" ? "on" : ""}" onclick="docMode('edit')">编辑</button></span>` : ""}
+      ${d && (d.kind === "md" || d.editable && d.latest) ? `<span class="seg mini">${[["view", "预览"], ...(d.kind === "md" ? [["wx", "公众号"]] : []), ...(d.editable && d.latest ? [["edit", "编辑"]] : [])]
+        .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
     </div>
     ${d && !d.latest ? `<div class="doc-old"><span>${esc(verLabel(vs[d.v], d.v))}</span><span class="sp"></span>
       ${d.editable ? `<button class="btn" onclick="docRestore()">用这一版的内容</button>` : ""}<button class="btn" onclick="openDoc(DOC.path)">看最新的</button></div>` : ""}
     <div class="doc-body">${docBody()}</div>`;
+  if (DOC.mode === "wx") wxImgTools();
 }
 function docVersions(e){
   const vs = DOC.d.versions;
@@ -3792,6 +3814,7 @@ function docMode(m){
   if (!DOC || DOC.mode === m) return;
   DOC.mode = m; drawDoc();
   if (m === "edit") $("#doc-ta")?.focus();
+  else if (DOC.d && DOC.d.kind === "md") try { localStorage.setItem("ccim.mdView", m); } catch {}   // Markdown 默认用上次看的版式
 }
 function docInput(ta){
   DOC.draft = ta.value;
@@ -3807,7 +3830,7 @@ async function docSave(){
   const {chat, path, draft, machine} = DOC;
   try {
     const d = await api("/api/doc/save", {chat, path, text: draft, mtime: DOC.d.mtime}, machine);
-    if (DOC && DOC.path === path){ DOC.d = d; DOC.dirty = DOC.draft !== d.text; if (DOC.mode !== "edit") drawDoc(); else { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); } }
+    if (DOC && DOC.path === path){ DOC.d = d; DOC.dirty = DOC.draft !== d.text; if (DOC.mode !== "edit") { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); drawDocBody(); } else { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); } }
     toast("已保存");
   } catch (e) { toast(e.message); }
   finally { if (DOC) DOC.saving = false; }
@@ -3825,6 +3848,234 @@ function docChanged(rec, chat){   // 对话里来了这个文件的新版本
 }
 function docChip(path, name, sub){
   return `<button class="docfile" onclick="openDoc(${q(path)})"><span class="di">${ICON.file}</span><span class="t"><b>${esc(name)}</b><small>${esc(sub)}</small></span></button>`;
+}
+
+// ---- 公众号排版（#35）：Markdown 按公众号版式显示，样式全写成内联的（公众号编辑器只认内联样式），一键复制 ----
+const WX_THEMES = {
+  fresh: {name: "清爽", acc: "#1F7A8C"},
+  warm: {name: "暖橙", acc: "#D9673B"},
+  ink: {name: "墨韵", acc: "#222222"},
+};
+let wxTheme = (() => { try { return WX_THEMES[localStorage.getItem("ccim.wxTheme")] ? localStorage.getItem("ccim.wxTheme") : "fresh"; } catch { return "fresh"; } })();
+function wxCss(key){
+  const a = WX_THEMES[key].acc, ink = key === "ink", serif = `"Songti SC","STSong",serif`;
+  return [
+    ["*", ""],
+    ["p", "margin:0 0 1.2em;"],
+    ["h1", `font-size:22px;font-weight:bold;line-height:1.5;margin:1.4em 0 1em;text-align:center;color:#222;${ink ? `font-family:${serif};` : ""}`],
+    ["h2", key === "warm" ? `display:table;margin:2em auto 1.1em;padding:4px 16px;background:${a};color:#fff;border-radius:4px;font-size:17px;font-weight:bold;line-height:1.6;`
+      : ink ? `font-size:19px;font-weight:bold;line-height:1.5;margin:2em 0 1em;padding-bottom:8px;border-bottom:1px solid #222;text-align:center;font-family:${serif};color:#111;`
+      : `font-size:18px;font-weight:bold;line-height:1.5;margin:2em 0 1em;padding-left:10px;border-left:4px solid ${a};color:#222;`],
+    ["h3", `font-size:16px;font-weight:bold;line-height:1.5;margin:1.6em 0 .8em;color:${ink ? "#111" : a};${ink ? `font-family:${serif};` : ""}`],
+    ["h4,h5,h6", "font-size:15px;font-weight:bold;margin:1.4em 0 .6em;color:#333;"],
+    ["b,strong", `font-weight:bold;color:${ink ? "#000" : a};`],
+    ["i,em", "font-style:italic;"],
+    ["s", "text-decoration:line-through;color:#999;"],
+    ["blockquote", `margin:0 0 1.2em;padding:10px 14px;background:${ink ? "#f5f5f5" : "#f7f8f8"};border-left:3px solid ${ink ? "#999" : a};color:#666;font-size:14px;line-height:1.75;border-radius:0 4px 4px 0;`],
+    ["blockquote p", "margin:0 0 .6em;"],
+    ["blockquote > :last-child", "margin-bottom:0;"],
+    ["ul,ol", "margin:0 0 1.2em;padding-left:1.6em;"],
+    ["li", "margin:.3em 0;"],
+    ["li ul,li ol", "margin:.3em 0 0;"],
+    ["li.task", "list-style:none;margin-left:-1.4em;"],
+    ["code", "font-size:90%;padding:2px 5px;margin:0 2px;border-radius:3px;background:rgba(27,31,35,.06);color:#C7254E;font-family:Menlo,Consolas,monospace;"],
+    ["pre", "margin:0 0 1.2em;padding:12px 14px;background:#F6F8FA;border-radius:6px;font-size:13px;line-height:1.65;overflow-x:auto;"],
+    ["pre code", "display:block;padding:0;margin:0;background:none;color:#333;font-size:13px;white-space:nowrap;"],
+    ["figure", "margin:1.5em 0;text-align:center;"],
+    ["img", "max-width:100%;height:auto;display:block;margin:0 auto;border-radius:4px;"],
+    ["figcaption", "font-size:13px;color:#999;margin-top:8px;text-align:center;line-height:1.5;"],
+    ["table", "border-collapse:collapse;width:100%;margin:0 0 1.2em;font-size:14px;line-height:1.6;"],
+    ["th", "background:#F5F6F7;font-weight:bold;border:1px solid #DDD;padding:8px 10px;"],
+    ["td", "border:1px solid #DDD;padding:8px 10px;"],
+    ["td p,th p", "margin:0;"],
+    ["hr", "border:0;border-top:1px solid #E5E5E5;margin:2em 0;"],
+    ["sup[data-note]", `color:${ink ? "#666" : a};font-size:12px;margin-left:1px;`],
+    [".miss", "display:inline-block;padding:2px 8px;border:1px dashed #ccc;border-radius:4px;font-size:13px;color:#999;"],
+  ].filter(x => x[1]);
+}
+const WX_ROOT = `font-size:15px;line-height:1.8;color:#333;letter-spacing:.5px;word-break:break-word;text-align:justify;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;`;
+function wxHtml(src, assets){
+  const t = document.createElement("template");
+  t.innerHTML = docMd(src, assets);
+  const c = t.content, notes = [];
+  c.querySelectorAll("a").forEach(a => {   // 公众号正文里外链点不了：改成文末的参考资料
+    const h = a.getAttribute("href") || "";
+    const s = document.createElement("span"); s.dataset.href = h; s.innerHTML = a.innerHTML;
+    if (/^https?:\/\/mp\.weixin\.qq\.com\//.test(h)) { a.removeAttribute("target"); a.removeAttribute("rel"); return; }
+    if (/^https?:/.test(h) && a.textContent !== h){
+      let n = notes.indexOf(h); if (n < 0) { notes.push(h); n = notes.length - 1; }
+      s.insertAdjacentHTML("beforeend", `<sup data-note="">[${n + 1}]</sup>`);
+    }
+    a.replaceWith(s);
+  });
+  c.querySelectorAll("pre code").forEach(x => { x.innerHTML = x.innerHTML.replace(/\t/g, "    ").replace(/ /g, "&nbsp;").replace(/\n/g, "<br>"); });
+  if (notes.length){
+    c.append(Object.assign(document.createElement("h4"), {textContent: "参考资料"}));
+    const p = document.createElement("p"); p.setAttribute("style", "font-size:13px;color:#888;line-height:1.7;word-break:break-all;");
+    p.innerHTML = notes.map((h, k) => `[${k + 1}] ${esc(h)}`).join("<br>");
+    c.append(p);
+  }
+  for (const [sel, css] of wxCss(wxTheme)) c.querySelectorAll(sel).forEach(el => el.setAttribute("style", (el.getAttribute("style") || "").replace(/;?\s*$/, ";").replace(/^;$/, "") + css));   // 后面的规则优先
+  const box = document.createElement("div"); box.append(c);
+  return `<section id="wx-art" style="${esc(WX_ROOT)}">${box.innerHTML}</section>`;
+}
+function wxView(){
+  const d = DOC.d;
+  return `<div class="wx-bar">${dd("wxtheme", Object.entries(WX_THEMES).map(([k, t]) => [k, t.name]), wxTheme, v => { wxTheme = v; try { localStorage.setItem("ccim.wxTheme", v); } catch {} drawDocBody(); })}
+      <span class="sp"></span><button class="btn primary" onclick="wxCopy()">${ICON.copy}复制到公众号</button></div>
+    <div class="wx-page ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${wxHtml(DOC.draft, d.assets)}</div>`;
+}
+function cleanCopy(el){
+  const c = el.cloneNode(true);
+  c.querySelectorAll(".wx-img").forEach(x => x.remove());
+  [c, ...c.querySelectorAll("*")].forEach(x => { ["data-l", "data-src", "data-href", "data-note", "data-lang", "contenteditable", "class", "id"].forEach(a => x.removeAttribute(a)); });
+  return c;
+}
+async function wxCopy(){
+  const art = $("#wx-art"); if (!art) return;
+  const c = cleanCopy(art), html = c.outerHTML, text = art.innerText;
+  try {
+    await navigator.clipboard.write([new ClipboardItem({"text/html": new Blob([html], {type: "text/html"}), "text/plain": new Blob([text], {type: "text/plain"})})]);
+  } catch {
+    const tmp = document.createElement("div");                 // 剪贴板接口用不了时：选中再复制
+    tmp.style.cssText = "position:fixed;left:-9999px;top:0"; tmp.append(c); document.body.append(tmp);
+    const r = document.createRange(); r.selectNodeContents(tmp);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    const ok = document.execCommand("copy"); s.removeAllRanges(); tmp.remove();
+    if (!ok) { toast("复制没成功，再试一次"); return; }
+  }
+  toast("已复制，到公众号编辑器里粘贴");
+}
+async function wxCopyImg(e, btn){
+  e.stopPropagation();
+  const img = btn.closest(".wx-imgbox")?.querySelector("img"); if (!img) return;
+  try {
+    const png = await new Promise((res, rej) => {               // 剪贴板只认 PNG：先画到画布上再转
+      const im = new Image(); im.onload = () => { const cv = document.createElement("canvas"); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+        cv.getContext("2d").drawImage(im, 0, 0); cv.toBlob(b => b ? res(b) : rej(), "image/png"); }; im.onerror = rej; im.src = img.src; });
+    await navigator.clipboard.write([new ClipboardItem({"image/png": png})]);
+    toast("图片已复制");
+  } catch { toast("这张图复制不了，用「下载」"); }
+}
+function wxSaveImg(e, btn){
+  e.stopPropagation();
+  const img = btn.closest(".wx-imgbox")?.querySelector("img"); if (!img) return;
+  const a = document.createElement("a"); a.href = img.src;
+  a.download = (img.dataset.src || "图片").split("/").pop().replace(/\.svg$/i, ".svg") || "图片";
+  document.body.append(a); a.click(); a.remove();
+}
+function wxImgTools(){   // 每张图下面：复制图片、下载（不进复制出去的内容）
+  document.querySelectorAll("#wx-art img").forEach(img => {
+    if (img.parentElement.classList.contains("wx-imgbox")) return;
+    const box = document.createElement("span"); box.className = "wx-imgbox";
+    img.replaceWith(box); box.append(img);
+    box.insertAdjacentHTML("beforeend", `<span class="wx-img"><button onclick="wxCopyImg(event,this)">复制图片</button><button onclick="wxSaveImg(event,this)">下载</button></span>`);
+  });
+}
+
+// ---- 在排好版的页面上直接改（#35）：点一段，改完点别处就写回原文的那几行 ----
+const canBlock = () => !!(DOC && DOC.d && DOC.d.latest && DOC.d.editable && DOC.d.kind === "md");
+function blockClick(e){
+  if (!canBlock()) return;
+  if (e.target.closest("button,.wx-img,a,[contenteditable=true],textarea")) return;
+  const el = e.target.closest("[data-l]");
+  if (!el || el.closest("[contenteditable=true]")) return;
+  const [a, b] = el.dataset.l.split("-").map(Number);
+  const rich = /^(P|H[1-6]|BLOCKQUOTE|UL|OL)$/.test(el.tagName) && !el.querySelector("table,pre,figure");
+  if (rich){
+    el.contentEditable = "true"; el.classList.add("editing");
+    const at = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+    el.focus();
+    if (at){ const s = getSelection(); s.removeAllRanges(); s.addRange(at); }
+    let cancel = false;
+    el.onkeydown = ev => {
+      if (ev.key === "Escape"){ ev.stopPropagation(); cancel = true; el.blur(); }
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "s"){ ev.preventDefault(); el.blur(); docSave(); }
+      if ((ev.metaKey || ev.ctrlKey) && /^[bi]$/.test(ev.key)){ ev.preventDefault(); document.execCommand(ev.key === "b" ? "bold" : "italic"); }
+    };
+    el.onpaste = ev => { ev.preventDefault(); document.execCommand("insertText", false, ev.clipboardData.getData("text/plain")); };
+    el.onblur = () => { el.onblur = null; cancel ? drawDocBody() : putLines(a, b, blockMd(el)); };
+  } else {
+    const L = DOC.draft.replace(/\r/g, "").split("\n");
+    const ta = document.createElement("textarea"); ta.className = "block-src"; ta.spellcheck = false;
+    ta.value = L.slice(a, b + 1).join("\n");
+    el.replaceWith(ta);
+    const fit = () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + 2 + "px"; };
+    fit(); ta.oninput = fit; ta.focus();
+    let cancel = false;
+    ta.onkeydown = ev => { if (ev.key === "Escape"){ ev.stopPropagation(); cancel = true; ta.blur(); } if ((ev.metaKey || ev.ctrlKey) && ev.key === "s"){ ev.preventDefault(); ta.blur(); docSave(); } };
+    ta.onblur = () => { ta.onblur = null; cancel ? drawDocBody() : putLines(a, b, ta.value); };
+  }
+}
+function putLines(a, b, text){
+  const L = DOC.draft.replace(/\r/g, "").split("\n"), old = L.slice(a, b + 1).join("\n");
+  if (text.trim() === old.trim() || docMd(text, {}, true) === docMd(old, {}, true)) { drawDocBody(); return; }   // 只是写法不同、显示一样：不算改
+  L.splice(a, b - a + 1, ...(text.trim() ? text.replace(/\s+$/, "").split("\n") : []));
+  DOC.draft = L.join("\n");
+  docInput({value: DOC.draft});
+  drawDocBody();
+}
+// 改过的一段转回 Markdown
+function blockMd(el){
+  const tag = el.tagName;
+  if (/^H[1-6]$/.test(tag)) return "#".repeat(+tag[1]) + " " + inlineMd(el).replace(/\s*\n\s*/g, " ").trim();
+  if (tag === "BLOCKQUOTE") return paras(el).map(p => p.split("\n").map(x => "> " + x).join("\n")).join("\n>\n");
+  if (tag === "UL" || tag === "OL") return listMd(el, 0);
+  return paras(el).join("\n\n");
+}
+function paras(el){   // 段落里按回车会分出 div / p：每个算一段
+  const out = []; let cur = "";
+  for (const n of el.childNodes){
+    if (n.nodeType === 1 && /^(DIV|P)$/.test(n.tagName)){ if (cur.trim()) out.push(cur.trim()); cur = ""; const t = inlineMd(n).trim(); if (t) out.push(t); }
+    else cur += n.nodeType === 3 ? mdText(n.nodeValue) : inlineMd({childNodes: [n]});
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.length ? out : [""];
+}
+function listMd(el, depth){
+  const ord = el.tagName === "OL"; let k = parseInt(el.getAttribute("start")) || 1;
+  return [...el.children].filter(li => li.tagName === "LI").map(li => {
+    const sub = [...li.children].filter(x => x.tagName === "UL" || x.tagName === "OL");
+    const tick = li.querySelector(":scope > .tick");
+    const own = {childNodes: [...li.childNodes].filter(x => !sub.includes(x) && x !== tick)};
+    const mark = ord ? `${k++}. ` : "- ";
+    const box = tick ? (tick.textContent.includes("☑") ? "[x] " : "[ ] ") : "";
+    return "  ".repeat(depth) + mark + box + inlineMd(own).replace(/\s*\n\s*/g, " ").trim() + sub.map(s => "\n" + listMd(s, depth + 1)).join("");
+  }).join("\n");
+}
+const mdText = s => s.replace(/\u00a0/g, " ").replace(/([*`\\])/g, "\\$1");
+function inlineMd(node){
+  let s = "";
+  for (const n of node.childNodes){
+    if (n.nodeType === 3) { s += mdText(n.nodeValue); continue; }
+    if (n.nodeType !== 1) continue;
+    const t = n.tagName, inner = () => inlineMd(n);
+    if (n.matches("sup[data-note],.wx-img")) continue;
+    if (t === "B" || t === "STRONG") s += wrap(inner(), "**");
+    else if (t === "I" || t === "EM") s += wrap(inner(), "*");
+    else if (t === "S" || t === "DEL" || t === "STRIKE") s += wrap(inner(), "~~");
+    else if (t === "CODE") s += "`" + n.textContent + "`";
+    else if (t === "A" || n.dataset.href){
+      const h = n.getAttribute("href") || n.dataset.href, x = inner();
+      s += x === h ? h : `[${x}](${h})`;
+    }
+    else if (t === "IMG") s += `![${n.getAttribute("alt") || ""}](${n.dataset.src || n.getAttribute("src")})`;
+    else if (n.classList.contains("miss")) s += `![](${n.dataset.src || ""})`;
+    else if (t === "BR") s += "  \n";
+    else if (t === "DIV" || t === "P") s += "\n\n" + inner();
+    else s += inner();
+  }
+  return s;
+}
+function wrap(x, m){   // **加粗** 的空格要放到外面，不然不认
+  const a = x.match(/^\s*/)[0], b = x.match(/\s*$/)[0], core = x.trim();
+  return core ? a + m + core + m + b : x;
+}
+function drawDocBody(){
+  const b = $("#docpane .doc-body"); if (!b || !DOC) return;
+  const top = b.scrollTop;
+  b.innerHTML = docBody(); b.scrollTop = top;
+  if (DOC.mode === "wx") wxImgTools();
 }
 
 // ================= 对话框 =================

@@ -46,4 +46,4 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
           git archive HEAD | ssh -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -i ~/.ssh/deploy \
-            "ubuntu@$HOST" "$GITHUB_SHA"
+            "$HOST" "$GITHUB_SHA"

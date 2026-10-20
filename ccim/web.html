@@ -107,6 +107,20 @@ body{overflow:hidden}
 .chat-head .grow{flex:1;min-width:0}
 .notice{margin:12px 22px 0;padding:9px 12px;border-radius:8px;background:#F4F1E6;color:#6B5A27;font-size:13px}
 .thread{flex:1;overflow:auto;padding:22px 0 10px}
+.chat-mid{flex:1;display:flex;min-height:0}
+.chat-mid .thread{min-width:0}
+.toc{width:210px;flex:none;border-left:1px solid var(--line);padding:16px 12px;overflow:auto}
+.toc h3{font-size:12px;color:var(--faint);font-weight:500;margin:0 0 8px 4px}
+.toc ol{list-style:none;margin:0;padding:0;border-left:1.5px solid var(--line)}
+.toc li button{display:block;width:100%;text-align:left;padding:5px 8px 5px 12px;margin-left:-1.5px;border-left:1.5px solid transparent;font-size:13px;color:var(--ink-2);line-height:1.4}
+.toc li button:hover{color:var(--ink)}
+.toc li button .d{display:block;font-size:11.5px;color:var(--faint)}
+.toc li button.on{border-left-color:var(--qing);color:var(--qing);font-weight:500}
+.chap{max-width:760px;margin:0 auto 6px;padding:0 22px;scroll-margin-top:14px}
+.chap button{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--qing);background:var(--qing-soft);padding:2px 9px 2px 7px;border-radius:6px}
+.chap svg{width:13px;height:13px}
+.chap.me{text-align:right}
+.chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
 .msg.me{display:flex;justify-content:flex-end}
 .msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
@@ -609,6 +623,8 @@ const ICON = {
   quote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h7M4 12h11M4 17h7"/><path d="M18 14v5"/></svg>',
   branch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 5 5 9-10"/></svg>',
+  flag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5" fill="currentColor" fill-opacity=".18"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
   undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
@@ -1039,6 +1055,7 @@ function msgActs(src, i, r){
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (src === "log" && canFork(i, r)) btns.push(`<button onclick="forkAt(${i})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
+  if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
   return `<div class="msg-acts">${btns.join("")}</div>`;
 }
@@ -1131,13 +1148,70 @@ function drawThread(){
   const typed = [...t.querySelectorAll("form[data-sid]")].map(f => [f.dataset.sid, f.pw.value, document.activeElement === f.pw]);
   const earlier = (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
   t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map((r, i) => recHtml(r, i)).join("") + liveHtml();
+    + detail.log.map((r, i) => chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();
   }
   if (near) t.scrollTop = t.scrollHeight;
+  drawToc();
 }
+// ---- 章节（#25）：给重要的消息起个名字，右边的目录点一下跳过去 ----
+let showToc = (() => { try { return localStorage.getItem("ccim.toc") !== "0"; } catch { return true; } })();
+const chapKey = r => (r.type === "user" || r.type === "answer") && r.at ? `${r.type}:${r.at}` : null;
+function chapters(){
+  const ch = detail.chapters || {};
+  return detail.log.map((r, i) => [i, ch[chapKey(r)]]).filter(([, n]) => n);
+}
+function chapPill(r, i){
+  const n = (detail.chapters || {})[chapKey(r)];
+  return n ? `<div class="chap ${r.type === "user" ? "me" : ""}" id="chap-${i}"><button onclick="editChapter(${i})" title="改章节名">${ICON.flag}${esc(n)}</button></div>` : "";
+}
+function firstLine(text){
+  const t = (text || "").replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`\[\]]/g, "").trim();
+  const s = t.split(/[。！？!?\n]|\.\s/)[0].trim() || t;
+  return s.length > 24 ? s.slice(0, 24) + "…" : s;
+}
+function editChapter(i){
+  const r = detail.log[i], cur = (detail.chapters || {})[chapKey(r)];
+  dialog(cur ? "章节" : "标为章节", `<input id="chap-name" class="input" maxlength="40" value="${esc(cur || firstLine(r.text))}">`,
+    `${cur ? `<button class="btn" style="margin-right:auto" onclick="saveChapter(${i},'')">取消章节</button>` : ""}<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveChapter(${i})">保存</button>`);
+  const el = $("#chap-name"); el.focus(); el.select();
+  el.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) saveChapter(i); };
+}
+async function saveChapter(i, name){
+  const r = detail.log[i];
+  if (name === undefined) name = $("#chap-name").value.trim() || firstLine(r.text);
+  closeDialog();
+  const v = await act(() => api("/api/chat/chapter", {id: detail.id, key: chapKey(r), name}));
+  detail.chapters = v.chapters;
+  drawThread();
+}
+function tocWide(){ const m = $("#main"); return m && m.offsetWidth >= 980 && !m.classList.contains("with-panel"); }
+function drawToc(){
+  const toc = $("#toc"), btn = $("#toc-btn"); if (!toc) return;
+  const cs = chapters();
+  if (btn) { btn.hidden = !cs.length; btn.classList.toggle("on", showToc && tocWide()); }
+  toc.hidden = !cs.length || !showToc || !tocWide();
+  if (toc.hidden) return;
+  toc.innerHTML = `<h3>章节</h3><ol>${cs.map(([i, n]) => `<li><button data-i="${i}" onclick="jumpChapter(${i})">${esc(n)}<span class="d">${when(stamp(detail.log[i].at))}</span></button></li>`).join("")}</ol>`;
+  tocSpy();
+}
+function stamp(at){ if (!at) return ""; const d = new Date(at * 1000), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function jumpChapter(i){ closePop(); const el = $("#chap-" + i); if (el) el.scrollIntoView({block: "start", behavior: "smooth"}); }
+function tocSpy(){
+  const t = $("#thread"), toc = $("#toc"); if (!t || !toc || toc.hidden) return;
+  const top = t.getBoundingClientRect().top + 60;
+  let on = null;
+  t.querySelectorAll(".chap").forEach(el => { if (el.getBoundingClientRect().top <= top) on = el.id.slice(5); });
+  if (on === null) { const f = t.querySelector(".chap"); on = f && f.id.slice(5); }
+  toc.querySelectorAll("button[data-i]").forEach(b => b.classList.toggle("on", b.dataset.i === on));
+}
+function tocBtn(e){
+  if (tocWide()) { showToc = !showToc; try { localStorage.setItem("ccim.toc", showToc ? "1" : "0"); } catch {} drawToc(); return; }
+  pop(e, `<div class="sec">章节</div>` + chapters().map(([i, n]) => `<button onclick="jumpChapter(${i})">${ICON.flag}<span>${esc(n)}</span></button>`).join(""), true);
+}
+addEventListener("resize", () => drawToc());
 function forkFrom(c){
   const p = c.parent && S.chats.find(x => x.id === c.parent);
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
@@ -1218,11 +1292,12 @@ function drawChat(){
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
+      <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
       <button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>
     </div>
     ${c.readonly ? `<div class="notice">这个对话来自${esc(c.source)}。在这里接着聊会另开一个分支，${esc(c.source)}那边的对话不受影响。</div>` : ""}
     ${groupPanel(c)}
-    <div class="thread" id="thread"></div>
+    <div class="chat-mid"><div class="thread" id="thread" onscroll="tocSpy()"></div><aside class="toc" id="toc" hidden></aside></div>
     <div class="composer">
       <div class="box" id="box">
         <div class="rcpt" id="rcpt-chat"></div>

@@ -502,6 +502,7 @@ class Platform:
         v = self.chat_view(cid)
         v["log"] = self.mentions.lost(self.channel.logs.read(cid))
         v["rewind"] = self.rewindable(cid, v["log"])
+        v["chapters"] = self.meta(cid).get("chapters") or {}
         for r in v["log"]:                    # 平台重启过：没处理的密码卡片作废
             if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
                 r.update(state="expired")
@@ -552,6 +553,31 @@ class Platform:
                 chats[cid][k] = v
         self.store.write(chats)
         return self.chat_view(cid)
+
+    def set_chapter(self, cid, key, name):
+        """章节（#25）：key 是消息的「类型:时间」，name 为空就取消。"""
+        if not isinstance(key, str) or not re.fullmatch(r"(user|answer):[\d.]+", key):
+            raise Problem("找不到这条消息。")
+        name = " ".join((name or "").split())[:40]
+        if cid.startswith("x:"):
+            marks = registry.read_state(self.home).get("marks") or {}
+            ch = dict((marks.get(cid) or {}).get("chapters") or {})
+        else:
+            chats = self.chats()
+            if cid not in chats:
+                raise Problem("找不到这个对话。")
+            ch = dict(chats[cid].get("chapters") or {})
+        if name:
+            ch[key] = name
+        else:
+            ch.pop(key, None)
+        if cid.startswith("x:"):
+            marks.setdefault(cid, {})["chapters"] = ch
+            registry.write_state(self.home, marks=marks)
+        else:
+            chats[cid]["chapters"] = ch
+            self.store.write(chats)
+        return {"chapters": ch}
 
     # ----- 飞书、微信、终端里的对话 -----
 
@@ -617,7 +643,7 @@ class Platform:
             mk = marks.get(r["id"]) or {}
             if mk.get("hidden"):
                 continue
-            r.update({k: v for k, v in mk.items() if k != "hidden"})
+            r.update({k: v for k, v in mk.items() if k not in ("hidden", "chapters")})
             out.append(r)
         return out
 
@@ -650,8 +676,9 @@ class Platform:
         from . import history
         r = self._external(cid)
         a = agents.get(r["agent"])
+        ch = ((registry.read_state(self.home).get("marks") or {}).get(cid) or {}).get("chapters") or {}
         return dict(r, log=history.read(r["base"], r["sid"], agents.cwd(a)), progress=None, readonly=True,
-                    model=None, effort=None, temp=False)
+                    model=None, effort=None, temp=False, chapters=ch)
 
     def continue_chat(self, cid, text, files):
         """在网页里接着别处的对话聊：另开一个网页对话，从那个对话分支出来，原来那边不受影响。"""
@@ -990,6 +1017,7 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
+                "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),

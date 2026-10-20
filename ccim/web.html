@@ -2108,9 +2108,9 @@ function boardRow(c, kind){
   const who = [(c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
   const prog = kind === "work" ? `<span class="working"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "干活中")}</span>` : esc(c.brief || "");
   const r = REASON[c.attention];
-  const btn = c.attention === "ask" ? `<a class="btn primary" href="${boardHref(c)}" style="text-decoration:none">去批准</a>`
+  const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
     : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
-  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention === "done" || c.attention === "err" ? "fresh" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
+  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""}" href="${boardHref(c)}">${iconOf(c, a, kind === "recent" ? "sm" : "")}
     <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;

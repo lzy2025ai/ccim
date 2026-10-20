@@ -157,6 +157,18 @@ body{overflow:hidden}
 .newtag.ask{color:#8A6A12}
 .newtag.err{color:var(--bad)}
 .brow.fresh .btitle{font-weight:700}
+/* 等你处理：玻璃卡片。后面垫一层柔和的色块，卡片半透明 + 背景模糊 + 顶部高光 + 投影（#54） */
+.glass-bed{position:relative;isolation:isolate;padding:2px 0}
+.glass-bed::before{content:"";position:absolute;z-index:-1;inset:-10px -6px;border-radius:24px;pointer-events:none;
+  background:radial-gradient(40% 70% at 12% 30%,color-mix(in srgb,var(--qing) 22%,transparent),transparent 70%),
+             radial-gradient(35% 80% at 85% 70%,color-mix(in srgb,var(--zhu) 14%,transparent),transparent 70%),
+             radial-gradient(30% 60% at 55% 10%,color-mix(in srgb,var(--huang) 16%,transparent),transparent 70%);filter:blur(18px)}
+.glass-bed .brow{background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);
+  border:1px solid rgba(255,255,255,.75);border-radius:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(29,34,43,.04),0 10px 28px -12px rgba(43,76,111,.35),0 2px 6px rgba(29,34,43,.06);
+  transition:transform .18s ease,box-shadow .18s ease}
+.glass-bed .brow:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(29,34,43,.04),0 16px 34px -12px rgba(43,76,111,.42),0 3px 8px rgba(29,34,43,.08)}
+@media (prefers-reduced-motion:reduce){.glass-bed .brow,.glass-bed .brow:hover{transition:none;transform:none}}
 .brow.fresh .bprog{color:var(--ink)}
 .brow.work,.item.work{position:relative;border-color:transparent}
 .ants{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
@@ -2158,7 +2170,7 @@ async function renderBoard(quick){
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v.turns).sort((a, b) => b[1].turns - a[1].turns).slice(0, 6);
   const maxT = Math.max(1, ...ags.map(([, v]) => v.turns));
-  const sec = (title, color, n, body) => `<div class="bsec"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
+  const sec = (title, color, n, body, cls = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
   const shown = showAllRecent ? recent : recent.slice(0, 5);
   $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
     <div class="bstats">
@@ -2168,7 +2180,7 @@ async function renderBoard(quick){
       <div class="stat"><b>${boardStats ? st.done_week : "…"}</b><span>本周完成</span></div>
     </div>
     <div class="bgrid"><div class="bleft">
-      ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? wait.map(c => boardRow(c, "wait")).join("") : `<p class="bempty">没有在等你的事。</p>`)}
+      ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting")}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
       ${(() => {
         const ags = recentAgents(recent);

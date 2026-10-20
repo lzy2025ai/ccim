@@ -3579,6 +3579,13 @@ function toggleList(on){
   addEventListener("pointerup", end); addEventListener("pointercancel", end);
   rz.addEventListener("dblclick", () => { app.style.removeProperty("--list-w"); try { localStorage.removeItem("ccim.listW"); } catch {} });
 })();
+// iPad、手机：输入法收起后 Safari 有时不把页面滚回去，上半截卡着（#56）。输入框失焦、可视区域变回原高时滚回顶部
+(function(){
+  const reset = () => { if (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop) { window.scrollTo(0, 0); document.documentElement.scrollTop = document.body.scrollTop = 0; } };
+  document.addEventListener("focusout", e => { if (e.target.matches && e.target.matches("textarea,input")) setTimeout(() => { if (!document.activeElement || !document.activeElement.matches("textarea,input")) reset(); }, 120); });
+  const vv = window.visualViewport;
+  if (vv) { let full = vv.height; vv.addEventListener("resize", () => { if (vv.height >= full - 1) { full = vv.height; reset(); } else if (vv.height > full) full = vv.height; }); }
+})();
 let wasNarrow = narrow();
 addEventListener("resize", () => {             // 跨过手机宽度：变窄按当前页面一屏一个，变宽恢复原来的折叠习惯
   if (narrow() === wasNarrow) return;

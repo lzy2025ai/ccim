@@ -9,7 +9,7 @@
 新版本 60 秒内没连上，就改用稳定版启动，保证还能从飞书联系上；结果都发飞书告诉主人。
 这个独立进程优先用稳定版跑，新代码坏了也不影响它。
 """
-import json, os, shutil, subprocess, sys, time
+import json, os, re, shutil, subprocess, sys, time
 
 from . import registry
 
@@ -49,7 +49,7 @@ def _save_channel(**changes):
 
 
 def _is_dev_install():
-    return os.path.isdir(os.path.join(SRC, ".git"))
+    return os.path.exists(os.path.join(SRC, ".git"))       # 工作目录（git worktree）里的 .git 是文件
 
 
 def dev_python():
@@ -97,7 +97,83 @@ def describe(python):
     real = _env(python)
     if real.startswith(os.path.realpath(_stable()) + os.sep):
         return "稳定版 " + os.path.relpath(real, os.path.realpath(_stable())).split(os.sep)[0]
-    return "开发版"
+    t = trying()
+    return f"开发版（在试 {t['label']}）" if t else "开发版"
+
+
+# ---------- 验收时试某个需求（#42） ----------
+# 每个需求在自己的工作目录（git worktree）里开发，主目录不切分支。`ccim try 编号` 把跑开发版的进程切到那个工作目录上：
+# 启动时把它放在 PYTHONPATH 最前面，导入的就是那里的代码（开发环境还是主目录的 .venv，依赖一样）。
+
+def trying():
+    """正在试的需求：{label, src, branch}，没有返回 None。"""
+    t = _channel().get("try")
+    return t if t and os.path.isdir(t.get("src") or "") else None
+
+
+def launch_env(python):
+    """启动这个 python 时额外的环境变量：开发版且正在试某个需求时指向那个工作目录。"""
+    t = trying()
+    if not t or not python or _env(python).startswith(os.path.realpath(_stable()) + os.sep):
+        return {}
+    return {"PYTHONPATH": t["src"]}
+
+
+def worktrees():
+    """[(目录, 分支)]"""
+    r = _git("worktree", "list", "--porcelain")
+    out, cur = [], {}
+    for line in r.stdout.splitlines() + [""]:
+        if not line.strip():
+            if cur.get("worktree"):
+                out.append((cur["worktree"], cur.get("branch", "").replace("refs/heads/", "")))
+            cur = {}
+            continue
+        k, _, v = line.partition(" ")
+        cur[k] = v
+    return out
+
+
+def find_worktree(what):
+    """按需求编号、分支名或目录找工作目录。"""
+    what = str(what).lstrip("#")
+    for path, branch in worktrees()[1:]:      # 第一个是主目录
+        if (what.isdigit() and re.match(rf"issue-{what}(-|$)", branch)) or branch == what or \
+                os.path.realpath(path) == os.path.realpath(os.path.expanduser(what)):
+            return path, branch
+    return None
+
+
+def dev_projects():
+    """跑开发版的项目（试需求时要一起切换的）。"""
+    return [p for p, e in registry.all_projects().items() if which(p, e)[1] == "开发版"]
+
+
+def set_try(what):
+    """what 为 main / None 就切回主目录。返回 [说明]。"""
+    if not _is_dev_install():
+        raise SystemExit("要在 ccim 的代码目录（开发版）里运行。")
+    if what in (None, "", "main"):
+        _save_channel(**{"try": None})
+        label = "main"
+    else:
+        hit = find_worktree(what)
+        if not hit:
+            raise SystemExit(f"找不到 {what} 的工作目录。先让 Agent 建好（git worktree add …），或者写分支名、目录。")
+        path, branch = hit
+        m = re.match(r"issue-(\d+)", branch)
+        label = f"#{m.group(1)}" if m else branch
+        _save_channel(**{"try": {"label": label, "src": path, "branch": branch}})
+    out = []
+    from . import daemon
+    for p in dev_projects():
+        if not daemon.running(p):
+            continue
+        ok, msg = safe_restart(p, notify=False)
+        out.append(msg)
+    if not out:
+        out.append("现在没有跑开发版的项目，下次启动时生效。")
+    return label, out
 
 
 # ---------- 安全重启 ----------
@@ -178,12 +254,13 @@ def build_stable():
     """把代码目录当前的提交装成一个稳定版，返回版本名。"""
     if not _is_dev_install():
         raise SystemExit("要在 ccim 的代码目录（开发版）里运行。")
-    if _git("status", "--porcelain").stdout.strip():
-        raise SystemExit("代码还有没提交的改动，先提交再升级。")
-    import tomllib                            # 开发版装好后元数据不会跟着改，版本号直接读 pyproject
-    with open(os.path.join(SRC, "pyproject.toml"), "rb") as f:
-        ver = tomllib.load(f)["project"]["version"]
-    label = f"{ver}-{_git('rev-parse', '--short', 'HEAD').stdout.strip()}"
+    # 一律按最新的 main 装（#42）：主目录可能正停在别的分支上，或者有别人没提交的改动
+    _git("fetch", "-q", "origin", "main")
+    ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
+    sha = _git("rev-parse", ref).stdout.strip()
+    import tomllib                            # 版本号读那次提交里的 pyproject
+    ver = tomllib.loads(_git("show", f"{sha}:pyproject.toml").stdout)["project"]["version"]
+    label = f"{ver}-{sha[:7]}"
     dest = os.path.join(_stable(), label)
     if not stable_python(label):
         _rm(dest)
@@ -191,7 +268,7 @@ def build_stable():
         env.pop("PYTHONDONTWRITEBYTECODE", None)
         for cmd in (["uv", "venv", "-q", "--python", sys.executable, dest],
                     ["uv", "pip", "install", "-q", "--compile-bytecode", "--python", os.path.join(dest, "bin", "python"),
-                     f"git+file://{SRC}@{_git('rev-parse', 'HEAD').stdout.strip()}"]):
+                     f"git+file://{SRC}@{sha}"]):
             r = subprocess.run(cmd, capture_output=True, text=True, env=env)
             if r.returncode != 0:
                 _rm(dest)

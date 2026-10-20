@@ -44,12 +44,19 @@ def _argv(path, channel, mode, python=None):
     return [python, "-P", "-m", "ccim.cli", "run", path, "--channel", channel, "--mode", mode]
 
 
+def _launch_env(python):
+    from . import runtime
+    return runtime.launch_env(python)
+
+
 def start_background(path, channel, python=None):
     """脱离终端在后台跑：关掉终端、关掉 Claude 桌面版都不影响。"""
     log = open(log_path(path), "ab")
     started = registry.now()
-    proc = subprocess.Popen(_argv(path, channel, "bg", python), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                            start_new_session=True, cwd=path)
+    argv = _argv(path, channel, "bg", python)
+    from . import runtime
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd=path,
+                            env=dict(os.environ, **runtime.launch_env(argv[0])))
     return _wait_online(path, started, exited=lambda: proc.poll() is not None)
 
 
@@ -96,7 +103,7 @@ def start_always(path, channel, python=None):
                          "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
     plist = {
         "Label": label(path),
-        "ProgramArguments": _argv(path, channel, "always", python),
+        "ProgramArguments": (argv := _argv(path, channel, "always", python)),
         "WorkingDirectory": path,
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},   # 正常退出（ccim stop）不拉起，崩溃、启动失败才拉起
@@ -104,7 +111,7 @@ def start_always(path, channel, python=None):
         "ProcessType": "Interactive",
         "StandardOutPath": log_path(path),
         "StandardErrorPath": log_path(path),
-        "EnvironmentVariables": {"PATH": env_path, "LANG": "zh_CN.UTF-8", "PYTHONUNBUFFERED": "1"},
+        "EnvironmentVariables": {"PATH": env_path, "LANG": "zh_CN.UTF-8", "PYTHONUNBUFFERED": "1", **_launch_env(argv[0])},
     }
     os.makedirs(os.path.dirname(plist_path(path)), exist_ok=True)
     _launchctl("bootout", f"{_domain()}/{label(path)}")

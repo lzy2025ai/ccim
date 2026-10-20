@@ -41,6 +41,7 @@ def static_file(path):
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
+IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
 MARKS = ("title", "pin", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
@@ -230,6 +231,16 @@ class WebChannel(Channel):
         snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
         if snap:
             rec["snap"] = snap
+        elif os.path.splitext(path)[1].lower() in IMAGES and rec["size"] <= 30 << 20:
+            # 图片也存一份：Agent 常常反复写同一个文件名（截图），不存的话之前那几条消息也会显示成最新的（#56）
+            try:
+                d = docs.snap_dir(self.logs.folder, chat_id)
+                os.makedirs(d, exist_ok=True)
+                dest = os.path.join(d, f"{uuid.uuid4().hex[:10]}-{os.path.basename(path)}")
+                shutil.copy(path, dest)
+                rec.update(path=dest, orig=rec["path"])
+            except OSError:
+                pass
         self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def download(self, message_id, kind, key, name, folder):

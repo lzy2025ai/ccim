@@ -1460,8 +1460,10 @@ def save_agent(aid, fields):
         d = os.path.realpath(os.path.expanduser(fields["dir"].strip()))
         if not os.path.isdir(d):
             raise Problem("找不到这个工作目录。")
-        if d in ("/", os.path.realpath(os.path.expanduser("~"))) and not fields.get("confirmed"):
-            raise Problem("工作目录不能是整个硬盘或用户主目录，选一个具体的文件夹。")
+        if d == "/":
+            raise Problem("工作目录不能是整个硬盘，选一个具体的文件夹。")
+        if d == os.path.realpath(os.path.expanduser("~")) and not fields.get("confirmed"):
+            return {"confirm": "home"}        # 主目录：网页上说明影响，用户确认后再带 confirmed 保存（#50）
     if aid:
         a = agents.update(aid, **fields)
     else:

@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
+from . import kb as kb_mod
 from .channels.base import CardAction, Channel, Incoming
 
 log = logging.getLogger("ccim.platform")
@@ -314,6 +315,62 @@ class Platform:
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
+        channel.kbs_of = lambda cid: (self.chats().get(cid) or {}).get("kbs") or []   # 挂在对话上的知识库（#27）
+        self.kb_wake = threading.Event()
+        threading.Thread(target=self._kb_sync_loop, daemon=True).start()
+
+    # ----- 知识库（#27） -----
+
+    def _kb_sync_loop(self):
+        """问在线的其他电脑要知识库清单，比自己新的拉过来。每 30 秒一次，有改动时马上一次。"""
+        from . import kb
+        time.sleep(15)
+        while True:
+            for m in self.peers.machines():
+                if m["me"] or not m.get("online"):
+                    continue
+                try:
+                    st, _, data = self.peers.forward(m["id"], "GET", "/api/kb/manifest", b"", {})
+                    if st != 200:
+                        continue
+                    pull, drop, tombs = kb.wanted(json.loads(data))
+                    contents = {}
+                    if pull:
+                        st, _, data = self.peers.forward(m["id"], "POST", "/api/kb/export", json.dumps({"keys": pull}).encode(),
+                                                         {"Content-Type": "application/json"})
+                        contents = json.loads(data) if st == 200 else {}
+                    if kb.apply(contents, drop, tombs):
+                        log.info("知识库从「%s」同步了 %d 项，删了 %d 项", m["name"], len(contents), len(drop))
+                        self.channel.events.publish({"type": "kb", "chat": None})
+                except Exception:
+                    log.debug("知识库同步出错（%s）", m.get("name"), exc_info=True)
+            self.kb_wake.wait(30)
+            self.kb_wake.clear()
+
+    def kb_changed(self):
+        """这台电脑上改了知识库：叫在线的其他电脑马上来拉。"""
+        def go():
+            for m in self.peers.machines():
+                if not m["me"] and m.get("online"):
+                    try:
+                        self.peers.forward(m["id"], "POST", "/api/kb/sync_now", b"{}", {"Content-Type": "application/json"})
+                    except Exception:
+                        pass
+        threading.Thread(target=go, daemon=True).start()
+
+    def set_kbs(self, cid, ids):
+        from . import kb
+        ids = [x for x in (ids or []) if kb.dirs([x])][:8]
+        chats = self.chats()
+        if cid not in chats:
+            raise Problem("找不到这个对话。")
+        chats[cid]["kbs"] = ids
+        self.store.write(chats)
+        try:
+            self._bridge(cid).chat(cid, "p2p").reconnect = True     # 下一条消息开始带上
+        except Problem:
+            pass
+        return {"kbs": ids}
 
     # ----- 归档的对话到期删除（#26） -----
 
@@ -538,7 +595,7 @@ class Platform:
                 else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
-                **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()),
+                **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     def chat_detail(self, cid):
@@ -1031,6 +1088,11 @@ def _handler(pf):
             routes = {
                 "/api/state": lambda: state(pf) if q.get("local") else pf.peers.merged_state(state(pf)),
                 "/api/dirs": lambda: list_dirs(q.get("path") or ""),
+                "/api/kb": lambda: {"libs": kb_mod.libs()},
+                "/api/kb/lib": lambda: kb_mod.lib_detail(q.get("id", "")),
+                "/api/kb/entry": lambda: kb_mod.entry(q.get("lib", ""), q.get("id", "")),
+                "/api/kb/search": lambda: {"results": kb_mod.search(q.get("q", ""))},
+                "/api/kb/manifest": lambda: kb_mod.manifest(),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
@@ -1066,6 +1128,14 @@ def _handler(pf):
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
+                "/api/kb/lib/save": lambda: kb_write(pf, kb_mod.save_lib, b("id"), b("name"), b("desc") or "", b("color")),
+                "/api/kb/lib/delete": lambda: kb_write(pf, kb_mod.delete_lib, b("id")),
+                "/api/kb/entry/save": lambda: kb_write(pf, kb_mod.save_entry, b("lib"), b("id"), b("title"), b("content"), b("source")),
+                "/api/kb/entry/delete": lambda: kb_write(pf, kb_mod.delete_entry, b("lib"), b("id")),
+                "/api/kb/entry/move": lambda: kb_write(pf, kb_mod.move_entry, b("lib"), b("id"), b("to")),
+                "/api/kb/export": lambda: kb_mod.export(b("keys")),
+                "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
+                "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
@@ -1326,6 +1396,15 @@ def connect_agent(aid, channel):
     if job.get("id") in console.JOBS:
         console.JOBS[job["id"]].agent_id = aid
     return job
+
+
+def kb_write(pf, fn, *args):
+    try:
+        r = fn(*args)
+    except ValueError as e:
+        raise Problem(str(e))
+    pf.kb_changed()
+    return r
 
 
 def archive_days():

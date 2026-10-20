@@ -121,6 +121,41 @@ body{overflow:hidden}
 .chap svg{width:13px;height:13px}
 .chap.me{text-align:right}
 .when.left{color:var(--warn)}
+.kbmark{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.kbmark svg{width:16px;height:16px}
+.ov-sub{padding:0 32px 12px;min-height:8px}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ok)}
+.sync i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.sync.part{color:var(--muted)} .sync.part i{background:var(--faint)}
+.item.entry .sub2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;color:var(--muted)}
+.kb-read{max-width:820px;margin:0 auto;padding:26px 32px 40px;overflow:auto;height:100%}
+.kb-top{display:flex;align-items:center;gap:10px}
+.kb-top h2{font:600 20px/1.35 var(--song);margin:0;min-width:0}
+.kb-top .grow{flex:1}
+.kb-read .src{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.kb-read .src a{color:var(--qing);display:inline-flex;align-items:center;gap:4px;text-decoration:none}
+.kb-read .src svg{width:13px;height:13px}
+.kb-read .gone{text-decoration:line-through;color:var(--faint)}
+.kb-hits{padding:0 0 32px;display:grid;gap:8px;max-width:900px}
+.kb-hit{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:inherit}
+.kb-hit b{margin-right:8px} .kb-hit p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.kbrow{display:flex;flex-wrap:wrap;gap:6px}
+.kbrow:empty{display:none}
+.kbm{display:inline-flex;align-items:center;gap:5px;padding:2px 6px 2px 8px;border-radius:7px;background:var(--qing-soft);color:var(--qing);font-size:12.5px}
+.kbm svg{width:13px;height:13px}
+.kbm button{display:inline-flex;opacity:.6;padding:2px}
+.kbm button:hover{opacity:1}
+.wchip.kbm{background:var(--qing-soft);border-color:#C8D6E6;color:var(--qing)}
+.wchip.add{border-style:dashed;color:var(--muted)}
+.seltool{position:fixed;z-index:25;display:flex;gap:2px;background:var(--ink);color:#fff;border-radius:8px;padding:3px;font-size:12.5px;box-shadow:0 8px 20px rgba(0,0,0,.18)}
+.seltool button{padding:4px 9px;border-radius:6px;display:inline-flex;gap:5px;align-items:center;color:#fff}
+.seltool button:hover{background:rgba(255,255,255,.14)}
+.seltool svg{width:14px;height:14px}
+.pick-list{display:grid;gap:6px}
+.pick-list .pick{width:100%}
+.anc{display:block;height:0;scroll-margin-top:12px}
+.msg.flash{animation:flash 1.6s ease}
+@keyframes flash{0%,40%{background:var(--qing-soft)}100%{background:transparent}}
 .chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
 .msg.me{display:flex;justify-content:flex-end}
@@ -593,6 +628,7 @@ body{overflow:hidden}
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
+    <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
   </nav>
@@ -626,6 +662,9 @@ const ICON = {
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 5 5 9-10"/></svg>',
   flag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5" fill="currentColor" fill-opacity=".18"/></svg>',
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
+  kb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>',
+  save:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg>',
   undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   folder:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
@@ -867,6 +906,7 @@ function connectEvents(){
         drawThread();
       }
     }
+    if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
     else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
   };
@@ -880,11 +920,13 @@ function portrait(){ return innerWidth > 760 && innerWidth <= 900; }
 function phoneMain(){
   if (!current.id) return false;
   if (current.view === "agents" && current.id !== "new") return !!current.sub;   // 进了 Agent 先看它的对话列表
+  if (current.view === "kb") return !!current.sub;                                 // 进了知识库先看条目列表
   return true;
 }
 function phoneBack(){
   const v = current.view, id = current.id;
   const to = v === "agents" ? (current.sub && id !== "new" ? `#/agents/${encodeURIComponent(id)}` : "#/agents")
+    : v === "kb" && current.sub ? `#/kb/${encodeURIComponent(id)}`
     : v === "schedules" && id && id.startsWith("edit-") ? `#/schedules/${encodeURIComponent(id.slice(5))}`
     : `#/${v}`;
   location.hash = to;
@@ -898,7 +940,7 @@ function route(){
   if (current.view === "chats" && current.id === "new" && draft.machine) ctxMachine = draft.machine;
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
-  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects") && (!current.id || current.id === "new"));
+  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new"));
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
@@ -916,11 +958,13 @@ function route(){
     else if (narrow()) renderAgentSide();
     else openAgentLatest(current.id);
   }
+  else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
 function renderList(){
+  if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
   else if (current.view === "schedules") renderScheduleList();
@@ -1047,7 +1091,7 @@ async function openChat(id){
     document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === "agents"));
     renderList();
   }
-  drawChat();
+  drawChat(); doJump();
 }
 function stepsHtml(steps, open, head){
   if (!steps || !steps.length) return "";
@@ -1062,6 +1106,7 @@ function msgActs(src, i, r){
   const ref = `${q(src)},${i}`;
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
+  if (r.type === "answer" && r.text) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
   if (src === "log" && canFork(i, r)) btns.push(`<button onclick="forkAt(${i})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
@@ -1156,7 +1201,7 @@ function drawThread(){
   const typed = [...t.querySelectorAll("form[data-sid]")].map(f => [f.dataset.sid, f.pw.value, document.activeElement === f.pw]);
   const earlier = (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
   t.innerHTML = (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map((r, i) => chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
+    + detail.log.map((r, i) => `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();
@@ -1309,6 +1354,7 @@ function drawChat(){
     <div class="composer">
       <div class="box" id="box">
         <div class="rcpt" id="rcpt-chat"></div>
+        <div class="kbrow" id="kbrow"></div>
         <div class="pending" id="pending"></div>
         <textarea id="input" rows="2" aria-label="输入消息"></textarea>
         <div class="bar"><div class="opts">
@@ -1316,13 +1362,14 @@ function drawChat(){
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
-          ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}</div>
+          ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
+          ${c.readonly || c.base === "codex" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}</div>
           <button class="send" id="send"></button>
         </div>
       </div>
       <div class="hint">Enter 发送，Shift + Enter 换行；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
     </div>`;
-  drawThread(); drawComposerState(); drawPending(); drawChatRcpt();
+  drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow();
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
@@ -1635,6 +1682,8 @@ function renderNewChat(){
       <div class="where-row">
         ${multi() ? `<button class="wchip" onclick="pickMachine(event)" title="在哪台电脑上干活">${ICON.monitor}<span>${esc((machineOf(d.machine) || {}).name || "")}</span>${ICON.down}</button>` : ""}
         <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(tilde(d.dir)) : "不选工作目录"}</span>${ICON.down}</button>
+        ${d.base === "claude" ? `${(d.kbs || []).map(k => `<span class="wchip kbm">${ICON.kb}<span>${esc(kbName(k))}</span><button aria-label="取下" onclick="draft.kbs=draft.kbs.filter(x=>x!==${q(k)});renderNewChat()">${ICON.x}</button></span>`).join("")}
+        <button class="wchip add" onclick="pickKbs(event,true)">${ICON.plus}<span>挂知识库</span></button>` : ""}
       </div>
       <div class="composer" style="margin:0;padding:0">
         <div class="box" id="box">
@@ -1717,6 +1766,7 @@ async function startTemp(){
   if (!v && !files.length) return $("#input").focus();
   const m = draft.machine || S.me;
   const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}, m));
+  if (draft.base === "claude" && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
   const to = chatRcpt; closePop();
   await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}, m) : api("/api/chat/send", {id, text: v, files}, m));
   pendingFiles = []; chatRcpt = []; draftText = "";
@@ -1728,6 +1778,241 @@ async function startAgent(aid){
   await loadState(); location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
+
+// ================= 知识库（#27） =================
+let kbCache = null, kbOpen = null, kbFilter = "";
+const KB_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", lu: "var(--lu)", zhu: "var(--zhu)", dai: "var(--dai)", huang: "var(--huang)"};
+const kbApi = (path, body) => api(path, body, S.me);       // 每台电脑都有一份完整的，读写本机这份，自动同步到其他电脑
+async function kbLibs(){ if (!kbCache) kbCache = (await kbApi("/api/kb")).libs; return kbCache; }
+function kbName(id){ return ((kbCache || []).find(l => l.id === id) || {}).name || "知识库"; }
+function kbMark(l, big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:${KB_COLORS[l.color] || "var(--qing)"}">${ICON.kb}</span>`; }
+function syncLine(){
+  const ms = (S.machines || []).filter(m => !m.hub || !S.hub);
+  if (!multi()) return "";
+  const on = ms.filter(m => m.online).length;
+  return `<span class="sync ${on < ms.length ? "part" : ""}"><i></i>${on < ms.length ? `${on} / ${ms.length} 台电脑在线，其余连上后同步` : `${ms.length} 台电脑已同步`}</span>`;
+}
+async function renderKbCards(){
+  let libs = [];
+  try { libs = await kbLibs(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开知识库</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (current.view !== "kb" || current.id) return;
+  const hits = kbFilter ? (await kbApi(`/api/kb/search?q=${encodeURIComponent(kbFilter)}`)).results : null;
+  const body = hits ? (hits.length ? `<div class="kb-hits">${hits.map(h => `<a class="kb-hit" href="#/kb/${encodeURIComponent(h.lib)}/${encodeURIComponent(h.id)}"><b>${esc(h.title)}</b><span class="muted">${esc(h.lib_name)}</span><p>${esc(h.preview)}</p></a>`).join("")}</div>` : `<p class="muted" style="padding:0 32px">没有找到。</p>`)
+    : `<div class="cgrid">${libs.map(l => `<a class="ccard" href="#/kb/${encodeURIComponent(l.id)}">
+        <div class="top">${kbMark(l)}<div class="t"><div class="nm">${esc(l.name)}</div></div></div>
+        <div class="role">${esc(l.desc || "")}</div>
+        <div class="foot"><span class="grow">${l.count} 条</span><span>${l.updated ? when(stamp(l.updated)) + " 更新" : ""}</span><span class="go">打开</span></div></a>`).join("")}
+      <button class="ccard add" onclick="editKb()">${ICON.plus}新建知识库</button></div>`;
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>知识库</h1><span class="grow"></span>
+      <label class="search">${ICON.search}<input placeholder="搜索所有知识库" aria-label="搜索所有知识库" value="${esc(kbFilter)}" onchange="kbFilter=this.value.trim();renderKbCards()" onkeydown="if(event.key==='Enter'){kbFilter=this.value.trim();renderKbCards()}"></label>
+      <button class="btn primary" onclick="editKb()">${ICON.plus}新建知识库</button></div>
+    <div class="ov-sub">${syncLine()}</div><div class="ov-body">${body}</div></div>`;
+}
+async function openKb(lib, eid){
+  try { kbOpen = await kbApi(`/api/kb/lib?id=${encodeURIComponent(lib)}`); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个知识库</h2><p>${esc(e.message)}</p></div>`; renderKbList(); return; }
+  renderKbList();
+  const pick = eid || (!narrow() && kbOpen.entries[0] && kbOpen.entries[0].id);
+  if (!pick) {
+    $("#main").innerHTML = `<div class="empty"><h2>${esc(kbOpen.name)}</h2><p>${esc(kbOpen.desc || "")}</p><p class="muted">在对话里点回答下面的「存到知识库」，存进来的内容会出现在这里。</p>
+      <button class="btn primary" onclick="chatWithKb(${q(lib)})">和这个知识库对话</button></div>`;
+    return;
+  }
+  let e;
+  try { e = await kbApi(`/api/kb/entry?lib=${encodeURIComponent(lib)}&id=${encodeURIComponent(pick)}`); }
+  catch (err) { $("#main").innerHTML = `<div class="empty"><h2>找不到这一条</h2><p>${esc(err.message)}</p></div>`; return; }
+  const s = e.source || {};
+  $("#main").innerHTML = `<div class="kb-read">
+    <div class="kb-top"><h2>${esc(e.title)}</h2><span class="grow"></span>
+      <button class="btn primary" onclick="chatWithKb(${q(lib)})">和这个知识库对话</button>
+      <button class="icon-btn" aria-label="更多" onclick="entryMenu(event,${q(lib)},${q(e.id)})">${ICON.more}</button></div>
+    <div class="src" id="kb-src">${s.chat ? `来自 <a href="#" onclick="event.preventDefault();openSource(${q(JSON.stringify(s))})">${ICON.link}${esc([s.agent_name, `「${s.chat_title || "对话"}」`].filter(Boolean).join(" · "))}</a>` : "手动添加"}
+      ${s.machine && multi() ? `<span>· ${esc((machineOf(s.machine) || {}).name || "")}</span>` : ""}<span>· ${when(stamp(e.created || e.updated))} 存</span></div>
+    <div class="answer">${md(e.content)}</div></div>`;
+  if (s.chat) checkSource(s);
+}
+function renderKbList(){
+  const l = kbOpen && kbOpen.id === current.id ? kbOpen : null;
+  $("#list").innerHTML = `<div class="list-head"><a class="back" href="#/kb">${ICON.left}所有知识库</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
+    ${l ? `<div class="side-card">${kbMark(l)}<div class="t"><div class="nm">${esc(l.name)}</div><div class="sub">${l.entries.length} 条${l.desc ? " · " + esc(l.desc) : ""}</div></div>
+      <button class="icon-btn" aria-label="更多操作" onclick="kbMenu(event,${q(l.id)})">${ICON.more}</button></div>
+    <button class="side-new" onclick="chatWithKb(${q(l.id)})">${ICON.plus}和这个知识库对话</button>
+    <div class="scroll">${l.entries.length ? l.entries.map(e => `<a class="item entry ${current.sub === e.id || (!current.sub && !narrow() && l.entries[0].id === e.id) ? "on" : ""}" href="#/kb/${encodeURIComponent(l.id)}/${encodeURIComponent(e.id)}" style="text-decoration:none;color:inherit">
+      <span class="t"><span class="title">${esc(e.title)}</span><span class="sub2">${esc(e.preview)}</span><span class="sub">${when(stamp(e.created || e.updated))}${e.source && e.source.chat_title ? ` · 来自「${esc(e.source.chat_title)}」` : ""}</span></span></a>`).join("")
+      : `<p class="muted" style="padding:10px">还没有内容。</p>`}</div>` : `<div class="loading">…</div>`}`;
+}
+async function checkSource(s){        // 原对话还在不在
+  try { await api(`/api/chat?id=${encodeURIComponent(s.chat)}`, undefined, s.machine || S.me); }
+  catch { const el = $("#kb-src a"); if (el) el.outerHTML = `<span class="gone">${esc(`「${s.chat_title || "对话"}」`)}</span><span>原对话已删除</span>`; }
+}
+function openSource(js){
+  const s = JSON.parse(js);
+  jumpTo = {chat: s.chat, at: s.at};
+  if (s.machine) ctxMachine = s.machine;
+  location.hash = s.agent ? `#/agents/${encodeURIComponent(s.agent)}/${encodeURIComponent(s.chat)}` : `#/chats/${encodeURIComponent(s.chat)}`;
+}
+let jumpTo = null;
+function doJump(){                     // 从知识库回到原对话：滚到存的那条，闪一下
+  if (!jumpTo || !detail || detail.id !== jumpTo.chat) return;
+  const i = detail.log.findIndex(r => r.at === jumpTo.at);
+  jumpTo = null;
+  const el = i >= 0 && $("#rec-" + i);
+  if (!el) return;
+  el.scrollIntoView({block: "start"});
+  const m = el.nextElementSibling && el.nextElementSibling.classList.contains("chap") ? el.nextElementSibling.nextElementSibling : el.nextElementSibling;
+  if (m) { m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 1600); }
+}
+function editKb(lib){
+  const l = lib ? (kbCache || []).find(x => x.id === lib) || kbOpen : null;
+  dialog(l ? "编辑知识库" : "新建知识库", `<div class="form" style="grid-template-columns:1fr"><label for="kb-name">名字</label><input id="kb-name" class="input" maxlength="40" value="${esc(l ? l.name : "")}" placeholder="比如：官网改版、踩坑记录">
+    <label for="kb-desc">说明</label><input id="kb-desc" class="input" maxlength="200" value="${esc(l ? l.desc || "" : "")}" placeholder="放些什么（可以不填）"></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveKb(${q(lib || "")})">${l ? "保存" : "新建"}</button>`);
+  $("#kb-name").focus();
+}
+async function saveKb(lib){
+  const name = $("#kb-name").value.trim();
+  if (!name) return $("#kb-name").focus();
+  const r = await act(() => kbApi("/api/kb/lib/save", {id: lib || null, name, desc: $("#kb-desc").value}));
+  closeDialog(); kbCache = null;
+  if (lib) route(); else location.hash = `#/kb/${encodeURIComponent(r.id)}`;
+  return r;
+}
+function kbMenu(e, lib){
+  pop(e, `<button onclick="closePop();editKb(${q(lib)})">编辑</button><button class="danger" onclick="closePop();deleteKb(${q(lib)})">删除知识库</button>`);
+}
+async function deleteKb(lib){
+  const l = kbOpen || {};
+  if (!await confirmBox(`删除「${l.name || "知识库"}」？`, `里面的 ${(l.entries || []).length} 条会一起删掉，所有电脑上都删。`, "删除")) return;
+  await act(() => kbApi("/api/kb/lib/delete", {id: lib}), "已删除"); kbCache = null; location.hash = "#/kb";
+}
+function entryMenu(e, lib, eid){
+  pop(e, `<button onclick="closePop();editEntry(${q(lib)},${q(eid)})">编辑</button><button onclick="closePop();moveEntry(event,${q(lib)},${q(eid)})">移到别的知识库</button><button class="danger" onclick="closePop();deleteEntry(${q(lib)},${q(eid)})">删除</button>`);
+}
+async function editEntry(lib, eid){
+  const e = await kbApi(`/api/kb/entry?lib=${encodeURIComponent(lib)}&id=${encodeURIComponent(eid)}`);
+  dialog("编辑", `<div class="form" style="grid-template-columns:1fr"><label for="ke-title">标题</label><input id="ke-title" class="input" maxlength="80" value="${esc(e.title)}">
+    <label for="ke-body">内容</label><textarea id="ke-body" class="textarea" style="min-height:220px">${esc(e.content)}</textarea></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="ke-ok">保存</button>`);
+  $("#ke-ok").onclick = async () => {
+    await act(() => kbApi("/api/kb/entry/save", {lib, id: eid, title: $("#ke-title").value, content: $("#ke-body").value}), "已保存");
+    closeDialog(); kbCache = null; openKb(lib, eid);
+  };
+}
+async function moveEntry(e, lib, eid){
+  const libs = (await kbLibs()).filter(l => l.id !== lib);
+  if (!libs.length) return toast("还没有别的知识库");
+  dialog("移到", `<div class="pick-list">${libs.map(l => `<button class="pick" onclick="doMove(${q(lib)},${q(eid)},${q(l.id)})">${kbMark(l)}<span>${esc(l.name)}</span><span class="muted" style="margin-left:auto">${l.count} 条</span></button>`).join("")}</div>`, "");
+}
+async function doMove(lib, eid, to){
+  closeDialog();
+  await act(() => kbApi("/api/kb/entry/move", {lib, id: eid, to}), "已移过去"); kbCache = null;
+  location.hash = `#/kb/${encodeURIComponent(to)}/${encodeURIComponent(eid)}`;
+}
+async function deleteEntry(lib, eid){
+  if (!await confirmBox("删除这一条？", "所有电脑上的这一条都会删掉，原来的对话不受影响。", "删除")) return;
+  await act(() => kbApi("/api/kb/entry/delete", {lib, id: eid}), "已删除"); kbCache = null;
+  location.hash = `#/kb/${encodeURIComponent(lib)}`; openKb(lib);
+}
+async function chatWithKb(lib){
+  const {id} = await act(() => api("/api/chat/new", {temp: {base: "claude"}}, S.me));
+  await act(() => api("/api/chat/kbs", {id, kbs: [lib]}, S.me));
+  await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
+}
+// ---- 存到知识库 ----
+let kbSave = null;
+async function saveToKb(src, i, picked){
+  const r = src === "log" ? detail.log[i] : (detail.earlier || [])[i];
+  if (!r) return;
+  let libs = [];
+  try { libs = await kbLibs(); } catch {}
+  const text = (picked || r.text || "").trim();
+  const a = detail.agent ? agentOf(detail.agent) : null;
+  kbSave = {text, lib: (() => { try { return localStorage.getItem("ccim.kbLast") || ""; } catch { return ""; } })(),
+    source: {machine: ownerOf(detail.id) || ctxMachine || S.me, chat: detail.id, chat_title: detail.title, agent: detail.agent || null,
+             agent_name: a ? a.name : null, at: r.at, part: !!picked}};
+  if (!libs.find(l => l.id === kbSave.lib)) kbSave.lib = libs[0] ? libs[0].id : "";
+  dialog("存到知识库", `<div class="form" style="grid-template-columns:1fr">
+      <label for="ks-title">标题</label><input id="ks-title" class="input" maxlength="80" value="${esc(firstLine(text))}">
+      <label>内容</label><div class="quote-box" style="max-height:110px">${esc(text)}</div>
+      <label>存进</label><div id="ks-lib"></div></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="ks-ok" onclick="doSaveKb()">存进去</button>`);
+  drawKsLib(libs);
+  $("#ks-title").focus(); $("#ks-title").select();
+}
+function drawKsLib(libs){
+  const opts = [...libs.map(l => [l.id, l.name, `${l.count} 条`]), ["__new", "新建知识库…", ""]];
+  $("#ks-lib").innerHTML = kbSave.lib === "__new" || !libs.length
+    ? `<input id="ks-new" class="input" maxlength="40" placeholder="新知识库的名字">`
+    : dd("ks", opts, kbSave.lib, v => { kbSave.lib = v; if (v === "__new") drawKsLib(libs); });
+  if ($("#ks-new")) { kbSave.lib = "__new"; $("#ks-new").focus(); }
+}
+async function doSaveKb(){
+  const b = $("#ks-ok"); b.disabled = true;
+  try {
+    let lib = kbSave.lib;
+    if (lib === "__new" || !lib) {
+      const name = ($("#ks-new") || {}).value?.trim();
+      if (!name) { b.disabled = false; return $("#ks-new")?.focus(); }
+      lib = (await kbApi("/api/kb/lib/save", {name})).id;
+    }
+    await kbApi("/api/kb/entry/save", {lib, title: $("#ks-title").value, content: kbSave.text, source: kbSave.source});
+    try { localStorage.setItem("ccim.kbLast", lib); } catch {}
+    kbCache = null; closeDialog(); toast(`已存到「${kbName(lib) === "知识库" ? "新知识库" : kbName(lib)}」`);
+  } catch (e) { toast(e.message); b.disabled = false; }
+}
+// 选中回答里的一段：浮出「存到知识库 / 引用」
+document.addEventListener("mouseup", () => setTimeout(selTool, 0));
+function selTool(){
+  document.querySelector(".seltool")?.remove();
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !detail) return;
+  const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
+  const ans = node && node.closest("#thread .answer");
+  if (!ans || !ans.contains(sel.focusNode)) return;
+  const text = sel.toString().trim();
+  if (text.length < 2) return;
+  const anc = [...document.querySelectorAll("#thread .anc")].filter(a => a.compareDocumentPosition(ans) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+  const i = anc ? +anc.id.slice(4) : -1;
+  if (i < 0) return;
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  const t = document.createElement("div"); t.className = "seltool";
+  t.innerHTML = `<button>${ICON.save}存到知识库</button><button>${ICON.quote}引用</button>`;
+  t.style.left = Math.max(8, rect.left) + "px"; t.style.top = Math.max(8, rect.top - 40) + "px";
+  t.addEventListener("mousedown", e => e.preventDefault());
+  const [sv, qt] = t.querySelectorAll("button");
+  sv.onclick = () => { t.remove(); saveToKb("log", i, text); };
+  qt.onclick = () => { t.remove(); const input = $("#input"); if (!input) return; input.value = text.split("\n").map(l => "> " + l).join("\n") + "\n\n" + input.value.replace(/^\s+/, ""); input.focus(); };
+  document.body.append(t);
+}
+// ---- 对话里挂知识库 ----
+async function pickKbs(e, forDraft){
+  e.stopPropagation();
+  const target = e.currentTarget;
+  let libs = [];
+  try { libs = await kbLibs(); } catch {}
+  const cur = forDraft ? (draft.kbs || []) : (detail.kbs || []);
+  if (!libs.length) {
+    return pop({currentTarget: target, stopPropagation(){}}, `<div class="sec">还没有知识库</div><button onclick="closePop();location.hash='#/kb'">${ICON.plus}去建一个</button>`, true);
+  }
+  const pp = pop({currentTarget: target, stopPropagation(){}}, `<div class="sec">挂上的知识库，回答时会先查（可以多选）</div>` + libs.map(l => `<button data-k="${esc(l.id)}">${kbMark(l)}<span><div>${esc(l.name)}</div><div class="desc">${l.count} 条</div></span>${cur.includes(l.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+  pp.querySelectorAll("[data-k]").forEach(b => b.onclick = async () => {
+    const k = b.dataset.k, list = forDraft ? (draft.kbs || []) : (detail.kbs || []);
+    const next = list.includes(k) ? list.filter(x => x !== k) : [...list, k];
+    if (forDraft) { draft.kbs = next; closePop(); renderNewChat(); return; }
+    const v = await act(() => api("/api/chat/kbs", {id: detail.id, kbs: next}));
+    detail.kbs = v.kbs; closePop(); drawKbRow();
+  });
+}
+function drawKbRow(){
+  const el = $("#kbrow"); if (!el || !detail) return;
+  const ks = detail.kbs || [];
+  if (ks.length && !kbCache) { kbLibs().then(drawKbRow).catch(() => {}); return; }
+  el.innerHTML = ks.map(k => `<span class="kbm">${ICON.kb}${esc(kbName(k))}<button aria-label="取下" onclick="unmountKb(${q(k)})">${ICON.x}</button></span>`).join("");
+}
+async function unmountKb(k){
+  const v = await act(() => api("/api/chat/kbs", {id: detail.id, kbs: (detail.kbs || []).filter(x => x !== k)}));
+  detail.kbs = v.kbs; drawKbRow();
+}
 
 // ================= Agent =================
 let agentFilter = "", agentTab = "overview", agentDraftFrom = null;

@@ -93,6 +93,11 @@
 - 归档清理（#26）：天数存在每台电脑的全局设置 archive_days（7 / 30 / 90 / never，默认 30），网页上改时逐台保存（/api/archive_days）。
   归档时记 archived_at；到期 = max(归档时间, 最后一条消息) + 天数（`delete_at`），平台每小时 `cleanup_archived`：网页对话 delete_chat，
   别处的对话在 marks 里 hidden。列表里最后一周显示「还有 N 天删除」
+- `ccim/kb.py`：知识库（#27）。~/.ccim/kb/<库>/_lib.json + 每条一个 .md（第一行注释是编号、标题、来源、修改时间，后面「# 标题」和正文，
+  助手直接用 Grep / Read 查）。删除记在 _tombstones.json。每台电脑一份完整的：平台 `_kb_sync_loop` 每 30 秒（本机改了就 `kb_changed`
+  叫别的电脑马上来）问在线的其他电脑要清单（/api/kb/manifest），比自己新的用 /api/kb/export 拉过来（`wanted` / `apply`），后改的算数；
+  服务器只转发。网页读写本机这份（S.me）。挂到对话：对话 meta 的 kbs → WebChannel.kbs_of → `Chat._connect` 里 add_dirs + `kb_note`
+  （只有 Claude Code）；改了挂哪些要 reconnect。条目的 source 记来源对话（machine、chat、at），网页按 at 找到那条消息定位（`doJump`）
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

@@ -212,6 +212,11 @@ class Hub:
         out = self.peers.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
         out["me"] = self.default_machine()
         out["hub"] = {"name": self.peers.me["name"], "url": self.public_url}
+        try:                                  # 服务器每次合并都自动部署 main，它的版本就是最新版（#37）
+            from . import upgrade
+            out["hub"]["commit"] = upgrade.info().get("commit") or None
+        except Exception:
+            pass
         for k in ("global", "defaults", "models", "codex", "home"):   # 页面上这些按「当前那台」取
             info = (out.get("machine_info") or {}).get(out["me"]) or {}
             out.setdefault(k, info.get(k) or ({} if k in ("global", "defaults", "models") else None))

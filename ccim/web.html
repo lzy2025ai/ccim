@@ -1619,7 +1619,7 @@ async function reloadChat(){
   const keep = $("#input") ? $("#input").value : "";
   detail = await api(`/api/chat?id=${encodeURIComponent(detail.id)}`);
   drawChat(); if (keep) $("#input").value = keep;
-  agentSide = null; loadState();
+  loadState();                           // Agent 的对话列表由 loadState 在后台刷新，不清空
 }
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
@@ -1885,9 +1885,23 @@ async function saveRename(id){
 async function deleteChat(id){
   const c = rowOf(id);
   if (!c) return;
-  const ext = id.startsWith("x:");
-  if (!await confirmBox("删除这个对话？", ext ? `在${c.source || "原来的地方"}还能找到它。` : "对话记录会删掉，工作目录里的文件不受影响。", "删除")) return;
-  await act(() => ext ? api("/api/chat/mark", {id, changes: {hidden: true}}, machineOfChat(c)) : api("/api/chat/delete", {id}, machineOfChat(c)), "已删除");
+  const ext = id.startsWith("x:"), term = ext && c.source === "终端" && (c.base || "claude") === "claude";
+  let withTerm = true;
+  if (term) {
+    const ok = await new Promise(res => {
+      dialog("删除这个对话？", `<button type="button" class="checkrow" role="checkbox" aria-checked="true" id="del-term">
+        <span class="cb">${ICON.check}</span><span>终端里的对话也一起删除</span></button>`,
+        `<button class="btn" id="cb-no">取消</button><button class="btn danger" id="cb-ok">删除</button>`);
+      const t = $("#del-term");
+      t.onclick = () => { withTerm = !withTerm; t.setAttribute("aria-checked", withTerm); };
+      $("#cb-no").onclick = () => { closeDialog(); res(false); };
+      $("#cb-ok").onclick = () => { closeDialog(); res(true); };
+      $("#cb-ok").focus();
+    });
+    if (!ok) return;
+  } else if (!await confirmBox("删除这个对话？", ext ? `在${c.source || "原来的地方"}还能找到它。` : "对话记录会删掉，工作目录里的文件不受影响。", "删除")) return;
+  await act(() => ext && !(term && withTerm) ? api("/api/chat/mark", {id, changes: {hidden: true}}, machineOfChat(c))
+    : api("/api/chat/delete", {id}, machineOfChat(c)), "已删除");
   const open = detail && detail.id === id || current.sub === id;
   if (open) {
     const back = current.view === "agents" ? `#/agents/${encodeURIComponent(current.id)}` : "#/chats";
@@ -2149,8 +2163,10 @@ async function startTemp0(v, files){
 }
 async function startAgent(aid){
   const {id} = await act(() => api("/api/chat/new", {agent: aid}));
-  agentSide = null;
-  await loadState(); location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
+  await loadState();                     // 列表不清空，新对话先插到最上面，完整列表在后台刷新
+  const row = S.chats.find(c => c.id === id);
+  if (row && agentSide && agentSide.id === aid && !agentSide.chats.some(c => c.id === id)) agentSide.chats.unshift(row);
+  location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
 

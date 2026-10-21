@@ -600,6 +600,19 @@ class Platform:
         self.store.write(self.chats())
         self.channel.logs.remove(cid)
 
+    def delete_terminal(self, cid):
+        """终端里的 Claude Code 对话：连对话记录一起删（#61）。飞书、微信里的还在被机器人用，不删。"""
+        r = self._external(cid)
+        if r.get("source") != "终端" or r.get("base") != "claude":
+            raise Problem("只有终端里的对话能一起删除。")
+        from claude_agent_sdk import delete_session
+        try:
+            delete_session(r["sid"], directory=agents.cwd(agents.get(r["agent"])))
+        except FileNotFoundError:
+            pass
+        self.mark_chat(cid, {"hidden": True})
+        getattr(self, "_ext_seen", {}).pop(cid, None)
+
     # ----- 给网页的数据 -----
 
     def _effective(self, m, c=None):
@@ -1235,7 +1248,8 @@ def _handler(pf):
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
-                "/api/chat/delete": lambda: pf.run(pf.delete_chat(b("id"))),
+                "/api/chat/delete": lambda: pf.call(pf.delete_terminal, b("id")) if str(b("id")).startswith("x:")
+                    else pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
                 "/api/kb/lib/save": lambda: kb_write(pf, kb_mod.save_lib, b("id"), b("name"), b("desc") or "", b("color")),
                 "/api/kb/lib/delete": lambda: kb_write(pf, kb_mod.delete_lib, b("id")),

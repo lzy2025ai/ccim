@@ -68,7 +68,7 @@ body{overflow:hidden}
 .item .title,.item .sub{display:block}
 .item .title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .when{font-size:12px;color:var(--faint);white-space:nowrap}
+.item .when{font-size:12px;color:var(--faint);white-space:nowrap;flex:none;min-width:52px;text-align:right}   /* 宽度固定，前面的来源标签才对得齐 */
 
 .main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
 
@@ -301,6 +301,7 @@ body{overflow:hidden}
 .item .more svg{width:15px;height:15px}
 .item .more:hover{background:var(--sunk);color:var(--ink)}
 .item:hover .more,.item.on .more{display:inline-flex}
+@media (hover:hover){.item:hover .more,.item.on .more{margin-left:32px}}   /* 顶替时间那一格（52px），标签不跳 */
 .item:hover .when,.item.on .when{display:none}
 .item .t .mk,.item .title .mk{display:inline-flex;vertical-align:-2px;margin-right:5px}
 .item .t{display:flex;align-items:center;min-width:0}

@@ -123,6 +123,11 @@
   chat_view 带 attention（done / ask / err，回答晚于 meta 的 seen_at 算没看过；网页打开对话就 /api/chat/seen）、brief（一句话进度：
   WebChannel 写了回答就 on_answer → `refresh_brief` 用 haiku 总结，推送 type=brief）、doing。第一次启动时已有对话都算看过（board_seen_init）。
   /api/board 是概览（近 26 周每天条数、本周轮数和完成数、各 Agent 本周条数），网页逐台取再合起来；等你处理 / 在干活 / 最近在跟由 S.chats 算
+- 公众号排版（#35）：Markdown 文档的面板多一个「公众号」视图（`wxView`）。`wxHtml` 把 `docMd` 的结果套上主题的内联样式
+  （公众号编辑器去掉 class 和样式表，只认内联的；`WX_THEMES` / `wxCss`，主题记在 localStorage），外链改成文末参考资料，代码块的空格换行换成 &nbsp; / <br>。
+  复制（`wxCopy`）去掉 data-*、class 后以 text/html 写剪贴板，图片是 data: 地址；每张图下面有复制图片（画到画布转 PNG）、下载。
+  在排好版的页面上直接改（`blockClick`）：段落、标题、引用、列表用 contenteditable，失焦时 `blockMd` 转回 Markdown 换掉 data-l 那几行；
+  表格、代码、图片弹原文小框。显示没变化的不算改（比较 docMd 结果）
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删

@@ -53,7 +53,7 @@
   因为要单独拿结果）。任务是 `session.Task`（str 子类，带 future），`Chat._finish` 记下 outcome，`_work` 结束时交给它；
   /stop 清队列时也会结束。命令行等结果时看 status 里的进程号，进程没了就不再等。退出码 0 / 2 / 3 / 4 / 1
 - 智能体平台（#7，方案 docs/智能体平台-产品方案.md）：`ccim web` 打开。
-  - `ccim/agents.py`：Agent 登记表 ~/.ccim/agents.json（名字、印章、角色说明、底座、默认模型和思考深度、工作目录可空、chrome 开关）。chrome 开了 `session._connect` 给 CLI 加 `--chrome`（只对 Claude 底座，#90）。
+  - `ccim/agents.py`：Agent 登记表 ~/.ccim/agents.json（名字、印章、角色说明、底座、默认模型和思考深度、工作目录可空、chrome 开关）。chrome 开了 `session._connect` 给 CLI 加 `--chrome`（只对 Claude 底座，#90）；改了开关，`relaunch_agent` 让它开着的网页对话下一条消息时按原会话续接、换上新参数。
     `avatar` 可选内置头像 ID（`AVATARS` 白名单），空值沿用文字印章；图片在 `ccim/static/avatars/`，由平台和 Hub 共用的 `static_file` 提供。
     Agent 是设置的唯一来源，改了同步写回它关联的飞书登记、微信号 projects（agent_id 指回来；`_sync`）；命令行改项目设置用
     `absorb` 记回 Agent。老「项目」在任意 ccim 命令时 `migrate` 成 Agent。角色说明经 `session.role_note` 进系统提示（飞书、微信也生效）

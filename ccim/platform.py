@@ -418,6 +418,13 @@ class Platform:
             self.store.write(chats)
         return {}
 
+    def relaunch_agent(self, aid):
+        """Agent 改了要换启动参数的设置（chrome）：它已经开着的对话下一条消息时按原会话续接，带上新参数。"""
+        for key, b in self.bridges.items():
+            if key == aid or key.startswith(aid + "@"):
+                for c in b.chats.values():
+                    c.reconnect = True
+
     def set_kbs(self, cid, ids):
         from . import kb
         ids = [x for x in (ids or []) if kb.dirs([x])][:8]
@@ -1404,7 +1411,7 @@ def _handler(pf):
                 "/api/peers/code": lambda: pf.peers.new_code(),
                 "/api/peers/remove": lambda: pf.peers.remove(b("id")),
                 "/api/peers/leave": lambda: leave_hub(pf),
-                "/api/agent/save": lambda: save_agent(b("id"), b("fields") or {}),
+                "/api/agent/save": lambda: save_agent(pf, b("id"), b("fields") or {}),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
                 "/api/project/member": lambda: pf.call(pf.projects.member, b("id"), b("add"), b("remove")),
@@ -1613,7 +1620,7 @@ def state(pf):
             "models": {"claude": models.claude(), "codex": models.codex()}}
 
 
-def save_agent(aid, fields):
+def save_agent(pf, aid, fields):
     if fields.get("base") == "codex":
         from . import web as console
         if not console._codex():
@@ -1627,7 +1634,10 @@ def save_agent(aid, fields):
         if d == os.path.realpath(os.path.expanduser("~")) and not fields.get("confirmed"):
             return {"confirm": "home"}        # 主目录：网页上说明影响，用户确认后再带 confirmed 保存（#50）
     if aid:
+        before = (agents.get(aid) or {}).get("chrome")
         a = agents.update(aid, **fields)
+        if bool(a.get("chrome")) != bool(before):
+            pf.call(pf.relaunch_agent, aid)
     else:
         a = agents.create(**fields)
     return {"id": a["id"]}

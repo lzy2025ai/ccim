@@ -924,11 +924,15 @@ async function api(path, body, machine){
   finally { busyBar(-1); if (btn) { btn.classList.remove("pending"); btn.removeAttribute("aria-busy"); } }
 }
 async function api0(path, body, machine){
+  const to = targetOf(path, body, machine);
   const r = await fetch(path, {method: body === undefined ? "GET" : "POST",
-                               headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(targetOf(path, body, machine))},
+                               headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(to)},
                                body: body === undefined ? undefined : JSON.stringify(body)});
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && S.hub) { location.reload(); throw new Error(d.error || "登录过期了"); }   // 服务器上：登录过期回到登录页
+  // 别的电脑还没升级到有这个接口的版本（#74）
+  if (r.status === 404 && d.error === "not found" && to && (to !== S.me || S.hub))
+    throw new Error(`${(machineOf(to) || {name: "那台电脑"}).name}上的 ccim 版本较旧，先在「设置 → 电脑」里升级`);
   if (!r.ok) throw new Error(d.error || "出错了，再试一次。");
   return d;
 }
@@ -2273,10 +2277,12 @@ function boardRow(c, kind){
 let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
 async function dismissTask(id){
   const c = (S.chats || []).find(x => x.id === id);
+  const was = c && {attention: c.attention, unread: c.unread};
   if (c) { c.attention = null; c.unread = true; }
   if (boardReply && boardReply.id === id) boardReply = null;
   drawAttention(); renderBoard(true);
-  try { await api("/api/chat/dismiss", {id}, ownerOf(id) || ctxMachine); } catch (e) { toast(e.message); }
+  try { await api("/api/chat/dismiss", {id}, ownerOf(id) || ctxMachine); }
+  catch (e) { if (c) Object.assign(c, was); drawAttention(); renderBoard(true); toast(e.message); return; }
   refreshSoon();
 }
 function openBoardReply(id){

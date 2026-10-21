@@ -138,6 +138,7 @@ class Chat:
         self.turn = None
         self.stopping = False
         self.reconnect = False
+        self.tail = None                      # 这一轮最后一条回答的编号，下一条消息前用它看别处有没有接着聊过
         self.outcome = None                   # 这一轮的结果 (状态, 回答)，交给 ccim ask 派的任务
 
     # ----- 对外 -----
@@ -303,6 +304,9 @@ class Chat:
                 if self.reconnect and prompt is not AWAKE:
                     await self._disconnect()
                     self.reconnect = False
+                elif self.client and prompt is not AWAKE and self._stale():
+                    log.info("[%s] 对话在别处接着聊过，重新接上", self.chat_id[-6:])
+                    await self._disconnect()
                 self.stopping = False
                 self.outcome = None
                 self.b.caffeinate.acquire()
@@ -422,8 +426,20 @@ class Chat:
                 log.warning("[%s] 接不上之前的会话 %s，开新会话", self.chat_id[-6:], resume[:8], exc_info=True)
                 self.session_id = None
 
+    def _stale(self):
+        """连着的这段时间里，别处（终端、Claude 桌面端）也往这个对话里写过：连着的进程不知道那些内容，要重新接上。"""
+        if not self.tail or not self.session_id:
+            return False
+        from . import history
+        try:
+            last = history.last_uuid(self.session_id, self.b.path)
+        except Exception:
+            return False
+        return bool(last) and last != self.tail
+
     async def _disconnect(self):
         c, self.client = self.client, None
+        self.tail = None
         if self.pump:
             self.pump.cancel()
             self.pump = None
@@ -546,6 +562,7 @@ class Chat:
                         break
         finally:
             ticker.cancel()
+        self.tail = t.uuid if self.client else None
         await self._finish(t, result, error, reply_to)
 
     async def _finish(self, t, result, error, reply_to):

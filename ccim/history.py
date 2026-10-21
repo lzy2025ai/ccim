@@ -41,13 +41,15 @@ def claude(session_id, cwd=None, limit=200):
                 text = SYS_BLOCK.sub("", handoff._text(r)).strip()
                 if not text or (text.startswith("<") and text.endswith(">")):
                     continue
-                out.append({"type": "user", "text": text, "files": [], "at": at})
+                out.append({"type": "user", "text": text, "files": [], "at": at, "uuid": r.get("uuid")})
                 continue
             if r.get("type") != "assistant":
                 continue
             if not out or out[-1]["type"] != "answer":
                 out.append({"type": "answer", "text": "", "steps": [], "state": "done", "at": at})
             ans = out[-1]
+            if r.get("uuid"):
+                ans["uuid"] = r["uuid"]                    # 这一轮最后一条回答的编号：从这里分叉
             for b in (r.get("message") or {}).get("content") or []:
                 if b.get("type") == "tool_use":
                     d = describe_tool(b.get("name", ""), b.get("input"))
@@ -205,3 +207,70 @@ def read(base, session_id, cwd=None):
             _READ.clear()
         _READ[key] = (sig, rows)
     return [dict(r) for r in rows]
+
+
+def sig(base, session_id, cwd=None):
+    """对话记录现在的样子（大小、修改时间）：网页据此判断别处有没有写过，要不要重新读。"""
+    path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+    try:
+        st = os.stat(path) if path else None
+    except OSError:
+        return None
+    return f"{st.st_size}-{st.st_mtime}" if st else None
+
+
+def last_uuid(session_id, cwd=None):
+    """Claude Code 对话记录里最后一条说话的消息（用户或助手，不算子 agent）的编号；读不到返回 None。"""
+    path = handoff.transcript_path(session_id, cwd)
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.seek(max(0, f.tell() - (1 << 20)))
+            lines = f.read().split(b"\n")
+    except OSError:
+        return None
+    if size:
+        lines = lines[1:]                    # 第一行可能是半截
+    for line in reversed(lines):
+        if b'"uuid"' not in line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and r.get("type") in ("user", "assistant") and not r.get("isSidechain"):
+            return r.get("uuid")
+    return None
+
+
+_OPEN = [0.0, {}]                            # 上次看进程的时间、会话编号 → 在哪开着
+
+
+def open_elsewhere(session_id):
+    """Claude 桌面端或终端里正开着这个对话：返回「Claude 桌面端」/「终端」，没开着返回 None。
+    它们开着对话时会挂着一个带 --resume 的 claude 进程，内容在进程内存里，不会读别处后来写进记录的东西。
+    本进程自己（网页里的对话）起的不算。"""
+    now = time.monotonic()
+    if now - _OPEN[0] > 3:
+        found = {}
+        try:
+            import subprocess
+            out = subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,command="], capture_output=True, text=True,
+                                 timeout=5).stdout
+        except Exception:
+            out = ""
+        me = os.getpid()
+        for line in out.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) < 3 or not parts[0].isdigit() or int(parts[1]) == me:
+                continue
+            cmd = parts[2]
+            if "claude" not in cmd:
+                continue
+            m = re.search(r"(?:--resume|--session-id|-r)[= ]([0-9a-f]{8}-[0-9a-f-]{27})", cmd)
+            if m:
+                found[m.group(1)] = "Claude 桌面端" if "/Application Support/Claude/" in cmd else "终端"
+        _OPEN[:] = [now, found]
+    return _OPEN[1].get(session_id)

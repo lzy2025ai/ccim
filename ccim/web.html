@@ -119,6 +119,7 @@ body{overflow:hidden}
 .chat-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
 .chat-head .grow{flex:1;min-width:0}
 .notice{margin:12px 22px 0;padding:9px 12px;border-radius:8px;background:#F4F1E6;color:#6B5A27;font-size:13px}
+.notice.warn{background:#FBE9E4;color:#9A3412}
 .thread{flex:1;overflow:auto;padding:22px 0 10px}
 .chat-mid{flex:1;display:flex;min-height:0}
 .chat-mid .thread{min-width:0}
@@ -1431,7 +1432,7 @@ function msgActs(src, i, r){
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (r.type === "answer" && r.text) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
-  if (src === "log" && canFork(i, r)) btns.push(`<button onclick="forkAt(${i})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
+  if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
   return `<div class="msg-acts">${btns.join("")}</div>`;
@@ -1470,8 +1471,10 @@ async function doRewind(i){
   const input = $("#input");
   if (input) { input.value = r.text; input.focus(); input.dispatchEvent(new Event("input")); }
 }
-function canFork(i, r){
-  if (r.type !== "answer" || r.state !== "done" || detail.readonly || detail.busy) return false;
+function canFork(i, r, src = "log"){
+  if (src === "elsewhere" || r.type !== "answer" || detail.busy) return false;
+  if (src === "earlier" || detail.readonly) return !!r.uuid && detail.base !== "codex";   // 终端、桌面端里的回答
+  if (r.state !== "done") return false;
   const last = detail.log.map(x => x.type).lastIndexOf("answer");
   return i === last || (!!r.fork && detail.base !== "codex");
 }
@@ -1483,7 +1486,7 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -1530,8 +1533,14 @@ function drawThread(){
   const from = detail.showAll ? 0 : Math.max(0, detail.log.length - SHOW_RECENT);
   const earlier = from ? "" : (detail.earlier || []).map((r, i) => recHtml(r, i, "earlier")).join("");
   const more = from ? `<button class="show-more" onclick="showEarlier()">显示更早的 ${from + (detail.earlier || []).length} 条</button>` : "";
+  // 接着原会话聊（#94）：之后在终端、桌面端里说的按时间穿插进来
+  const ew = detail.elsewhere || [], firstAt = from ? (detail.log[from] || {}).at || 0 : 0;
+  let k = 0;
+  while (k < ew.length && from && (ew[k].at || 0) < firstAt) k++;
+  const ewUpTo = at => { let h = ""; while (k < ew.length && (ew[k].at || 0) < at) { h += recHtml(ew[k], k, "elsewhere"); k++; } return h; };
   t.innerHTML = more + (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map((r, i) => i < from ? "" : `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("") + liveHtml();
+    + detail.log.map((r, i) => i < from ? "" : ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("")
+    + ewUpTo(Infinity) + liveHtml();
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();
@@ -1602,6 +1611,32 @@ function tocBtn(e){
   pop(e, `<div class="sec">章节</div>` + chapters().map(([i, n]) => `<button onclick="jumpChapter(${i})">${ICON.flag}<span>${esc(n)}</span></button>`).join(""), true);
 }
 addEventListener("resize", () => drawToc());
+// 终端、桌面端的对话：在网页里接着聊的内容接进原对话（#94）
+function extNotice(c){
+  if (c.readonly && !c.linkable) return `<div class="notice" id="ext-notice">这个对话来自${esc(c.source)}。在这里接着聊会另开一个分支，${esc(c.source)}那边的对话不受影响。</div>`;
+  if (!c.readonly && !c.linked) return "";
+  const o = c.open_elsewhere;
+  if (o) return `<div class="notice warn" id="ext-notice">${esc(o)}正开着这个对话。回那边接着聊之前，${o === "终端" ? "先退出再重新打开这个对话" : "先重启 Claude 桌面端"}，不然那边看不到这里聊的内容，两边会接不上。</div>`;
+  return `<div class="notice" id="ext-notice">${c.readonly ? "在这里接着聊的内容会接进原对话。" : ""}回 Claude 桌面端接着聊之前先重启桌面端（终端里重新打开这个对话），才能看到这里聊的内容。</div>`;
+}
+let extSigBusy = false;
+async function checkExt(){
+  const d = detail;
+  if (!d || extSigBusy || starting || d.busy || document.visibilityState !== "visible" || !(d.linked || (d.readonly && d.linkable))) return;
+  extSigBusy = true;
+  try {
+    const r = await api(`/api/chat/sig?id=${encodeURIComponent(d.id)}`);
+    if (detail !== d || (r.sig === d.sig && (r.open_elsewhere || null) === (d.open_elsewhere || null))) return;
+    const nd = await api(`/api/chat?id=${encodeURIComponent(d.id)}`);
+    if (detail !== d || detail.busy || starting) return;
+    detail = Object.assign(nd, {showAll: d.showAll});
+    const n = $("#ext-notice");
+    if (n) n.outerHTML = extNotice(detail);
+    drawThread();
+  } catch {} finally { extSigBusy = false; }
+}
+setInterval(checkExt, 5000);
+addEventListener("visibilitychange", checkExt);
 function forkFrom(c){
   const p = c.parent && S.chats.find(x => x.id === c.parent);
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
@@ -1685,7 +1720,7 @@ function drawChat(){
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
       <button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>
     </div>
-    ${c.readonly ? `<div class="notice">这个对话来自${esc(c.source)}。在这里接着聊会另开一个分支，${esc(c.source)}那边的对话不受影响。</div>` : ""}
+    ${extNotice(c)}
     ${groupPanel(c)}
     <div class="chat-mid"><div class="thread" id="thread" onscroll="tocSpy()"></div><aside class="toc" id="toc" hidden></aside></div>
     <div class="composer">
@@ -2081,7 +2116,7 @@ function mentionGroup(mid){
   return `<div class="msg wide"><div class="compare">${rs.map(x => `<div class="col">${one(x)}</div>`).join("")}</div></div>`;
 }
 async function stopMention(rid){ await act(() => api("/api/chat/mention/stop", {rid}), "正在停下"); }
-function msgText(src, i){ return ((src === "earlier" ? detail.earlier : detail.log)[i] || {}).text || ""; }
+function msgText(src, i){ return ((src === "earlier" ? detail.earlier : src === "elsewhere" ? detail.elsewhere : detail.log)[i] || {}).text || ""; }
 async function copyMsg(btn, src, i){
   const text = msgText(src, i);
   try { await navigator.clipboard.writeText(text); }
@@ -2098,8 +2133,8 @@ function quoteMsg(btn, src, i){
   const text = (picked || msgText(src, i)).trim();
   addQuote(text);
 }
-async function forkAt(i){
-  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i}), "已分叉，在新对话里接着聊");
+async function forkAt(i, src = "log"){
+  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, src}), "已分叉，在新对话里接着聊");
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 function saveAsAgent(){

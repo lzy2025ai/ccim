@@ -530,7 +530,7 @@ class Platform:
             b.name = b.approvals.project = name
         return b
 
-    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None, parent=None, fork_at=None):
+    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None, parent=None, fork_at=None, link=None):
         cid = "w-" + uuid.uuid4().hex[:10]
         rec = {"type": "p2p", "created": registry.now(), "last_active": registry.now()}
         if agent:
@@ -548,6 +548,8 @@ class Platform:
                            "model": t.get("model") or None, "effort": t.get("effort") or None}
         if fork_from:                         # 接着别处的对话聊：origin 留着，网页里把之前的内容也显示出来
             rec.update(fork_from=fork_from, origin=fork_from, source=source)
+        if link:                              # 接着终端、桌面端的对话聊：就用原来的会话，不分支（#94）
+            rec.update(origin=link, source=source, session_id=link, continued_at=time.time())
         if title:
             rec["title"] = title
         if parent:                            # 从网页里另一个对话的某条回答分出来
@@ -665,13 +667,18 @@ class Platform:
                 "mention_of": m.get("mention_of"),
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
-                else "群聊" if m.get("mention_of") else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
+                else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
-                "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
+                "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
                 **self._board_marks(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
+
+    @staticmethod
+    def _linked(m):
+        """接着终端、桌面端的对话聊，而且还在用原来那个会话（没退回、没因为接不上换成新会话）。"""
+        return bool(m.get("continued_at") and m.get("origin") and m.get("session_id") == m["origin"])
 
     def chat_detail(self, cid):
         if cid.startswith("x:"):
@@ -690,8 +697,41 @@ class Platform:
         if m.get("origin"):
             from . import history
             a = agents.get(m["agent"]) if m.get("agent") else None
-            v["earlier"] = history.read(v["base"], m["origin"], agents.cwd(a) if a else None)
+            cwd = agents.cwd(a) if a else None
+            rows = history.read(v["base"], m["origin"], cwd)
+            if m.get("continued_at"):         # 接着原来的会话聊：分隔线以上是转过来之前的，之后别处说的穿插显示
+                at = m["continued_at"]
+                v["earlier"] = [r for r in rows if (r.get("at") or 0) < at]
+                v["elsewhere"] = self._elsewhere([r for r in rows if (r.get("at") or 0) >= at], v["log"]) \
+                    if self._linked(m) else []
+                if m.get("busy"):             # 正在答的这一轮还没对上号，先不当成别处说的
+                    asked = max([r.get("at") or 0 for r in v["log"] if r.get("type") == "user"] or [0])
+                    v["elsewhere"] = [r for r in v["elsewhere"] if (r.get("at") or 0) < asked - 1]
+                if self._linked(m):
+                    v["linked"] = True
+                    v["open_elsewhere"] = history.open_elsewhere(m["origin"])
+                    v["sig"] = history.sig(v["base"], m["origin"], cwd)
+            else:
+                v["earlier"] = rows
         return v
+
+    @staticmethod
+    def _elsewhere(rows, log):
+        """原来的会话里、转到网页之后的内容，去掉网页自己说的：剩下的就是在终端、桌面端里接着说的。"""
+        mine = set()
+        for r in log:
+            if r.get("type") == "answer":
+                mine |= {r.get("prompt"), (r.get("fork") or {}).get("at")}
+        mine.discard(None)
+        out, skip = [], False
+        for r in rows:
+            if r["type"] == "user":
+                skip = r.get("uuid") in mine
+            elif r.get("uuid") in mine:
+                skip = True
+            if not skip:
+                out.append(dict(r, elsewhere=True))
+        return out
 
     def chat_list(self):
         rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")
@@ -924,19 +964,45 @@ class Platform:
         r = self._external(cid)
         a = agents.get(r["agent"])
         ch = ((registry.read_state(self.home).get("marks") or {}).get(cid) or {}).get("chapters") or {}
+        term = r["source"] == "终端" and r["base"] == "claude"
         return dict(r, log=history.read(r["base"], r["sid"], agents.cwd(a)), progress=None, readonly=True,
-                    model=None, effort=None, temp=False, chapters=ch)
+                    model=None, effort=None, temp=False, chapters=ch, linkable=term,
+                    open_elsewhere=history.open_elsewhere(r["sid"]) if term else None,
+                    sig=history.sig(r["base"], r["sid"], agents.cwd(a)))
+
+    def chat_sig(self, cid):
+        """网页停在终端、桌面端的对话上时隔几秒问一次：记录变了就重新取，桌面端开没开着也跟着变。"""
+        from . import history
+        if cid.startswith("x:"):
+            r = self._external(cid)
+            a = agents.get(r["agent"])
+            sid, base = r["sid"], r["base"]
+        else:
+            m = self.meta(cid)
+            if not self._linked(m):
+                return {"sig": None}
+            a = agents.get(m["agent"]) if m.get("agent") else None
+            sid, base = m["origin"], self._effective(m)["base"]
+        return {"sig": history.sig(base, sid, agents.cwd(a) if a else None),
+                "open_elsewhere": history.open_elsewhere(sid) if base == "claude" else None}
 
     def continue_chat(self, cid, text, files):
-        """在网页里接着别处的对话聊：另开一个网页对话，从那个对话分支出来，原来那边不受影响。"""
+        """在网页里接着别处的对话聊：另开一个网页对话。终端、桌面端里的接着原来的会话聊，内容回得去；
+        飞书、微信里的从那个对话分支出来，原来那边不受影响。"""
         check_message(self, text, files)
         r = self._external(cid)
-        new = self.call(self.new_chat, agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
+        if r["source"] == "终端" and r["base"] == "claude":     # 终端、桌面端里的：接着原来的会话聊（#94）
+            new = self.call(self.new_chat, agent=r["agent"], link=r["sid"], title=r["title"], source=r["source"])
+        else:                                 # 飞书、微信那边的进程一直连着会话，两边一起写会乱：分支
+            new = self.call(self.new_chat, agent=r["agent"], fork_from=r["sid"], title=r["title"], source=r["source"])
         send(self, new, text, files)
         return {"id": new}
 
-    def fork_chat(self, cid, index):
-        """从这个对话的第 index 条回答分出一个新对话：之前的内容带过去，之后两边各聊各的。"""
+    def fork_chat(self, cid, index, src="log"):
+        """从这个对话的第 index 条回答分出一个新对话：之前的内容带过去，之后两边各聊各的。
+        src=earlier：从接着聊之前（终端、桌面端里）的回答分；终端、桌面端的对话（x:）直接按记录里的编号分。"""
+        if cid.startswith("x:") or src == "earlier":
+            return self._fork_history(cid, index)
         m = self.meta(cid)
         if m.get("busy"):
             raise Problem("等它这一轮做完再分叉。")
@@ -967,15 +1033,39 @@ class Platform:
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
+    def _fork_history(self, cid, index):
+        d = self.chat_detail(cid)
+        rows = d["log"] if cid.startswith("x:") else d.get("earlier") or []
+        if d.get("busy"):
+            raise Problem("等它这一轮做完再分叉。")
+        if not isinstance(index, int) or not 0 <= index < len(rows) or rows[index].get("type") != "answer":
+            raise Problem("找不到这条回答。")
+        if d["base"] == "codex" or not rows[index].get("uuid"):
+            raise Problem("这条回答分不了叉。")
+        sid = d["sid"] if cid.startswith("x:") else self.meta(cid)["origin"]
+        new = self.new_chat(agent=d.get("agent"), fork_from=sid, fork_at=rows[index]["uuid"], parent=cid)
+        for r in rows[:index + 1]:
+            self.channel.logs.append(new, {k: v for k, v in r.items() if k not in ("uuid", "elsewhere")})
+        return {"id": new}
+
     # ----- 退回（#24） -----
 
-    def _rewind_plan(self, rows, i, base):
+    def _rewind_plan(self, rows, i, base, m=None):
         """退回到第 i 条（自己发的消息）之前：返回 (文件恢复到哪条消息, 接到哪个会话, 接到哪条)；退不了返回 None。"""
         if base == "codex" or not 0 <= i < len(rows) or rows[i].get("type") != "user" or rows[i].get("by"):
             return None
         prev = [r for r in rows[:i] if r.get("type") == "answer"]
         sid = at = None
-        if prev:
+        if not prev and m and m.get("continued_at") and m.get("origin"):
+            # 接着终端、桌面端的对话聊的第一条：接回转过来之前那边的最后一条回答
+            from . import history
+            a = agents.get(m["agent"]) if m.get("agent") else None
+            before = [r for r in history.read(base, m["origin"], agents.cwd(a) if a else None)
+                      if r["type"] == "answer" and (r.get("at") or 0) < m["continued_at"]]
+            if not before or not before[-1].get("uuid"):
+                return None
+            sid, at = m["origin"], before[-1]["uuid"]
+        elif prev:
             f = prev[-1].get("fork") or {}
             if not f.get("at"):
                 return None
@@ -989,7 +1079,7 @@ class Platform:
         out = {}
         for i, r in enumerate(rows):
             if r.get("type") == "user":
-                p = self._rewind_plan(rows, i, base)
+                p = self._rewind_plan(rows, i, base, m)
                 if p:
                     out[i] = {"files": bool(p[0]), "turns": sum(1 for x in rows[i:] if x.get("type") == "user")}
         return out
@@ -998,7 +1088,7 @@ class Platform:
         """退回第 index 条时会恢复哪些文件（相对工作目录）。"""
         m = self.meta(cid)
         rows = self.channel.logs.read(cid)
-        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"])
+        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"], m)
         if not plan or not plan[0] or m.get("busy"):
             return {"files": []}
         c = self._bridge(cid).chat(cid, "p2p")
@@ -1015,7 +1105,7 @@ class Platform:
         if m.get("busy"):
             raise Problem("它还在回答，先停下再退回。")
         rows = self.channel.logs.read(cid)
-        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"])
+        plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"], m)
         if not plan:
             raise Problem("这条消息退不回去。")
         files_at, sid, at = plan
@@ -1244,6 +1334,7 @@ def _handler(pf):
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
                 "/api/board": lambda: pf.call(board_mod.stats, pf),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
+                "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
@@ -1294,7 +1385,7 @@ def _handler(pf):
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
-                "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index")),
+                "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index"), b("src") or "log"),
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",

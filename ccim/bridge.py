@@ -1,10 +1,12 @@
 """把渠道收到的消息分给各个聊天的 Claude 会话；谁能用、群里怎么用都在这里判断。"""
-import asyncio, logging, os, time
+import asyncio, logging, os, re, time
 
 from . import asks, commands, registry
 from .approval import Approvals
 from .channels.base import address
 from .session import Caffeinate, Chat
+
+QUEUE = re.compile(r"^/(queue|排队)(?=\s|$)\s*", re.I)   # /queue 内容：排到后面，不补充进正在做的这一轮（#79）
 
 log = logging.getLogger("ccim.bridge")
 
@@ -129,6 +131,12 @@ class Bridge:
             except Exception as e:
                 log.warning("下载文件失败", exc_info=True)
                 await self.channel.send_text(addr, f"文件没收到：{e}", reply_to)
+        queued, m = inc.queue, QUEUE.match(text)
+        if m:
+            queued, text = True, text[m.end():]
+        if queued and not text and not paths:
+            await self.channel.send_text(addr, "在 /queue 后面写上要排队的内容，比如：/queue 做完再跑一遍测试", reply_to)
+            return
         if not text and not paths:
             if inc.kind not in ("text", "post", "image", "file", "media", "audio"):
                 await self.channel.send_text(addr, "这类消息我还看不了，请发文字、图片或文件。", reply_to)
@@ -139,7 +147,7 @@ class Bridge:
         if text and not paths and self.approvals.has_pending(addr):
             if await self.approvals.answer_by_text(addr, text):
                 return
-        if text.startswith("/") and not paths:
+        if text.startswith("/") and not paths and not queued:
             if await commands.handle(self, chat, text, reply_to, inc.sender_id):
                 return
         prompt = text
@@ -149,7 +157,7 @@ class Bridge:
                 prompt = f"（用户针对下面这条消息开了一个话题，接下来在话题里讨论它）\n「{root[:800]}」\n\n{prompt}"
         if paths:
             prompt += ("\n\n" if prompt else "") + "用户发来了文件，已保存到：\n" + "\n".join(paths)
-        if chat.busy:
+        if chat.busy and not queued:
             await self._ask_followup(chat, addr, prompt, text, reply_to, inc)
             return
         ahead = chat.submit(prompt, reply_to, inc.message_id)

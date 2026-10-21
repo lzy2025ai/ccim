@@ -1134,7 +1134,7 @@ async function loadState(){
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
     clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(current.id), 300);   // 它的对话列表（含终端里的）单独拉
   }
-  renderList(); drawAttention();
+  seeOpen(); renderList(); drawAttention();
   if (current.view === "board") renderBoard(true);
   const c = detail && S.chats.find(x => x.id === detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
@@ -1198,7 +1198,7 @@ function connectEvents(){
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
       }
     }
-    if (detail && ev.chat === detail.id && (ev.type === "answer" || ev.type === "mention") && document.visibilityState === "visible") markSeen(detail.id);
+    if (detail && ev.chat === detail.id && (ev.type === "answer" || ev.type === "mention") && document.visibilityState === "visible") markSeen(detail.id, true);
     if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
@@ -2256,6 +2256,13 @@ function renderChatEmptyOr(){ renderChatEmpty(); }
 
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.project && !c.schedule && !c.external;
+// 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
+function seeOpen(){
+  if (!detail || document.visibilityState !== "visible") return;
+  const c = (S.chats || []).find(x => x.id === detail.id);
+  if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
+}
+addEventListener("visibilitychange", seeOpen);
 function waiting(){ return (S.chats || []).filter(c => isTop(c) && c.attention); }
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
@@ -2263,10 +2270,10 @@ function drawAttention(){
   if (b) { b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
-async function markSeen(id){
+async function markSeen(id, force){
   const c = (S.chats || []).find(x => x.id === id);
-  if (c && !c.attention) return;
-  if (c) { c.attention = null; drawAttention(); }
+  if (c && !c.attention && !c.unread && !force) return;
+  if (c) { if (c.attention !== "ask") c.attention = null; c.unread = false; drawAttention(); }
   try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
 }
 let boardStats = null, boardStatsAt = 0, showAllRecent = false;

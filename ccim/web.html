@@ -1201,7 +1201,7 @@ function connectEvents(){
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
       }
     }
-    if (detail && ev.chat === detail.id && (ev.type === "answer" || ev.type === "mention") && document.visibilityState === "visible") markSeen(detail.id, true);
+    if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
     if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
@@ -2306,8 +2306,11 @@ function renderChatEmptyOr(){ renderChatEmpty(); }
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.project && !c.schedule && !c.external;
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
+// 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
+const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
+  && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id));
 function seeOpen(){
-  if (!detail || document.visibilityState !== "visible") return;
+  if (!detail || !viewing(detail.id)) return;
   const c = (S.chats || []).find(x => x.id === detail.id);
   if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
 }

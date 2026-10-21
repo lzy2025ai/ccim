@@ -2711,7 +2711,7 @@ function renderAgentSide(){
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
   const a = agentOf(id) || agentSide.a || {name: "", seal: "", base: "claude"};
   const m = machineOf(a.machine || ownerOf(id) || S.me);
-  const rows = agentSide.chats.filter(c => !c.project && !c.schedule && !c.mention_of);
+  const rows = agentSide.chats.filter(c => !c.project && !c.schedule);   // 群聊里被 @ 的那份也列出来（#78）
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
@@ -2725,7 +2725,7 @@ function renderAgentSide(){
 async function openAgentLatest(id){
   if (!agentSide || agentSide.id !== id || !agentSide.a) await fetchAgentSide(id);
   if (current.view !== "agents" || current.id !== id || current.sub) return;
-  const first = (agentSide.chats || []).find(c => !c.project && !c.schedule && !c.mention_of);
+  const first = (agentSide.chats || []).find(c => !c.project && !c.schedule);
   if (first) { history.replaceState(null, "", `#/agents/${encodeURIComponent(id)}/${encodeURIComponent(first.id)}`); current.sub = first.id; renderList(); openChat(first.id); return; }
   const a = agentOf(id) || agentSide.a || {name: ""};
   $("#main").innerHTML = `<div class="empty"><h2>和${esc(a.name)}聊点什么</h2><p>${esc(a.role || "")}</p>

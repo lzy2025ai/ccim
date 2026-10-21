@@ -661,7 +661,7 @@ class Platform:
                 "mention_of": m.get("mention_of"),
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
-                else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
+                else "群聊" if m.get("mention_of") else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],

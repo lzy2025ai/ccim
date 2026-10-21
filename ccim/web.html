@@ -1227,6 +1227,7 @@ function phoneBack(){
 }
 function route(){
   const parts = location.hash.slice(2).split("/");
+  const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null};
   const own = ownerOf(current.id && current.id.startsWith("edit-") ? current.id.slice(5) : current.id);
   if (own) ctxMachine = own;
@@ -1245,6 +1246,11 @@ function route(){
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
   else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
   else if (current.view === "agents") {
+    // 从别处进来：先显示上次那份列表，再重新取（这期间终端里可能新开了对话，#95）
+    if (agentSide && agentSide.id === current.id && (prev.view !== "agents" || prev.id !== current.id)) {
+      agentSide.stale = true;
+      if (current.sub || narrow()) fetchAgentSide(current.id);
+    }
     if (current.id === "new") renderAgentForm(null);
     else if (!current.id) renderAgentCards();
     else if (current.sub === "settings") renderAgent(current.id);
@@ -2773,7 +2779,7 @@ function renderAgentSide(){
       : `<p class="muted" style="padding:10px">还没有对话。</p>`}</div>`;
 }
 async function openAgentLatest(id){
-  if (!agentSide || agentSide.id !== id || !agentSide.a) await fetchAgentSide(id);
+  if (!agentSide || agentSide.id !== id || !agentSide.a || agentSide.stale) await fetchAgentSide(id);
   if (current.view !== "agents" || current.id !== id || current.sub) return;
   const first = (agentSide.chats || []).find(c => !c.project && !c.schedule);
   if (first) { history.replaceState(null, "", `#/agents/${encodeURIComponent(id)}/${encodeURIComponent(first.id)}`); current.sub = first.id; renderList(); openChat(first.id); return; }

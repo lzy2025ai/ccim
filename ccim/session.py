@@ -399,7 +399,8 @@ class Chat:
         kbs = kb.dirs(getattr(self.b.channel, "kbs_of", lambda c: [])(self.chat_id))    # 挂在这个对话上的知识库（#27）
         for resume, fork in tries + [(None, False)]:
             opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
-                extra_args={"replay-user-messages": None} if snapshots else {},fork_session=fork, resume_session_at=self.fork_at if fork else None,
+                extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
+                fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],

@@ -2850,7 +2850,7 @@ async function renderAgent(id){
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
         ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
       </div>
-      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd></dl></div>
+      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd>` : ""}</dl></div>
     </div>`}</div>`;
 }
 function channelHtml(a, k){
@@ -2925,6 +2925,8 @@ function formHtml(a){
     <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
+    ${(fd.base || "claude") === "claude" ? `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
+      <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>` : ""}
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
     <span></span><div class="row" style="margin-top:6px">
@@ -2950,7 +2952,7 @@ function redrawForm(){ const keep = {...fd}; const pane = document.querySelector
 async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
   const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, avatar: fd.avatar || null, base: fd.base || "claude",
-                  model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null};
+                  model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null, chrome: (fd.base || "claude") === "claude" && !!fd.chrome};
   const where = id ? ownerOf(id) || ctxMachine : fd.machine;
   let r = await act(() => api("/api/agent/save", {id, fields}, where));
   if (r.confirm === "home") {            // 工作目录是用户主目录：说明影响，确认后再存

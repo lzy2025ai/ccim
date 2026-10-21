@@ -513,7 +513,7 @@ class Platform:
             key = a["id"] if path == agents.cwd(a) else f"{a['id']}@{path}"
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": a.get("role")}
+                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome")}
             name = a["name"]
         else:
             t = m.get("temp") or {}

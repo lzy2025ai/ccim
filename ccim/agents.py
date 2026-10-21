@@ -1,6 +1,7 @@
 """Agent 登记表：~/.ccim/agents.json，{编号: Agent}。
 
-Agent = 名字、印章（字和颜色）、角色说明、底座（claude / codex）、默认模型和思考深度、工作目录（可以没有）。
+Agent = 名字、印章（字和颜色）、角色说明、底座（claude / codex）、默认模型和思考深度、工作目录（可以没有）、
+能不能用 Chrome（chrome：会话带 --chrome，接上本机 Claude in Chrome 扩展，只对 Claude 底座有用）。
 没有工作目录的 Agent 在 ~/.ccim/agents/<编号>/ 里干活。
 
 飞书、微信的登记还是按目录记的（registry.json、微信号的 projects），各带一个 agent_id 指回这里。
@@ -16,8 +17,8 @@ COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
 AVATARS = ("01-navigator", "02-coder", "03-designer", "04-writer", "05-researcher", "06-analyst",
            "07-engineer", "08-assistant", "09-explorer", "10-guardian", "11-maker", "12-planner",
            "13-spark", "14-archivist", "15-buddy", "16-sprout")
-FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned")
-SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role"}   # Agent 字段 → 登记里的字段
+FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome")
+SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role", "chrome": "chrome"}   # Agent 字段 → 登记里的字段
 
 
 def _file():
@@ -84,8 +85,9 @@ def _clean(fields):
         out["dir"] = os.path.realpath(os.path.expanduser(out["dir"]))
     if "base" in out and out["base"] not in ("claude", "codex"):
         out["base"] = "claude"
-    if "pinned" in out:
-        out["pinned"] = bool(out["pinned"])
+    for k in ("pinned", "chrome"):
+        if k in out:
+            out[k] = bool(out[k])
     if "color" in out and out["color"] not in COLORS:
         out["color"] = COLORS[0]
     if "avatar" in out:

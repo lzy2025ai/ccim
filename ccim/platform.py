@@ -187,6 +187,10 @@ class WebChannel(Channel):
             ev["rec_chat"] = rec["chat"]
         self.events.publish(ev)
 
+    def idle(self, chat_id):
+        """这一轮结束的状态已经记下：叫网页再取一次列表。"""
+        self.events.publish({"type": "idle", "chat": chat_id})
+
     async def progress(self, chat_id, snap):
         if snap["state"] == "working":
             self.progress_of[chat_id] = snap

@@ -52,8 +52,13 @@ def _is_dev_install():
     return os.path.exists(os.path.join(SRC, ".git"))       # 工作目录（git worktree）里的 .git 是文件
 
 
+def _in_stable(python):
+    return _env(python).startswith(os.path.realpath(_stable()) + os.sep)
+
+
 def dev_python():
-    if _is_dev_install():
+    # 稳定版的 Python 带着 PYTHONPATH 导入了代码目录里的代码时，_is_dev_install 也是真，但它不是开发版（#111）
+    if _is_dev_install() and not _in_stable(sys.executable):
         return sys.executable
     p = _channel().get("dev_python")
     return p if p and os.path.exists(p) else None
@@ -95,7 +100,7 @@ def describe(python):
     if not python:
         return ""
     real = _env(python)
-    if real.startswith(os.path.realpath(_stable()) + os.sep):
+    if _in_stable(python):
         return "稳定版 " + os.path.relpath(real, os.path.realpath(_stable())).split(os.sep)[0]
     t = trying()
     return f"开发版（在试 {t['label']}）" if t else "开发版"
@@ -114,7 +119,7 @@ def trying():
 def launch_env(python):
     """启动这个 python 时额外的环境变量：开发版且正在试某个需求时指向那个工作目录。"""
     t = trying()
-    if not t or not python or _env(python).startswith(os.path.realpath(_stable()) + os.sep):
+    if not t or not python or _in_stable(python):
         return {}
     return {"PYTHONPATH": t["src"]}
 
@@ -208,6 +213,7 @@ def schedule_restart(path, delay=15, target=None, notify=True):
         args += ["--target", target]
     log = open(os.path.join(registry.pdir(path), "restart.log"), "ab")
     env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}))
+    env.pop("PYTHONPATH", None)               # 在试用某个需求的进程里调用时带着那个工作目录；要试哪个由 launch_env 决定（#111）
     subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
 
 

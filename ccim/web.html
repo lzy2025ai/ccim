@@ -1190,7 +1190,7 @@ function connectEvents(){
       }
     }
     if (detail && ev.chat === detail.id && (ev.type === "answer" || ev.type === "mention") && document.visibilityState === "visible") markSeen(detail.id);
-    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) c.brief = ev.brief; }
+    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
     else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
@@ -2261,7 +2261,7 @@ function boardRow(c, kind){
     : kind === "wait" ? `<button class="btn" onclick="event.preventDefault();dismissTask(${q(c.id)})">知道了</button>${replying ? "" : `<button class="btn primary" onclick="event.preventDefault();openBoardReply(${q(c.id)})">回复</button>`}` : "";
   const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
   const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}${iconOf(c, a, kind === "recent" ? "sm" : "")}
-    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle" title="${esc(c.title)}">${esc(c.ask || c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;
   if (!replying) return row;

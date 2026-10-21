@@ -103,19 +103,53 @@ PROMPT = """下面是一个对话里用户最近说的话和助手最近的回�
 助手最近的回答：
 {answer}"""
 
+TITLE_PROMPT = """
 
-async def make_brief(user, answer):
+另外给这个对话起一个标题，放在对话列表里让用户认出是哪件事：不超过 16 个字，说清楚在做什么事，不要标点、引号。
+这个对话开头用户说的：
+{first}
+
+按这个格式输出两行，不要别的：
+进度：……
+标题：……"""
+
+
+async def make_brief(user, answer, first=None):
+    """一句话进度；first（对话开头几句）给了就顺便起标题，返回 (进度, 标题)。"""
     from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
     from .session import CLI
     opts = ClaudeAgentOptions(model=BRIEF_MODEL, max_turns=1, allowed_tools=[], setting_sources=[],
-                              cwd=os.path.expanduser("~"), cli_path=CLI, permission_mode="default")
+                              cwd=os.path.expanduser("~"), cli_path=CLI, permission_mode="default",
+                              extra_args={"no-session-persistence": None})   # 不留对话记录，否则主目录的 Agent 会把它们列成终端对话（#67）
+    prompt = PROMPT.format(user=user[-1500:], answer=answer[-3000:])
+    if first:
+        prompt = prompt.replace("只输出这一句。", "") + TITLE_PROMPT.format(first=first[:1500])
     text = ""
-    async for m in query(prompt=PROMPT.format(user=user[-1500:], answer=answer[-3000:]), options=opts):
+    async for m in query(prompt=prompt, options=opts):
         if isinstance(m, AssistantMessage):
             for b in m.content:
                 if isinstance(b, TextBlock):
                     text += b.text
-    return " ".join(text.split()).strip("「」\"'")[:60]
+    clean = lambda t, n: " ".join(t.split()).strip("「」\"'“”")[:n]
+    if not first:
+        return clean(text, 60), None
+    brief = title = ""
+    for line in text.splitlines():
+        k, _, v = line.partition("：")
+        if k.strip() == "进度":
+            brief = v
+        elif k.strip() == "标题":
+            title = v
+    return clean(brief, 60), clean(title, 30) or None
+
+
+def renamed(m, first):
+    """用户自己起过名：改名时记了 title_set；这个功能之前改的名字，看它是不是第一句话开头（默认标题就是第一句话）。"""
+    t = (m.get("title") or "").rstrip("…")
+    return bool(m.get("title_set") or t and not m.get("title_auto") and not " ".join(first.split()).startswith(t))
+
+
+TITLE_ROUNDS = 3          # 前三轮每轮回答完重新起标题，之后固定；手动改过名（title_set）的不动
 
 
 async def refresh_brief(pf, cid):
@@ -131,16 +165,20 @@ async def refresh_brief(pf, cid):
     if not ans:
         return
     user = next((r.get("text") or "" for r in reversed(rows) if r.get("type") == "user" and r.get("at", 0) <= ans.get("at", 0)), "")
+    asks = [r.get("text") or "" for r in rows if r.get("type") == "user" and not r.get("by")]
+    first = "\n".join(asks[:TITLE_ROUNDS]) if asks and len(asks) <= TITLE_ROUNDS and not renamed(m, asks[0]) else None
     async with _brief_lock:
         try:
-            brief = await asyncio.wait_for(make_brief(user, ans["text"]), 90)
+            brief, title = await asyncio.wait_for(make_brief(user, ans["text"], first), 90)
         except Exception:
             log.warning("一句话进度没生成出来", exc_info=True)
             return
-    if not brief:
-        return
     chats = pf.chats()
-    if cid in chats:
+    if cid not in chats or not (brief or title):
+        return
+    if brief:
         chats[cid]["brief"], chats[cid]["brief_at"] = brief, time.time()
-        pf.store.write(chats)
-        pf.channel.events.publish({"type": "brief", "chat": cid, "brief": brief})
+    if title and not chats[cid].get("title_set"):
+        chats[cid]["title"], chats[cid]["title_auto"] = title, True
+    pf.store.write(chats)
+    pf.channel.events.publish({"type": "brief", "chat": cid, "brief": chats[cid].get("brief"), "title": chats[cid].get("title")})

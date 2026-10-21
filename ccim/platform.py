@@ -393,9 +393,10 @@ class Platform:
 
     def _board_marks(self, cid, m):
         if not board_mod.top_level(m):
-            return {"attention": None, "unread": False}
+            return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
-        return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ)}
+        return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ),
+                "ask": " ".join((summ.get("last_user") or "").split())[:120]}
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""
@@ -705,6 +706,8 @@ class Platform:
             raise Problem("没有这个颜色。")
         if "title" in changes:
             changes["title"] = " ".join((changes["title"] or "").split())[:60] or None
+            changes["title_set"] = bool(changes["title"])      # 手动改过名，不再自动起标题（#67）
+            changes["title_auto"] = None
         if changes.get("pin") is True:
             changes["pin"] = -time.time()         # 新置顶的排在最上面
         if "archived" in changes:

@@ -103,7 +103,8 @@ async def refresh(path, timeout=30):
     from .session import CLI
 
     async def ask():
-        opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku")
+        opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku",
+                                  extra_args={"no-session-persistence": None})   # 不留对话记录，否则会被列成终端对话（#84）
         async with ClaudeSDKClient(options=opts) as c:
             await c.query("只回答：好")
             async for m in c.receive_response():
@@ -175,7 +176,8 @@ async def report(path):
     raw = ""
     old = stale()
     try:
-        opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku")
+        opts = ClaudeAgentOptions(cwd=path, cli_path=CLI, setting_sources=[], max_turns=1, model="haiku",
+                                  extra_args={"no-session-persistence": None})   # 不留对话记录，否则会被列成终端对话（#84）
         async with ClaudeSDKClient(options=opts) as c:
             if old:                           # 额度要发过请求才拿得到：用最便宜的模型问一句最短的
                 await c.query("只回答：好")

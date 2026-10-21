@@ -12,6 +12,7 @@ log = logging.getLogger("ccim.filesend")
 
 BLOCK = 1 << 20                     # 本机读盘一次读这么多
 PART = 4 << 20                      # 跨电脑一段取这么多
+FIRST = 256 << 10                   # 第一段
 AHEAD = 2                           # 跨电脑预取几段
 
 
@@ -126,47 +127,44 @@ def serve_local(handler, path, extra=None):
 
 def serve_remote(handler, fetch, extra=None):
     """fetch(开始, 长度) → (文件信息, 字节)，取不到抛异常（Gone 表示 404）。"""
-    m, first = fetch(0, 0)
+    m, _ = fetch(0, 0)
     plan = _plan(handler, m)
     if not plan:
         return
     code, start, end = plan
     total = end - start + 1
-    offsets = list(range(start, end + 1, PART))
+    segs, off = [], start                 # 第一段小一点，浏览器早点看到进度；后面按 PART 取
+    while off <= end:
+        n = min(FIRST if not segs else PART, end + 1 - off)
+        segs.append((off, n))
+        off += n
     pool = ThreadPoolExecutor(max_workers=AHEAD + 1)
     stop = threading.Event()
 
-    def get(off):
+    def get(seg):
         if stop.is_set():
             return None
-        mm, data = fetch(off, min(PART, end + 1 - off))
+        mm, data = fetch(*seg)
         if mm["etag"] != m["etag"]:
             raise Gone("文件传到一半被改了")
         return data
 
-    futs = [pool.submit(get, o) for o in offsets[:AHEAD + 1]]
-    nxt, sent, started = len(futs), 0, False
+    futs = [pool.submit(get, sg) for sg in segs[:AHEAD + 1]]
+    nxt, sent = len(futs), 0
+    _head(handler, m, code, start, end, extra)   # 文件信息有了就发头，浏览器马上进入下载
     try:
-        data = futs[0].result() if futs else b""   # 第一段到了再发头：取不到还能回错误
-        _head(handler, m, code, start, end, extra)
-        started = True
-        i = 0
-        while True:
+        for i in range(len(segs)):
+            if nxt < len(segs):
+                futs.append(pool.submit(get, segs[nxt]))
+                nxt += 1
+            data = futs[i].result()
             if data:
                 handler.wfile.write(data)
                 sent += len(data)
-            i += 1
-            if i >= len(futs):
-                break
-            if nxt < len(offsets):
-                futs.append(pool.submit(get, offsets[nxt]))
-                nxt += 1
-            data = futs[i].result()
-    except (BrokenPipeError, ConnectionResetError):
+    except (BrokenPipeError, ConnectionResetError, Gone):
         pass
     except Exception:
-        if not started:
-            raise                     # 还没发头：交给调用的回错误
+        log.warning("取文件中途出错", exc_info=True)
     finally:
         stop.set()
         pool.shutdown(wait=False, cancel_futures=True)

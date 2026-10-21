@@ -63,7 +63,12 @@
     渠道把两者合成一条 answer。每个网页对话一份记录 web/<对话>.jsonl（user / answer / note / card / file）。
     网页对话的状态在平台 state.json 的 chats（agent 或 temp 设置、origin 等）。Agent 对话共用 Agent 的 Bridge；临时对话各一个 Bridge
   - 飞书、微信、终端里的对话：`registry.all_chats` + `list_sessions`，内容由 `ccim/history.py` 从 Claude Code / Codex 的对话记录读出来；
-    网页里接着聊 = 新网页对话 fork（Codex 用 `codex exec fork`），原来那个照常列出
+    飞书、微信里的对话在网页里接着聊 = 新网页对话 fork（Codex 用 `codex exec fork`），原来那个照常列出
+    终端、桌面端里的 Claude 对话（#94）接着原会话聊、不分支：新网页对话 meta 里 session_id = origin、continued_at，列表里只剩它（`_linked`）。
+    实测：Claude 桌面端开着一个对话时挂着带 --resume 的 claude 进程，内容在内存里，不重新读记录，那边一开口就会和网页写的分叉；
+    所以 `history.open_elsewhere` 看进程，开着就在网页顶部醒目提示（不拦）。别处后来说的从原会话记录里读（按提问 / 回答编号去掉网页自己的，
+    `elsewhere`），网页停在这类对话上每 5 秒问 /api/chat/sig，变了就重新取。网页发消息前 `Chat._stale`：记录里最后一条不是自己上一轮的回答，
+    就断开重新接上。终端对话、转过来之前的回答都能分叉（history 记录带 uuid，`_fork_history`）
   - `ccim/web.py`：原控制台的渠道管理（启动停止、日志、断开、扫码接入 Job）被平台接口复用；接入成功后 `agents.link`
   - `ccim/web.html`：单页，原型在 docs/prototype/。界面不用浏览器原生控件（下拉、确认框都是自己画的）
 - `ccim/projects.py`：项目（群聊，#8）。项目存平台 state.json 的 projects（只在主循环里改）；消息流记录 web/project-<编号>.jsonl

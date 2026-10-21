@@ -108,6 +108,7 @@
   （HTML 还有样式表、脚本）由 `docs.view` 打包成 data: 地址，所以别的电脑、服务器上也能显示，HTML 放 sandbox iframe 的 srcdoc。
   Markdown 用 `docMd`（比聊天的 md() 全，每块带 data-l 原文行号）。保存（/api/doc/save）带打开时的 mtime，文件被改过就拒绝；
   记一条 type=edit，对话 meta 的 doc_edits 在下一次发消息时拼在前面告诉助手。Word 自己转（`docx_html`），只能看
+- `ccim/filesend.py`：对话里的文件发给浏览器（#76）。本机的边读边发，支持 Range（206 / 416）和 ETag（304）。别的电脑上的（网页的 /api/file 带 machine，平台 `_remote` 和服务器 hubserver 都走 `serve_peer`）按段取 /api/file/part（一段 4 MB，回应是一行 JSON 文件信息 + 这一段），经现有转交通道（签名照旧），收到一段写一段、预取两段，所以没有大小上限；中途文件被改（ETag 变了）就断开连接。那边是旧版本（part 返回 404）时退回整个文件转发。链接、<img>、<video> 带不了 X-CCIM 头，所以 /api/file 在 `_remote` 里只校验 Host
 - `ccim/upgrade.py`：版本和网页上升级（#37）。`info` 认出是开发版（代码目录，git 提交）、稳定版（~/.ccim/stable 目录名）、
   发布版（uv tool 装的，direct_url.json 里的提交）还是服务器（~/ccim-hub/deployed.txt）；发布版和 GitHub 上最新提交比（后台问，一小时一次）。
   state 里的 ccim → machine_info 带到网页。升级由独立进程（`python -m ccim.upgrade run`）做：uv tool upgrade → 用新装的 python 问新提交 →

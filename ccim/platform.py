@@ -16,10 +16,10 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 """
 import asyncio, glob, json, logging, os, queue, re, shutil, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
-from . import docs
+from . import docs, filesend
 from . import kb as kb_mod
 from . import board as board_mod
 from .channels.base import CardAction, Channel, Incoming
@@ -1179,9 +1179,15 @@ def _handler(pf):
                 (parse_qs(urlparse(self.path).query).get("machine") or [""])[0]   # 图片等 <img> 带不了头，用参数
             if not mid or mid == pf.peers.me["id"]:
                 return False
+            path = urlparse(self.path).path
+            if path == "/api/file" and self.command == "GET":   # 链接、<img>、<video> 带不了 X-CCIM 头
+                if not self._host_ok():
+                    self._send(403, b"forbidden", "text/plain")
+                else:
+                    filesend.serve_peer(self, pf.peers, mid)
+                return True
             if not self._guard():
                 return True
-            path = urlparse(self.path).path
             if body is None:
                 body = self.rfile.read(int(self.headers.get("Content-Length") or 0)) if self.command == "POST" else b""
             from .peers import Offline
@@ -1222,6 +1228,8 @@ def _handler(pf):
                 return self._events()
             if u.path == "/api/file":
                 return self._file(q.get("chat", ""), q.get("path", ""))
+            if u.path == "/api/file/part":
+                return self._file_part(q)
             routes = {
                 "/api/state": lambda: state(pf) if q.get("local") else pf.peers.merged_state(state(pf)),
                 "/api/dirs": lambda: list_dirs(q.get("path") or ""),
@@ -1346,20 +1354,32 @@ def _handler(pf):
                 raise Problem("文件没传完，再试一次。")
             return {"key": key, "name": name, "size": n}
 
+        def _file_ok(self, chat, path):
+            """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。"""
+            return os.path.isfile(path) and any(
+                r.get("type") == "file" and r.get("path") == path
+                or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
+                for r in pf.channel.logs.read(chat))
+
         def _file(self, chat, path):
-            """对话里 Agent 发出来的、用户发过去的文件：只给这个对话记录里出现过的。"""
             if not self._host_ok():
                 return self._send(403, b"forbidden", "text/plain")
-            ok = any(r.get("type") == "file" and r.get("path") == path
-                     or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
-                     for r in pf.channel.logs.read(chat))
-            if not ok or not os.path.isfile(path):
+            if not self._file_ok(chat, path):
                 return self._send(404, b"not found", "text/plain")
-            import mimetypes
-            with open(path, "rb") as f:
-                data = f.read()
-            ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
-            self._send(200, data, ctype, {"Content-Disposition": f"inline; filename*=UTF-8''{quote(os.path.basename(path))}"})
+            filesend.serve_local(self, path)
+
+        def _file_part(self, q):
+            """别的电脑来取一段（#76）：文件信息 + 这一段。"""
+            if not self._guard():
+                return
+            chat, path = q.get("chat", ""), q.get("path", "")
+            if not self._file_ok(chat, path):
+                return self._send(404, b"not found", "text/plain")
+            try:
+                start, n = int(q.get("start") or 0), int(q.get("len") or 0)
+            except ValueError:
+                return self._send(400, b"bad range", "text/plain")
+            self._send(200, filesend.read_part(path, start, n), "application/octet-stream")
 
         def _events(self):
             if not self._host_ok():

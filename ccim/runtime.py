@@ -174,7 +174,7 @@ def set_try(what):
     started = registry.now()
     paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
     for i, p in enumerate(paths):
-        schedule_restart(p, delay=base + 3 * i)
+        schedule_restart(p, delay=base + 3 * i, notify=False)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
     names = "、".join(f"「{os.path.basename(p)}」" for p in paths)
     if inner:
         return label, [f"{names} {base} 秒后依次重启；新版本起不来会用稳定版顶上。"]
@@ -199,14 +199,16 @@ def inside(path):
 
 # ---------- 安全重启 ----------
 
-def schedule_restart(path, delay=15, target=None):
-    """另起一个脱离当前进程的进程去重启，立即返回。target：dev / stable / None（按项目设置）。"""
+def schedule_restart(path, delay=15, target=None, notify=True):
+    """另起一个脱离当前进程的进程去重启，立即返回。target：dev / stable / None（按项目设置）。
+    notify=False：不在飞书、微信里通知结果（用环境变量传，跑重启的稳定版旧了也不会因为不认识参数而失败）。"""
     py = stable_python() or dev_python() or sys.executable
     args = [py, "-P", "-m", "ccim.cli", "safe-restart-run", path, "--delay", str(delay)]
     if target:
         args += ["--target", target]
     log = open(os.path.join(registry.pdir(path), "restart.log"), "ab")
-    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/")
+    env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}))
+    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
 
 
 def safe_restart(path, delay=0, target=None, notify=True):

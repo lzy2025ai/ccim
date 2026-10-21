@@ -543,7 +543,11 @@ def cmd_handback(args):
 
 
 def cmd_safe_restart_run(args):
-    ok, _ = runtime.safe_restart(os.path.realpath(args.path), delay=args.delay, target=args.target)
+    quiet = bool(os.environ.get("CCIM_RESTART_QUIET"))      # ccim try：成功不通知，出问题照样在飞书、微信里说
+    path = os.path.realpath(args.path)
+    ok, msg = runtime.safe_restart(path, delay=args.delay, target=args.target, notify=not quiet)
+    if quiet and not ok:
+        runtime._tell(path, registry.get(path), msg, True)
     sys.exit(0 if ok else 1)
 
 

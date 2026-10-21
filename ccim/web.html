@@ -490,6 +490,9 @@ body{overflow:hidden}
 
 .pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px;overflow-y:auto;overscroll-behavior:contain}
 .pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop.slash button.on{background:var(--sunk)}
+.pop.slash b{font:600 13px var(--mono);min-width:110px}
+.pop.slash b .arg{font:400 12px var(--sans);color:var(--muted)}
 .pop button:hover{background:var(--sunk)}
 .pop button .ck{margin-left:auto;color:var(--qing)}
 .pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
@@ -1188,6 +1191,7 @@ function connectEvents(){
       } else {
         const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
+        if (ev.type === "note" && detail.progress?.guess) { detail.busy = false; detail.progress = null; drawComposerState(); }   // 斜杠命令只回一句，不会开始干活
         if (own >= 0) detail.log[own] = rec;
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
@@ -1704,8 +1708,9 @@ function drawChat(){
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const input = $("#input");
-  if (!c.readonly) input.addEventListener("input", atTyped);
+  if (!c.readonly) { input.addEventListener("input", atTyped); input.addEventListener("input", slashTyped); }
   input.addEventListener("keydown", e => {
+    if (slashKey(e)) return;
     if (sendKey(e)) { e.preventDefault(); sendChat(); }
   });
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
@@ -1714,7 +1719,7 @@ function drawChat(){
 }
 function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
-  $("#input").placeholder = c.readonly ? "在这里接着聊" : c.busy ? "补充说明，它做完当前这一步就会看到"
+  $("#input").placeholder = c.readonly ? "在这里接着聊" : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
     : (c.members || []).length ? `给 ${c.agent_name} 发消息，@ 叫群里其他 Agent` : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
   $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
@@ -1829,7 +1834,7 @@ async function sendChat(){
   }
   const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
   detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
-  if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: ""}; }
+  if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: "", guess: true}; }   // 还没开始干活，先显示思考中
   drawThread(); drawComposerState();
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
@@ -2005,6 +2010,46 @@ function chatAt(e){
 }
 function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent
   if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#chip-at") || $("#box"), stopPropagation(){}}), 0);
+}
+// 开头打 / ：列出能用的命令（#82）
+const SLASH = [
+  ["/queue", "排在后面，手头这件做完再处理", "内容"],
+  ["/stop", "停下正在做的事"],
+  ["/status", "当前状态"],
+  ["/usage", "额度和用量", "", "claude"],
+  ["/model", "换模型", "名字"],
+  ["/effort", "换思考深度", "等级"],
+];
+function slashTyped(){
+  const v = $("#input").value, m = /^\/(\S*)$/.exec(v);
+  const old = document.querySelector(".pop.slash");
+  const hits = m ? SLASH.filter(([k, , , only]) => k.startsWith("/" + m[1].toLowerCase()) && (!only || (detail.base || "claude") === only)) : [];
+  if (!hits.length || hits.length === 1 && hits[0][0] === v) { if (old) old.remove(); return; }
+  if (old && old.dataset.v === v) return;
+  const on = old ? Math.min(+old.dataset.on || 0, hits.length - 1) : 0;
+  const p = pop({currentTarget: $("#box"), stopPropagation(){}}, hits.map(([k, d, arg], i) =>
+    `<button class="${i === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="slashPick(${q(k)}, ${arg ? 1 : 0}, true)"><b>${esc(k)}${arg ? ` <span class="arg">${esc(arg)}</span>` : ""}</b><span class="desc">${esc(d)}</span></button>`).join(""));
+  p.classList.add("slash"); p.dataset.v = v; p.dataset.on = on; p._hits = hits;
+}
+function slashPick(k, arg, go){   // 回车、点选：不用参数的命令直接发出去；Tab 只填进输入框
+  const i = $("#input");
+  i.value = k + (arg ? " " : "");
+  closePop(); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
+  drawComposerState();
+  if (go && !arg) sendChat();
+}
+function slashKey(e){
+  const p = document.querySelector(".pop.slash"); if (!p || e.isComposing) return false;
+  const bs = [...p.querySelectorAll("button")], on = +p.dataset.on || 0;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const n = (on + (e.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length;
+    bs.forEach((b, i) => b.classList.toggle("on", i === n)); p.dataset.on = n; bs[n].scrollIntoView({block: "nearest"});
+  } else if (e.key === "Enter" && !e.shiftKey) bs[on].click();
+  else if (e.key === "Tab") { const [k, , arg] = p._hits[on]; slashPick(k, arg ? 1 : 0, false); }
+  else if (e.key === "Escape") { p.remove(); e.stopPropagation(); }
+  else return false;
+  e.preventDefault();
+  return true;
 }
 function liveOfMention(r){
   if (r.state !== "queued") return null;

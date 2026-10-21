@@ -458,10 +458,14 @@ body{overflow:hidden}
 .box textarea{width:100%;border:0;outline:none;resize:none;padding:12px 14px 4px;min-height:52px;max-height:200px;background:none}
 #box{position:relative}
 #box textarea{max-height:none}
-.grip{position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:56px;height:16px;cursor:ns-resize;touch-action:none;z-index:2}
-.grip::after{content:"";position:absolute;left:12px;right:12px;top:6px;height:4px;border-radius:2px;background:var(--line-strong);opacity:0;transition:opacity .15s}
-#box:hover .grip::after,#box:focus-within .grip::after,.grip.on::after{opacity:1}
-@media (hover:none){.grip::after{opacity:1}}
+.grip{position:absolute;top:-5px;left:14px;right:14px;height:10px;cursor:row-resize;touch-action:none;z-index:2}
+#box:has(.grip:hover),#box:has(.grip.on){border-top-color:var(--qing)}
+@media (hover:none){.grip{display:none}}
+.ta-wrap{position:relative}
+.ta-wrap .icon-btn{position:absolute;top:6px;right:6px;width:26px;height:26px;background:var(--panel)}
+.ta-wrap .icon-btn svg{width:14px;height:14px}
+.ta-wrap.big textarea{padding-right:40px}
+.ta-wrap .icon-btn[hidden]{display:none}
 .quote .qt{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .bubble .bq{border-left:3px solid var(--line-strong);padding-left:10px;color:var(--muted);font-size:13px;margin:2px 0 6px}
 .box .bar{display:flex;align-items:center;gap:4px;padding:6px 8px}
@@ -865,6 +869,8 @@ const ICON = {
   fold:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg>',
   check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L19 7"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
+  grow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+  shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 const $ = s => document.querySelector(s);
@@ -1636,9 +1642,10 @@ function drawChat(){
         <div class="rcpt" id="rcpt-chat"></div>
         <div class="kbrow" id="kbrow"></div>
         <div class="pending" id="pending"></div>
-        <div class="grip" id="grip" title="拖动调高度，双击恢复"></div>
+        <div class="grip" id="grip"></div>
         <div id="quotes"></div>
-        <textarea id="input" rows="2" aria-label="输入消息"></textarea>
+        <div class="ta-wrap" id="ta-wrap"><textarea id="input" rows="2" aria-label="输入消息"></textarea>
+          <button class="icon-btn" id="ta-size" hidden onclick="toggleInput()"></button></div>
         <div class="bar"><div class="opts">
           <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
@@ -1680,13 +1687,24 @@ function drawComposerState(){
   $("#input").oninput = drawComposerState;
   fitInput();
 }
-// 输入框跟着内容变高；拖顶上的横条手动拉高（记住），双击恢复
+// 输入框跟着内容变高；拖上边框手动拉高（记住），双击恢复；字多了右上角可以展开、收起
 let inputH = +localStorage.getItem("ccim.inputH") || 0;
+const inputCap = () => Math.round(innerHeight * .6);
 function fitInput(){
-  const ta = $("#input"); if (!ta || !$("#grip")) return;
-  const cap = Math.round(innerHeight * .6);
+  const ta = $("#input"), b = $("#ta-size"); if (!ta || !b) return;
+  const cap = inputCap();
   ta.style.height = "auto";
-  ta.style.height = Math.min(Math.max(inputH, ta.scrollHeight + 2), cap) + "px";
+  const need = ta.scrollHeight;
+  ta.style.height = Math.min(Math.max(inputH, need + 2), cap) + "px";
+  const big = inputH >= cap - 1, show = big || need > 110;
+  b.hidden = !show; $("#ta-wrap").classList.toggle("big", show);
+  b.innerHTML = big ? ICON.shrink : ICON.grow;
+  b.title = big ? "收起" : "展开"; b.setAttribute("aria-label", b.title);
+}
+function toggleInput(){
+  inputH = inputH >= inputCap() - 1 ? 0 : inputCap();
+  if (inputH) localStorage.setItem("ccim.inputH", inputH); else localStorage.removeItem("ccim.inputH");
+  fitInput(); $("#input").focus();
 }
 function gripInput(){
   const g = $("#grip"), ta = $("#input"); if (!g) return;
@@ -1696,7 +1714,7 @@ function gripInput(){
     g.onpointermove = m => { inputH = Math.min(Math.max(52, h0 + y0 - m.clientY), cap); ta.style.height = inputH + "px"; };
     g.onpointerup = g.onpointercancel = () => {
       g.onpointermove = g.onpointerup = g.onpointercancel = null; g.classList.remove("on");
-      localStorage.setItem("ccim.inputH", inputH);
+      localStorage.setItem("ccim.inputH", inputH); fitInput();
     };
   };
   g.ondblclick = () => { inputH = 0; localStorage.removeItem("ccim.inputH"); fitInput(); };

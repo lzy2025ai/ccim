@@ -372,6 +372,13 @@ def _handler(hub):
                 return self._send(403, {"error": "forbidden"})
             if u.path == "/api/state":
                 return self._send(200, hub.state())
+            if u.path == "/api/file":
+                mid = q.get("machine") or hub.default_machine()
+                if not mid:
+                    return self._send(503, {"error": "还没有电脑连上来。"})
+                from .filesend import serve_peer
+                return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                                                         "X-Content-Type-Options": "nosniff"})
             return self._forward(b"", q)
 
         def do_POST(self):

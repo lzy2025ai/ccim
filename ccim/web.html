@@ -456,6 +456,14 @@ body{overflow:hidden}
 .box{border:1px solid var(--line-strong);border-radius:14px;background:var(--panel);box-shadow:0 1px 0 rgba(29,34,43,.03)}
 .box:focus-within{border-color:var(--qing)}
 .box textarea{width:100%;border:0;outline:none;resize:none;padding:12px 14px 4px;min-height:52px;max-height:200px;background:none}
+#box{position:relative}
+#box textarea{max-height:none}
+.grip{position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:56px;height:16px;cursor:ns-resize;touch-action:none;z-index:2}
+.grip::after{content:"";position:absolute;left:12px;right:12px;top:6px;height:4px;border-radius:2px;background:var(--line-strong);opacity:0;transition:opacity .15s}
+#box:hover .grip::after,#box:focus-within .grip::after,.grip.on::after{opacity:1}
+@media (hover:none){.grip::after{opacity:1}}
+.quote .qt{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bubble .bq{border-left:3px solid var(--line-strong);padding-left:10px;color:var(--muted);font-size:13px;margin:2px 0 6px}
 .box .bar{display:flex;align-items:center;gap:4px;padding:6px 8px}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:7px;font-size:12px;color:var(--ink-2)}
 .chip:hover{background:var(--sunk)}
@@ -1418,7 +1426,7 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${esc(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -1628,6 +1636,8 @@ function drawChat(){
         <div class="rcpt" id="rcpt-chat"></div>
         <div class="kbrow" id="kbrow"></div>
         <div class="pending" id="pending"></div>
+        <div class="grip" id="grip" title="拖动调高度，双击恢复"></div>
+        <div id="quotes"></div>
         <textarea id="input" rows="2" aria-label="输入消息"></textarea>
         <div class="bar"><div class="opts">
           <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
@@ -1641,7 +1651,7 @@ function drawChat(){
       </div>
       <div class="hint">${sendHint()}；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
     </div>`;
-  drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow();
+  drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow(); drawQuotes(); gripInput();
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
@@ -1665,15 +1675,68 @@ function drawComposerState(){
   s.className = "send" + (c.busy ? " stop" : "");
   s.innerHTML = c.busy ? ICON.stop : ICON.up;
   s.setAttribute("aria-label", c.busy ? "停下" : "发送");
-  s.onclick = c.readonly ? sendChat : c.busy && !$("#input").value.trim() && !pendingFiles.length ? stopChat : sendChat;
+  s.onclick = c.readonly ? sendChat : c.busy && !$("#input").value.trim() && !pendingFiles.length && !quoteList().length ? stopChat : sendChat;
   if (c.readonly) { s.className = "send"; s.innerHTML = ICON.up; }
   $("#input").oninput = drawComposerState;
+  fitInput();
+}
+// 输入框跟着内容变高；拖顶上的横条手动拉高（记住），双击恢复
+let inputH = +localStorage.getItem("ccim.inputH") || 0;
+function fitInput(){
+  const ta = $("#input"); if (!ta || !$("#grip")) return;
+  const cap = Math.round(innerHeight * .6);
+  ta.style.height = "auto";
+  ta.style.height = Math.min(Math.max(inputH, ta.scrollHeight + 2), cap) + "px";
+}
+function gripInput(){
+  const g = $("#grip"), ta = $("#input"); if (!g) return;
+  g.onpointerdown = e => {
+    e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add("on");
+    const y0 = e.clientY, h0 = ta.offsetHeight, cap = Math.round(innerHeight * .6);
+    g.onpointermove = m => { inputH = Math.min(Math.max(52, h0 + y0 - m.clientY), cap); ta.style.height = inputH + "px"; };
+    g.onpointerup = g.onpointercancel = () => {
+      g.onpointermove = g.onpointerup = g.onpointercancel = null; g.classList.remove("on");
+      localStorage.setItem("ccim.inputH", inputH);
+    };
+  };
+  g.ondblclick = () => { inputH = 0; localStorage.removeItem("ccim.inputH"); fitInput(); };
+}
+// 引用：放在输入框上面，发送时拼到消息前面
+let quotes = {id: null, list: []};
+const quoteList = () => detail && quotes.id === detail.id ? quotes.list : [];
+function addQuote(text){
+  const input = $("#input"); if (!input || !text) return;
+  if (!$("#quotes")) {                    // 没有引用区的输入框：照旧放进文字里
+    input.value = text.split("\n").map(l => "> " + l).join("\n") + "\n\n" + input.value.replace(/^\s+/, "");
+    return input.focus();
+  }
+  if (quotes.id !== detail.id) quotes = {id: detail.id, list: []};
+  quotes.list.push(text); drawQuotes(); drawComposerState(); input.focus();
+}
+function dropQuote(k){ quotes.list.splice(k, 1); drawQuotes(); drawComposerState(); $("#input")?.focus(); }
+function drawQuotes(){
+  const el = $("#quotes"); if (!el) return;
+  el.innerHTML = quoteList().map((t, k) => `<div class="quote in-box"><span class="qt">${esc(t)}</span><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="dropQuote(${k})">${ICON.x}</button></div>`).join("");
+}
+const withQuotes = (qs, v) => [...qs.map(t => t.split("\n").map(l => "> " + l).join("\n")), v].filter(Boolean).join("\n\n");
+// 发出去的消息：开头的引用画成引用块
+function userText(t){
+  const ls = (t || "").split("\n"), out = []; let k = 0;
+  while (k < ls.length && /^>/.test(ls[k])) {
+    const b = [];
+    while (k < ls.length && /^>/.test(ls[k])) b.push(ls[k++].replace(/^> ?/, ""));
+    out.push(`<div class="bq">${esc(b.join("\n"))}</div>`);
+    while (k < ls.length && !ls[k].trim()) k++;
+  }
+  return out.length ? out.join("") + esc(ls.slice(k).join("\n")) : esc(t);
 }
 async function sendChat(){
-  const v = $("#input").value.trim(), files = pendingFiles.filter(f => f.key);
+  const typed = $("#input").value.trim(), files = pendingFiles.filter(f => f.key), qs = quoteList().slice(), v = withQuotes(qs, typed);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
   closePop();
+  const back = () => { $("#input").value = typed; if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
+  quotes.list = []; drawQuotes();
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt;
     $("#input").value = ""; pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
@@ -1682,7 +1745,7 @@ async function sendChat(){
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
       else if (detail.agent && to.some(a => !(detail.members || []).includes(a))) { toast("已拉进群聊"); reloadChat(); }
     }
-    catch { $("#input").value = v; chatRcpt = to; drawChatRcpt(); }
+    catch { back(); chatRcpt = to; drawChatRcpt(); drawComposerState(); }
     return;
   }
   if (detail.readonly && starting) return;
@@ -1701,7 +1764,7 @@ async function sendChat(){
         ? `#/agents/${encodeURIComponent(src.agent)}/${encodeURIComponent(id)}` : `#/chats/${encodeURIComponent(id)}`;
     } catch {
       src.log = src.log.filter(x => x !== mine);
-      if (detail === src) { drawThread(); $("#input").value = v; }
+      if (detail === src) { drawThread(); back(); }
     } finally { starting = false; }
     return;
   }
@@ -1712,7 +1775,7 @@ async function sendChat(){
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
   try { r = await act(() => api("/api/chat/send", {id: detail.id, text: v, files})); }
-  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; $("#input").value = v; drawThread(); drawComposerState(); return; }
+  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -1911,11 +1974,7 @@ function quoteMsg(btn, src, i){
   const box = btn.closest(".msg"), sel = getSelection();
   const picked = sel && !sel.isCollapsed && box.contains(sel.anchorNode) ? sel.toString() : "";   // 选中了一段就只引用这段
   const text = (picked || msgText(src, i)).trim();
-  const input = $("#input"); if (!input || !text) return;
-  const quoted = text.split("\n").map(l => "> " + l).join("\n") + "\n\n";
-  input.value = quoted + input.value.replace(/^\s+/, "");
-  input.focus(); input.setSelectionRange(input.value.length, input.value.length);
-  input.style.height = ""; drawComposerState();
+  addQuote(text);
 }
 async function forkAt(i){
   const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i}), "已分叉，在新对话里接着聊");
@@ -2399,7 +2458,7 @@ function selTool(){
   t.addEventListener("mousedown", e => e.preventDefault());
   const [sv, qt] = t.querySelectorAll("button");
   sv.onclick = () => { t.remove(); saveToKb("log", i, text); };
-  qt.onclick = () => { t.remove(); const input = $("#input"); if (!input) return; input.value = text.split("\n").map(l => "> " + l).join("\n") + "\n\n" + input.value.replace(/^\s+/, ""); input.focus(); };
+  qt.onclick = () => { t.remove(); addQuote(text); };
   document.body.append(t);
 }
 // ---- 对话里挂知识库 ----

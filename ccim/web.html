@@ -2028,15 +2028,14 @@ function slashTyped(){
   if (old && old.dataset.v === v) return;
   const on = old ? Math.min(+old.dataset.on || 0, hits.length - 1) : 0;
   const p = pop({currentTarget: $("#box"), stopPropagation(){}}, hits.map(([k, d, arg], i) =>
-    `<button class="${i === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="slashPick(${q(k)}, ${arg ? 1 : 0}, true)"><b>${esc(k)}${arg ? ` <span class="arg">${esc(arg)}</span>` : ""}</b><span class="desc">${esc(d)}</span></button>`).join(""));
-  p.classList.add("slash"); p.dataset.v = v; p.dataset.on = on; p._hits = hits;
+    `<button class="${i === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="slashPick(${q(k)}, ${arg ? 1 : 0})"><b>${esc(k)}${arg ? ` <span class="arg">${esc(arg)}</span>` : ""}</b><span class="desc">${esc(d)}</span></button>`).join(""));
+  p.classList.add("slash"); p.dataset.v = v; p.dataset.on = on;
 }
-function slashPick(k, arg, go){   // 回车、点选：不用参数的命令直接发出去；Tab 只填进输入框
+function slashPick(k, arg){   // 回车、Tab、点选都只填进输入框，再按回车才发出（免得误触）
   const i = $("#input");
   i.value = k + (arg ? " " : "");
   closePop(); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
   drawComposerState();
-  if (go && !arg) sendChat();
 }
 function slashKey(e){
   const p = document.querySelector(".pop.slash"); if (!p || e.isComposing) return false;
@@ -2044,8 +2043,7 @@ function slashKey(e){
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     const n = (on + (e.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length;
     bs.forEach((b, i) => b.classList.toggle("on", i === n)); p.dataset.on = n; bs[n].scrollIntoView({block: "nearest"});
-  } else if (e.key === "Enter" && !e.shiftKey) bs[on].click();
-  else if (e.key === "Tab") { const [k, , arg] = p._hits[on]; slashPick(k, arg ? 1 : 0, false); }
+  } else if (e.key === "Enter" && !e.shiftKey || e.key === "Tab") bs[on].click();
   else if (e.key === "Escape") { p.remove(); e.stopPropagation(); }
   else return false;
   e.preventDefault();

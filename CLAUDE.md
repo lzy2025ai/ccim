@@ -223,8 +223,11 @@
   用户在飞书里体验也一样：`ccim try <编号>` 之后回复用户（重启会断掉当前这一轮）。
 - **用户说验收通过**：合并 PR（squash），issue 自动关闭；没验收的不合并。main 开了保护：PR 要基于最新的 main 且检查通过才能合并，
   别的 PR 先合了就在自己的工作目录里 `git fetch && git rebase origin/main`、解决冲突、强推，再合并。合并后：
-  `ccim try main`（如果正在试它）→ `ccim promote`（一律按最新的 main 装稳定版，升级跑稳定版的项目）→ 删掉工作目录
-  （`git worktree remove …`）和分支。不要直接 `ccim restart` 别的项目到开发版。
+  `git -C <主目录> pull --ff-only` → `ccim try main`（不管有没有在试它，都要跑）→ `ccim promote`（一律按最新的 main 装稳定版，
+  升级跑稳定版的项目）→ 删掉工作目录（`git worktree remove …`）和分支。不要直接 `ccim restart` 别的项目到开发版。
+  `ccim try main` 会重启本机跑开发版的进程（网页平台、ccim 测试机器人），它们才用上刚合并的 Python 代码。web.html 每次请求现读，
+  刷新网页就是新的；后台没重启时，新网页配旧后台，新功能会悄悄失效（#61 合并后删终端对话就这样没生效）。
+  重启会打断正在进行的对话（包括正在和用户说话的这一轮），所以先告诉用户、等用户同意再跑。
 - 合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）先用 Python 3.11 检查，再把服务器上的总控更新到这个版本。
   别的电脑在网页「设置 → 电脑」里点升级（#37）。
 - 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑

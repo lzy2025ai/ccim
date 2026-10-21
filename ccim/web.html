@@ -157,6 +157,15 @@ body{overflow:hidden}
 .newtag.ask{color:#8A6A12}
 .newtag.err{color:var(--bad)}
 .brow.fresh .btitle{font-weight:700}
+/* 点了「知道了」、还没打开看过：最近在跟里比别的稍重一点（#65） */
+.udot.soft{background:none;box-shadow:inset 0 0 0 1.5px var(--qing);margin-right:0}
+.brow.quiet.unread .btitle{font-weight:600;color:var(--ink)}
+/* 面板里直接回复 */
+.bitem{margin-bottom:8px}
+.bitem .brow{margin-bottom:0}
+.breply{padding:8px 0 4px}
+.breply textarea{resize:vertical;min-height:56px;display:block;border-radius:12px;padding:10px 12px}
+.breply .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 /* 等你处理：玻璃卡片。后面垫一层柔和的色块，卡片半透明 + 背景模糊 + 顶部高光 + 投影（#54） */
 .glass-bed{position:relative;isolation:isolate;padding:2px 0}
 .glass-bed::before{content:"";position:absolute;z-index:-1;inset:-10px -6px;border-radius:24px;pointer-events:none;
@@ -2223,8 +2232,9 @@ function recentAgents(recent){   // 最近在跟的按 Agent 合起来：几个�
 function agentRecentRow([aid, cs]){
   const a = agentOf(aid); if (!a) return "";
   const c = cs[0];
-  return `<a class="brow quiet" href="#/agents/${encodeURIComponent(aid)}">${seal(a, "sm", false)}
-    <span class="bmain"><span class="btop"><span class="btitle">${esc(a.name)}</span><span class="bwho">${cs.length} 个对话${multi() ? " · " + esc((machineOf(c.machine) || {}).name || "") : ""}</span></span>
+  const soft = cs.some(x => x.unread);
+  return `<a class="brow quiet ${soft ? "unread" : ""}" href="#/agents/${encodeURIComponent(aid)}">${seal(a, "sm", false)}
+    <span class="bmain"><span class="btop">${soft ? `<span class="udot soft"></span>` : ""}<span class="btitle">${esc(a.name)}</span><span class="bwho">${cs.length} 个对话${multi() ? " · " + esc((machineOf(c.machine) || {}).name || "") : ""}</span></span>
     <span class="bprog">最近：${esc(c.title)}${c.brief ? `　${esc(c.brief)}` : ""}</span></span>
     <span class="bmeta">${when(c.last_active)}</span></a>`;
 }
@@ -2246,18 +2256,46 @@ function boardRow(c, kind){
   const who = [(c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
   const prog = kind === "work" ? `<span class="working"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "干活中")}</span>` : esc(c.brief || "");
   const r = REASON[c.attention];
+  const replying = boardReply && boardReply.id === c.id;
   const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
-    : kind === "work" ? "" : `<button class="btn" onclick="event.preventDefault();doneTask(${q(c.id)})">这件事完了</button>`;
-  return `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""} ${kind === "work" ? "work" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}${iconOf(c, a, kind === "recent" ? "sm" : "")}
-    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+    : kind === "wait" ? `<button class="btn" onclick="event.preventDefault();dismissTask(${q(c.id)})">知道了</button>${replying ? "" : `<button class="btn primary" onclick="event.preventDefault();openBoardReply(${q(c.id)})">回复</button>`}` : "";
+  const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
+  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}${iconOf(c, a, kind === "recent" ? "sm" : "")}
+    <span class="bmain"><span class="btop">${c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : ""}<span class="bagent">${esc(a ? a.name : "临时对话")}</span><span class="btitle">${esc(c.title)}</span><span class="bwho">${esc(who)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     ${prog ? `<span class="bprog">${prog}</span>` : ""}</span>
     <span class="bmeta">${kind === "work" ? "" : when(c.last_active)}${btn}</span></a>`;
+  if (!replying) return row;
+  return `<div class="bitem">${row}<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"
+      oninput="boardReply.text=this.value" onkeydown="if(sendKey(event)){event.preventDefault();sendBoardReply()}else if(event.key==='Escape')closeBoardReply()">${esc(boardReply.text)}</textarea>
+    <div class="acts"><button class="btn" onclick="closeBoardReply()">取消</button><button class="btn primary" id="br-send" onclick="sendBoardReply()">发送</button></div></div></div>`;
 }
-async function doneTask(id){
+let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
+async function dismissTask(id){
   const c = (S.chats || []).find(x => x.id === id);
-  await act(() => api("/api/chat/mark", {id, changes: {archived: true}}, ownerOf(id) || ctxMachine), "已归档，从任务面板里拿掉了");
-  if (c) { c.archived = true; c.attention = null; }
-  drawAttention(); renderBoard(true); refreshSoon();
+  if (c) { c.attention = null; c.unread = true; }
+  if (boardReply && boardReply.id === id) boardReply = null;
+  drawAttention(); renderBoard(true);
+  try { await api("/api/chat/dismiss", {id}, ownerOf(id) || ctxMachine); } catch (e) { toast(e.message); }
+  refreshSoon();
+}
+function openBoardReply(id){
+  if (!boardReply || boardReply.id !== id) boardReply = {id, text: ""};
+  boardReply.focus = true;
+  renderBoard(true);
+}
+function closeBoardReply(){ boardReply = null; renderBoard(true); }
+async function sendBoardReply(){
+  const r = boardReply, v = (r && r.text || "").trim();
+  if (!r) return;
+  if (!v) return $("#br-text") && $("#br-text").focus();
+  const b = $("#br-send"); if (b) b.disabled = true;
+  try { await act(() => api("/api/chat/send", {id: r.id, text: v, files: []}, ownerOf(r.id) || ctxMachine)); }
+  catch { if (b) b.disabled = false; return; }
+  boardReply = null;
+  const c = (S.chats || []).find(x => x.id === r.id);
+  if (c) { c.busy = true; c.attention = null; c.unread = false; }
+  markSeen(r.id);
+  toast("已发出"); drawAttention(); renderBoard(true); refreshSoon();
 }
 function heatHtml(heat, today){
   const end = today ? new Date(today + "T00:00:00") : new Date(); end.setHours(0, 0, 0, 0);
@@ -2292,6 +2330,9 @@ async function renderBoard(quick){
   const maxT = Math.max(1, ...ags.map(([, v]) => v.turns));
   const sec = (title, color, n, body, cls = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
   const shown = showAllRecent ? recent : recent.slice(0, 5);
+  if (boardReply && !wait.some(c => c.id === boardReply.id)) boardReply = null;     // 那件事已经不在等你了
+  const ta = $("#br-text"), focused = ta && document.activeElement === ta, sel = ta && [ta.selectionStart, ta.selectionEnd];
+  const top = $(".board") ? $(".board").scrollTop : 0;
   $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
     <div class="bstats">
       <div class="stat"><b>${wait.length}</b><span>等你处理</span></div>
@@ -2314,6 +2355,12 @@ async function renderBoard(quick){
       <div class="bsec"><h2>活跃度</h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
       <div class="bsec"><h2>本周各 Agent</h2>${ags.length ? ags.map(([id, v]) => { const a = agentOf(id); return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(v.turns / maxT * 100)}%"></i></span><span class="acnt">${v.turns} 条</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
     </div></div></div>`;
+  if (top) $(".board").scrollTop = top;
+  const nt = $("#br-text");
+  if (nt && (focused || boardReply.focus)) {
+    boardReply.focus = false; nt.focus();
+    const end = nt.value.length; nt.setSelectionRange(sel ? sel[0] : end, sel ? sel[1] : end);
+  }
 }
 
 // ================= 知识库（#27） =================

@@ -391,6 +391,20 @@ class Platform:
                         pass
         threading.Thread(target=go, daemon=True).start()
 
+    def _board_marks(self, cid, m):
+        if not board_mod.top_level(m):
+            return {"attention": None, "unread": False}
+        summ = board_mod.summary(self.channel.logs, cid)
+        return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ)}
+
+    def dismiss(self, cid):
+        """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["dismissed_at"] = time.time()
+            self.store.write(chats)
+        return {}
+
     def mark_seen(self, cid):
         """网页里看过这个对话了（任务面板的未读，#48）。"""
         chats = self.chats()
@@ -650,7 +664,7 @@ class Platform:
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
-                "attention": board_mod.attention(m, board_mod.summary(self.channel.logs, cid)) if board_mod.top_level(m) else None,
+                **self._board_marks(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
@@ -1259,6 +1273,7 @@ def _handler(pf):
                 "/api/kb/export": lambda: kb_mod.export(b("keys")),
                 "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
                 "/api/chat/seen": lambda: pf.call(pf.mark_seen, b("id")),
+                "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),

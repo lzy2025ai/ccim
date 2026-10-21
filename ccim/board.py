@@ -2,6 +2,7 @@
 
 - 每个网页对话的记录扫一遍得到摘要（最后一个回答的时间和状态、有没有等批准的卡片、每天发了几条），按文件大小和修改时间缓存。
 - 未读：对话 meta 的 seen_at（网页里打开过就更新）早于最后一个回答。平台第一次启动这个功能时，已有的对话都算看过。
+  任务面板里点「知道了」记 dismissed_at：不再等你处理，但没打开过的仍算未读（#65）。
 - 一句话进度：每轮回答完（网页对话，不含 @ 的子对话、项目、定时任务）用小模型总结，存在 meta 的 brief。
 """
 import asyncio, datetime, logging, os, time
@@ -46,9 +47,14 @@ def attention(meta, summ):
         return "ask"
     if meta.get("busy"):
         return None
-    if summ.get("answer_at", 0) > (meta.get("seen_at") or 0):
+    if summ.get("answer_at", 0) > max(meta.get("seen_at") or 0, meta.get("dismissed_at") or 0):
         return "err" if summ.get("answer_state") == "error" else "done"
     return None
+
+
+def unread(meta, summ):
+    """回答还没打开看过（任务面板里点了「知道了」的也算，#65）。"""
+    return bool(summ) and not meta.get("busy") and summ.get("answer_at", 0) > (meta.get("seen_at") or 0)
 
 
 def top_level(meta):

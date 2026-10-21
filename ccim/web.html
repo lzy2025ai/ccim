@@ -610,6 +610,62 @@ body{overflow:hidden}
 .avatar-text[hidden],.avatar-grid[hidden]{display:none}
 
 /* ---------- Agent ---------- */
+/* 设备管理（#100） */
+.mlink{text-decoration:none;color:inherit}
+.mlink:hover .title{text-decoration:underline;text-underline-offset:3px}
+.crumb{font-size:12.5px;color:var(--muted);text-decoration:none}
+.crumb:hover{color:var(--ink)}
+.dev-body{max-width:1000px}
+.dbar{height:10px;border-radius:5px;background:var(--sunk);overflow:hidden}
+.dbar i{display:block;height:100%;background:var(--qing);border-radius:5px}
+.dbar.full i{background:var(--bad)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.ops .op{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:baseline}
+.ops .when{color:var(--faint);min-width:72px;flex:none} .ops .what{flex:none}
+.ops .paths{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ftool{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.ftool .btn.on{background:var(--qing-soft);border-color:var(--qing)}
+.crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0}
+.crumbs button{padding:3px 6px;border-radius:6px;color:var(--ink-2)}
+.crumbs button:hover{background:var(--sunk)}
+.crumbs button:last-child{font-weight:600;color:var(--ink)}
+.crumbs .sep{color:var(--faint)}
+.flist{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.flist.drag{outline:2px dashed var(--qing);outline-offset:-4px}
+.fhead,.frow{display:flex;align-items:center;gap:10px;padding:0 12px;min-height:40px;border-bottom:1px solid var(--line)}
+.frow:last-child{border-bottom:0}
+.fhead{min-height:34px;font-size:12px;color:var(--faint);background:var(--paper)}
+.fhead button{color:inherit} .fhead button.on{color:var(--ink);font-weight:600}
+.frow.sel{background:var(--qing-soft)}
+.frow .ck,.fhead .ck,.cg-head .ck{width:18px;height:18px;flex:none;border-radius:5px;border:1.5px solid var(--line-strong);display:grid;place-items:center;color:#fff;background:var(--panel)}
+.fhead .ck{border-color:transparent;background:none}
+.frow .ck[aria-checked="true"],.cg-head .ck[aria-checked="true"]{background:var(--qing);border-color:var(--qing)}
+.frow .ck svg,.cg-head .ck svg{width:12px;height:12px}
+.frow.up .ck{border-color:transparent;background:none}
+.frow .nm,.fhead .nm{flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;padding:9px 0}
+.frow .nm svg{width:16px;height:16px;flex:none;color:var(--muted)}
+.frow .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .nm.t{display:block} .frow .nm.t .title,.frow .nm.t .sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .nm.t .sub{font-size:12px;color:var(--muted)}
+button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
+.frow .sz,.fhead .sz{width:80px;text-align:right;flex:none;font-size:12.5px;color:var(--muted)}
+.frow .tm,.fhead .tm{width:110px;text-align:right;flex:none;font-size:12.5px;color:var(--faint)}
+.cgroup{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;margin-bottom:16px}
+.cg-head{display:flex;align-items:center;gap:10px;padding:12px 12px 0}
+.cg-head h3{margin:0}
+.cg-desc{font-size:12.5px;margin:4px 12px 8px 40px}
+.cgroup .frow:first-of-type{border-top:1px solid var(--line)}
+.scan-run{display:flex;gap:14px;align-items:center;padding:20px 0}
+.cbar{position:sticky;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-top:8px;
+  background:var(--panel);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+.dev-body{container-type:inline-size}
+.dev-page .tabs button,.fhead button{white-space:nowrap}
+@container (max-width:560px){
+  .frow .tm,.fhead .tm{display:none}
+  .frow .sz,.fhead .sz{width:60px}
+  .frow .nm{min-width:80px}
+}
 .agent-page{overflow:auto;flex:1}
 .agent-top{display:flex;gap:18px;align-items:center;padding:26px 32px 20px;border-bottom:1px solid var(--line)}
 .agent-top h2{font:600 24px/1.25 var(--song);margin:0}
@@ -1254,7 +1310,7 @@ function phoneBack(){
 function route(){
   const parts = location.hash.slice(2).split("/");
   const prev = current;
-  current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null};
+  current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
   const own = ownerOf(current.id && current.id.startsWith("edit-") ? current.id.slice(5) : current.id);
   if (own) ctxMachine = own;
   else if (!current.id || current.id === "new" || current.view === "settings") ctxMachine = S.me;   // 隐藏的子对话：沿用打开它的那台
@@ -1286,7 +1342,8 @@ function route(){
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "board") renderBoard();
-  else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
+  else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
+    : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
@@ -1781,6 +1838,7 @@ function drawChat(){
   });
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
+  if (prefill && !c.readonly) { input.value = prefill; prefill = ""; drawComposerState(); }
   input.focus();
 }
 function drawComposerState(){
@@ -2047,7 +2105,7 @@ async function answerSecret(sid, run, form){
 }
 
 // ---- @ 其他 Agent ----
-let chatRcpt = [], draftText = "";
+let chatRcpt = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
   el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
@@ -2999,7 +3057,7 @@ function renderSettingsList(){
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     ${S.hub ? "" : `<a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>`}
     <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
-    <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "在这里管另一台电脑上的 Agent"}</span></span></a>
+    <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
 }
 async function logout(){
@@ -3014,8 +3072,8 @@ function renderMachines(){
     ${latestOf() ? `<div class="role" style="margin-top:4px">最新版本 ${esc(latestOf())}</div>` : ""}</div></div>
     <div class="pane">
       <div class="sect">${ms.map(m => `<div class="mem" style="padding:10px 0">
-        <span class="t" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
-        <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}</span></span>
+        <a class="t mlink" href="${devHref(m.id)}" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
+        <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}</span></a>
         ${upgradeBox(m)}
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
@@ -3097,6 +3155,270 @@ async function leaveHub(){
   if (!await confirmBox("断开？", "断开后这里只显示这台电脑自己的东西，两边的 Agent、对话都不受影响。", "断开")) return;
   await act(() => api("/api/peers/leave", {}), "已断开，几秒后刷新");
   setTimeout(() => location.reload(), 6000);
+}
+// ================= 设备管理（#100）：某台电脑的概况、文件、磁盘清理 =================
+const FS_CHAT = "@fs";
+let DEV = {mid: null};
+function devReset(mid){ DEV = {mid, path: "~", hidden: false, sel: new Set(), ls: null, sort: "name", info: null, scan: null, csel: new Set()}; }
+const devHref = (mid, tab) => `#/settings/machines/${encodeURIComponent(mid)}${tab && tab !== "overview" ? "/" + tab : ""}`;
+function bytes(n){
+  if (n == null) return "";
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n >= 100 || i === 0 ? Math.round(n) : n.toFixed(1)} ${u[i]}`;
+}
+function day(ts){
+  if (!ts) return "";
+  const d = new Date(ts * 1000), now = new Date(), p = n => String(n).padStart(2, "0");
+  if (d.toDateString() === now.toDateString()) return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+const devApi = (path, body) => api(path, body, DEV.mid);
+function devTilde(p){   // 按那台电脑的主目录缩写
+  const h = (DEV.ls || DEV.info || DEV.scan || {}).home;
+  return h && (p === h || p.startsWith(h + "/")) ? "~" + p.slice(h.length) : tilde(p, DEV.mid);
+}
+function renderDevice(mid, tab){
+  const m = machineOf(mid);
+  if (!m) { location.hash = "#/settings/machines"; return; }
+  if (DEV.mid !== mid) devReset(mid);
+  ctxMachine = mid;
+  tab = ["files", "clean"].includes(tab) ? tab : "overview";
+  $("#main").innerHTML = `<div class="agent-page dev-page"><div class="agent-top"><div class="grow">
+      <a class="crumb" href="#/settings/machines">电脑</a><h2>${esc(m.name)}${m.me ? `<span class="muted" style="font:400 15px var(--sans)">（这台）</span>` : ""}</h2></div>
+      <span class="status ${m.online ? "on" : ""}"><i></i>${m.online ? "在线" : "离线"}</span></div>
+    <div class="tabs" role="tablist">${[["overview", "概况"], ["files", "文件"], ["clean", "磁盘清理"]].map(([k, n]) =>
+      `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? "on" : ""}" onclick="location.hash=${q(devHref(mid, k))}">${n}</button>`).join("")}</div>
+    <div class="pane dev-body" id="dev-body">${m.online ? `<div class="doc-loading">…</div>` : `<p class="muted">这台电脑离线，连上后才能管理。</p>`}</div></div>`;
+  if (!m.online) return;
+  (tab === "files" ? devFiles : tab === "clean" ? devClean : devOverview)();
+}
+const devBody = () => $("#dev-body");
+const devOn = mid => DEV.mid === mid && devBody();
+
+// ---- 概况 ----
+async function devOverview(){
+  const mid = DEV.mid;
+  let d;
+  try { d = await devApi("/api/fs/info"); } catch (e) { if (devOn(mid)) devBody().innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  if (!devOn(mid)) return;
+  DEV.info = d;
+  const m = machineOf(mid), v = verOf(m), disk = d.disk, pct = Math.round(disk.used / disk.total * 100);
+  const ags = S.agents.filter(a => (a.machine || S.me) === mid);
+  const OPS = {mkdir: "新建文件夹", rename: "改名", trash: "移到废纸篓", upload: "上传", clean: "清理"};
+  devBody().innerHTML = `
+    <div class="sect"><h3>磁盘</h3>
+      <div class="dbar ${pct >= 90 ? "full" : ""}"><i style="width:${pct}%"></i></div>
+      <div class="row" style="justify-content:space-between;margin-top:8px"><span>可用 <b>${bytes(disk.free)}</b><span class="muted">，共 ${bytes(disk.total)}</span></span>
+        <button class="btn" onclick="location.hash=${q(devHref(mid, "clean"))}">清理磁盘</button></div></div>
+    <div class="sect"><h3>这台电脑</h3><dl class="kv">
+      ${d.model ? `<dt>型号</dt><dd>${esc(d.model)}</dd>` : ""}<dt>系统</dt><dd>${esc(d.os)}</dd>
+      ${v ? `<dt>ccim</dt><dd>${esc([v.kind === "dev" ? "开发版" : "", v.version, v.commit].filter(Boolean).join(" "))}</dd>` : ""}</dl></div>
+    <div class="sect"><h3>Agent</h3>${ags.length ? ags.map(a => `<a class="mem" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a, "sm", false)}
+        <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${BASE[a.base || "claude"]}</span></span>
+        <span class="status ${a.busy ? "busy" : "on"}"><i></i>${a.busy ? esc(a.doing || "干活中") : "空闲"}</span></a>`).join("")
+      : `<p class="muted">这台电脑上还没有 Agent。</p>`}</div>
+    <div class="sect"><h3>最近的操作</h3>${d.ops.length ? `<div class="ops">${d.ops.map(o => `<div class="op"><span class="when">${day(o.at)}</span>
+        <span class="what">${OPS[o.op] || esc(o.op)}${o.op === "clean" && o.freed ? `，清出 ${bytes(o.freed)}` : ""}</span>
+        <span class="paths">${o.op === "rename" ? `${esc(devTilde(o.paths[0]))} → ${esc(o.paths[1].split("/").pop())}`
+          : esc(o.paths.slice(0, 3).map(devTilde).join("、")) + (o.paths.length > 3 ? ` 等 ${o.paths.length} 项` : "")}</span></div>`).join("")}</div>`
+      : `<p class="muted">在这里新建、改名、删除、清理的记录会列在这里。</p>`}</div>`;
+}
+
+// ---- 文件 ----
+async function devFiles(path){
+  const mid = DEV.mid;
+  if (path !== undefined && path !== DEV.path) { DEV.path = path; DEV.sel = new Set(); }
+  let d;
+  try { d = await devApi(`/api/fs/ls?path=${encodeURIComponent(DEV.path)}${DEV.hidden ? "&hidden=1" : ""}`); }
+  catch (e) {
+    if (!devOn(mid)) return;
+    if (DEV.ls && DEV.path !== DEV.ls.path) { toast(e.message); DEV.path = DEV.ls.path; return drawFiles(); }
+    devBody().innerHTML = `<p class="muted">${esc(e.message)}</p>${DEV.path !== "~" ? `<button class="btn" onclick="devFiles('~')">回到主目录</button>` : ""}`;
+    return;
+  }
+  if (!devOn(mid)) return;
+  DEV.ls = d; DEV.path = d.path;
+  DEV.sel = new Set([...DEV.sel].filter(n => d.entries.some(e => e.name === n)));
+  drawFiles();
+}
+function devSorted(){
+  const es = [...DEV.ls.entries], k = DEV.sort;
+  const cmp = k === "size" ? (a, b) => (b.size || 0) - (a.size || 0) : k === "time" ? (a, b) => b.mtime - a.mtime : (a, b) => a.name.localeCompare(b.name, "zh");
+  return es.sort((a, b) => (b.dir - a.dir) || cmp(a, b));
+}
+const devPath = n => DEV.ls.path.replace(/\/$/, "") + "/" + n;
+function drawFiles(){
+  const d = DEV.ls, mid = DEV.mid;
+  const rel = d.path === d.home ? [] : d.path.slice(d.home.length + 1).split("/");
+  const crumbs = [`<button onclick="devFiles(${q(d.home)})">主目录</button>`].concat(rel.map((n, i) =>
+    `<button onclick="devFiles(${q(d.home + "/" + rel.slice(0, i + 1).join("/"))})">${esc(n)}</button>`)).join(`<span class="sep">›</span>`);
+  const n = DEV.sel.size, es = devSorted(), one = n === 1 ? d.entries.find(e => DEV.sel.has(e.name)) : null;
+  const allFiles = n && [...DEV.sel].every(x => !(d.entries.find(e => e.name === x) || {}).dir);
+  const head = (k, label) => `<button class="${DEV.sort === k ? "on" : ""}" onclick="DEV.sort='${k}';drawFiles()">${label}</button>`;
+  devBody().innerHTML = `
+    <div class="ftool"><div class="crumbs">${crumbs}</div>
+      <div class="row" style="margin-left:auto">${n ? `<span class="muted">已选 ${n} 项</span>
+          <button class="btn" onclick="devAgent(event)">让 Agent 处理</button>
+          ${one ? `<button class="btn" onclick="devRename()">改名</button>` : ""}
+          ${allFiles && n <= 5 ? `<button class="btn" onclick="devDownload()">下载</button>` : ""}
+          <button class="btn danger" onclick="devTrash()">移到废纸篓</button>
+          <button class="btn" onclick="DEV.sel.clear();drawFiles()">取消</button>`
+        : `<button class="btn" onclick="devAgent(event)">让 Agent 处理这个文件夹</button>
+          <button class="btn" onclick="devMkdir()">${ICON.plus}新建文件夹</button>
+          <button class="btn" onclick="$('#dev-up').click()">上传</button>
+          <input type="file" id="dev-up" multiple hidden onchange="devUpload(this.files);this.value=''">
+          <button class="btn ${DEV.hidden ? "on" : ""}" aria-pressed="${DEV.hidden}" onclick="DEV.hidden=!DEV.hidden;devFiles()">${DEV.hidden ? "不显示隐藏文件" : "显示隐藏文件"}</button>`}</div></div>
+    <div class="flist" id="flist">
+      <div class="fhead"><span class="ck"></span><span class="nm">${head("name", "名字")}</span><span class="sz">${head("size", "大小")}</span><span class="tm">${head("time", "修改时间")}</span></div>
+      ${d.parent ? `<div class="frow up"><span class="ck"></span><button class="nm" onclick="devFiles(${q(d.parent)})">${ICON.folder}上一层</button></div>` : ""}
+      ${es.map(e => `<div class="frow ${DEV.sel.has(e.name) ? "sel" : ""}">
+        <button class="ck" role="checkbox" aria-checked="${DEV.sel.has(e.name)}" aria-label="选中 ${esc(e.name)}" onclick="devPick(${q(e.name)})">${DEV.sel.has(e.name) ? ICON.check : ""}</button>
+        <button class="nm" onclick="devOpen(${q(e.name)})" title="${esc(e.name)}">${e.dir ? ICON.folder : ICON.file}<span>${esc(e.name)}</span></button>
+        <span class="sz">${e.dir ? "" : bytes(e.size)}</span><span class="tm">${day(e.mtime)}</span></div>`).join("")}
+      ${!es.length ? `<p class="muted" style="padding:14px 4px">这个文件夹是空的。</p>` : ""}
+      ${d.more ? `<p class="muted" style="padding:10px 4px">还有 ${d.more} 项没有列出来。</p>` : ""}</div>`;
+  const fl = $("#flist");
+  fl.addEventListener("dragover", e => { e.preventDefault(); fl.classList.add("drag"); });
+  fl.addEventListener("dragleave", () => fl.classList.remove("drag"));
+  fl.addEventListener("drop", e => { e.preventDefault(); fl.classList.remove("drag"); if (e.dataTransfer.files.length) devUpload(e.dataTransfer.files); });
+}
+function devPick(name){ DEV.sel.has(name) ? DEV.sel.delete(name) : DEV.sel.add(name); drawFiles(); }
+function devOpen(name){
+  const e = DEV.ls.entries.find(x => x.name === name), p = devPath(name);
+  if (!e) return;
+  if (e.dir) return devFiles(p);
+  if (docKind(name)) return openDoc(p, null, FS_CHAT);
+  if (isImg(name)) return showImage(fileUrl(FS_CHAT, p), name);
+  devDownload([name]);
+}
+function devDownload(names){
+  for (const n of names || [...DEV.sel]) {
+    const a = document.createElement("a"); a.href = fileUrl(FS_CHAT, devPath(n)); a.download = n;
+    document.body.append(a); a.click(); a.remove();
+  }
+}
+function nameBox(title, value, ok){
+  dialog(title, `<input id="nm-in" class="input" maxlength="200" value="${esc(value)}">`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="nm-ok">确定</button>`);
+  const el = $("#nm-in"); el.focus();
+  const dot = value.lastIndexOf("."); el.setSelectionRange(0, dot > 0 ? dot : value.length);
+  const go = async () => { const v = el.value.trim(); if (!v) return el.focus(); try { await ok(v); closeDialog(); } catch (e) { toast(e.message); } };
+  $("#nm-ok").onclick = go;
+  el.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) go(); };
+}
+function devMkdir(){
+  nameBox("新建文件夹", "未命名文件夹", async v => { await devApi("/api/fs/mkdir", {path: DEV.ls.path, name: v}); devFiles(); });
+}
+function devRename(){
+  const name = [...DEV.sel][0];
+  nameBox("改名", name, async v => { await devApi("/api/fs/rename", {path: devPath(name), name: v}); DEV.sel = new Set([v]); devFiles(); });
+}
+async function devTrash(){
+  const names = [...DEV.sel];
+  const list = names.slice(0, 3).map(n => `「${n}」`).join("、") + (names.length > 3 ? ` 等 ${names.length} 项` : "");
+  if (!await confirmBox("移到废纸篓？", `${list}会移到「${(machineOf(DEV.mid) || {}).name || "那台电脑"}」的废纸篓，需要的话可以从废纸篓里放回去。`, "移到废纸篓")) return;
+  const r = await act(() => devApi("/api/fs/trash", {paths: names.map(devPath)}));
+  toast(r.failed.length ? `${r.done.length} 项已移到废纸篓，${r.failed.length} 项没移：${r.failed[0].error}` : "已移到废纸篓");
+  DEV.sel.clear(); devFiles();
+}
+async function devUpload(list){
+  const mid = DEV.mid, folder = DEV.ls.path;
+  let ok = 0;
+  for (const file of list) {
+    try {
+      const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(file.name), ...remoteHeader(mid)}, body: file});
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
+      await api("/api/fs/put", {key: d.key, path: folder, name: file.name}, mid);
+      ok++;
+    } catch (e) { toast(`${file.name} 没传上：${e.message}`); }
+  }
+  if (ok) toast(`已上传 ${ok} 个文件`);
+  if (devOn(mid) && DEV.ls && DEV.ls.path === folder) devFiles();
+}
+function devAgent(e){
+  const mid = DEV.mid, folder = DEV.ls.path, picked = [...DEV.sel].map(devPath);
+  const ags = S.agents.filter(a => (a.machine || S.me) === mid);
+  const text = picked.length ? `看一下这些文件：\n${picked.map(p => "- " + p).join("\n")}\n\n` : `看一下这个文件夹：${folder}\n\n`;
+  window._devGo = aid => { closePop(); devTalk(mid, aid, folder, text); };
+  pop(e, `<div class="sec">让谁来处理</div>
+    <button onclick="_devGo(null)"><span><div>新对话</div><div class="desc">在这个文件夹里干活</div></span></button>
+    ${ags.map(a => `<button onclick="_devGo(${q(a.id)})">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join("")}`, true);
+}
+async function devTalk(mid, aid, folder, text){   // 打开对话、把要处理的东西写进输入框，用户补一句再发
+  if (!aid) {
+    draft = {...draft, machine: mid, dir: folder || "", model: "", effort: ""};
+    draftText = text; location.hash = "#/chats/new"; return;
+  }
+  prefill = text;
+  await startAgent(aid);
+}
+
+// ---- 磁盘清理 ----
+async function devClean(){
+  const mid = DEV.mid;
+  let d;
+  try { d = await devApi("/api/fs/scan"); } catch (e) { if (devOn(mid)) devBody().innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  if (!devOn(mid)) return;
+  DEV.scan = d;
+  drawClean();
+  clearTimeout(window._scanT);
+  if (d.job.state === "running") window._scanT = setTimeout(() => { if (devOn(mid) && current.sub === mid && current.tab === "clean") devClean(); }, 1500);
+}
+async function devScan(){
+  await act(() => devApi("/api/fs/scan", {}));
+  DEV.csel = new Set(); devClean();
+}
+function drawClean(){
+  const d = DEV.scan, j = d.job, r = d.result, mid = DEV.mid;
+  if (j.state === "running") {
+    devBody().innerHTML = `<div class="scan-run"><span class="spin"></span><div><b>正在扫描：${esc(j.step || "")}</b>
+      <div class="muted">${j.dirs ? `已经看了 ${j.dirs.toLocaleString()} 个文件夹，` : ""}一般要一两分钟</div></div></div>`;
+    return;
+  }
+  if (!r) {
+    devBody().innerHTML = `<div class="sect"><p>扫一遍这台电脑的主目录，找出缓存、很久没动的项目依赖、大文件、下载文件夹里的旧文件，勾选后清理。</p>
+      ${j.state === "failed" ? `<p class="danger-link">上次扫描出错了：${esc(j.error || "")}</p>` : ""}
+      <button class="btn primary" onclick="devScan()">开始扫描</button></div>`;
+    return;
+  }
+  const items = r.items, sel = DEV.csel;
+  const total = items.reduce((s, x) => s + x.size, 0), picked = items.filter(x => sel.has(x.path)), ps = picked.reduce((s, x) => s + x.size, 0);
+  const groups = d.groups.map(g => ({...g, items: items.filter(x => x.group === g.id)})).filter(g => g.items.length);
+  devBody().innerHTML = `
+    <div class="ftool"><div><b>可以清理 ${bytes(total)}</b><span class="muted"> · ${day(r.at)} 扫描</span></div>
+      <div class="row" style="margin-left:auto"><button class="btn" onclick="devCleanAgent()">让 Agent 看看</button><button class="btn" onclick="devScan()">重新扫描</button></div></div>
+    ${r.denied ? `<p class="muted" style="font-size:12.5px">有 ${r.denied} 个文件夹没有权限，没扫到。到这台 Mac 的「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里允许后重新扫描。</p>` : ""}
+    ${groups.length ? groups.map(g => {
+      const all = g.items.every(x => sel.has(x.path)), gs = g.items.reduce((s, x) => s + x.size, 0);
+      return `<div class="sect cgroup"><div class="cg-head"><button class="ck" role="checkbox" aria-checked="${all}" aria-label="全选${esc(g.name)}" onclick="devCPickGroup(${q(g.id)})">${all ? ICON.check : ""}</button>
+        <h3>${esc(g.name)} <span class="muted" style="font:400 13px var(--sans)">${bytes(gs)}</span></h3></div><p class="muted cg-desc">${esc(g.desc)}</p>
+        ${g.items.map(x => `<div class="frow ${sel.has(x.path) ? "sel" : ""}"><button class="ck" role="checkbox" aria-checked="${sel.has(x.path)}" aria-label="选中 ${esc(x.name)}" onclick="devCPick(${q(x.path)})">${sel.has(x.path) ? ICON.check : ""}</button>
+          <span class="nm t"><span class="title">${esc(x.name)}</span><span class="sub">${esc(devTilde(x.path))}${x.note ? ` · ${esc(x.note)}` : ""}</span></span>
+          <span class="sz">${bytes(x.size)}</span><span class="tm">${x.used ? day(x.used) : ""}</span></div>`).join("")}</div>`;
+    }).join("") : `<p class="muted">没找到可以清理的东西。</p>`}
+    ${picked.length ? `<div class="cbar"><span>已选 ${picked.length} 项，共 <b>${bytes(ps)}</b></span><button class="btn primary" onclick="devCleanGo()">清理</button></div>` : ""}`;
+}
+function devCPick(p){ DEV.csel.has(p) ? DEV.csel.delete(p) : DEV.csel.add(p); drawClean(); }
+function devCPickGroup(g){
+  const ps = DEV.scan.result.items.filter(x => x.group === g).map(x => x.path), all = ps.every(p => DEV.csel.has(p));
+  ps.forEach(p => all ? DEV.csel.delete(p) : DEV.csel.add(p)); drawClean();
+}
+async function devCleanGo(){
+  const items = DEV.scan.result.items.filter(x => DEV.csel.has(x.path));
+  const wipe = items.filter(x => x.group === "cache" || x.group === "trash"), move = items.length - wipe.length;
+  const size = bytes(items.reduce((s, x) => s + x.size, 0));
+  const parts = [wipe.length ? `${wipe.length} 项缓存${wipe.some(x => x.group === "trash") ? "和废纸篓" : ""}直接清空` : "", move ? `${move} 项移到废纸篓` : ""].filter(Boolean).join("，");
+  if (!await confirmBox(`清理 ${size}？`, `${parts}。${wipe.some(x => x.group === "trash") ? "清空废纸篓后找不回。" : ""}`, "清理")) return;
+  const r = await act(() => devApi("/api/fs/clean", {paths: items.map(x => x.path)}));
+  toast(r.failed.length ? `清出 ${bytes(r.freed)}，${r.failed.length} 项没清：${r.failed[0].error}` : `清出 ${bytes(r.freed)}`);
+  DEV.csel = new Set(); devClean();
+}
+function devCleanAgent(){
+  const mid = DEV.mid, r = DEV.scan.result, names = Object.fromEntries(DEV.scan.groups.map(g => [g.id, g.name]));
+  const lines = r.items.slice(0, 60).map(x => `- [${names[x.group]}] ${x.path}（${bytes(x.size)}${x.used ? `，上次使用 ${day(x.used)}` : ""}）`);
+  const text = `这是这台电脑的磁盘扫描结果，帮我看看哪些可以放心清理、哪些最好留着，说说理由：\n${lines.join("\n")}${r.items.length > 60 ? `\n（还有 ${r.items.length - 60} 项更小的没列）` : ""}\n`;
+  devTalk(mid, null, null, text);
 }
 const gs = {};
 function renderChatSettings(){

@@ -791,6 +791,14 @@ body{--doc-w:min(52vw,780px)}
 .pending .thumb.up img{opacity:.45}
 .pending .thumb button{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
 .pending .thumb button svg{width:12px;height:12px}
+.pending .thumb img,#thread .files img,#thread img.sentimg,#thread .answer img{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:80;background:rgba(15,18,24,.9);display:flex;overflow:auto;overscroll-behavior:contain}
+.lightbox img{margin:auto;max-width:94vw;max-height:92vh;object-fit:contain;border-radius:4px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.lightbox img.can{cursor:zoom-in}
+.lightbox img.full{max-width:none;max-height:none;cursor:zoom-out}
+.lightbox .close{position:fixed;top:14px;right:14px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center}
+.lightbox .close:hover{background:rgba(255,255,255,.26)}
+.lightbox .close svg{width:16px;height:16px}
 .files .shot img{display:block;max-width:240px;max-height:180px;border-radius:10px;border:1px solid var(--line)}
 .box.drag{border-color:var(--qing);background:var(--qing-soft)}
 .state-err{color:var(--bad)}
@@ -1042,8 +1050,27 @@ function pop(e, html, below){
   return p;
 }
 addEventListener("click", closePop);
+// 对话里的图片：点开在当前页面上看，不跳新标签页
+document.addEventListener("click", e => {
+  const img = e.target.closest?.(".pending .thumb img, #thread .files img, #thread img.sentimg, #thread .answer img");
+  if (!img || e.metaKey || e.ctrlKey) return;      // 按着 ⌘ 点照旧新标签打开
+  e.preventDefault(); e.stopPropagation();
+  showImage(img.currentSrc || img.src, img.alt);
+}, true);
+function showImage(src, alt){
+  document.querySelector(".lightbox")?.remove();
+  const lb = document.createElement("div"); lb.className = "lightbox";
+  lb.innerHTML = `<img alt="${esc(alt || "")}"><button class="close" aria-label="关闭" title="关闭">${ICON.x}</button>`;
+  const im = lb.querySelector("img");
+  im.onload = () => im.classList.toggle("can", im.naturalWidth > im.clientWidth + 1 || im.naturalHeight > im.clientHeight + 1);
+  im.src = src;
+  im.onclick = () => { if (im.classList.contains("full")) im.classList.remove("full"); else if (im.classList.contains("can")) im.classList.add("full"); };
+  lb.onclick = e => { if (e.target === lb || e.target.closest(".close")) lb.remove(); };
+  document.body.append(lb);
+}
 addEventListener("keydown", e => {   // 只关最上面那层
   if (e.key !== "Escape") return;
+  const lb = document.querySelector(".lightbox"); if (lb) return lb.remove();
   const top = document.querySelector(".pop") || [...document.querySelectorAll(".scrim")].pop();
   closePop();
   if (top && top.classList.contains("scrim")) top.remove();

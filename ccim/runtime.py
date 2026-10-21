@@ -164,28 +164,51 @@ def set_try(what):
         m = re.match(r"issue-(\d+)", branch)
         label = f"#{m.group(1)}" if m else branch
         _save_channel(**{"try": {"label": label, "src": path, "branch": branch}})
-    out = []
+    # 一律交给独立进程重启（#70）：在平台里的 Agent 执行这条命令时，停平台会连带结束这条命令，在这里重启就没人再把它启动了
     from . import daemon
-    for p in dev_projects():
-        if not daemon.running(p):
-            continue
-        ok, msg = safe_restart(p, notify=False)
-        out.append(msg)
-    if not out:
-        out.append("现在没有跑开发版的项目，下次启动时生效。")
+    paths = [p for p in dev_projects() if daemon.running(p)]
+    if not paths:
+        return label, ["现在没有跑开发版的项目，下次启动时生效。"]
+    inner = bool(os.environ.get("CCIM_PROCESS"))
+    base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去
+    started = registry.now()
+    paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
+    for i, p in enumerate(paths):
+        schedule_restart(p, delay=base + 3 * i, notify=False)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
+    names = "、".join(f"「{os.path.basename(p)}」" for p in paths)
+    if inner:
+        return label, [f"{names} {base} 秒后依次重启；新版本起不来会用稳定版顶上。"]
+    out, left = [], list(paths)
+    for _ in range(120):                      # 在终端里调用：等它们都重新连上再告诉结果
+        time.sleep(1)
+        for p in list(left):
+            st = registry.read_state(p)
+            if st.get("started", "") >= started and st.get("online") and daemon.running(p):
+                out.append(f"「{os.path.basename(p)}」已重启，运行的是{describe(st.get('python'))}{'（顶替中）' if st.get('fallback') else ''}。")
+                left.remove(p)
+        if not left:
+            break
+    out += [f"「{os.path.basename(p)}」还没起来，用 ccim show {os.path.basename(p)} 看看。" for p in left]
     return label, out
+
+
+def inside(path):
+    """这条命令是不是在 path 这个 ccim 进程里面跑的（比如平台里的 Agent 执行的）。"""
+    return os.environ.get("CCIM_PROCESS") == os.path.realpath(path)
 
 
 # ---------- 安全重启 ----------
 
-def schedule_restart(path, delay=15, target=None):
-    """另起一个脱离当前进程的进程去重启，立即返回。target：dev / stable / None（按项目设置）。"""
+def schedule_restart(path, delay=15, target=None, notify=True):
+    """另起一个脱离当前进程的进程去重启，立即返回。target：dev / stable / None（按项目设置）。
+    notify=False：不在飞书、微信里通知结果（用环境变量传，跑重启的稳定版旧了也不会因为不认识参数而失败）。"""
     py = stable_python() or dev_python() or sys.executable
     args = [py, "-P", "-m", "ccim.cli", "safe-restart-run", path, "--delay", str(delay)]
     if target:
         args += ["--target", target]
     log = open(os.path.join(registry.pdir(path), "restart.log"), "ab")
-    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/")
+    env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}))
+    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
 
 
 def safe_restart(path, delay=0, target=None, notify=True):

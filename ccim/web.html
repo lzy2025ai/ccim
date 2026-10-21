@@ -960,8 +960,8 @@ function group(ts){
   const d = new Date(ts.replace(" ", "T")), now = new Date();
   return d.toDateString() === now.toDateString() ? "今天" : "更早";
 }
-function modelList(base){   // [值, 名字, 说明, 具体型号]：和 Claude Code / Codex 自己的模型列表一致（当前那台电脑的）
-  const info = (S.machine_info || {})[ctxMachine || S.me] || {};
+function modelList(base, machine){   // [值, 名字, 说明, 具体型号]：和 Claude Code / Codex 自己的模型列表一致（当前那台电脑的）
+  const info = (S.machine_info || {})[machine || ctxMachine || S.me] || {};
   const got = ((info.models || S.models) || {})[base] || [];
   return got.length || base === "codex" ? got : CLAUDE_MODELS;
 }
@@ -1113,8 +1113,8 @@ function pickDD(id, v){
   document.querySelector(`#dd-${id} span`).textContent = (d.opts.find(o => o[0] === v) || [v, v])[1];
   d.onpick && d.onpick(v);
 }
-function modelOpts(base, followLabel, cur){
-  const list = modelList(base).slice();
+function modelOpts(base, followLabel, cur, machine){
+  const list = modelList(base, machine).slice();
   if (base === "codex"){
     const dm = (S.defaults.codex || [])[0];
     if (dm && !list.some(o => o[0] === dm)) list.unshift([dm, dm, ""]);
@@ -1641,7 +1641,7 @@ function pullMenu(e){
 }
 function quickAgentForChat(){
   const cid = detail.id;
-  quickAgent({title: "新建 Agent，拉进这个对话", done: async (id, name) => {
+  quickAgent({title: "新建 Agent，拉进这个对话", machine: ownerOf(cid) || ctxMachine, done: async (id, name) => {
     await act(() => api("/api/chat/members", {id: cid, add: [id]}));
     closeDialog(); await loadState(); showGroup = true; await reloadChat(); toast(`「${name}」已拉进来，@ 它就能让它回答`);
   }});
@@ -3296,30 +3296,49 @@ function addMemberMenu(e){
 }
 function quickAgent(opts){
   closePop();
-  opts = opts || {title: `新建 Agent，拉进「${proj.name}」`,
+  opts = opts || {title: `新建 Agent，拉进「${proj.name}」`, machine: ownerOf(proj.id),
     done: async (id, name) => { await act(() => api("/api/project/member", {id: proj.id, add: id}));
       closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`); }};
-  let base = "claude", model = "", effort = "";
-  const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model), model, v => model = v)}</div>
+  let base = "claude", model = "", effort = "", machine = opts.machine || S.me;   // 默认建在这个对话所在的电脑上（#86）
+  const hasCodex = () => (((S.machine_info || {})[machine] || {}).codex ?? S.codex);
+  const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model, machine), model, v => model = v)}</div>
       <label>默认思考深度</label><div>${dd("q-effort", effortOpts(base, "跟随全局设置"), effort, v => effort = v)}</div>`;
+  const bases = () => ["claude", "codex"].map(b => `<button class="${base === b ? "on" : ""}" data-b="${b}" ${b === "codex" && !hasCodex() ? "disabled" : ""}>${BASE[b]}</button>`).join("");
+  const machines = S.machines.filter(m => m.online || m.id === machine);
   dialog(opts.title, `<div class="form">
+      ${multi() ? `<label>在哪台电脑</label><div>${dd("q-machine", machines.map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), machine, v => {
+        if (v === machine) return;
+        machine = v; model = "";
+        if (base === "codex" && !hasCodex()) { base = "claude"; effort = ""; }
+        $("#q-dir").value = ""; $("#q-base").innerHTML = bases(); bindBase(); $("#q-picks").innerHTML = picks();
+      })}</div>` : ""}
       <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">
       <label for="q-role">角色说明</label><textarea id="q-role" class="textarea" placeholder="它负责什么、有什么要求"></textarea>
-      <label>底座</label><div class="seg" id="q-base"><button class="on" data-b="claude">Claude Code</button><button data-b="codex" ${S.codex ? "" : "disabled"}>Codex</button></div>
+      <label>底座</label><div class="seg" id="q-base">${bases()}</div>
       <div id="q-picks" class="sub">${picks()}</div>
+      <label for="q-dir">工作目录</label><div class="row"><input id="q-dir" class="input" style="flex:1" placeholder="不填就用它自己的工作区"><button class="btn" id="q-pick">${ICON.folder}选择…</button></div>
     </div>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="q-ok">新建并拉进来</button>`);
-  document.querySelectorAll("#q-base button").forEach(b => b.onclick = () => {
+  const bindBase = () => document.querySelectorAll("#q-base button").forEach(b => b.onclick = () => {
     if (base === b.dataset.b) return;
     base = b.dataset.b; model = effort = "";
     document.querySelectorAll("#q-base button").forEach(x => x.classList.toggle("on", x === b));
     $("#q-picks").innerHTML = picks();
   });
+  bindBase();
+  $("#q-pick").onclick = () => chooseFolder(p => { $("#q-dir").value = tilde(p, machine); }, machine);
   $("#q-name").focus();
   $("#q-ok").onclick = async () => {
     const name = $("#q-name").value.trim(); if (!name) { toast("先给它起个名字"); return; }
-    const {id} = await act(() => api("/api/agent/save", {fields: {name, role: $("#q-role").value, base, seal: autoSeal(name), avatar: freeAvatar(), model: model || null, effort: effort || null}}));
-    await opts.done(id, name);
+    const fields = {name, role: $("#q-role").value, base, seal: autoSeal(name), avatar: freeAvatar(), model: model || null, effort: effort || null,
+                    dir: $("#q-dir").value.trim() || null};   // ~ 由那台电脑自己展开
+    let r = await act(() => api("/api/agent/save", {fields}, machine));
+    if (r.confirm === "home") {            // 和 Agent 设置页一样：主目录先确认
+      if (!await confirmBox("用整个主目录当工作目录？", "它能读写主目录下的所有文件（桌面、文档、各个项目和配置）；找文件、搜内容会比较慢；在终端里从主目录开的对话也会算到它名下。只是写作、调研的话，工作目录留空更合适。", "仍然使用主目录")) return;
+      r = await act(() => api("/api/agent/save", {fields: {...fields, confirmed: true}}, machine));
+    }
+    await loadState();                     // 拉进来之前先认得它在哪台电脑
+    await opts.done(r.id, name);
   };
 }
 function whereTag(aid, home){   // 不在项目那台电脑上的 Agent：标上在哪

@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
-from . import docs, filesend
+from . import devices, docs, filesend
 from . import kb as kb_mod
 from . import board as board_mod
 from .channels.base import CardAction, Channel, Incoming
@@ -324,6 +324,7 @@ class Platform:
         self.projects = Projects(self)
         self.schedules = Schedules(self)
         self.mentions = Mentions(self)
+        self.cleaner = devices.Cleaner(registry.pdir(home))
 
     def handlers(self):
         return {"platform": self}
@@ -815,6 +816,10 @@ class Platform:
 
     def doc_versions(self, cid, path):
         """对话里这个文件的各版本：Agent 发的、用户上传的、用户在预览里改的。不在记录里的文件不给看。"""
+        if cid == devices.FS_CHAT:            # 设备管理里打开的：只有现在这一版（#100）
+            if not devices.allowed_file(path):
+                raise Problem("找不到这个文件。")
+            return [{"by": "me", "at": os.path.getmtime(path), "snap": None}]
         out = []
         for r in self.channel.logs.read(cid):
             if r.get("type") in ("file", "edit") and r.get("path") == path:
@@ -848,6 +853,8 @@ class Platform:
             docs.save(path, text, mtime)
         except docs.Problem as e:
             raise Problem(str(e))
+        if cid == devices.FS_CHAT:
+            return self.doc_view(cid, path)
         rec = {"type": "edit", "path": path, "name": os.path.basename(path)}
         snap = docs.snapshot(self.channel.logs.folder, cid, path)
         if snap:
@@ -1270,7 +1277,7 @@ def _handler(pf):
                 return
             try:
                 self._send(200, fn() or {})
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, ValueError) as e:
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -1286,7 +1293,7 @@ def _handler(pf):
                 return False
             path = urlparse(self.path).path
             if path == "/api/file" and self.command == "GET":   # 链接、<img>、<video> 带不了 X-CCIM 头
-                if not self._host_ok():
+                if not self._host_ok() or not self._fs_ok():
                     self._send(403, b"forbidden", "text/plain")
                 else:
                     filesend.serve_peer(self, pf.peers, mid)
@@ -1354,6 +1361,9 @@ def _handler(pf):
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
+                "/api/fs/info": lambda: devices.overview(registry.pdir(pf.home)),
+                "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
+                "/api/fs/scan": lambda: pf.cleaner.view(),
             }
             if u.path in routes:
                 return self._api(routes[u.path])
@@ -1432,6 +1442,12 @@ def _handler(pf):
                 "/api/global": lambda: save_global(body),
                 "/api/pick": lambda: {"path": console.pick_folder()},
                 "/api/reveal": lambda: console.reveal(b("path")),
+                "/api/fs/mkdir": lambda: devices.mkdir(registry.pdir(pf.home), b("path"), b("name")),
+                "/api/fs/rename": lambda: devices.rename(registry.pdir(pf.home), b("path"), b("name")),
+                "/api/fs/trash": lambda: devices.trash(registry.pdir(pf.home), b("paths") or []),
+                "/api/fs/put": lambda: devices.put(registry.pdir(pf.home), b("key"), b("path"), b("name")),
+                "/api/fs/scan": lambda: pf.cleaner.start(),
+                "/api/fs/clean": lambda: pf.cleaner.clean(b("paths") or []),
             }
             if u.path in routes:
                 return self._api(routes[u.path])
@@ -1461,14 +1477,23 @@ def _handler(pf):
             return {"key": key, "name": name, "size": n}
 
         def _file_ok(self, chat, path):
-            """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。"""
+            """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。设备管理里的按它的范围（#100）。"""
+            if chat == devices.FS_CHAT:
+                return devices.allowed_file(path)
             return os.path.isfile(path) and any(
                 r.get("type") == "file" and r.get("path") == path
                 or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
                 for r in pf.channel.logs.read(chat))
 
+        def _fs_ok(self):
+            """设备管理里的文件（chat=@fs）能打开主目录里的任何文件：只给这个网页自己（别的网站嵌进来的不给）。"""
+            q = parse_qs(urlparse(self.path).query)
+            if (q.get("chat") or [""])[0] != devices.FS_CHAT or self.headers.get("X-From-Peer"):
+                return True
+            return self.headers.get("Sec-Fetch-Site") in (None, "same-origin", "none")
+
         def _file(self, chat, path):
-            if not self._host_ok():
+            if not self._host_ok() or not self._fs_ok():
                 return self._send(403, b"forbidden", "text/plain")
             if not self._file_ok(chat, path):
                 return self._send(404, b"not found", "text/plain")

@@ -114,6 +114,12 @@
   Markdown 用 `docMd`（比聊天的 md() 全，每块带 data-l 原文行号）。保存（/api/doc/save）带打开时的 mtime，文件被改过就拒绝；
   记一条 type=edit，对话 meta 的 doc_edits 在下一次发消息时拼在前面告诉助手。Word 自己转（`docx_html`），只能看
 - `ccim/filesend.py`：对话里的文件发给浏览器（#76）。本机的边读边发，支持 Range（206 / 416）和 ETag（304）。别的电脑上的（网页的 /api/file 带 machine，平台 `_remote` 和服务器 hubserver 都走 `serve_peer`）按段取 /api/file/part（一段 4 MB，回应是一行 JSON 文件信息 + 这一段），经现有转交通道（签名照旧），收到一段写一段、预取两段，所以没有大小上限；中途文件被改（ETag 变了）就断开连接。那边是旧版本（part 返回 404）时退回整个文件转发。链接、<img>、<video> 带不了 X-CCIM 头，所以 /api/file 在 `_remote` 里只校验 Host
+- `ccim/devices.py`：设备管理（#100）。「设置 → 电脑」点一台进入 #/settings/machines/<编号>/<概况 | files | clean>，接口 /api/fs/*，
+  按 X-Machine 转到那台电脑。范围是那台的主目录（realpath 后比较）；主目录本身、第一层的系统文件夹（KEEP）和 ~/.ccim 不能删、不能改名
+  （网页上传留下的 uploads 除外）；删除 = 移到 ~/.Trash。预览、下载走 /api/file 和 /api/doc，chat 传 "@fs"（FS_CHAT），
+  `_file_ok` / `doc_versions` 按设备范围放行，只认本网页发起的请求（Sec-Fetch-Site）。磁盘清理 `Cleaner`：后台线程扫描（缓存、很久没动的项目依赖、
+  大文件、下载文件夹旧文件、废纸篓、旧上传），结果存 scan.json，清理只认结果里的路径；缓存和废纸篓清空内容，其余移到废纸篓。
+  操作记在 ops.jsonl，概况页列最近的。「让 Agent 处理」打开新对话（工作目录是这个文件夹）或某个 Agent 的新对话，要处理的路径先写进输入框（prefill / draftText）
 - `ccim/upgrade.py`：版本和网页上升级（#37）。`info` 认出是开发版（代码目录，git 提交）、稳定版（~/.ccim/stable 目录名）、
   发布版（uv tool 装的，direct_url.json 里的提交）还是服务器（~/ccim-hub/deployed.txt）；发布版和 GitHub 上最新提交比（后台问，一小时一次）。
   state 里的 ccim → machine_info 带到网页。升级由独立进程（`python -m ccim.upgrade run`）做：uv tool upgrade → 用新装的 python 问新提交 →

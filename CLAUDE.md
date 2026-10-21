@@ -235,6 +235,8 @@
   仓库 Secrets：DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS、DEPLOY_HOST（用户@地址；不能放仓库变量，变量会原样打印在公开的运行日志里）。只有 lzy2025ai/ccim 会部署，fork 不会
 - 用 gh 操作前先 `gh auth switch --user lzy2025ai`，做完切回 `gh auth switch --user flowstart`（推送同理）。
 - 提交时只 `git add` 自己改的文件，不要 `git add -A`。
+- 重启一律交给独立进程（#70）：`ccim try` 用 `schedule_restart`；ccim 进程启动时设环境变量 CCIM_PROCESS，在它里面（比如平台里的 Agent）
+  `ccim restart` 它自己会自动改成独立进程。直接在当前进程里先停再启动，停的时候会把执行命令的 Agent 一起结束，启动就没人做了。
 - 实现：`runtime.set_try` 把要试的工作目录记在 ~/.ccim/stable/channel.json 的 try，`launch_env` 在启动开发版进程时把它放到 PYTHONPATH
   最前面（daemon 的后台启动和 LaunchAgent 都带上）；`build_stable` 按 origin/main 那次提交装。
 

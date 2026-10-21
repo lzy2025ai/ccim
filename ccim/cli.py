@@ -100,6 +100,7 @@ def run(path, mode):
     for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):   # 在 Claude Code 的终端里启动时，别让子进程以为自己是嵌套会话
         os.environ.pop(k, None)
     os.chdir(path)
+    os.environ["CCIM_PROCESS"] = os.path.realpath(path)   # 子进程（Agent 跑的命令）知道自己在哪个 ccim 进程里（#70）
     asyncio.run(_serve(path, entry, secret, mode))
 
 
@@ -302,7 +303,7 @@ def cmd_restart(args):
     _apply_agent(path, args.agent)
     if entry.get("kind") != "weixin":
         _apply_settings(path, args)
-    if args.safe:
+    if args.safe or runtime.inside(path):     # 在它自己里面（比如平台里的 Agent）重启它：停掉它会连带停掉这条命令，交给独立进程（#70）
         runtime.schedule_restart(path, delay=args.delay)
         print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，"
               f"结果发到{NAMES[entry['channel']]}。")

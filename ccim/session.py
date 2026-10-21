@@ -462,6 +462,9 @@ class Chat:
         finally:
             pub.cancel()
             self.b.save(self.chat_id, busy=False, asked=None, since=None, steps=[])
+            idle = getattr(self.b.channel, "idle", None)
+            if idle:                          # 网页：回答比「这一轮结束」先到，列表刷新早了会一直显示执行中（#98）
+                idle(self.chat_id)
             for fn in (self.turn.on_end if self.turn else []):
                 fn()
 

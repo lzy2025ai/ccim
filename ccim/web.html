@@ -1164,8 +1164,10 @@ const fileUrl = (chat, path) => `/api/file?chat=${encodeURIComponent(chat)}&path
 
 function connectEvents(){
   const es = new EventSource("/api/events");
+  let lost = false;
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
+    if (ev.type === "idle") { refreshSoon(); return; }   // 一轮结束的状态记下了（#98）
     const rec = {...ev};                  // 记录本身：外层的 chat 是「哪个对话的推送」，不是记录的字段（@ 回答自己的 chat 是它的子对话）
     delete rec.chat; delete rec.rec_chat;
     if (ev.rec_chat) rec.chat = ev.rec_chat;
@@ -1205,7 +1207,13 @@ function connectEvents(){
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
     else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
   };
-  es.onerror = () => {};   // 浏览器会自己重连
+  es.onerror = () => { lost = true; };   // 浏览器会自己重连
+  es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
+    if (!lost) return;
+    lost = false;
+    refreshSoon();
+    if (detail && !starting && !(detail.log || []).some(r => r.sending)) reloadChat().catch(() => {});
+  };
 }
 
 // ================= 路由 =================

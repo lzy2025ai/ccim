@@ -671,6 +671,56 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
   .frow .sz,.fhead .sz{width:60px}
   .frow .nm{min-width:80px}
 }
+/* 平台 Skill（#101） */
+.ccard.off{opacity:.6}
+.ccard.fresh{animation:skfresh 2.4s ease-out}
+@keyframes skfresh{0%,40%{box-shadow:0 0 0 3px var(--qing-soft),0 0 0 4px var(--qing)}100%{box-shadow:none}}
+.sk-page{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden}
+.sk-head{padding:18px 28px 14px;border-bottom:1px solid var(--line)}
+.sk-back{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:8px}
+.sk-back:hover{color:var(--ink)} .sk-back svg{width:14px;height:14px}
+.sk-title{display:flex;gap:16px;align-items:flex-start}
+.sk-title .grow{flex:1;min-width:0}
+.sk-title h2{font:600 22px/1.3 var(--song);margin:0;display:flex;align-items:center;gap:8px}
+.sk-desc{color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:820px}
+.sk-acts{display:flex;gap:8px;flex:none}
+.sk-body{flex:1;display:grid;grid-template-columns:260px 1fr;min-height:0}
+.sk-tree{border-right:1px solid var(--line);overflow:auto;padding:8px 6px;background:var(--paper)}
+.sk-node{display:flex;align-items:center;gap:6px;width:100%;text-align:left;padding:5px 8px 5px calc(8px + var(--d) * 14px);border-radius:6px;font-size:13px;color:var(--ink-2)}
+.sk-node:hover{background:var(--sunk)} .sk-node.on{background:var(--qing-soft);color:var(--qing);font-weight:500}
+.sk-node svg{width:14px;height:14px;flex:none;color:var(--muted)}
+.sk-node span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sk-view{display:flex;flex-direction:column;min-width:0;min-height:0}
+.sk-vtop{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);min-height:46px}
+.sk-path{flex:1;min-width:0;font:12.5px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sk-path .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-left:6px}
+.sk-vbody{flex:1;overflow:auto;min-height:0}
+.sk-md{padding:20px 28px;max-width:860px}
+.sk-fm{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 14px;margin:0 0 18px}
+.sk-fm dt{color:var(--muted)} .sk-fm dd{margin:0;white-space:pre-wrap}
+.sk-img{padding:20px} .sk-img img{max-width:100%;border-radius:6px;border:1px solid var(--line)}
+.sk-ta{width:100%;height:100%;min-height:60vh;border:0;outline:0;resize:none;padding:16px 20px;font:13px/1.65 var(--mono);background:var(--panel);color:var(--ink)}
+.sk-code{margin:0;padding:14px 0;font:12.5px/1.65 var(--mono);color:#24292F;background:var(--panel);counter-reset:none;white-space:pre;tab-size:4}
+.sk-code .ln{display:inline-block;width:3.2em;padding-right:1em;text-align:right;color:var(--faint);user-select:none}
+.hl-c{color:#6E7781;font-style:italic} .hl-s{color:#0A3069} .hl-n{color:#0550AE} .hl-w{color:#CF222E} .hl-k{color:#8250DF}
+@media (max-width:760px){
+  .sk-head{padding:12px 14px}
+  .sk-title{flex-wrap:wrap}
+  .sk-body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .sk-tree{max-height:32vh;border-right:0;border-bottom:1px solid var(--line)}
+}
+.skmeta{font-size:12.5px;color:var(--faint)}
+.skill-doc{max-width:760px}
+.skfiles{display:flex;flex-wrap:wrap;gap:6px}
+.skfiles code{font-size:12px;background:var(--sunk);padding:2px 7px;border-radius:5px}
+.skdrop{border:1.5px dashed var(--line-strong);border-radius:10px;padding:28px;text-align:center;color:var(--muted)}
+.skdrop.drag{border-color:var(--qing);background:var(--qing-soft)}
+.sklocal{max-height:50vh;overflow:auto}
+.sklocal .mem .sub{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.skpick{display:flex;flex-wrap:wrap;gap:6px}
+.skchip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;border:1px solid var(--line-strong);font-size:12.5px;color:var(--muted);background:var(--panel)}
+.skchip.on{border-color:var(--qing);color:var(--qing);background:var(--qing-soft)}
+.skchip svg{width:12px;height:12px}
 .agent-page{overflow:auto;flex:1}
 .agent-top{display:flex;gap:18px;align-items:center;padding:26px 32px 20px;border-bottom:1px solid var(--line)}
 .agent-top h2{font:600 24px/1.25 var(--song);margin:0}
@@ -926,6 +976,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
@@ -1310,6 +1361,7 @@ function connectEvents(){
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
     if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
+    if (ev.type === "skills") { skillsCache = null; if (current.view === "skills") { clearTimeout(window._skt); window._skt = setTimeout(route, 400); } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
     else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
@@ -1351,7 +1403,8 @@ function route(){
   if (current.view === "chats" && current.id === "new" && draft.machine) ctxMachine = draft.machine;
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
-  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb" || current.view === "board") && (!current.id || current.id === "new"));
+  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb" || current.view === "board") && (!current.id || current.id === "new")
+    || current.view === "skills");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
@@ -1376,6 +1429,7 @@ function route(){
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "board") renderBoard();
+  else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
@@ -1396,7 +1450,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board") return;
+  if (current.view === "board" || current.view === "skills") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -2592,6 +2646,255 @@ async function renderBoard(quick){
   }
 }
 
+// ================= 平台 Skill（#101） =================
+let skillsCache = null, skillOpen = null;
+const skApi = (path, body) => api(path, body, S.me);       // 每台电脑都有一份完整的，读写本机这份，自动同步到其他电脑
+async function skillList(){ if (!skillsCache) skillsCache = (await skApi("/api/skills")).skills; return skillsCache; }
+function skillSrc(s){
+  const x = s.source || {};
+  return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
+}
+function skillMark(big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:var(--dai)">${ICON.star}</span>`; }
+async function renderSkills(){
+  if (current.id) return openSkill(current.id);
+  let list = [];
+  try { list = await skillList(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开 Skill</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (current.view !== "skills" || current.id) return;
+  const fresh = skFresh; skFresh = [];
+  const body = list.length ? `<div class="cgrid">${list.map(s => `<a class="ccard ${s.disabled ? "off" : ""} ${fresh.includes(s.name) ? "fresh" : ""}" href="#/skills/${encodeURIComponent(s.name)}">
+      <div class="top">${skillMark()}<div class="t"><div class="nm">${esc(s.name)}</div></div>${s.disabled ? `<span class="tag">已停用</span>` : ""}</div>
+      <div class="role">${esc(s.desc || "")}</div>
+      <div class="foot"><span class="grow" title="${esc(skillSrc(s))}">${esc(skillSrc(s))}</span><span>${when(stamp(s.updated))}</span></div></a>`).join("")}
+      <button class="ccard add" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`
+    : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。</p>
+      <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`;
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
+      <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>
+    <div class="ov-sub">${syncLine()}</div><div class="ov-body">${body}</div></div>`;
+}
+let SKV = null;    // 打开的 Skill：{name, s（详情）, open（展开的文件夹）, file（选中的文件路径）, f（文件内容）, mode: view / src / edit, draft, dirty}
+async function openSkill(name){
+  let s;
+  try { s = skillOpen = await skApi(`/api/skills/detail?name=${encodeURIComponent(name)}`); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个 Skill</h2><p>${esc(e.message)}</p><a class="btn" href="#/skills">返回 Skill 列表</a></div>`; return; }
+  if (current.view !== "skills" || current.id !== name) return;
+  if (!SKV || SKV.name !== name) SKV = {name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
+  SKV.s = s;
+  if (!s.files.includes(SKV.file)) SKV.file = "SKILL.md";
+  const offFor = S.agents.filter(a => (a.skills_off || []).includes(name));
+  $("#main").innerHTML = `<div class="sk-page">
+    <div class="sk-head">
+      <a class="sk-back" href="#/skills">${ICON.left}Skill 列表</a>
+      <div class="sk-title"><div class="grow"><h2>${esc(s.name)}${s.disabled ? `<span class="tag">已停用</span>` : ""}</h2>
+          <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
+          <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div></div>
+        <div class="sk-acts">${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
+          <button class="btn" onclick="toggleSkill(${q(name)},${s.disabled ? "true" : "false"})">${s.disabled ? "启用" : "停用"}</button>
+          <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button></div></div></div>
+    <div class="sk-body"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div></div>`;
+  drawSkTree();
+  skOpenFile(SKV.file, true);
+}
+function skTreeOf(files){
+  const root = {dirs: {}, files: []};
+  for (const f of files) {
+    const parts = f.split("/"); let n = root;
+    parts.slice(0, -1).forEach((p, i) => { n = n.dirs[p] = n.dirs[p] || {path: parts.slice(0, i + 1).join("/"), dirs: {}, files: []}; });
+    n.files.push(f);
+  }
+  return root;
+}
+function drawSkTree(){
+  const el = $("#sk-tree"); if (!el) return;
+  const walk = (n, depth) => Object.keys(n.dirs).sort().map(k => {
+    const d = n.dirs[k], open = SKV.open.has(d.path);
+    return `<button class="sk-node dir" style="--d:${depth}" aria-expanded="${open}" onclick="skToggleDir(${q(d.path)})">${open ? ICON.down : ICON.chev}${ICON.folder}<span>${esc(k)}</span></button>`
+      + (open ? walk(d, depth + 1) : "");
+  }).join("") + n.files.map(f => `<button class="sk-node ${SKV.file === f ? "on" : ""}" style="--d:${depth}" onclick="skOpenFile(${q(f)})">${ICON.file}<span>${esc(f.split("/").pop())}</span></button>`).join("");
+  el.innerHTML = walk(skTreeOf(SKV.s.files), 0);
+}
+function skToggleDir(p){ SKV.open.has(p) ? SKV.open.delete(p) : SKV.open.add(p); drawSkTree(); }
+async function skOpenFile(path, first){
+  if (!first && SKV.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  SKV.file = path; SKV.f = null; SKV.dirty = false;
+  path.split("/").slice(0, -1).forEach((_, i, a) => SKV.open.add(a.slice(0, i + 1).join("/")));   // 打开文件所在的文件夹
+  drawSkTree(); drawSkView();
+  let f;
+  try { f = await skApi(`/api/skills/file?name=${encodeURIComponent(SKV.name)}&path=${encodeURIComponent(path)}`); }
+  catch (e) { if (SKV.file === path) $("#sk-view").innerHTML = `<p class="muted" style="padding:20px">${esc(e.message)}</p>`; return; }
+  if (!SKV || SKV.file !== path) return;
+  SKV.f = f; SKV.draft = f.text || "";
+  SKV.mode = SKV.mode === "edit" ? "view" : isMdFile(path) ? (SKV.mode === "src" ? "src" : "view") : "view";
+  drawSkView();
+}
+const isMdFile = p => /\.(md|markdown)$/i.test(p);
+function drawSkView(){
+  const el = $("#sk-view"); if (!el) return;
+  const f = SKV.f, path = SKV.file;
+  const md = isMdFile(path), text = f && typeof f.text === "string";
+  const tools = !text ? "" : SKV.mode === "edit"
+    ? `<button class="btn" onclick="skCancel()">取消</button><button class="btn primary" onclick="skSave()">保存</button>`
+    : `${md ? `<span class="seg mini">${[["view", "预览"], ["src", "源码"]].map(([k, n]) => `<button class="${SKV.mode === k ? "on" : ""}" onclick="SKV.mode='${k}';drawSkView()">${n}</button>`).join("")}</span>` : ""}
+       <button class="btn" onclick="SKV.mode='edit';SKV.draft=SKV.f.text;drawSkView()">编辑</button>`;
+  let body;
+  if (!f) body = `<div class="doc-loading">…</div>`;
+  else if (f.image) body = `<div class="sk-img"><img src="${f.image}" alt="${esc(path)}"></div>`;
+  else if (!text) body = `<p class="muted" style="padding:20px">这个文件不能在这里预览（${bytes(f.size)}）。</p>`;
+  else if (SKV.mode === "edit") body = `<textarea id="sk-ta" class="sk-ta" spellcheck="false">${esc(SKV.draft)}</textarea>`;
+  else if (md && SKV.mode === "view") body = `<article class="doc-md sk-md" onclick="skLink(event)">${skFront(f.text)}${docMd(f.text.replace(/^\s*---\n[\s\S]*?\n---\n?/, ""))}</article>`;
+  else body = codeView(f.text, md ? "md" : path.split(".").pop().toLowerCase());
+  el.innerHTML = `<div class="sk-vtop"><span class="sk-path" title="${esc(path)}">${esc(path)}${SKV.dirty ? `<span class="dot" title="没保存"></span>` : ""}</span><span class="row">${tools}</span></div>
+    <div class="sk-vbody">${body}</div>`;
+  const ta = $("#sk-ta");
+  if (ta) { ta.oninput = () => { SKV.draft = ta.value; if (!SKV.dirty) { SKV.dirty = true; drawSkView(); $("#sk-ta").focus(); } }; ta.onkeydown = e => { if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); skSave(); } }; }
+}
+function skFront(text){   // SKILL.md 开头的名字、说明，预览里显示成一个小表
+  const m = /^\s*---\n([\s\S]*?)\n---/.exec(text || ""); if (!m) return "";
+  const rows = [];
+  for (const l of m[1].split("\n")) {
+    const r = /^([\w-]+):\s*(.*)$/.exec(l);
+    if (r) rows.push([r[1], r[2].replace(/^["']|["']$/g, "")]);
+    else if (rows.length && l.trim()) rows[rows.length - 1][1] += (rows[rows.length - 1][1] ? "\n" : "") + l.trim();   // 下一层的内容接在上一项后面
+  }
+  return rows.length ? `<dl class="sk-fm">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
+}
+function skLink(e){   // 预览里点 Skill 里的相对链接：在左边打开那个文件
+  const a = e.target.closest("a"); if (!a) return;
+  const href = a.getAttribute("href") || "";
+  if (/^(https?:|mailto:|#)/i.test(href)) return;
+  e.preventDefault();
+  const base = SKV.file.split("/").slice(0, -1);
+  for (const p of decodeURI(href).split("#")[0].split("/")) { if (p === "..") base.pop(); else if (p && p !== ".") base.push(p); }
+  const t = base.join("/");
+  if (SKV.s.files.includes(t)) skOpenFile(t); else toast("这个 Skill 里没有这个文件");
+}
+async function skSave(){
+  const f = await act(() => skApi("/api/skills/file/save", {name: SKV.name, path: SKV.file, text: SKV.draft, mtime: SKV.f.mtime}), "已保存");
+  SKV.f = f; SKV.dirty = false; SKV.mode = "view"; skillsCache = null; drawSkView();
+}
+async function skCancel(){
+  if (SKV.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，取消就丢掉了。", "丢掉")) return;
+  SKV.dirty = false; SKV.mode = "view"; drawSkView();
+}
+// ---- 代码高亮：常见语言的注释、字符串、关键字、数字（不求完整，看着清楚就行） ----
+const HL_KW = {
+  js: "async await break case catch class const continue default delete do else export extends false finally for from function if import in instanceof let new null of return static super switch this throw true try typeof undefined var void while yield",
+  py: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return self True try while with yield",
+  sh: "if then else elif fi for in do done while until case esac function return local export echo exit set source",
+  go: "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false",
+  rs: "as async await break const continue crate else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while",
+};
+const HL_ALIAS = {mjs: "js", cjs: "js", ts: "js", tsx: "js", jsx: "js", json: "json", yaml: "yaml", yml: "yaml", toml: "yaml", bash: "sh", zsh: "sh", rb: "py", go: "go", rs: "rs", java: "js", c: "js", h: "js", cpp: "js", css: "css"};
+function hlCode(text, ext){
+  const lang = HL_ALIAS[ext] || ext;
+  const hash = ["py", "sh", "yaml", "md"].includes(lang), slash = ["js", "go", "rs", "css", "json"].includes(lang);
+  const kws = new Set((HL_KW[lang] || "").split(" ").filter(Boolean));
+  const parts = [hash ? "#[^\\n]*" : null, slash ? "\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/" : null,
+    lang === "py" ? '"""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'' : null,
+    "\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*'" + (lang === "js" ? "|`(?:\\\\.|[^`\\\\])*`" : ""),
+    "\\b\\d+(?:\\.\\d+)?\\b", "[A-Za-z_$][\\w$]*"].filter(Boolean);
+  const re = new RegExp(parts.join("|"), "g");
+  let out = "", last = 0, m;
+  while ((m = re.exec(text))) {
+    const t = m[0];
+    out += esc(text.slice(last, m.index));
+    const cls = /^(#|\/\/|\/\*)/.test(t) && (hash || slash) ? "c" : /^["'`]/.test(t) ? (/^\s*:/.test(text.slice(re.lastIndex)) && ["json", "yaml"].includes(lang) ? "k" : "s")
+      : /^\d/.test(t) ? "n" : kws.has(t) ? "w" : lang === "yaml" && /^\s*:/.test(text.slice(re.lastIndex)) && /(^|\n)\s*(- )?$/.test(text.slice(0, m.index)) ? "k" : "";
+    out += cls ? `<span class="hl-${cls}">${esc(t)}</span>` : esc(t);
+    last = re.lastIndex;
+  }
+  return out + esc(text.slice(last));
+}
+function codeView(text, ext){
+  const lines = hlCode(text, ext).split("\n");
+  return `<pre class="sk-code"><code>${lines.map((l, i) => `<span class="ln">${i + 1}</span>${l}`).join("\n")}</code></pre>`;
+}
+async function toggleSkill(name, on){
+  await act(() => skApi("/api/skills/toggle", {name, on}), on ? "已启用" : "已停用");
+  skillsCache = null; openSkill(name);
+}
+async function updateSkill(name){
+  await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
+  skillsCache = null; openSkill(name);
+}
+async function deleteSkill(name){
+  if (!await confirmBox(`删除「${name}」？`, "所有电脑上都删掉，Agent 以后的对话里就用不到它了。各台电脑本地自己装的不受影响。", "删除")) return;
+  await act(() => skApi("/api/skills/delete", {name}), "已删除"); skillsCache = null; location.hash = "#/skills";
+}
+let skTab = "github";
+function installSkill(tab){
+  skTab = tab || skTab;
+  const tabs = [["github", "GitHub 地址"], ["upload", "上传文件"], ["local", "从电脑导入"]];
+  dialog("安装 Skill", `<div class="seg" style="margin-bottom:14px">${tabs.map(([k, n]) => `<button class="${skTab === k ? "on" : ""}" aria-pressed="${skTab === k}" onclick="installSkill('${k}')">${n}</button>`).join("")}</div>
+    <div id="sk-body"></div>`, "");
+  const b = $("#sk-body");
+  if (skTab === "github") {
+    b.innerHTML = `<input id="sk-url" class="input" style="width:100%" placeholder="https://github.com/用户/仓库/tree/main/skills/某个 Skill">
+      <p class="muted" style="font-size:12.5px">仓库地址会把里面所有的 Skill 都装上；只要其中一个，贴那个文件夹的地址。</p>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" id="sk-go">安装</button></div>`;
+    const go = async () => {
+      const url = $("#sk-url").value.trim(); if (!url) return $("#sk-url").focus();
+      const r = await act(() => skApi("/api/skills/install", {url}));
+      skillDone(r.names);
+    };
+    $("#sk-go").onclick = go; $("#sk-url").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) go(); }; $("#sk-url").focus();
+  } else if (skTab === "upload") {
+    b.innerHTML = `<div class="skdrop" id="sk-drop"><p>把 zip、.skill 压缩包或 SKILL.md 拖到这里</p><button class="btn" onclick="$('#sk-file').click()">选择文件</button>
+      <input type="file" id="sk-file" hidden accept=".zip,.skill,.gz,.tgz,.md" onchange="uploadSkill(this.files[0]);this.value=''"></div>`;
+    const d = $("#sk-drop");
+    d.addEventListener("dragover", e => { e.preventDefault(); d.classList.add("drag"); });
+    d.addEventListener("dragleave", () => d.classList.remove("drag"));
+    d.addEventListener("drop", e => { e.preventDefault(); d.classList.remove("drag"); if (e.dataTransfer.files[0]) uploadSkill(e.dataTransfer.files[0]); });
+  } else {
+    const ms = (S.machines || []).filter(m => m.online);
+    window._skFrom = window._skFrom && ms.some(m => m.id === window._skFrom) ? window._skFrom : S.me;
+    b.innerHTML = `${ms.length > 1 ? `<div style="margin-bottom:10px">${dd("sk-machine", ms.map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), window._skFrom, v => { window._skFrom = v; installSkill("local"); })}</div>` : ""}
+      <div id="sk-local"><div class="doc-loading">…</div></div>`;
+    loadLocalSkills(window._skFrom);
+  }
+}
+async function loadLocalSkills(mid){
+  let r;
+  try { r = await api("/api/skills/local", undefined, mid); } catch (e) { $("#sk-local").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const el = $("#sk-local"); if (!el) return;
+  el.innerHTML = r.skills.length ? `<div class="sklocal">${r.skills.map(s => `<div class="mem"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(s.name)}</span><span class="sub">${esc(s.desc)}</span></span>
+      ${s.installed ? `<span class="muted" style="font-size:12.5px">已经装了</span><button class="btn" onclick="importSkill(${q(mid)},${q(s.name)})">重新导入</button>` : `<button class="btn primary" onclick="importSkill(${q(mid)},${q(s.name)})">导入</button>`}</div>`).join("")}</div>`
+    : `<p class="muted">这台电脑上还没有自己装的 Skill。</p>`;
+}
+async function importSkill(mid, name){
+  const r = await act(() => api("/api/skills/install", {local: name}, mid));   // 在那台电脑上装进平台，再同步到其他电脑
+  skillDone(r.names);
+}
+async function uploadSkill(file){
+  if (!file) return;
+  let d;
+  try {
+    const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(file.name), ...remoteHeader(S.me)}, body: file});
+    d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
+  } catch (e) { return toast(e.message); }
+  const r = await act(() => skApi("/api/skills/install", {key: d.key, name: file.name}));
+  skillDone(r.names);
+}
+let skFresh = [];   // 刚装好的：列表里闪一下
+function skillDone(names){
+  closeDialog(); skillsCache = null; skFresh = names;
+  toast(names.length > 1 ? `装好了 ${names.length} 个：${names.join("、")}` : `装好了「${names[0]}」`);
+  if (location.hash !== "#/skills") location.hash = "#/skills"; else route();
+}
+function agentSkills(a){
+  if (!skillsCache) { skillList().then(() => { if (current.view === "agents" && current.id === a.id && current.sub === "settings") renderAgent(a.id); }).catch(() => {}); return "…"; }
+  const on = skillsCache.filter(s => !s.disabled && !(a.skills_off || []).includes(s.name));
+  return on.length ? esc(on.map(s => s.name).join("、")) : "没有";
+}
+function skillRows(){   // Agent 设置里：挂哪些平台 Skill
+  if (!skillsCache) { skillList().then(() => { if (document.querySelector("#f-skills")) redrawForm(); }).catch(() => {}); return `<div id="f-skills" class="muted">…</div>`; }
+  const on = skillsCache.filter(s => !s.disabled);
+  if (!on.length) return `<div id="f-skills" class="help" style="margin:0">还没有装平台 Skill，在左边「Skill」里安装。</div>`;
+  const off = new Set(fd.skills_off || []);
+  return `<div id="f-skills" class="skpick">${on.map(s => `<button class="skchip ${off.has(s.name) ? "" : "on"}" role="checkbox" aria-checked="${!off.has(s.name)}" title="${esc(s.desc || "")}"
+      onclick="fd.skills_off=${off.has(s.name) ? `(fd.skills_off||[]).filter(x=>x!==${q(s.name)})` : `[...(fd.skills_off||[]),${q(s.name)}]`};redrawForm()">${off.has(s.name) ? "" : ICON.check}${esc(s.name)}</button>`).join("")}</div>`;
+}
+
 // ================= 知识库（#27） =================
 let kbCache = null, kbOpen = null, kbFilter = "";
 const KB_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", lu: "var(--lu)", zhu: "var(--zhu)", dai: "var(--dai)", huang: "var(--huang)"};
@@ -2970,7 +3273,7 @@ async function renderAgent(id){
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
         ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
       </div>
-      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd>` : ""}</dl></div>
+      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd><dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
     </div>`}</div>`;
 }
 function channelHtml(a, k){
@@ -3046,7 +3349,8 @@ function formHtml(a){
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
     ${(fd.base || "claude") === "claude" ? `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
-      <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>` : ""}
+      <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>
+      <label>平台 Skill</label><div>${skillRows()}</div>` : ""}
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
     <span></span><div class="row" style="margin-top:6px">
@@ -3072,7 +3376,8 @@ function redrawForm(){ const keep = {...fd}; const pane = document.querySelector
 async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
   const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, avatar: fd.avatar || null, base: fd.base || "claude",
-                  model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null, chrome: (fd.base || "claude") === "claude" && !!fd.chrome};
+                  model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null, chrome: (fd.base || "claude") === "claude" && !!fd.chrome,
+                  skills_off: fd.skills_off || []};
   const where = id ? ownerOf(id) || ctxMachine : fd.machine;
   let r = await act(() => api("/api/agent/save", {id, fields}, where));
   if (r.confirm === "home") {            // 工作目录是用户主目录：说明影响，确认后再存

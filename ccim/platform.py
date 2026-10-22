@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from . import agents, registry
 from . import devices, docs, filesend
 from . import kb as kb_mod
+from . import skills as skills_mod
 from . import board as board_mod
 from .channels.base import CardAction, Channel, Incoming
 
@@ -360,28 +361,29 @@ class Platform:
     # ----- 知识库（#27） -----
 
     def _kb_sync_loop(self):
-        """问在线的其他电脑要知识库清单，比自己新的拉过来。每 30 秒一次，有改动时马上一次。"""
+        """问在线的其他电脑要知识库、平台 Skill（#101）的清单，比自己新的拉过来。每 30 秒一次，有改动时马上一次。"""
         from . import kb
         time.sleep(15)
         while True:
             for m in self.peers.machines():
                 if m["me"] or not m.get("online"):
                     continue
-                try:
-                    st, _, data = self.peers.forward(m["id"], "GET", "/api/kb/manifest", b"", {})
-                    if st != 200:
-                        continue
-                    pull, drop, tombs = kb.wanted(json.loads(data))
-                    contents = {}
-                    if pull:
-                        st, _, data = self.peers.forward(m["id"], "POST", "/api/kb/export", json.dumps({"keys": pull}).encode(),
-                                                         {"Content-Type": "application/json"})
-                        contents = json.loads(data) if st == 200 else {}
-                    if kb.apply(contents, drop, tombs):
-                        log.info("知识库从「%s」同步了 %d 项，删了 %d 项", m["name"], len(contents), len(drop))
-                        self.channel.events.publish({"type": "kb", "chat": None})
-                except Exception:
-                    log.debug("知识库同步出错（%s）", m.get("name"), exc_info=True)
+                for mod, base, what, ev in ((kb, "/api/kb", "知识库", "kb"), (skills_mod, "/api/skills", "Skill", "skills")):
+                    try:
+                        st, _, data = self.peers.forward(m["id"], "GET", base + "/manifest", b"", {})
+                        if st != 200:
+                            continue
+                        pull, drop, tombs = mod.wanted(json.loads(data))
+                        contents = {}
+                        if pull:
+                            st, _, data = self.peers.forward(m["id"], "POST", base + "/export", json.dumps({"keys": pull}).encode(),
+                                                             {"Content-Type": "application/json"})
+                            contents = json.loads(data) if st == 200 else {}
+                        if mod.apply(contents, drop, tombs):
+                            log.info("%s从「%s」同步了 %d 项，删了 %d 项", what, m["name"], len(contents), len(drop))
+                            self.channel.events.publish({"type": ev, "chat": None})
+                    except Exception:
+                        log.debug("%s同步出错（%s）", what, m.get("name"), exc_info=True)
             self.kb_wake.wait(30)
             self.kb_wake.clear()
 
@@ -521,7 +523,7 @@ class Platform:
             key = a["id"] if path == agents.cwd(a) else f"{a['id']}@{path}"
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome")}
+                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome"), "agent_id": a["id"]}
             name = a["name"]
         else:
             t = m.get("temp") or {}
@@ -1290,7 +1292,7 @@ def _handler(pf):
                 return
             try:
                 self._send(200, fn() or {})
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, ValueError) as e:
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -1363,6 +1365,11 @@ def _handler(pf):
                 "/api/kb/entry": lambda: kb_mod.entry(q.get("lib", ""), q.get("id", "")),
                 "/api/kb/search": lambda: {"results": kb_mod.search(q.get("q", ""))},
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
+                "/api/skills": lambda: {"skills": skills_mod.listing()},
+                "/api/skills/detail": lambda: skills_mod.detail(q.get("name", "")),
+                "/api/skills/local": lambda: {"skills": skills_mod.local_list()},
+                "/api/skills/file": lambda: skills_mod.read_file(q.get("name", ""), q.get("path", "")),
+                "/api/skills/manifest": lambda: skills_mod.manifest(),
                 "/api/board": lambda: pf.call(board_mod.stats, pf),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
@@ -1413,6 +1420,12 @@ def _handler(pf):
                 "/api/kb/entry/move": lambda: kb_write(pf, kb_mod.move_entry, b("lib"), b("id"), b("to")),
                 "/api/kb/export": lambda: kb_mod.export(b("keys")),
                 "/api/kb/sync_now": lambda: (pf.kb_wake.set(), {})[1],
+                "/api/skills/install": lambda: skill_write(pf, install_skill, pf, body),
+                "/api/skills/toggle": lambda: skill_write(pf, skills_mod.set_disabled, b("name"), not b("on")),
+                "/api/skills/delete": lambda: skill_write(pf, skills_mod.delete, b("name")),
+                "/api/skills/update": lambda: skill_write(pf, skills_mod.update, b("name")),
+                "/api/skills/file/save": lambda: skill_write(pf, skills_mod.save_file, b("name"), b("path"), b("text"), b("mtime")),
+                "/api/skills/export": lambda: skills_mod.export(b("keys")),
                 "/api/chat/seen": lambda: pf.call(pf.mark_seen, b("id")),
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
@@ -1597,6 +1610,25 @@ def list_dirs(path):
     except PermissionError:
         raise Problem("没有权限打开这个文件夹。")
     return {"path": d, "parent": os.path.dirname(d) if d != "/" else None, "home": home, "dirs": names[:500]}
+
+
+def skill_write(pf, fn, *args):
+    """改了平台 Skill：叫别的电脑马上来同步。"""
+    r = fn(*args)
+    pf.kb_changed()
+    return r if isinstance(r, dict) else {"result": r}
+
+
+def install_skill(pf, body):
+    if body.get("url"):
+        names = skills_mod.install_github(body["url"])
+    elif body.get("key"):
+        names = skills_mod.install_upload(body["key"], registry.pdir(pf.home), body.get("name") or "")
+    elif body.get("local"):
+        names = skills_mod.import_local(body["local"], pf.peers.me.get("name") or "")
+    else:
+        raise Problem("选一个来源。")
+    return {"names": names}
 
 
 def leave_hub(pf):

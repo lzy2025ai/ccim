@@ -17,7 +17,7 @@ COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
 AVATARS = ("01-navigator", "02-coder", "03-designer", "04-writer", "05-researcher", "06-analyst",
            "07-engineer", "08-assistant", "09-explorer", "10-guardian", "11-maker", "12-planner",
            "13-spark", "14-archivist", "15-buddy", "16-sprout")
-FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome")
+FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome", "skills_off")
 SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role", "chrome": "chrome"}   # Agent 字段 → 登记里的字段
 
 
@@ -88,6 +88,8 @@ def _clean(fields):
     for k in ("pinned", "chrome"):
         if k in out:
             out[k] = bool(out[k])
+    if "skills_off" in out:                   # 平台 Skill 里这个 Agent 不挂的（#101）
+        out["skills_off"] = sorted({str(x) for x in out["skills_off"] or [] if isinstance(x, str)})
     if "color" in out and out["color"] not in COLORS:
         out["color"] = COLORS[0]
     if "avatar" in out:

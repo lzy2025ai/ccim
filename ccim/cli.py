@@ -676,6 +676,131 @@ def _wait_result(home, tid, timeout=0):
         time.sleep(1)
 
 
+# ---------- ccim schedule：Agent 建平台定时任务（#122） ----------
+
+WEEK = "一二三四五六日"
+
+
+def _platform_api(path, body=None):
+    import json, urllib.error, urllib.request
+    from .platform import url
+    req = urllib.request.Request(url().rstrip("/") + path, method="GET" if body is None else "POST",
+                                 data=None if body is None else json.dumps(body).encode(),
+                                 headers={"X-CCIM": "1", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.load(e).get("error")
+        except ValueError:
+            msg = None
+        raise SystemExit(msg or f"网页平台出错了（{e.code}）。")
+    except (urllib.error.URLError, OSError):
+        raise SystemExit("网页平台没在运行，定时任务靠它到点去跑。先运行 ccim web 打开它。")
+
+
+def _sched_freq(s):
+    if s["freq"] == "every":
+        n = s.get("every") or 60
+        return f"每 {n // 60} 小时" if n % 60 == 0 else f"每 {n} 分钟"
+    return {"daily": f"每天 {s['time']}", "workday": f"每个工作日 {s['time']}",
+            "weekly": f"每周{'、'.join(WEEK[d] for d in s.get('days') or [])} {s['time']}",
+            "monthly": f"每月 {s.get('dom')} 号 {s['time']}"}.get(s["freq"], f"{s.get('date')} {s['time']}，只跑一次")
+
+
+def _sched_when(ts):
+    import datetime as dt
+    if not ts:
+        return "—"
+    d = dt.datetime.fromtimestamp(ts)
+    day = (d.date() - dt.date.today()).days
+    return ("今天" if day == 0 else "明天" if day == 1 else f"{d.month}月{d.day}日") + d.strftime(" %H:%M")
+
+
+def _sched_target(args):
+    """建在哪：网页对话里就回到这个对话；飞书、微信里就交给这个 Agent，结果私聊发回那边。返回 (target, deliver)。"""
+    from . import agents
+    if args.agent:
+        a = agents.get(args.agent) or next((dict(x, id=k) for k, x in agents.all_agents().items() if x.get("name") == args.agent), None)
+        if not a:
+            raise SystemExit(f"找不到叫「{args.agent}」的 Agent。")
+        return {"kind": "agent", "id": a["id"]}, []
+    chat, channel = os.environ.get("CCIM_CHAT"), os.environ.get("CCIM_CHANNEL")
+    if channel == "web" and chat and chat[:2] not in ("s-", "p-", "m-"):
+        return {"kind": "chat", "id": chat}, []
+    aid = os.environ.get("CCIM_AGENT") or ((agents.for_path(os.environ["CCIM_PROJECT"]) or {}).get("id")
+                                             if os.environ.get("CCIM_PROJECT") else None)
+    if not aid:
+        raise SystemExit("不知道交给哪个 Agent：加上 --agent 名字。")
+    return {"kind": "agent", "id": aid}, [channel] if channel in ("feishu", "weixin") else []
+
+
+def _sched_fields(args):
+    f = {"name": args.name, "prompt": args.task}
+    if args.every:
+        m = re.fullmatch(r"\s*(\d+)\s*(m|min|分|分钟|h|小时)?\s*", args.every)
+        if not m:
+            raise SystemExit("--every 写成 30m 或 2h 这样。")
+        f.update(freq="every", every=int(m.group(1)) * (60 if m.group(2) in ("h", "小时") else 1))
+        return f
+    if not args.at:
+        raise SystemExit("写上什么时候跑：--every 30m（每隔多久），或者 --at 09:00（几点，默认每天）。")
+    f["time"] = args.at
+    if args.date:
+        f.update(freq="once", date=args.date)
+    elif args.days:
+        try:
+            f.update(freq="weekly", days=[int(x) - 1 for x in re.split(r"[,，、\s]+", args.days.strip()) if x])
+        except ValueError:
+            raise SystemExit("--days 写星期几的数字，比如 1,3,5（周一、三、五）。")
+    elif args.monthly:
+        f.update(freq="monthly", dom=args.monthly)
+    else:
+        f["freq"] = "workday" if args.workday else "daily"
+    return f
+
+
+def cmd_schedule(args):
+    act = args.action
+    if act == "add":
+        if not args.task or not args.name:
+            raise SystemExit('用法：ccim schedule add "每次要做的事" --name 名字 --every 30m（或 --at 09:00）')
+        target, deliver = _sched_target(args)
+        f = dict(_sched_fields(args), target=target, deliver=deliver, quiet=not args.always_reply,
+                 session="new" if args.new_session else "same")
+        sid = _platform_api("/api/schedule/save", {"id": None, "fields": f})["id"]
+        s = _platform_api(f"/api/schedule?id={sid}")
+        where = ("到点后在这个对话里交给你" if target["kind"] == "chat" else
+                 "到点后交给这个 Agent" + ("，结果私聊发回来" if deliver else "，结果在网页的定时任务页"))
+        print(f"建好了：「{s['name']}」（编号 {sid}），{_sched_freq(s)}，下一次 {_sched_when(s.get('next_run'))}。{where}"
+              + ("；没有值得说的就不会出声。" if f["quiet"] else "。"))
+        return
+    if act == "list":
+        rows = _platform_api("/api/schedule/list")["schedules"]
+        if not args.all:
+            chat, aid = os.environ.get("CCIM_CHAT"), os.environ.get("CCIM_AGENT")
+            rows = [r for r in rows if r["target"].get("id") in (chat, aid)] if chat or aid else rows
+        if not rows:
+            print("没有定时任务。" + ("（加 --all 看所有的）" if not args.all else ""))
+        for r in rows:
+            state = "正在跑" if r.get("running") else f"下一次 {_sched_when(r.get('next_run'))}" if r.get("on") else "已暂停"
+            print(f"{r['id']}  {r['name']}  {_sched_freq(r)}  {state}\n    {r['prompt'][:80]}")
+        return
+    if not args.task:
+        raise SystemExit(f"用法：ccim schedule {act} 编号（编号用 ccim schedule list 查）")
+    sid = args.task
+    if act in ("pause", "resume"):
+        _platform_api("/api/schedule/toggle", {"id": sid, "on": act == "resume"})
+        print("已暂停。" if act == "pause" else "已恢复。")
+    elif act == "delete":
+        _platform_api("/api/schedule/delete", {"id": sid})
+        print("已删除。")
+    elif act == "run":
+        _platform_api("/api/schedule/run", {"id": sid})
+        print("已开始跑这一次。")
+
+
 def cmd_ask(args):
     if args.result:
         d = asks.find(args.result)
@@ -891,6 +1016,23 @@ def parser():
     s.add_argument("--timeout", type=float, default=0, help="最多等几秒，不写就一直等")
     s.add_argument("--result", metavar="任务编号", help="取之前 --no-wait 派的任务的结果")
     s.set_defaults(fn=cmd_ask)
+    s = sub.add_parser("schedule", help="定时任务（给 agent 用）：add 建、list 列、pause / resume / delete / run 编号",
+                       description="在网页平台建定时任务。在网页对话里建的，到点后回到这个对话里交给你；"
+                                   "在飞书、微信里建的，到点后交给这个 Agent，结果私聊发回去。")
+    s.add_argument("action", choices=("add", "list", "pause", "resume", "delete", "run"))
+    s.add_argument("task", nargs="?", help="add：每次要做的事；pause / resume / delete / run：任务编号")
+    s.add_argument("--name", help="add：任务名字，网页上显示")
+    s.add_argument("--every", help="每隔多久跑一次：30m、2h（最少 5 分钟）")
+    s.add_argument("--at", help="几点跑，24 小时制 09:00；只写这个就是每天")
+    s.add_argument("--workday", action="store_true", help="和 --at 一起：只在周一到周五")
+    s.add_argument("--days", help="和 --at 一起：每周哪几天，1-7 是周一到周日，比如 1,3,5")
+    s.add_argument("--monthly", type=int, help="和 --at 一起：每月几号（1-28）")
+    s.add_argument("--date", help="和 --at 一起：只跑一次，哪天（2026-10-23）")
+    s.add_argument("--always-reply", action="store_true", help="每次都把结果告诉用户（默认没有值得说的就不出声）")
+    s.add_argument("--new-session", action="store_true", help="交给 Agent 时每次开新对话（默认接着同一个，记得之前跑过的）")
+    s.add_argument("--agent", help="交给哪个 Agent（名字或编号）；不写就是你自己")
+    s.add_argument("--all", action="store_true", help="list：列出这台电脑上所有的定时任务")
+    s.set_defaults(fn=cmd_schedule)
     s = sub.add_parser("logs", help="查看后台日志")
     s.add_argument("project", nargs="?")
     s.add_argument("-f", "--follow", action="store_true", help="持续输出")

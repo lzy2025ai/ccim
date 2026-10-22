@@ -44,6 +44,11 @@ APPEND = """\
 ADMIN = """
 - 需要管理员权限（sudo）的命令，调用 mcp__ccim__run_as_admin 执行（command 写完整命令，不带 sudo；reason 写清楚为什么要这样做）。
   用户会看到命令并确认后才执行；不要让用户去终端运行，也不要让用户把密码发到聊天里。用户拒绝了就不要换个说法再试。"""
+SCHEDULE = """
+- 用户要你到点或每隔一段时间做某件事（比如每 30 分钟查一次、每天早上汇总）时，用命令 `ccim schedule add` 建定时任务
+  （用法看 `ccim schedule add --help`），到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。
+  不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
+CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND = """
 - 这个项目在别处（飞书、微信、终端或桌面端）还有别的对话，各聊各的。用户想知道别处聊过什么时，
   先用 mcp__ccim__list_chats 列出来，再用 mcp__ccim__read_chat 读，读到的内容当作参考，不用照着做。"""
@@ -430,6 +435,12 @@ class Chat:
         except Exception:
             log.debug("记录额度失败", exc_info=True)
 
+    def ccim_env(self):
+        """给助手进程的环境变量：它跑 ccim schedule 时，知道是从哪个对话、哪个 Agent 建的（#122）。"""
+        return {"CCIM_CHAT": self.chat_id, "CCIM_CHANNEL": self.b.entry.get("channel") or getattr(self.b.channel, "name", ""),
+                "CCIM_AGENT": self.b.entry.get("agent_id") or "", "CCIM_PROJECT": self.b.path,
+                "PATH": ccim_bin() + os.pathsep + os.environ.get("PATH", "")}
+
     async def _connect(self):
         if self.client:
             return
@@ -450,13 +461,13 @@ class Chat:
                 fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
-                resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"],
+                resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"] + CRON_TOOLS, env=self.ccim_env(),
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agents"],                            # 只是在群里 @ 人，用户看得到
                 plugins=[{"type": "local", "path": view}] if view else [],
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -879,6 +890,24 @@ def _look_around(chat):
         return {"content": [{"type": "text", "text": head + text}]}
 
     return [list_chats, read_chat]
+
+
+def ccim_bin():
+    """只放 ccim 一个命令的目录，加到助手的 PATH 前面：后台进程的 PATH 里不一定有 ccim，又不能把整个 venv 的 bin 加进去（会换掉 python）。"""
+    d = os.path.join(registry.HOME, "bin")
+    exe = os.path.join(os.path.dirname(sys.executable), "ccim")
+    link = os.path.join(d, "ccim")
+    try:
+        if os.path.exists(exe) and os.path.realpath(link) != os.path.realpath(exe):
+            os.makedirs(d, exist_ok=True)
+            tmp = link + ".tmp"
+            if os.path.lexists(tmp):
+                os.remove(tmp)
+            os.symlink(exe, tmp)
+            os.replace(tmp, link)
+    except OSError:
+        log.warning("放 ccim 命令出错", exc_info=True)
+    return d
 
 
 def kb_note(kbs):

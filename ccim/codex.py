@@ -25,6 +25,8 @@ NOTE = """\
 - 需要把图片、视频、文件交给用户时，在回复里单独一行写：[发送文件] 文件的绝对路径（一行一个），ccim 会把它发到聊天里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里。
 - 没有交互式提问框，有问题直接在回复里问。
+- 用户要你到点或每隔一段时间做某件事时，用命令 `ccim schedule add` 建定时任务（用法看 `ccim schedule add --help`），
+  到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。
 
 """
 RECONNECT = "网络不稳，重连中"
@@ -153,7 +155,8 @@ class CodexChat(Chat):
                 args.append(prompt_note(NOTE, self.b.channel) + role_note(self.b.entry).lstrip() + "\n\n" * bool(role_note(self.b.entry)) + prompt)
             self.proc = await asyncio.create_subprocess_exec(
                 *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True)
+                stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True,
+                env={**os.environ, **self.ccim_env()})
             t.ready = time.monotonic()
             err_task = asyncio.create_task(self.proc.stderr.read())
             async for line in self.proc.stdout:

@@ -717,7 +717,10 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 @media (max-width:760px){.sk-chat-fab{bottom:calc(72px + env(safe-area-inset-bottom))}}
 .skc-head{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line);min-height:58px}
 .skc-head .t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
-.skc-head .t b{font:600 15px var(--song)} .skc-head .t span{font-size:12px;color:var(--muted)}
+.skc-head .t b{font:600 15px var(--song)} .skc-head .t>span{font-size:12px;color:var(--muted)}
+.skc-where{display:inline-flex;align-items:center;gap:3px;align-self:flex-start;font-size:12px;color:var(--muted);padding:1px 4px;margin-left:-4px;border-radius:5px;max-width:100%}
+.skc-where:hover{background:var(--sunk);color:var(--ink)} .skc-where svg{width:11px;height:11px;flex:none}
+.skc-where.off{color:var(--bad);gap:8px} .skc-where.off .link{font-size:12px}
 .skc-body{flex:1;overflow:auto;padding:18px 18px 8px;min-height:0}
 .skc-msg{margin-bottom:20px;min-width:0}
 .skc-msg.me{display:flex;justify-content:flex-end}
@@ -1356,6 +1359,10 @@ let detail = null;                // 当前打开的对话
 let refreshTimer = null;
 async function loadState(){
   S = await api("/api/state");
+  if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
+    const on = (machineOf(SKC.mid) || {}).online !== false;
+    if (on !== SKC.on) { SKC.on = on; drawSkChat(); }
+  }
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
     clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(current.id), 300);   // 它的对话列表（含终端里的）单独拉
   }
@@ -2739,7 +2746,14 @@ function skillSrc(s){
 }
 function skillMark(big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:var(--dai)">${ICON.star}</span>`; }
 // ---- Skill 页右侧的 Skill 助手（#116）：说话就能装、改、管理平台 Skill ----
-let SKC = null;   // {id, log, progress, busy, open}
+let SKC = null;   // {mid（在哪台电脑）, id, log, progress, busy, model, effort}
+function skcMid(){   // 助手在哪台电脑上跑：上次选的；没选过用总控那台，再不行用这台
+  const ms = S.machines || [];
+  let saved = null; try { saved = localStorage.getItem("ccim.skcMachine"); } catch {}
+  if (saved && (!ms.length || ms.some(m => m.id === saved))) return saved;
+  const hub = ms.find(m => m.hub && m.online !== false);
+  return hub ? hub.id : S.me;
+}
 const skcOpen = () => { try { return localStorage.getItem("ccim.skchat") !== "0"; } catch { return true; } };
 function skContent(){   // Skill 页：左边内容，右边助手
   let c = $("#sk-content");
@@ -2760,11 +2774,44 @@ function skcToggle(on){
   if (on) { drawSkChat(); setTimeout(() => $("#skc-in")?.focus(), 50); }
 }
 async function skcLoad(fresh){
+  const mid = skcMid();
   try {
-    const {id} = await api("/api/helper", {kind: "skills", fresh: !!fresh}, S.me);
-    const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, S.me);
-    SKC = {id, log: d.log || [], progress: d.progress || null, busy: !!d.busy};
-  } catch (e) { SKC = {error: e.message}; }
+    const {id} = await api("/api/helper", {kind: "skills", fresh: !!fresh}, mid);
+    const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, mid);
+    SKC = {mid, id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, model: d.model, effort: d.effort,
+           model_custom: d.model_custom, effort_custom: d.effort_custom};
+  } catch (e) { SKC = {mid, error: e.message}; }
+  drawSkChat();
+}
+function skcWhere(){   // 标题下面那行：在哪台电脑、什么模型；点开能换
+  if (!SKC) return "";
+  const m = machineOf(SKC.mid), name = (m || {}).name || "这台电脑";
+  if (m && m.online === false) {
+    const alt = (S.machines || []).find(x => x.online !== false && x.id !== SKC.mid);
+    return `<span class="skc-where off">「${esc(name)}」离线了${alt ? `<button class="link" onclick="skcUse(${q(alt.id)})">换到「${esc(alt.name)}」</button>` : ""}</span>`;
+  }
+  const parts = [multi() ? name : "", SKC.model ? modelName(SKC.model) : "", SKC.effort ? `思考 ${SKC.effort}` : ""].filter(Boolean);
+  return `<button class="skc-where" onclick="skcMenu(event)" title="换电脑、模型、思考深度">${esc(parts.join(" · ") || "默认设置")}${ICON.down}</button>`;
+}
+function skcMenu(e){
+  const ck = on => on ? `<span class="ck">✓</span>` : "";
+  const row = (fn, label, desc, on) => `<button onclick="closePop();${fn}"><span><div>${esc(label)}</div>${desc ? `<div class="desc">${esc(desc)}</div>` : ""}</span>${ck(on)}</button>`;
+  const ms = (S.machines || []).filter(m => m.online !== false);
+  const curM = SKC.model_custom ? SKC.model : "", curE = SKC.effort_custom ? SKC.effort : "";
+  pop(e, (multi() ? `<div class="sec">在哪台电脑</div>` + ms.map(m => row(`skcUse(${q(m.id)})`, m.name + (m.me ? "（这台）" : ""), m.hub ? "总控" : "", m.id === SKC.mid)).join("") : "")
+    + `<div class="sec">模型</div>` + modelOpts("claude", "跟随默认设置", curM, SKC.mid).map(([v, n, d]) => row(`skcSet('model',${q(v)})`, n, d, (curM || "") === v)).join("")
+    + `<div class="sec">思考深度</div>` + effortOpts("claude", "跟随默认设置").map(([v, n, d]) => row(`skcSet('effort',${q(v)})`, n, d, (curE || "") === v)).join(""), true);
+}
+async function skcUse(mid){
+  if (SKC && SKC.mid === mid) return;
+  if (SKC && SKC.busy && !await confirmBox("换一台电脑？", "助手还在干活，这边的会接着做完，换过去是另一个对话。", "换")) return;
+  try { localStorage.setItem("ccim.skcMachine", mid); } catch {}
+  SKC = null; drawSkChat(); await skcLoad();
+}
+async function skcSet(key, value){
+  await act(() => api("/api/chat/set", {id: SKC.id, key, value: value || null}, SKC.mid), key === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度");
+  const d = await api(`/api/chat?id=${encodeURIComponent(SKC.id)}`, undefined, SKC.mid);
+  Object.assign(SKC, {model: d.model, effort: d.effort, model_custom: d.model_custom, effort_custom: d.effort_custom});
   drawSkChat();
 }
 async function skcNew(){
@@ -2801,7 +2848,7 @@ function skcLooking(){   // 输入框上方：它知道你正看着什么
 function drawSkChat(){
   const el = $("#sk-chat"); if (!el) return;
   const typed = $("#skc-in") ? $("#skc-in").value : "";
-  const head = `<div class="skc-head">${SKC_AV}<div class="t"><b>Skill 助手</b><span>装、改、管理平台 Skill</span></div>
+  const head = `<div class="skc-head">${SKC_AV}<div class="t"><b>Skill 助手</b>${skcWhere() || `<span>装、改、管理平台 Skill</span>`}</div>
     <button class="icon-btn" title="新对话" aria-label="新对话" onclick="skcNew()">${ICON.plus}</button>
     <button class="icon-btn" title="收起" aria-label="收起" onclick="skcToggle(false)">${ICON.x}</button></div>`;
   if (!SKC) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
@@ -2814,7 +2861,7 @@ function drawSkChat(){
   const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
   el.innerHTML = head + `<div class="skc-body" id="skc-body">${empty}${SKC.log.map(skcRec).join("")}
       ${p ? `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
-        ${stallBar(p, SKC.id, S.me)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
+        ${stallBar(p, SKC.id, SKC.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
     <div class="skc-foot">${skcLooking()}<div class="skc-box"><textarea id="skc-in" rows="1" placeholder="${SKC.busy ? "补充说明，它做完这一步就会看到" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
       <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#skc-body"); b.scrollTop = b.scrollHeight;
@@ -2851,11 +2898,11 @@ async function skcSend(text){
   SKC.log.push({type: "user", text: v, sending: true});
   if (!SKC.busy) SKC.progress = {steps: [], text: ""};
   SKC.busy = true; drawSkChat();
-  try { await api("/api/chat/send", {id: SKC.id, text: v, files: [], ctx: skcCtx()}, S.me); }
+  try { await api("/api/chat/send", {id: SKC.id, text: v, files: [], ctx: skcCtx()}, SKC.mid); }
   catch (e) { toast(e.message); SKC.log = SKC.log.filter(r => !r.sending); SKC.busy = false; SKC.progress = null; drawSkChat(); }
 }
-async function skcStop(){ if (SKC && SKC.id) await act(() => api("/api/chat/stop", {id: SKC.id}, S.me)); }
-async function skcAct(mid, value){ await act(() => api("/api/chat/action", {id: SKC.id, mid, value}, S.me)); }
+async function skcStop(){ if (SKC && SKC.id) await act(() => api("/api/chat/stop", {id: SKC.id}, SKC.mid)); }
+async function skcAct(mid, value){ await act(() => api("/api/chat/action", {id: SKC.id, mid, value}, SKC.mid)); }
 function skcEvent(ev){   // 推送：进度、记录
   if (!SKC || ev.chat !== SKC.id) return;
   const rec = {...ev}; delete rec.chat;

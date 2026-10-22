@@ -2242,7 +2242,7 @@ const SLASH = [
   ["/effort", "换思考深度", "等级"],
 ];
 function slashTyped(){
-  const v = $("#input").value, m = /^\/(\S*)$/.exec(v);
+  const i = $("#input"), v = i.value.slice(0, i.selectionStart), m = /^\/(\S*)$/.exec(v);   // 光标前面是 /xxx 就提示，后面已有的文字留着
   const old = document.querySelector(".pop.slash");
   const hits = m ? SLASH.filter(([k, , , only]) => k.startsWith("/" + m[1].toLowerCase()) && (!only || (detail.base || "claude") === only)) : [];
   if (!hits.length || hits.length === 1 && hits[0][0] === v) { if (old) old.remove(); return; }
@@ -2253,9 +2253,9 @@ function slashTyped(){
   p.classList.add("slash"); p.dataset.v = v; p.dataset.on = on;
 }
 function slashPick(k, arg){   // 回车、Tab、点选都只填进输入框，再按回车才发出（免得误触）
-  const i = $("#input");
-  i.value = k + (arg ? " " : "");
-  closePop(); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
+  const i = $("#input"), rest = i.value.slice(i.selectionStart).replace(/^\s+/, ""), head = k + (arg || rest ? " " : "");
+  i.value = head + rest;
+  closePop(); i.focus(); i.setSelectionRange(head.length, head.length);
   drawComposerState();
 }
 function slashKey(e){

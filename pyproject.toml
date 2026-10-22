@@ -3,7 +3,7 @@ name = "ccim"
 version = "0.19.0"
 description = "在飞书、微信里和本机的 Claude Code 对话"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "lzy2025ai" }]
 requires-python = ">=3.11"

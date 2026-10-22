@@ -6,7 +6,7 @@
 
 Send a message from your phone, and Claude gets to work in the project directory on that computer.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-Feishu%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-WeChat-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-Feishu%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-WeChat-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
 
 [简体中文](README.md) · English
 
@@ -381,4 +381,4 @@ QR-based bot creation and the persistent-connection card handling were modelled 
 
 ## License
 
-[MIT](LICENSE)
+[AGPL-3.0](LICENSE)

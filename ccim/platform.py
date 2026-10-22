@@ -584,9 +584,10 @@ class Platform:
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
         from .bridge import QUEUE
-        q = QUEUE.match(text or "")            # 前面还要拼别的内容，所以 /queue 在这里认出来
+        head = re.match(r"(?:>[^\n]*\n)*\s*", text or "").end()   # 网页的引用拼在最前面，跳过它再认（#117）
+        q = QUEUE.match((text or "")[head:])   # 前面还要拼别的内容，所以 /queue 在这里认出来
         if q:
-            text = text[q.end():]
+            text = text[:head] + text[head + q.end():]
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text

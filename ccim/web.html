@@ -1712,6 +1712,18 @@ function liveHtml(){
   return `<div class="msg">${fromRow()}${p.steps.length ? stepsHtml(p.steps, true, head) : `<div class="steps"><button>${head}</button></div>`}
     ${stallBar(p, detail.id, ctxMachine)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>`;
 }
+// 群里 @ 别的 Agent 的消息（带 to）连同它们的回答自成一组；主 Agent 回完的内容挪回它回的那条消息下面，
+// 不夹在之后 @ 的消息和回答中间（#129）。liveAt 是主 Agent 干活进度该插的位置
+function threadOrder(log, from){
+  const order = []; let at = 0;
+  for (let i = from; i < log.length; i++){
+    const r = log[i];
+    if (r.type === "user" && r.to && r.to.length || r.type === "mention") order.push(i);
+    else if (r.type === "user") { order.push(i); at = order.length; }
+    else order.splice(at++, 0, i);
+  }
+  return {order, liveAt: at};
+}
 function drawThread(){
   const t = $("#thread"); if (!t) return;
   const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
@@ -1728,9 +1740,11 @@ function drawThread(){
   let k = 0;
   while (k < ew.length && from && (ew[k].at || 0) < firstAt) k++;
   const ewUpTo = at => { let h = ""; while (k < ew.length && (ew[k].at || 0) < at) { h += recHtml(ew[k], k, "elsewhere"); k++; } return h; };
+  const {order, liveAt} = threadOrder(detail.log, from);
+  const parts = order.map(i => { const r = detail.log[i]; return ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i); });
+  if (liveAt < parts.length) parts.splice(liveAt, 0, liveHtml());
   t.innerHTML = more + (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + detail.log.map((r, i) => i < from ? "" : ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i)).join("")
-    + ewUpTo(Infinity) + liveHtml();
+    + parts.join("") + ewUpTo(Infinity) + (liveAt < parts.length ? "" : liveHtml());
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();

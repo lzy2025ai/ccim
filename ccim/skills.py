@@ -96,35 +96,37 @@ def listing():
     return out
 
 
+def _files(base):
+    out = []
+    for dp, dirs, fs in os.walk(base):
+        dirs[:] = sorted(x for x in dirs if x not in SKIP)
+        out += [os.path.relpath(os.path.join(dp, f), base) for f in sorted(fs) if f not in SKIP]
+    return out[:2000]
+
+
 def detail(name):
     m = _read_meta(_check(name))
     if not m:
         raise Problem("找不到这个 Skill。")
-    with open(os.path.join(_lib(name), "SKILL.md"), encoding="utf-8", errors="replace") as f:
-        text = f.read()
-    files = []
-    for dp, dirs, fs in os.walk(_lib(name)):
-        dirs[:] = sorted(x for x in dirs if x not in SKIP)
-        files += [os.path.relpath(os.path.join(dp, f), _lib(name)) for f in sorted(fs) if f not in SKIP]
-    return {**m, "text": text, "files": files[:2000]}
+    return {**m, "files": _files(_lib(name)), "repo": repo_of(m.get("source"))}
 
 
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
           ".svg": "image/svg+xml"}
 
 
-def _file(name, rel):
-    base = os.path.realpath(_lib(_check(name)))
+def _inside(base, rel):
+    base = os.path.realpath(base)
     p = os.path.realpath(os.path.join(base, rel or ""))
     if not p.startswith(base + os.sep) or not os.path.isfile(p):
         raise Problem("找不到这个文件。")
     return p
 
 
-def read_file(name, rel):
+def _read_at(base, rel):
     """Skill 里的一个文件：文字给原文，图片给 data 地址，其他的只给大小。"""
     import base64 as b64
-    p = _file(name, rel)
+    p = _inside(base, rel)
     st = os.stat(p)
     out = {"path": rel, "size": st.st_size, "mtime": st.st_mtime}
     ext = os.path.splitext(p)[1].lower()
@@ -141,21 +143,202 @@ def read_file(name, rel):
         return {**out, "binary": True}
 
 
-def save_file(name, rel, text, mtime):
-    """在网页里改了 Skill 的文件：打开以后被改过就不写；记成这个 Skill 改过，同步到别的电脑。"""
+def _save_at(base, rel, text, mtime):
+    """打开以后被改过就不写。"""
     if not isinstance(text, str):
         raise Problem("内容不对。")
+    p = _inside(base, rel)
+    if mtime and abs(os.path.getmtime(p) - float(mtime)) > 0.001:
+        raise Problem("这个文件在你打开以后被改过了，刷新后再改。")
+    with open(p, "w", encoding="utf-8") as f:     # 原地写：软链接指过去的原件、文件权限都保留
+        f.write(text)
+    return _read_at(base, rel)
+
+
+def read_file(name, rel):
+    return _read_at(_lib(_check(name)), rel)
+
+
+def save_file(name, rel, text, mtime):
+    """在网页里改了平台 Skill 的文件：记成这个 Skill 改过，同步到别的电脑。"""
     with LOCK:
-        p = _file(name, rel)
-        if mtime and abs(os.path.getmtime(p) - float(mtime)) > 0.001:
-            raise Problem("这个文件在你打开以后被改过了，刷新后再改。")
-        _write(p, text)
+        out = _save_at(_lib(_check(name)), rel, text, mtime)
         m = _read_meta(name) or {}
         if rel == "SKILL.md":
             m["desc"] = _front(text).get("description", m.get("desc", ""))
         m.update(updated=time.time(), size=_size(_lib(name)))
         _write(_meta_path(name), json.dumps(m, ensure_ascii=False))
-    return read_file(name, rel)
+    return out
+
+
+# ----- Agent 的本地 Skill（#115）：它在自己那台电脑上能用到的，不是平台装的 -----
+
+def _plugin_skill_dirs():
+    """装了、开着的插件里带的 Skill：[(插件名, skills 目录)]。"""
+    try:
+        with open(os.path.expanduser("~/.claude/plugins/installed_plugins.json"), encoding="utf-8") as f:
+            inst = json.load(f).get("plugins") or {}
+        with open(os.path.expanduser("~/.claude/settings.json"), encoding="utf-8") as f:
+            on = json.load(f).get("enabledPlugins") or {}
+    except (OSError, ValueError):
+        return []
+    out = []
+    for key, rows in inst.items():
+        if not on.get(key):
+            continue
+        for r in rows or []:
+            d = os.path.join(r.get("installPath") or "", "skills")
+            if r.get("scope") == "user" and os.path.isdir(d):
+                out.append((key.split("@")[0], d))
+                break
+    return out
+
+
+def _groups(agent):
+    """[(分组, 名字, 目录, 能不能改)]"""
+    from . import agents as agents_mod
+    home = os.path.realpath(os.path.expanduser("~"))
+    if (agent.get("base") or "claude") == "codex":
+        return [("user", "这台电脑通用的", os.path.expanduser("~/.codex/skills"), True)]
+    cwd = os.path.realpath(agents_mod.cwd(agent))
+    out = [] if cwd == home else [("project", "工作目录里的", os.path.join(cwd, ".claude", "skills"), True)]
+    out.append(("user", "这台电脑通用的", os.path.expanduser("~/.claude/skills"), True))
+    out += [(f"plugin:{n}", f"插件「{n}」带的", d, False) for n, d in _plugin_skill_dirs()]
+    return out
+
+
+def agent_skills(agent):
+    have = {m["name"] for m in listing()}
+    out = []
+    for gid, label, d, editable in _groups(agent):
+        rows = []
+        for n in sorted(os.listdir(d) if os.path.isdir(d) else [], key=str.lower):
+            p = os.path.join(d, n)
+            if n.startswith(".") or not os.path.isfile(os.path.join(p, "SKILL.md")):
+                continue
+            with open(os.path.join(p, "SKILL.md"), encoding="utf-8", errors="replace") as f:
+                fm = _front(f.read(6000))
+            rows.append({"name": n, "desc": fm.get("description", ""), "link": os.path.realpath(p) if os.path.islink(p) else None,
+                         "shared": n in have})
+        if rows:
+            out.append({"id": gid, "label": label, "editable": editable, "skills": rows})
+    return out
+
+
+def _agent_dir(agent, group, name, label=False):
+    for gid, lab, d, editable in _groups(agent):
+        if gid == group:
+            p = os.path.join(d, name or "")
+            if not name or "/" in name or name.startswith(".") or not os.path.isfile(os.path.join(p, "SKILL.md")):
+                break
+            return (os.path.realpath(p), editable, os.path.islink(p)) + ((lab,) if label else ())
+    raise Problem("找不到这个 Skill。")
+
+
+def agent_detail(agent, group, name):
+    d, editable, link, label = _agent_dir(agent, group, name, label=True)
+    with open(os.path.join(d, "SKILL.md"), encoding="utf-8", errors="replace") as f:
+        fm = _front(f.read(6000))
+    return {"name": name, "group": group, "label": label, "desc": fm.get("description", ""), "editable": editable,
+            "link": d if link else None, "files": _files(d), "size": _size(d), "shared": bool(_read_meta(name))}
+
+
+def agent_read(agent, group, name, rel):
+    return _read_at(_agent_dir(agent, group, name)[0], rel)
+
+
+def agent_save(agent, group, name, rel, text, mtime):
+    d, editable, _ = _agent_dir(agent, group, name)
+    if not editable:
+        raise Problem("插件带的 Skill 只能看，改了插件更新时会被覆盖。")
+    return _save_at(d, rel, text, mtime)
+
+
+def agent_share(agent, group, name, machine_name=""):
+    """把 Agent 的本地 Skill 提交成平台 Skill（同名的换成这一份）。"""
+    d, _, _ = _agent_dir(agent, group, name)
+    if not NAME.fullmatch(name):
+        raise Problem(f"「{name}」不能当 Skill 的名字，只能用英文字母、数字、点、横线、下划线。")
+    return [_put(d, {"type": "local", "machine": machine_name, "agent": agent.get("name") or ""}, name=name)]
+
+
+# ----- 各个 Skill 市场里有没有（#115） -----
+
+MARKETS = [("skills.sh", "https://skills.sh", "https://skills.sh/?q={q}"),
+           ("ClawHub", "https://clawhub.ai", "https://clawhub.ai/skills?q={q}"),
+           ("SkillsMP", "https://skillsmp.com", "https://skillsmp.com/search?q={q}")]
+_market_cache = {}
+
+
+def _get_json(url):
+    import ssl
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        ctx = ssl.create_default_context()
+    req = urllib.request.Request(url, headers={"User-Agent": "ccim", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+        return json.loads(r.read(4 << 20))
+
+
+def _one_market(market, name, repo):
+    from urllib.parse import quote
+    q, low = quote(name), name.lower()
+    try:
+        if market == "skills.sh":
+            rows = [r for r in _get_json(f"https://skills.sh/api/search?q={q}").get("skills") or [] if (r.get("skillId") or r.get("name") or "").lower() == low]
+            same = [r for r in rows if repo and (r.get("source") or "").lower() == repo]
+            best = max(same or rows, key=lambda r: r.get("installs") or 0, default=None)
+            return best and {"url": "https://skills.sh/" + best["id"], "stat": "安装", "n": best.get("installs") or 0,
+                             "where": best.get("source"), "same": bool(same)}
+        if market == "ClawHub":
+            rows = [r for r in _get_json(f"https://clawhub.ai/api/v1/search?q={q}").get("results") or []
+                    if (r.get("canonicalUrl") or "").rstrip("/").split("/")[-1].lower() == low or (r.get("displayName") or "").lower() == low]
+            best = max(rows, key=lambda r: r.get("downloads") or 0, default=None)
+            return best and {"url": "https://clawhub.ai" + best["canonicalUrl"], "stat": "下载", "n": best.get("downloads") or 0,
+                             "where": ((best.get("native") or {}).get("ownerHandle")), "same": False}
+        if market == "SkillsMP":
+            rows = [r for r in _get_json(f"https://skillsmp.com/api/skills?search={q}").get("skills") or [] if (r.get("name") or "").lower() == low]
+            same = [r for r in rows if repo and f"github.com/{repo}/" in (r.get("githubUrl") or "").lower() + "/"]
+            best = max(same or rows, key=lambda r: r.get("stars") or 0, default=None)
+            return best and {"url": "https://skillsmp.com/skills/" + best["id"], "stat": "仓库星数", "n": best.get("stars") or 0,
+                             "where": f"{best.get('author')}", "same": bool(same)}
+    except Exception as e:
+        log.info("查 %s 出错：%s", market, e)
+        return {"error": True}
+    return None
+
+
+def market(name, repo=None):
+    """这个 Skill 在各个市场里的收录情况：同一个仓库的优先（same），没有就按名字。结果缓存 6 小时。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from urllib.parse import quote
+    if not name:
+        raise Problem("找不到这个 Skill。")
+    repo = (repo or "").lower() or None
+    key = (name.lower(), repo)
+    hit = _market_cache.get(key)
+    if hit and time.time() - hit[0] < 6 * 3600:
+        return hit[1]
+    with ThreadPoolExecutor(3) as ex:
+        found = list(ex.map(lambda m: _one_market(m[0], name, repo), MARKETS))
+    out = {"markets": [{"name": m, "home": home, "search": search.format(q=quote(name)), **({"hit": f} if f and not f.get("error") else {}),
+                        **({"error": True} if f and f.get("error") else {})} for (m, home, search), f in zip(MARKETS, found)]}
+    if not any(f and f.get("error") for f in found):
+        _market_cache[key] = (time.time(), out)
+    return out
+
+
+def repo_of(source):
+    """从 GitHub 装的：owner/repo。"""
+    try:
+        if (source or {}).get("type") == "github":
+            o, r, _, _ = _github(source["url"])
+            return f"{o}/{r}"
+    except Problem:
+        pass
+    return None
 
 
 def local_list():

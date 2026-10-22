@@ -505,6 +505,8 @@ body{overflow:hidden}
 
 .pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px;overflow-y:auto;overscroll-behavior:contain}
 .pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop a{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;color:inherit;text-decoration:none}
+.pop a:hover{background:var(--sunk)} .pop a > svg{width:13px;height:13px;margin-left:auto;color:var(--faint);flex:none}
 .pop.slash button.on{background:var(--sunk)}
 .pop.slash b{font:600 13px var(--mono);min-width:110px}
 .pop.slash b .arg{font:400 12px var(--sans);color:var(--muted)}
@@ -684,6 +686,19 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .ccard.off{opacity:.6}
 .ccard.fresh{animation:skfresh 2.4s ease-out}
 @keyframes skfresh{0%,40%{box-shadow:0 0 0 3px var(--qing-soft),0 0 0 4px var(--qing)}100%{box-shadow:none}}
+.sk-market{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:12.5px}
+.mk{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;border:1px solid var(--line-strong);color:var(--ink-2);text-decoration:none;background:var(--panel)}
+.mk:hover{border-color:var(--qing);color:var(--qing)} .mk b{font-weight:600} .mk svg{width:12px;height:12px;opacity:.6}
+.mk.none{color:var(--faint);border-style:dashed} .mk.none span{color:var(--faint)}
+.mk-tag{font-size:11px;color:var(--muted);background:var(--sunk);border-radius:4px;padding:0 4px}
+.sk-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.sk-item{display:flex;align-items:center;gap:10px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--line)}
+.sk-item:last-child{border-bottom:0} .sk-item:hover{background:var(--paper)}
+.sk-item .t{flex:1;min-width:0} .sk-item .title{display:flex;gap:8px;align-items:center;font-weight:500}
+.sk-item .sub{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk-item svg{width:14px;height:14px;color:var(--faint);flex:none}
+.sk-head.inpage{padding:16px 32px 12px}
+.sk-body.inpage{height:calc(100vh - 300px);min-height:420px;border-top:1px solid var(--line)}
 .sk-page{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden}
 .sk-head{padding:18px 28px 14px;border-bottom:1px solid var(--line)}
 .sk-back{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:8px}
@@ -2673,7 +2688,7 @@ const skApi = (path, body) => api(path, body, S.me);       // 每台电脑都有
 async function skillList(){ if (!skillsCache) skillsCache = (await skApi("/api/skills")).skills; return skillsCache; }
 function skillSrc(s){
   const x = s.source || {};
-  return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
+  return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" && x.agent ? `${x.agent} 分享的` : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
 }
 function skillMark(big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:var(--dai)">${ICON.star}</span>`; }
 async function renderSkills(){
@@ -2690,6 +2705,7 @@ async function renderSkills(){
     : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。</p>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`;
   $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
+      <button class="btn" onclick="marketsMenu(event)">逛 Skill 市场${ICON.down}</button>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>
     <div class="ov-sub">${syncLine()}</div><div class="ov-body">${body}</div></div>`;
 }
@@ -2699,7 +2715,7 @@ async function openSkill(name){
   try { s = skillOpen = await skApi(`/api/skills/detail?name=${encodeURIComponent(name)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个 Skill</h2><p>${esc(e.message)}</p><a class="btn" href="#/skills">返回 Skill 列表</a></div>`; return; }
   if (current.view !== "skills" || current.id !== name) return;
-  if (!SKV || SKV.name !== name) SKV = {name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
+  if (!SKV || SKV.src.kind !== "platform" || SKV.name !== name) SKV = {src: {kind: "platform", name}, name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
   SKV.s = s;
   if (!s.files.includes(SKV.file)) SKV.file = "SKILL.md";
   const offFor = S.agents.filter(a => (a.skills_off || []).includes(name));
@@ -2708,13 +2724,31 @@ async function openSkill(name){
       <a class="sk-back" href="#/skills">${ICON.left}Skill 列表</a>
       <div class="sk-title"><div class="grow"><h2>${esc(s.name)}${s.disabled ? `<span class="tag">已停用</span>` : ""}</h2>
           <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
-          <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div></div>
+          <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div>
+          <div class="sk-market" id="sk-mk"></div></div>
         <div class="sk-acts">${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
           <button class="btn" onclick="toggleSkill(${q(name)},${s.disabled ? "true" : "false"})">${s.disabled ? "启用" : "停用"}</button>
           <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button></div></div></div>
     <div class="sk-body"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div></div>`;
   drawSkTree();
-  skOpenFile(SKV.file, true);
+  SKV.dirty ? drawSkView() : skOpenFile(SKV.file, true);   // 页面重画时留着没保存的改动
+  loadMarket(name, s.repo);
+}
+// ---- 各个 Skill 市场里的收录情况（#115） ----
+async function loadMarket(name, repo){
+  const el = $("#sk-mk"); if (!el) return;
+  el.innerHTML = `<span class="muted">在各个 Skill 市场里查…</span>`;
+  let r;
+  try { r = await skApi(`/api/skills/market?name=${encodeURIComponent(name)}${repo ? "&repo=" + encodeURIComponent(repo) : ""}`); }
+  catch { el.innerHTML = ""; return; }
+  if (!$("#sk-mk")) return;
+  $("#sk-mk").innerHTML = r.markets.map(m => m.hit
+    ? `<a class="mk" href="${esc(m.hit.url)}" target="_blank" rel="noopener" title="${esc(m.hit.where || "")}">${esc(m.name)}${m.hit.same ? "" : `<span class="mk-tag">同名</span>`}<b>${esc(m.hit.stat)} ${Number(m.hit.n).toLocaleString()}</b>${ICON.link}</a>`
+    : `<a class="mk none" href="${esc(m.search)}" target="_blank" rel="noopener">${esc(m.name)}<span>${m.error ? "没查到，去看看" : "没收录"}</span>${ICON.link}</a>`).join("");
+}
+function marketsMenu(e){
+  pop(e, `<div class="sec">去 Skill 市场看看</div>` + [["skills.sh", "https://skills.sh", "按安装量排行，一条命令装"], ["ClawHub", "https://clawhub.ai", "OpenClaw 的 Skill 市场"], ["SkillsMP", "https://skillsmp.com", "收录 GitHub 上公开的 Skill"]]
+    .map(([n, u, d]) => `<a href="${u}" target="_blank" rel="noopener" onclick="closePop()"><span><div>${n}</div><div class="desc">${d}</div></span>${ICON.link}</a>`).join(""), true);
 }
 function skTreeOf(files){
   const root = {dirs: {}, files: []};
@@ -2741,7 +2775,7 @@ async function skOpenFile(path, first){
   path.split("/").slice(0, -1).forEach((_, i, a) => SKV.open.add(a.slice(0, i + 1).join("/")));   // 打开文件所在的文件夹
   drawSkTree(); drawSkView();
   let f;
-  try { f = await skApi(`/api/skills/file?name=${encodeURIComponent(SKV.name)}&path=${encodeURIComponent(path)}`); }
+  try { f = await skGet(path); }
   catch (e) { if (SKV.file === path) $("#sk-view").innerHTML = `<p class="muted" style="padding:20px">${esc(e.message)}</p>`; return; }
   if (!SKV || SKV.file !== path) return;
   SKV.f = f; SKV.draft = f.text || "";
@@ -2756,7 +2790,7 @@ function drawSkView(){
   const tools = !text ? "" : SKV.mode === "edit"
     ? `<button class="btn" onclick="skCancel()">取消</button><button class="btn primary" onclick="skSave()">保存</button>`
     : `${md ? `<span class="seg mini">${[["view", "预览"], ["src", "源码"]].map(([k, n]) => `<button class="${SKV.mode === k ? "on" : ""}" onclick="SKV.mode='${k}';drawSkView()">${n}</button>`).join("")}</span>` : ""}
-       <button class="btn" onclick="SKV.mode='edit';SKV.draft=SKV.f.text;drawSkView()">编辑</button>`;
+       ${SKV.s.editable === false ? "" : `<button class="btn" onclick="SKV.mode='edit';SKV.draft=SKV.f.text;drawSkView()">编辑</button>`}`;
   let body;
   if (!f) body = `<div class="doc-loading">…</div>`;
   else if (f.image) body = `<div class="sk-img"><img src="${f.image}" alt="${esc(path)}"></div>`;
@@ -2789,8 +2823,20 @@ function skLink(e){   // 预览里点 Skill 里的相对链接：在左边打开
   const t = base.join("/");
   if (SKV.s.files.includes(t)) skOpenFile(t); else toast("这个 Skill 里没有这个文件");
 }
+// 平台 Skill 和 Agent 的本地 Skill 共用一套查看、编辑（SKV.src 区分）
+function skQuery(){ const x = SKV.src; return `id=${encodeURIComponent(x.aid)}&group=${encodeURIComponent(x.group)}&name=${encodeURIComponent(x.name)}`; }
+function skGet(path){
+  return SKV.src.kind === "platform" ? skApi(`/api/skills/file?name=${encodeURIComponent(SKV.name)}&path=${encodeURIComponent(path)}`)
+    : api(`/api/agent/skill/file?${skQuery()}&path=${encodeURIComponent(path)}`);
+}
 async function skSave(){
-  const f = await act(() => skApi("/api/skills/file/save", {name: SKV.name, path: SKV.file, text: SKV.draft, mtime: SKV.f.mtime}), "已保存");
+  const x = SKV.src;
+  if (x.kind === "local" && SKV.s.link && !SKV.linkOk) {
+    if (!await confirmBox("改的是原件", `这个 Skill 是链接过来的，保存会直接改 ${tilde(SKV.s.link, ownerOf(x.aid))} 里的文件。`, "保存")) return;
+    SKV.linkOk = true;
+  }
+  const f = await act(() => x.kind === "platform" ? skApi("/api/skills/file/save", {name: SKV.name, path: SKV.file, text: SKV.draft, mtime: SKV.f.mtime})
+    : api("/api/agent/skill/file/save", {id: x.aid, group: x.group, name: x.name, path: SKV.file, text: SKV.draft, mtime: SKV.f.mtime}), "已保存");
   SKV.f = f; SKV.dirty = false; SKV.mode = "view"; skillsCache = null; drawSkView();
 }
 async function skCancel(){
@@ -3288,14 +3334,65 @@ async function renderAgent(id){
       <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
         <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base || "claude"]}</span>${mtag(ownerOf(a.id))}${a.dir ? `<span class="path">${esc(tilde(a.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
     </div>
-    <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
-    ${agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
+    <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"], ["skills", "Skill"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';agentSk=null;renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
+    ${agentTab === "skills" ? `<div id="agent-sk"></div>` : agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
       <div class="sect"><h3>在哪能找到它</h3>
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
         ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
       </div>
       <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd><dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
     </div>`}</div>`;
+  if (agentTab === "skills") drawAgentSkills(a);
+}
+// ---- Agent 的本地 Skill（#115）：它那台电脑上能用到的 Skill，能看、能改、能提交成平台 Skill ----
+let agentSk = null;    // {aid, groups, open: {group, name} | null}
+async function drawAgentSkills(a){
+  const el = $("#agent-sk"); if (!el) return;
+  if (!agentSk || agentSk.aid !== a.id) agentSk = {aid: a.id, groups: null, open: null};
+  if (agentSk.open) return openLocalSkill(a, agentSk.open.group, agentSk.open.name);
+  if (!agentSk.groups) {
+    el.innerHTML = `<div class="pane"><div class="doc-loading">…</div></div>`;
+    try { agentSk.groups = (await api(`/api/agent/skills?id=${encodeURIComponent(a.id)}`)).groups; }
+    catch (e) { el.innerHTML = `<div class="pane"><p class="muted">${esc(e.message)}</p></div>`; return; }
+    if (!$("#agent-sk")) return;
+  }
+  const gs = agentSk.groups;
+  el.innerHTML = `<div class="pane">${gs.length ? gs.map(g => `<div class="sect"><h3>${esc(g.label)} <span class="muted" style="font:400 13px var(--sans)">${g.skills.length}</span></h3>
+      <div class="sk-list">${g.skills.map(sk => `<button class="sk-item" onclick="agentSk.open={group:${q(g.id)},name:${q(sk.name)}};drawAgentSkills(agentOf(${q(a.id)})||{id:${q(a.id)}})">
+        <span class="t"><span class="title">${esc(sk.name)}${sk.shared ? `<span class="tag">平台上也有</span>` : ""}</span><span class="sub">${esc(sk.desc || "")}</span></span>${ICON.chev}</button>`).join("")}</div></div>`).join("")
+    : `<p class="muted">这个 Agent 在它那台电脑上还没有装 Skill。</p>`}</div>`;
+}
+async function openLocalSkill(a, group, name){
+  const el = $("#agent-sk"); if (!el) return;
+  let s;
+  try { s = await api(`/api/agent/skill?id=${encodeURIComponent(a.id)}&group=${encodeURIComponent(group)}&name=${encodeURIComponent(name)}`); }
+  catch (e) { el.innerHTML = `<div class="pane"><p class="muted">${esc(e.message)}</p><button class="btn" onclick="agentSk.open=null;drawAgentSkills(agentOf(${q(a.id)}))">返回</button></div>`; return; }
+  if (!SKV || SKV.src.kind !== "local" || SKV.src.aid !== a.id || SKV.src.group !== group || SKV.name !== name)
+    SKV = {src: {kind: "local", aid: a.id, group, name}, name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
+  SKV.s = s;
+  if (!s.files.includes(SKV.file)) SKV.file = "SKILL.md";
+  const g = {label: s.label};
+  el.innerHTML = `<div class="sk-head inpage">
+      <button class="sk-back" onclick="skBack(${q(a.id)})">${ICON.left}本地 Skill</button>
+      <div class="sk-title"><div class="grow"><h2>${esc(name)}</h2>
+          <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
+          <div class="skmeta">${esc(g.label)} · ${bytes(s.size)}${s.link ? ` · 链接到 ${esc(tilde(s.link, ownerOf(a.id)))}` : ""}${s.editable ? "" : " · 只能看"}</div>
+          <div class="sk-market" id="sk-mk"></div></div>
+        <div class="sk-acts"><button class="btn primary" onclick="shareSkill(${q(a.id)},${q(group)},${q(name)},${s.shared})">${s.shared ? "更新平台上的那份" : "提交成平台 Skill"}</button></div></div></div>
+    <div class="sk-body inpage"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div>`;
+  drawSkTree();
+  SKV.dirty ? drawSkView() : skOpenFile(SKV.file, true);   // 页面重画时留着没保存的改动
+  loadMarket(name);
+}
+async function skBack(aid){
+  if (SKV && SKV.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  SKV.dirty = false; agentSk.open = null; drawAgentSkills(agentOf(aid) || {id: aid});
+}
+async function shareSkill(aid, group, name, shared){
+  if (SKV && SKV.dirty) return toast("先保存改动");
+  if (shared && !await confirmBox(`更新平台上的「${name}」？`, "平台上的这个 Skill 会换成这一份，所有电脑上都换。", "更新")) return;
+  await act(() => api("/api/agent/skill/share", {id: aid, group, name}), shared ? "已更新平台上的那份" : "已提交成平台 Skill，所有电脑上的 Agent 都能用");
+  skillsCache = null; agentSk.groups = null; drawAgentSkills(agentOf(aid) || {id: aid});
 }
 function channelHtml(a, k){
   const label = k === "feishu" ? "飞书" : "微信";

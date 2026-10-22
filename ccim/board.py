@@ -15,6 +15,15 @@ BRIEF_MODEL = "haiku"
 _brief_lock = None
 
 
+def ask_preview(text):
+    """面板上显示用户正文：跳过开头的引用，保留原始消息供对话使用（#128）。"""
+    lines = (text or "").splitlines()
+    start = 0
+    while start < len(lines) and (not lines[start].strip() or lines[start].lstrip().startswith(">")):
+        start += 1
+    return " ".join("\n".join(lines[start:]).split())[:120]
+
+
 def summary(logs, cid):
     path = logs._f(cid)
     try:

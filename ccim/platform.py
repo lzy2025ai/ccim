@@ -425,7 +425,7 @@ class Platform:
             return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
         return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ),
-                "ask": " ".join((summ.get("last_user") or "").split())[:120]}
+                "ask": board_mod.ask_preview(summ.get("last_user"))}
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""

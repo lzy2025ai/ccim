@@ -1119,7 +1119,8 @@ function targetOf(path, body, machine){
   const u = new URL(path, location.origin);
   return ownerOf(u.searchParams.get("id")) || ownerOf(body && (body.id || body.agent)) || ctxMachine;
 }
-const remoteHeader = m => m && S.me && m !== S.me ? {"X-Machine": m} : {};
+// 在服务器上 S.me 只是第一台在线的电脑，也要标明（#144）
+const remoteHeader = m => m && (S.hub || S.me && m !== S.me) ? {"X-Machine": m} : {};
 // 有请求在路上：顶部细进度条（超过 150 毫秒才出现，快的看不到）；点下去的按钮进入处理中，防止连点（#32）
 let inflight = 0, barTimer = null;
 function busyBar(d){

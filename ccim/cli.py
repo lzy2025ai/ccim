@@ -326,16 +326,16 @@ def cmd_restart(args):
     if args.safe or runtime.inside(path):     # 在它自己里面（比如平台里的 Agent）重启它：停掉它会连带停掉这条命令，交给独立进程（#70）
         runtime.schedule_restart(path, delay=args.delay)
         when = "等这一轮回复发出去、手头的活做完就重启（最多等 3 分钟）" if runtime.inside(path) else f"{args.delay} 秒后重启"
-        print(f"「{os.path.basename(path)}」{when}；新版本起不来会用稳定版顶上，结果发到{NAMES[entry['channel']]}。")
+        print(f"{runtime.proc_label(path)}{when}；新版本起不来会用稳定版顶上，结果发到{NAMES[entry['channel']]}。")
         return
     if daemon.is_always(path):
         daemon.stop(path)
         pid = daemon.start_always(path, entry["channel"])
-        print(f"「{os.path.basename(path)}」已重启，继续常驻（进程 {pid}）。")
+        print(f"{runtime.proc_label(path)}已重启，继续常驻（进程 {pid}）。")
         return
     daemon.stop(path)
     pid = daemon.start_background(path, entry["channel"])
-    print(f"「{os.path.basename(path)}」已重启，在后台运行（进程 {pid}）。")
+    print(f"{runtime.proc_label(path)}已重启，在后台运行（进程 {pid}）。")
 
 
 def _state_text(path):

@@ -2503,21 +2503,7 @@ async function markSeen(id, force){
 }
 let boardStats = null, boardStatsAt = 0, showAllRecent = false;
 let recentTab = (() => { try { return localStorage.getItem("ccim.recentTab") || "chats"; } catch { return "chats"; } })();
-function setRecentTab(t){ recentTab = t; try { localStorage.setItem("ccim.recentTab", t); } catch {} renderBoard(true); }
-function recentAgents(recent){   // 最近在跟的按 Agent 合起来：几个对话、最近那个是什么
-  const by = {};
-  for (const c of recent) { if (!c.agent) continue; (by[c.agent] = by[c.agent] || []).push(c); }
-  return Object.entries(by).map(([aid, cs]) => [aid, cs]).sort((x, y) => ((y[1][0].last_active || "") > (x[1][0].last_active || "") ? 1 : -1));
-}
-function agentRecentRow([aid, cs]){
-  const a = agentOf(aid); if (!a) return "";
-  const c = cs[0];
-  const soft = cs.some(x => x.unread);
-  return `<a class="brow quiet ${soft ? "unread" : ""}" href="#/agents/${encodeURIComponent(aid)}">${seal(a, "sm", false)}
-    <span class="bmain"><span class="btop">${soft ? `<span class="udot soft"></span>` : ""}<span class="btitle">${esc(a.name)}</span><span class="bwho">${cs.length} 个对话${multi() ? " · " + esc((machineOf(c.machine) || {}).name || "") : ""}</span></span>
-    <span class="bprog">最近：${esc(c.title)}${c.brief ? `　${esc(c.brief)}` : ""}</span></span>
-    <span class="bmeta">${when(c.last_active)}</span></a>`;
-}
+function setRecentTab(t){ recentTab = t; showAllRecent = false; try { localStorage.setItem("ccim.recentTab", t); } catch {} renderBoard(true); }
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
   const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
@@ -2612,7 +2598,6 @@ async function renderBoard(quick){
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v.turns).sort((a, b) => b[1].turns - a[1].turns).slice(0, 6);
   const maxT = Math.max(1, ...ags.map(([, v]) => v.turns));
   const sec = (title, color, n, body, cls = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
-  const shown = showAllRecent ? recent : recent.slice(0, 5);
   if (boardReply && !wait.some(c => c.id === boardReply.id)) boardReply = null;     // 那件事已经不在等你了
   const ta = $("#br-text"), focused = ta && document.activeElement === ta, sel = ta && [ta.selectionStart, ta.selectionEnd];
   const top = $(".board") ? $(".board").scrollTop : 0;
@@ -2627,11 +2612,13 @@ async function renderBoard(quick){
       ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting")}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
       ${(() => {
-        const ags = recentAgents(recent);
-        const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${recent.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${ags.length}</button></span>`;
-        const body = recentTab === "agents"
-          ? (ags.length ? ags.map(agentRecentRow).join("") : `<p class="bempty">最近 7 天没和 Agent 聊过。</p>`)
-          : (recent.length ? shown.map(c => boardRow(c, "recent")).join("") + (recent.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${recent.length - 5} 件</button>` : "") : `<p class="bempty">最近 7 天没有别的对话。</p>`);
+        // 对话：临时对话；Agent：和 Agent 的对话，都是一个对话一行（#119）
+        const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
+        const list = recentTab === "agents" ? withAgent : temps;
+        const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
+        const body = list.length ? (showAllRecent ? list : list.slice(0, 5)).map(c => boardRow(c, "recent")).join("")
+            + (list.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - 5} 件</button>` : "")
+          : `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;
         return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
       })()}
     </div><div class="bright">

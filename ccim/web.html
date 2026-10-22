@@ -1622,7 +1622,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""} ${c.stall ? "stall" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${c.busy ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
@@ -1632,7 +1632,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""} ${c.stall ? "stall" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${c.busy ? ANTS : ""}
         ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
-        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.source)}</span></span>${moreBtn(c)}</a>`;
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${whenTag(c)}<span>${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
@@ -2575,7 +2575,7 @@ async function startAgent(aid){
 function renderChatEmptyOr(){ renderChatEmpty(); }
 
 // ================= 任务面板（#48） =================
-const isTop = c => !c.mention_of && !c.project && !c.schedule && !c.external;
+const isTop = c => !c.mention_of && !c.project && (!c.schedule || c.listed) && !c.external;
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
 // 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
@@ -3530,7 +3530,7 @@ function renderAgentSide(){
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
   const a = agentOf(id) || agentSide.a || {name: "", seal: "", base: "claude"};
   const m = machineOf(a.machine || ownerOf(id) || S.me);
-  const rows = agentSide.chats.filter(c => !c.project && !c.schedule);   // 群聊里被 @ 的那份也列出来（#78）
+  const rows = agentSide.chats.filter(c => !c.project && (!c.schedule || c.listed));   // 群聊里被 @ 的那份也列出来（#78）
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
@@ -3544,7 +3544,7 @@ function renderAgentSide(){
 async function openAgentLatest(id){
   if (!agentSide || agentSide.id !== id || !agentSide.a || agentSide.stale) await fetchAgentSide(id);
   if (current.view !== "agents" || current.id !== id || current.sub) return;
-  const first = (agentSide.chats || []).find(c => !c.project && !c.schedule);
+  const first = (agentSide.chats || []).find(c => !c.project && (!c.schedule || c.listed));
   if (first) { history.replaceState(null, "", `#/agents/${encodeURIComponent(id)}/${encodeURIComponent(first.id)}`); current.sub = first.id; renderList(); openChat(first.id); return; }
   const a = agentOf(id) || agentSide.a || {name: ""};
   $("#main").innerHTML = `<div class="empty"><h2>和${esc(a.name)}聊点什么</h2><p>${esc(a.role || "")}</p>
@@ -4582,7 +4582,7 @@ function drawSchedule(){
     </div>
     <div class="pane">
       <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${s.target.kind === "chat" && groupOf(s.target.id) ? `<a class="link" href="#/chats/${encodeURIComponent(s.target.id)}">${esc(schedTarget(s))}</a>` : esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
-        <dt>结果</dt><dd>${esc(dl)}</dd>${s.target.kind === "agent" ? `<dt>对话</dt><dd>${s.session === "same" ? "接着同一个对话聊，记得之前跑过的" : "每次开一个新对话"}</dd>` : ""}</dl></div>
+        <dt>结果</dt><dd>${esc(dl)}</dd>${s.target.kind === "agent" ? `<dt>对话</dt><dd>${s.session === "same" ? `<a class="link" href="#/chats/${encodeURIComponent(`s-${s.id}-${s.target.id}`)}">接着同一个对话</a>` : "每次开一个新对话"}</dd>` : ""}</dl></div>
       <div class="sect"><h3>运行记录</h3>${s.runs.length ? s.runs.map((r, i) => `<div class="run ${open.has(r.id) || (!open.size && i === 0) ? "open" : ""}" data-id="${esc(r.id)}">
         <button class="run-head" onclick="this.parentElement.classList.toggle('open')"><span class="when" style="width:120px">${esc(fmtTs(r.at))}</span>${runState(r)}${ICON.chev}</button>
         <div class="run-body">${r.state === "working" ? `<p class="muted">正在跑，跑完结果会出现在这里。</p>` : r.state === "quiet" ? `<p class="muted">这次没有新情况，没在对话里出声。</p>` : `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text || "")}</div>`}
@@ -4607,9 +4607,9 @@ async function renderScheduleForm(id){
   const today = new Date(), tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
   const iso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   sd = s ? {name: s.name, target: JSON.parse(JSON.stringify(s.target)), prompt: s.prompt, freq: s.freq, time: s.time, days: s.days || [], dom: s.dom || 1,
-            date: s.date || iso(tomorrow), deliver: s.deliver || [], session: s.session || "new", every: s.every || 60, quiet: !!s.quiet}
+            date: s.date || iso(tomorrow), deliver: s.deliver || [], session: s.session || "same", every: s.every || 60, quiet: !!s.quiet}
          : {name: "", target: {kind: "agent", id: (S.agents[0] || {}).id}, prompt: "", freq: "workday", time: "09:00", days: [0], dom: 1,
-            date: iso(tomorrow), deliver: [], session: "new", every: 60, quiet: false};
+            date: iso(tomorrow), deliver: [], session: "same", every: 60, quiet: false};
   sd._id = id || null;
   drawScheduleForm();
 }
@@ -4657,8 +4657,8 @@ function drawScheduleForm(){
         ${ch("weixin") ? `<button class="check ${d.deliver.includes("weixin") ? "on" : ""}" data-dl="weixin">${ICON.check}也发到微信「${esc(ch("weixin").bot)}」</button>` : ""}
         ${d.target.kind !== "project" ? `<button class="check ${d.quiet ? "on" : ""}" id="sd-quiet">${ICON.check}没有新情况就不出声</button>` : ""}
       </div>
-      ${d.target.kind === "agent" && a ? `<label>对话</label><div><div class="seg" id="sd-sess"><button class="${d.session === "new" ? "on" : ""}" data-s="new">每次开新对话</button><button class="${d.session === "same" ? "on" : ""}" data-s="same">接着同一个对话</button></div>
-        <div class="help">${d.session === "new" ? "每次从头开始，互不影响。" : "记得之前每次跑的结果，适合「和上次比有什么变化」这类任务。"}</div></div>` : ""}
+      ${d.target.kind === "agent" && a ? `<label>对话</label><div><div class="seg" id="sd-sess"><button class="${d.session === "same" ? "on" : ""}" data-s="same">接着同一个对话</button><button class="${d.session === "new" ? "on" : ""}" data-s="new">每次开新对话</button></div>
+        <div class="help">${d.session === "new" ? "每次从头开始，互不影响，不出现在对话列表里。" : "记得之前每次跑的结果，对话列表里能找到它，也能在里面接着问。"}</div></div>` : ""}
       <span></span><div class="row" style="margin-top:6px"><button class="btn primary" id="sd-save">${d._id ? "保存" : "新建"}</button><button class="btn" id="sd-try">先试跑一次</button></div>
     </div></div></div>`;
   document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { const m = b.dataset.m; sd.target.agents = sd.target.agents.includes(m) ? sd.target.agents.filter(x => x !== m) : [...sd.target.agents, m]; drawScheduleForm(); });

@@ -7,6 +7,8 @@
 """
 import asyncio, datetime, logging, os, time
 
+from .schedules import listed
+
 log = logging.getLogger("ccim.board")
 _SUM = {}                                     # 对话 → (大小, 修改时间, 摘要)
 BRIEF_MODEL = "haiku"
@@ -57,8 +59,9 @@ def unread(meta, summ):
     return bool(summ) and not meta.get("busy") and summ.get("answer_at", 0) > (meta.get("seen_at") or 0)
 
 
-def top_level(meta):
-    return not (meta.get("mention_of") or meta.get("project") or meta.get("schedule") or meta.get("helper"))
+def top_level(meta, cid):
+    return not (meta.get("mention_of") or meta.get("project") or meta.get("helper")
+                or (meta.get("schedule") and not listed(cid, meta)))
 
 
 def stats(pf):
@@ -69,7 +72,7 @@ def stats(pf):
     heat, agents = {}, {}
     turns_week = done_week = 0
     for cid, m in pf.chats().items():
-        if m.get("project") or m.get("schedule"):
+        if m.get("project") or (m.get("schedule") and not listed(cid, m)):
             continue
         s = summary(pf.channel.logs, cid)
         aid = m.get("agent")
@@ -158,7 +161,7 @@ async def refresh_brief(pf, cid):
     if _brief_lock is None:
         _brief_lock = asyncio.Semaphore(2)
     m = pf.chats().get(cid)
-    if not m or not top_level(m):
+    if not m or not top_level(m, cid):
         return
     rows = pf.channel.logs.read(cid)
     ans = next((r for r in reversed(rows) if r.get("type") == "answer" and r.get("text")), None)

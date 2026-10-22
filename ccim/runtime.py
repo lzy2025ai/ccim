@@ -175,14 +175,16 @@ def set_try(what):
     if not paths:
         return label, ["现在没有跑开发版的项目，下次启动时生效。"]
     inner = bool(os.environ.get("CCIM_PROCESS"))
-    base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去
+    base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去（重启前还会等这一轮答完，#136）
     started = registry.now()
     paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
+    report = {"CCIM_RESTART_LABEL": f"切到 {label}" if label != "main" else "切回 main", "CCIM_RESTART_PATHS": json.dumps(paths)}
     for i, p in enumerate(paths):
-        schedule_restart(p, delay=base + 3 * i, notify=False)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
+        schedule_restart(p, delay=base + 3 * i, notify=False, env=report)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
     names = "、".join(f"「{os.path.basename(p)}」" for p in paths)
     if inner:
-        return label, [f"{names} {base} 秒后依次重启；新版本起不来会用稳定版顶上。"]
+        return label, [f"{names} 会在这一轮回复发出去、手头的活做完后依次重启（最多等 {WAIT_IDLE // 60} 分钟），"
+                       "重启好了在这里说一声；新版本起不来会用稳定版顶上。"]
     out, left = [], list(paths)
     for _ in range(120):                      # 在终端里调用：等它们都重新连上再告诉结果
         time.sleep(1)
@@ -204,7 +206,10 @@ def inside(path):
 
 # ---------- 安全重启 ----------
 
-def schedule_restart(path, delay=15, target=None, notify=True):
+WAIT_IDLE = 180                               # 重启前最多等手头的对话做完这么久（#136）
+
+
+def schedule_restart(path, delay=15, target=None, notify=True, env=None):
     """另起一个脱离当前进程的进程去重启，立即返回。target：dev / stable / None（按项目设置）。
     notify=False：不在飞书、微信里通知结果（用环境变量传，跑重启的稳定版旧了也不会因为不认识参数而失败）。"""
     py = stable_python() or dev_python() or sys.executable
@@ -212,7 +217,7 @@ def schedule_restart(path, delay=15, target=None, notify=True):
     if target:
         args += ["--target", target]
     log = open(os.path.join(registry.pdir(path), "restart.log"), "ab")
-    env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}))
+    env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}), **(env or {}))
     env.pop("PYTHONPATH", None)               # 在试用某个需求的进程里调用时带着那个工作目录；要试哪个由 launch_env 决定（#111）
     subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
 
@@ -230,6 +235,8 @@ def safe_restart(path, delay=0, target=None, notify=True):
         return False, msg
     always = daemon.is_always(path) or not r
     py, desc = which(path, entry, target)
+    if r:
+        _before_restart(path)
     daemon.stop(path)
     try:
         start = daemon.start_always if always else daemon.start_background
@@ -348,13 +355,54 @@ def promote(wait=180):
 
 
 def _wait_idle(path, limit):
-    """等这个项目手头的对话做完（最多 limit 秒）。"""
+    """等这个项目手头的对话做完（最多 limit 秒）。返回到时候还没做完的对话。"""
     deadline = time.monotonic() + limit
-    while time.monotonic() < deadline:
-        chats = registry.read_state(path).get("chats") or {}
-        if not any(c.get("busy") for c in chats.values()):
-            return
+    while True:
+        busy = [cid for cid, c in (registry.read_state(path).get("chats") or {}).items() if c.get("busy")]
+        if not busy or time.monotonic() >= deadline:
+            return busy
         time.sleep(3)
+
+
+def _before_restart(path):
+    """重启前（#136）：等发起重启的那一轮回复发出去、别的对话这一轮做完（最多 WAIT_IDLE 秒）；
+    还没做完的记下来，重启后在那些对话里说明；在这个进程里的对话发起的，记下来重启好了回它一句。"""
+    caller = os.environ.get("CCIM_CHAT") if os.environ.get("CCIM_PROCESS") == os.path.realpath(path) else None
+    left = _wait_idle(path, WAIT_IDLE)
+    changes = {"restart_cut": {"at": registry.now(), "chats": left} if left else None}
+    if caller:
+        try:
+            paths = json.loads(os.environ.get("CCIM_RESTART_PATHS") or "[]") or [path]
+        except ValueError:
+            paths = [path]
+        changes["restart_report"] = {"chat": caller, "since": registry.now(), "paths": paths,
+                                     "label": os.environ.get("CCIM_RESTART_LABEL") or "重启"}
+    registry.write_state(path, **changes)
+
+
+def after_restart_note(path):
+    """重启后的新进程调用：[(对话, 要说的话)]。发起重启的那个对话：等各个进程都起来（最多 2 分钟）再说结果。"""
+    st = registry.read_state(path)
+    cut, rep = st.get("restart_cut") or {}, st.get("restart_report")
+    if not cut and not rep:
+        return []
+    registry.write_state(path, restart_cut=None, restart_report=None)
+    out = [(cid, "上一轮被 ccim 重启打断了，没做完。要接着做就跟它说一声。") for cid in cut.get("chats") or []
+           if not rep or cid != rep.get("chat")]
+    if rep:
+        from . import daemon
+        deadline = time.monotonic() + 120
+        while True:
+            rows = [(p, registry.read_state(p)) for p in rep.get("paths") or [path]]
+            up = [(p, s) for p, s in rows if (s.get("started") or "") >= rep["since"] and s.get("online") and daemon.running(p)]
+            if len(up) == len(rows) or time.monotonic() >= deadline:
+                break
+            time.sleep(3)
+        ok = {p for p, _ in up}
+        lines = [f"- 「{os.path.basename(p)}」" + (f"在线，运行的是{describe(s.get('python'))}{'（新版本没起来，先用它顶上）' if s.get('fallback') else ''}"
+                                                if p in ok else "还没起来，用 ccim show 看看") for p, s in rows]
+        out.append((rep["chat"], f"已{rep.get('label') or '重启'}：\n" + "\n".join(lines)))
+    return out
 
 
 def _prune():

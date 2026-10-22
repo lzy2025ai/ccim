@@ -278,6 +278,11 @@
 - 推送、拉取已在仓库配置里固定用 lzy2025ai，不用切账号。gh 命令一律带上令牌：`GH_TOKEN=$(gh auth token -u lzy2025ai) gh …`。
   不要用 `gh auth switch`，它改的是全机共用的选中账号，会影响别的会话和仓库。
 - 提交时只 `git add` 自己改的文件，不要 `git add -A`。
+- 重启前先等（#136）：`safe_restart` 停进程前 `_before_restart`：等这个进程里的对话这一轮做完（state chats 的 busy，最多 WAIT_IDLE 180 秒），
+  还没做完的记 restart_cut；在这个进程里的对话发起的（环境变量 CCIM_PROCESS 是它、CCIM_CHAT 是那个对话），记 restart_report（`ccim try` 用
+  CCIM_RESTART_LABEL / CCIM_RESTART_PATHS 带上切到哪、重启了哪些）。新进程连上后 `_after_restart` → `runtime.after_restart_note`：
+  等那几个进程都起来（最多 2 分钟）在发起的对话里说结果，被打断的对话里说一声（微信不发）。进程启动时把 state 里残留的 busy 清掉。
+  注意：独立进程优先用稳定版跑，这部分改动要 promote 之后才生效
 - 重启一律交给独立进程（#70）：`ccim try` 用 `schedule_restart`；ccim 进程启动时设环境变量 CCIM_PROCESS，在它里面（比如平台里的 Agent）
   `ccim restart` 它自己会自动改成独立进程。直接在当前进程里先停再启动，停的时候会把执行命令的 Agent 一起结束，启动就没人做了。
 - 实现：`runtime.set_try` 把要试的工作目录记在 ~/.ccim/stable/channel.json 的 try，`launch_env` 在启动开发版进程时把它放到 PYTHONPATH

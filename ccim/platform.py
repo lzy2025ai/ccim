@@ -23,7 +23,7 @@ from . import devices, docs, filesend
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
-from .schedules import is_quiet as schedules_quiet
+from .schedules import is_quiet as schedules_quiet, listed
 from .channels.base import CardAction, Channel, Incoming
 
 log = logging.getLogger("ccim.platform")
@@ -421,7 +421,7 @@ class Platform:
         threading.Thread(target=go, daemon=True).start()
 
     def _board_marks(self, cid, m):
-        if not board_mod.top_level(m):
+        if not board_mod.top_level(m, cid):
             return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
         return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ),
@@ -742,6 +742,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
+                "listed": listed(cid, m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -809,8 +810,7 @@ class Platform:
         return out
 
     def chat_list(self):
-        rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")
-                and not c.get("mention_of") and not c.get("helper")] + \
+        rows = [self.chat_view(cid) for cid, c in self.chats().items() if board_mod.top_level(c, cid)] + \
             self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
@@ -1017,8 +1017,7 @@ class Platform:
         from . import history
         ids = {r["sid"]: r["id"] for r in rows if r.get("agent") == aid}
         for cid, c in self.chats().items():
-            if c.get("agent") == aid and c.get("session_id") and not c.get("project") and not c.get("schedule") \
-                    and not c.get("mention_of"):
+            if c.get("agent") == aid and c.get("session_id") and board_mod.top_level(c, cid):
                 ids.setdefault(c["session_id"], cid)
         try:
             parents = history.fork_parents(list(ids), cwd)

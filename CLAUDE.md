@@ -83,7 +83,8 @@
   回答还没出来时状态是 queued，网页按「这个对话正在干活、而且是它最早没做完的一件」显示成干活中；平台重启后没做完的显示 lost
 - `ccim/schedules.py`：定时任务（#9）。存平台 state.json 的 schedules（next_run 存盘），运行记录 web/schedule-<编号>.jsonl（run 按 id 合并）。
   平台进程里每 30 秒检查一次：到点就跑，下一次从「现在」往后算，所以错过几次都只补一次（比预定晚 5 分钟以上标 catchup）；
-  只跑一次的跑完就暂停。给 Agent：网页对话 s-<任务>-<运行>（或 session=same 时一直用 s-<任务>），meta 里 schedule，不进对话列表；
+  只跑一次的跑完就暂停。给 Agent：默认 session=same，一直用网页对话 s-<任务>-<Agent>（#132，`schedules.listed`：进对话列表、带「定时」标签，
+  用户能接着问；每次运行走 `_run_chat`，记成 sched 提问并加章节，连续两次出错先 reset 会话）；session=new 每次 s-<任务>-<运行>，不进对话列表。meta 里都有 schedule；
   给项目：走 `projects.dispatch`（一起做），等各人做完。deliver 用 `channels.send_once` 私聊主人
   Agent 自己建（#122）：`ccim schedule`（cli.py，走本机平台的 HTTP 接口）。会话启动时给助手进程环境变量 CCIM_CHAT / CCIM_CHANNEL / CCIM_AGENT /
   CCIM_PROJECT（`Chat.ccim_env`），PATH 前面加 ~/.ccim/bin（只放 ccim 一个软链，`ccim_bin`）。网页对话里建的是 kind=chat：到点在原对话里跑（`_run_chat`），

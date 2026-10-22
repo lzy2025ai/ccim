@@ -4,8 +4,9 @@
 平台进程里一个循环每 30 秒看一次：到点了就跑，然后按频率算下一次（next_run，存盘）。电脑睡着、ccim 没在运行错过了的，
 醒来发现已经过点就补跑一次（catchup），不管错过几次只补一次——下一次总是从「现在」往后算。
 
-给 Agent 的：每次一个新网页对话 s-<任务>-<运行>，或者一直用同一个 s-<任务>（session=same，记得之前跑过的）；
-这些对话 meta 里有 schedule，不进对话列表。给项目的：走项目派活（一起做，不对比），等各人都做完。
+给 Agent 的：默认一直用同一个网页对话 s-<任务>-<Agent>（session=same，记得之前跑过的，#132），它进对话列表，
+用户也能在里面接着问；每次运行在对话里记成定时任务那条提问、加一个章节，连续两次出错就换个新会话。
+或者每次一个新网页对话 s-<任务>-<运行>（session=new），不进对话列表。这些对话 meta 里都有 schedule。给项目的：走项目派活（一起做，不对比），等各人都做完。
 deliver 里有 feishu / weixin 的，做完用这个 Agent 接的机器人私聊主人（channels.send_once）。
 给对话的（kind=chat，Agent 用 ccim schedule 在网页对话里建的，#122）：到点在那个对话里跑，接着它的上下文。
 quiet：提示里让它没有值得说的就只回 QUIET，这种回答网页不记（WebChannel.send_text），对话里那条任务也去掉，也不发飞书、微信。
@@ -24,6 +25,11 @@ QUIET = "[无需通知]"
 QUIET_NOTE = (f"\n\n（这是定时任务到点自动发来的，用户这时不一定在看。这次没有值得告诉用户的新情况时，"
               f"只回复「{QUIET}」这几个字，不要别的；有就照常回答。）")
 PROJECT_WAIT = 4 * 3600                      # 项目任务最多等这么久
+
+
+def listed(cid, meta):
+    """定时任务「接着同一个对话」的那个对话进对话列表（#132）；每次新开的不进。"""
+    return bool(meta.get("schedule")) and cid == f"s-{meta['schedule']}-{meta.get('agent')}"
 
 
 def is_quiet(text):
@@ -105,7 +111,7 @@ class Schedules:
         t = f.get("target") or {}
         if t.get("kind") == "chat":           # 回到建任务的那个网页对话里跑
             c = self.pf.chats().get(t.get("id") or "")
-            if not c or c.get("project") or c.get("schedule") or c.get("mention_of"):
+            if not c or c.get("project") or (c.get("schedule") and not listed(t["id"], c)) or c.get("mention_of"):
                 raise Problem("找不到这个对话。")
             target = {"kind": "chat", "id": t["id"]}
         elif t.get("kind") == "group":        # 群聊：不选人就是交给主 Agent
@@ -137,7 +143,7 @@ class Schedules:
                "days": sorted({int(d) for d in f.get("days") or [] if 0 <= int(d) <= 6}),
                "dom": min(max(int(f.get("dom") or 1), 1), 28), "date": f.get("date"),
                "deliver": [d for d in f.get("deliver") or [] if d in ("feishu", "weixin")],
-               "session": "same" if f.get("session") == "same" else "new", "quiet": bool(f.get("quiet")),
+               "session": "new" if f.get("session") == "new" else "same", "quiet": bool(f.get("quiet")),
                "every": min(max(int(f.get("every") or 60), EVERY[0]), EVERY[1])}
         if freq == "weekly" and not out["days"]:
             raise Problem("选一下每周几。")
@@ -298,6 +304,10 @@ class Schedules:
             chats[cid] = {"type": "p2p", "agent": aid, "schedule": sid, "title": s["name"],
                           "created": registry.now(), "last_active": registry.now()}
             self.pf.store.write(chats)
+        if s.get("session") == "same":
+            if self._failing(sid, rid) and not chats[cid].get("busy"):   # 连续两次出错：换个新会话再跑，对话记录留着
+                await self.pf._bridge(cid).chat(cid, "p2p").reset()
+            return await self._run_chat(cid, s, prompt, sid, chapter=True)
         start = time.time()
         b = self.pf._bridge(cid)
         chat = b.chat(cid, "p2p")
@@ -310,6 +320,10 @@ class Schedules:
                      if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
         return {"state": state, "text": answer or last.get("text") or "", "steps": last.get("steps") or [],
                 "elapsed": last.get("elapsed") or round(time.time() - start, 1), "chat": cid}
+
+    def _failing(self, sid, rid):
+        runs = [r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run" and r["id"] != rid]
+        return len(runs) >= 2 and all(r.get("state") == "error" for r in runs[-2:])
 
     async def _run_project(self, s, prompt):
         t = s["target"]
@@ -342,7 +356,7 @@ class Schedules:
             return {"state": "error", "text": "等了太久还没做完，去群聊里看看。", "chat": cid}
         return await self._run_chat(cid, s, prompt)
 
-    async def _run_chat(self, cid, s, prompt, sid=None):
+    async def _run_chat(self, cid, s, prompt, sid=None, chapter=False):
         """在这个网页对话（单聊或群聊的主 Agent）里跑，接着它的上下文。对话里记一条任务（sched），不出声的那次再去掉。"""
         from .session import Task
         from . import groups
@@ -355,6 +369,9 @@ class Schedules:
         rec = self.pf.channel.logs.append(cid, {"type": "user", "id": "sched-" + uuid.uuid4().hex[:10], "text": s["prompt"],
                                                 "files": [], "sched": s["name"], "sched_id": sid})
         self.pf.channel._emit(cid, rec)
+        key = f"user:{rec['at']}"
+        if chapter:                               # 目录里按日期跳到某一次
+            self.pf.set_chapter(cid, key, time.strftime("%m-%d %H:%M", time.localtime(rec["at"])))
         head = groups.note_prefix(self.pf, cid, groups.MAIN) + self.pf.mentions.unseen(cid) if c.get("members") else ""
         task = Task(head + prompt)
         chat.submit(task)
@@ -362,6 +379,8 @@ class Schedules:
         state = {"ok": "done"}.get(state, state)
         if state == "done" and is_quiet(answer):
             self.pf.channel.logs.drop(cid, rec["id"])
+            if chapter:
+                self.pf.set_chapter(cid, key, "")
             self.pf.channel.events.publish({"type": "drop", "chat": cid, "id": rec["id"]})
             return {"state": "done", "text": QUIET, "elapsed": round(time.time() - start, 1), "chat": cid}
         last = next((r for r in reversed(self.pf.channel.logs.read(cid))

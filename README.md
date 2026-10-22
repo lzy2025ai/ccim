@@ -6,7 +6,7 @@
 
 手机上发一句话，Claude 就在那台电脑的项目目录里动手干活。
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-飞书%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-微信-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white) ![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white) ![Feishu / Lark](https://img.shields.io/badge/IM-飞书%20%2F%20Lark-3370FF) ![WeChat](https://img.shields.io/badge/IM-微信-07C160) ![Claude Code](https://img.shields.io/badge/Claude%20Code-supported-D97757) ![Codex](https://img.shields.io/badge/Codex-supported-10A37F)
 
 简体中文 · [English](README.en.md)
 
@@ -375,4 +375,4 @@ ln -sf "$PWD/.venv/bin/ccim" ~/.local/bin/ccim
 
 ## 许可证
 
-[MIT](LICENSE)
+[AGPL-3.0](LICENSE)

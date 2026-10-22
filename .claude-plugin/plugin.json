@@ -5,6 +5,6 @@
   "author": { "name": "lzy2025ai" },
   "homepage": "https://github.com/lzy2025ai/ccim",
   "repository": "https://github.com/lzy2025ai/ccim",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "keywords": ["feishu", "lark", "wechat", "weixin", "handoff", "mobile"]
 }

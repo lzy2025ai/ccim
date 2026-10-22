@@ -437,6 +437,13 @@ class Chat:
         snapshots = bool(getattr(self.b.channel, "live", False))   # 网页里能退回：记下文件快照，让它回显我们发的消息（带编号）
         from . import kb
         kbs = kb.dirs(getattr(self.b.channel, "kbs_of", lambda c: [])(self.chat_id))    # 挂在这个对话上的知识库（#27）
+        from . import agents, skills
+        aid = self.b.entry.get("agent_id")
+        try:                                  # 平台上装的 Skill（#101）：这个 Agent 没去掉的都挂上
+            view = skills.plugin_for(agents.get(aid) if aid else None)
+        except Exception:
+            log.warning("挂平台 Skill 出错", exc_info=True)
+            view = None
         for resume, fork in tries + [(None, False)]:
             opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
@@ -447,6 +454,7 @@ class Chat:
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agents"],                            # 只是在群里 @ 人，用户看得到
+                plugins=[{"type": "local", "path": view}] if view else [],
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))

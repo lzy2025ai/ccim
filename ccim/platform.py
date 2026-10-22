@@ -651,6 +651,8 @@ class Platform:
         from . import history
         from .session import Task
         sm = self.chats().get(src) or {}
+        if sm.get("mention_of"):              # 群聊里被 @ 的成员：来源记成那个群聊（子对话不进列表）
+            src = sm["mention_of"]
         target = next((cid for cid, m in self.chats().items()
                        if m.get("session_id") == sid and cid != src
                        and not (m.get("mention_of") or m.get("project") or m.get("schedule"))), None)
@@ -667,6 +669,8 @@ class Platform:
             if where:
                 return "open", where
             target = self.new_chat(agent=r["agent"], link=sid, title=r["title"], source=r["source"])
+        elif sm.get("agent") and self.chats()[target].get("agent") != sm.get("agent"):
+            raise Problem("只能转交给同一个 Agent 的对话；要和别的 Agent 协作，请用户拉群聊。")
         elif self._linked(self.meta(target)) and history.open_elsewhere(sid):   # 接着终端对话聊的网页对话，那边又开着
             return "open", history.open_elsewhere(sid)
         title = (self.chat_view(src).get("title") if src in self.chats() else None) or "另一个对话"

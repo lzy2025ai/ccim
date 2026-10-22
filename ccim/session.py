@@ -815,8 +815,8 @@ class Chat:
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += _look_around(chat) + [run_as_admin]
-            if pf and str(chat.chat_id).startswith("w-"):
-                tools.append(_send_to_chat(chat, pf))   # 网页对话：可以把消息转交给同一个 Agent 的其他对话（#121）
+            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper"):
+                tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
         return create_sdk_mcp_server("ccim", tools=tools)

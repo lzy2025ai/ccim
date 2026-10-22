@@ -3,11 +3,11 @@
 一个聊天一个 worker 协程，Claude 客户端的连接、提问、断开都在这个协程里做；
 空闲 30 分钟就断开，下一条消息再按 session_id 接上。
 """
-import asyncio, logging, os, shutil, subprocess, sys, time, uuid, warnings
+import asyncio, json, logging, os, shutil, subprocess, sys, time, uuid, warnings
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage,
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
-                              create_sdk_mcp_server, tool)
+                              PermissionResultAllow, create_sdk_mcp_server, tool)
 
 from . import registry, usage
 from .progress import clock, describe_tool, short
@@ -464,7 +464,7 @@ class Chat:
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"] + CRON_TOOLS, env=self.ccim_env(),
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
-                               "mcp__ccim__ask_agents"],                            # 只是在群里 @ 人，用户看得到
+                               "mcp__ccim__ask_agents"] + SKILL_TOOLS,               # 只是在群里 @ 人，用户看得到；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
@@ -812,7 +812,66 @@ class Chat:
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += _look_around(chat) + [run_as_admin]
+        if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
+            tools += _skill_tools(chat)
         return create_sdk_mcp_server("ccim", tools=tools)
+
+
+SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")]
+
+
+def _skill_tools(chat):
+    """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。"""
+    from . import skills
+
+    def ok(x):
+        return {"content": [{"type": "text", "text": x if isinstance(x, str) else json.dumps(x, ensure_ascii=False)}]}
+
+    def guard(fn):
+        async def run(args):
+            try:
+                return ok(await asyncio.to_thread(fn, args))
+            except (skills.Problem, OSError, ValueError) as e:
+                return _err(str(e))
+        return run
+
+    t_list = tool("skill_list", "列出平台上装的所有 Skill：名字、说明、来源、是否停用。", {})(
+        guard(lambda a: [{k: m.get(k) for k in ("name", "desc", "source", "disabled", "updated")} for m in skills.listing()]))
+    t_files = tool("skill_files", "列出某个平台 Skill 里的所有文件（相对路径）。", {"name": str})(
+        guard(lambda a: skills.detail(a.get("name") or "")["files"]))
+    t_read = tool("skill_read", "读平台 Skill 里的一个文件，path 是相对路径，比如 SKILL.md。", {"name": str, "path": str})(
+        guard(lambda a: skills.read_file(a.get("name") or "", a.get("path") or "SKILL.md").get("text") or "（这个文件不是文字，读不了）"))
+    t_write = tool("skill_write", "写平台 Skill 里的一个文件（整个内容）：没有的文件新建；还没有这个 Skill 时先写它的 SKILL.md 就建好了。"
+                   "改动会同步到所有电脑。", {"name": str, "path": str, "content": str})(
+        guard(lambda a: skills.write_any(a.get("name") or "", a.get("path") or "", a.get("content"))))
+
+    def install(a):
+        src = (a.get("source") or "").strip()
+        pf = getattr(chat.b.channel, "platform", None)
+        names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, pf.peers.me.get("name") if pf else "")
+        skills.changed()
+        return {"installed": names}
+    t_install = tool("skill_install", "安装平台 Skill。source 是 GitHub 地址（仓库或仓库里某个文件夹），"
+                     "或者这台电脑 ~/.claude/skills 里已有的 Skill 名字。", {"source": str})(guard(install))
+
+    def enable(a):
+        skills.set_disabled(a.get("name") or "", not a.get("enabled"))
+        skills.changed()
+        return "好了"
+    t_enable = tool("skill_enable", "启用或停用一个平台 Skill（停用的 Agent 用不到，但留着）。", {"name": str, "enabled": bool})(guard(enable))
+
+    @tool("skill_delete", "删除一个平台 Skill，所有电脑上都删掉。会先请用户确认。", {"name": str})
+    async def t_delete(args):
+        name = args.get("name") or ""
+        if not any(m["name"] == name for m in skills.listing()):
+            return _err(f"没有「{name}」这个平台 Skill。")
+        r = await chat.b.approvals.ask(chat.chat_id, "skill_delete", {"name": name}, None)
+        if not isinstance(r, PermissionResultAllow):
+            return _err("用户没有同意删除。")
+        await asyncio.to_thread(skills.delete, name)
+        skills.changed()
+        return ok(f"已删除「{name}」")
+    return [t_list, t_files, t_read, t_write, t_install, t_enable, t_delete]
 
 
 ASK_WAIT = 20 * 60                            # ask_agents 最多等这么久，没回完的回答之后出现在对话里

@@ -106,7 +106,56 @@ def detail(name):
     for dp, dirs, fs in os.walk(_lib(name)):
         dirs[:] = sorted(x for x in dirs if x not in SKIP)
         files += [os.path.relpath(os.path.join(dp, f), _lib(name)) for f in sorted(fs) if f not in SKIP]
-    return {**m, "text": text, "files": files[:200]}
+    return {**m, "text": text, "files": files[:2000]}
+
+
+IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+          ".svg": "image/svg+xml"}
+
+
+def _file(name, rel):
+    base = os.path.realpath(_lib(_check(name)))
+    p = os.path.realpath(os.path.join(base, rel or ""))
+    if not p.startswith(base + os.sep) or not os.path.isfile(p):
+        raise Problem("找不到这个文件。")
+    return p
+
+
+def read_file(name, rel):
+    """Skill 里的一个文件：文字给原文，图片给 data 地址，其他的只给大小。"""
+    import base64 as b64
+    p = _file(name, rel)
+    st = os.stat(p)
+    out = {"path": rel, "size": st.st_size, "mtime": st.st_mtime}
+    ext = os.path.splitext(p)[1].lower()
+    if ext in IMAGES and st.st_size <= 5 << 20:
+        with open(p, "rb") as f:
+            return {**out, "image": f"data:{IMAGES[ext]};base64," + b64.b64encode(f.read()).decode()}
+    if st.st_size > 2 << 20:
+        return {**out, "binary": True}
+    with open(p, "rb") as f:
+        data = f.read()
+    try:
+        return {**out, "text": data.decode("utf-8")}
+    except UnicodeDecodeError:
+        return {**out, "binary": True}
+
+
+def save_file(name, rel, text, mtime):
+    """在网页里改了 Skill 的文件：打开以后被改过就不写；记成这个 Skill 改过，同步到别的电脑。"""
+    if not isinstance(text, str):
+        raise Problem("内容不对。")
+    with LOCK:
+        p = _file(name, rel)
+        if mtime and abs(os.path.getmtime(p) - float(mtime)) > 0.001:
+            raise Problem("这个文件在你打开以后被改过了，刷新后再改。")
+        _write(p, text)
+        m = _read_meta(name) or {}
+        if rel == "SKILL.md":
+            m["desc"] = _front(text).get("description", m.get("desc", ""))
+        m.update(updated=time.time(), size=_size(_lib(name)))
+        _write(_meta_path(name), json.dumps(m, ensure_ascii=False))
+    return read_file(name, rel)
 
 
 def local_list():

@@ -113,7 +113,7 @@
   挂载：`Chat._connect` 按 `b.entry["agent_id"]` 取 Agent，`plugin_for` 生成 views/<Agent>/ 本地插件（plugin.json 名字 platform，skills/ 下软链到 lib，
   只放没停用、Agent 的 skills_off 里没有的），SDK `plugins` 挂上，Claude 里是 platform:名字，不和本地 Skill 冲突；没变就不重建。只有 Claude Code。
   安装：GitHub（codeload 下 tar.gz，地址可以指到仓库里某个文件夹，找出所有带 SKILL.md 的文件夹）、上传（zip / .skill / tar.gz / SKILL.md）、
-  从某台电脑的 ~/.claude/skills 导入（请求发到那台电脑，装进它的平台库再同步）。解压时拦掉往外写的路径和软链。网页 #/skills，Agent 设置里勾挂哪些
+  从某台电脑的 ~/.claude/skills 导入（请求发到那台电脑，装进它的平台库再同步）。解压时拦掉往外写的路径和软链。网页 #/skills：装好后留在列表；详情左边文件树、右边看文件（Markdown 预览 / 源码，代码用 hlCode 简单高亮，图片直接显示），能改能存（/api/skills/file/save 带打开时的 mtime，改完算这个 Skill 更新、同步）。Agent 设置里勾挂哪些
 - 响应速度（#32）：别的电脑的 state 用缓存（peers.cache_at，60 秒内直接用，超过 10 秒后台再取），往那台发过 POST 或收到它的推送
   （正在干活的进度除外）就标 dirty、下次现问。history.read 按文件大小和修改时间缓存；`_external` 用最近列表里的那行，不再列一遍所有对话。
   网页：api() 有请求超过 150 毫秒显示顶部进度条，按下的按钮进入处理中（防连点）；发消息先把自己那条显示出来（sending），

@@ -85,6 +85,10 @@
   平台进程里每 30 秒检查一次：到点就跑，下一次从「现在」往后算，所以错过几次都只补一次（比预定晚 5 分钟以上标 catchup）；
   只跑一次的跑完就暂停。给 Agent：网页对话 s-<任务>-<运行>（或 session=same 时一直用 s-<任务>），meta 里 schedule，不进对话列表；
   给项目：走 `projects.dispatch`（一起做），等各人做完。deliver 用 `channels.send_once` 私聊主人
+  Agent 自己建（#122）：`ccim schedule`（cli.py，走本机平台的 HTTP 接口）。会话启动时给助手进程环境变量 CCIM_CHAT / CCIM_CHANNEL / CCIM_AGENT /
+  CCIM_PROJECT（`Chat.ccim_env`），PATH 前面加 ~/.ccim/bin（只放 ccim 一个软链，`ccim_bin`）。网页对话里建的是 kind=chat：到点在原对话里跑（`_run_chat`），
+  记录里那条任务带 sched；飞书、微信里建的交给 Agent、deliver 回那个渠道。quiet：提示里让它没事只回 QUIET，WebChannel 不记这种回答，
+  `Logs.drop` 去掉那条任务、推送 drop。频率 every（每隔几分钟）。Claude 的 CronCreate / CronList / CronDelete 在 ccim 会话里禁用
 - 分叉（`Platform.fork_chat`）：每轮回答记下 `fork`（会话编号 + 这一轮最后一条回答的 uuid，`Turn.uuid`），新网页对话 parent 指回去、
   fork_from / fork_at 存在状态里（`send` 里不能把 fork_from 当参数传，否则 fork_at 被丢掉，变成从整个对话分），之前的记录复制过去。
   Codex 只能从整个对话分，所以只有最后一条回答能分叉。没选目录的临时对话分叉后用原来的临时目录（temp.scratch），会话记录按目录存。

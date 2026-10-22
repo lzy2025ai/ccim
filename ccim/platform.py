@@ -23,6 +23,7 @@ from . import devices, docs, filesend
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
+from .schedules import is_quiet as schedules_quiet
 from .channels.base import CardAction, Channel, Incoming
 
 log = logging.getLogger("ccim.platform")
@@ -138,7 +139,13 @@ class Logs:
 
     def truncate(self, chat, n):
         """只留前 n 条（按合并后的算）。"""
-        rows = self.read(chat)[:n]
+        self._rewrite(chat, self.read(chat)[:n])
+
+    def drop(self, chat, rid):
+        """去掉某一条（按 id）。"""
+        self._rewrite(chat, [r for r in self.read(chat) if r.get("id") != rid])
+
+    def _rewrite(self, chat, rows):
         with self.lock:
             tmp = self._f(chat) + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
@@ -202,6 +209,8 @@ class WebChannel(Channel):
 
     async def send_text(self, chat_id, markdown, reply_to=None, uid=None):
         done = self.done_steps.pop(chat_id, None)
+        if done and schedules_quiet(markdown):     # 定时任务这次没什么要说的（#122）：不记、不提醒
+            return
         if done and time.monotonic() - done["done_at"] > 10:   # 那一轮没有回答：这是之后的提示，不带步骤
             done = None
         if done:
@@ -1379,6 +1388,7 @@ def _handler(pf):
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
+                "/api/schedule/list": lambda: {"schedules": pf.call(pf.schedules.summary)},   # ccim schedule list
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),

@@ -1039,6 +1039,7 @@ const ICON = {
   grow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
   shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   expand:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+  clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>`,
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 const $ = s => document.querySelector(s);
@@ -1331,6 +1332,10 @@ function connectEvents(){
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
     if (ev.type === "idle") { refreshSoon(); return; }   // 一轮结束的状态记下了（#98）
+    if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
+      if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }
+      return;
+    }
     const rec = {...ev};                  // 记录本身：外层的 chat 是「哪个对话的推送」，不是记录的字段（@ 回答自己的 chat 是它的子对话）
     delete rec.chat; delete rec.rec_chat;
     if (ev.rec_chat) rec.chat = ev.rec_chat;
@@ -1666,7 +1671,8 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">在「${esc(from.title)}」里 @ 的</a>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -4168,7 +4174,10 @@ function fmtDay(d){
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 function fmtTs(sec){ if (!sec) return ""; const d = new Date(sec * 1000); return `${fmtDay(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+const everyText = n => n % 60 === 0 ? `每 ${n / 60} 小时` : `每 ${n} 分钟`;
+const EVERY = [5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720, 1440];
 function freqText(s){
+  if (s.freq === "every") return everyText(s.every || 60);
   if (s.freq === "daily") return `每天 ${s.time}`;
   if (s.freq === "workday") return `每个工作日 ${s.time}`;
   if (s.freq === "weekly") return `每周${(s.days || []).map(d => WEEK[d]).join("、")} ${s.time}`;
@@ -4177,11 +4186,13 @@ function freqText(s){
 }
 const groupOf = id => S.chats.find(c => c.id === id);
 function schedMark(s){
+  if (s.target.kind === "chat") { const c = groupOf(s.target.id); return seal(c && c.agent ? agentOf(c.agent) : null, "", false); }
   if (s.target.kind === "group") { const g = groupOf(s.target.id); return seal(g ? agentOf(g.agent) : null, "", false); }
   if (s.target.kind === "project") return pmark(projSummary(s.target.id) || {name: "项"});
   return seal(agentOf(s.target.id), "", false);
 }
 function schedTarget(s){
+  if (s.target.kind === "chat") { const c = groupOf(s.target.id); return `对话「${c ? c.title : "已删除"}」`; }
   if (s.target.kind === "group") {
     const g = groupOf(s.target.id);
     const who = s.target.agents.length ? s.target.agents : g ? [g.agent] : [];
@@ -4210,7 +4221,7 @@ function renderScheduleEmpty(){
 function runState(r){
   return ({done: `<span class="status on"><i></i>完成${r.elapsed ? `，用时 ${fmtSec(r.elapsed)}` : ""}</span>`, error: `<span class="status err"><i></i>出错了</span>`,
            stopped: `<span class="status"><i></i>停下了</span>`, working: `<span class="status busy"><i></i>正在跑</span>`,
-           lost: `<span class="status"><i></i>没跑完（ccim 重启过）</span>`}[r.state] || "") + (r.catchup ? ` <span class="tag">补跑</span>` : "");
+           lost: `<span class="status"><i></i>没跑完（ccim 重启过）</span>`, quiet: `<span class="status"><i></i>没有要告诉你的</span>`}[r.state] || "") + (r.catchup ? ` <span class="tag">补跑</span>` : "");
 }
 async function openSchedule(id){
   try { sched = await api(`/api/schedule?id=${encodeURIComponent(id)}`); }
@@ -4220,21 +4231,23 @@ async function openSchedule(id){
 function drawSchedule(){
   const s = sched, open = new Set([...document.querySelectorAll(".run.open")].map(x => x.dataset.id));
   const a = s.target.kind === "agent" ? agentOf(s.target.id) : null;
-  const dl = ["留在这里"].concat((s.deliver || []).map(d => d === "feishu" ? "发到飞书" : "发到微信")).join("，");
+  const dl = [s.target.kind === "chat" ? "回到这个对话" : "留在这里"].concat((s.deliver || []).map(d => d === "feishu" ? "发到飞书" : "发到微信")).join("，")
+    + (s.quiet && s.target.kind !== "project" ? "；没有新情况就不出声" : "");
+  const mach = (schedSummary(s.id) || {}).machine || ownerOf(s.id);
   $("#main").innerHTML = `<div class="agent-page">
     <div class="agent-top">${schedMark(s)}
       <div class="grow"><h2>${esc(s.name)}</h2>
-        <div class="row" style="margin-top:6px">${s.running ? `<span class="status busy"><i></i>正在跑</span>` : s.on ? `<span class="status on"><i></i>下次 ${esc(fmtTs(s.next_run))}</span>` : `<span class="status"><i></i>已暂停</span>`}<span class="tag">${esc(freqText(s))}</span></div></div>
+        <div class="row" style="margin-top:6px">${s.running ? `<span class="status busy"><i></i>正在跑</span>` : s.on ? `<span class="status on"><i></i>下次 ${esc(fmtTs(s.next_run))}</span>` : `<span class="status"><i></i>已暂停</span>`}<span class="tag">${esc(freqText(s))}</span>${mtag(mach, true)}</div></div>
       <button class="btn" onclick="schedRun()" ${s.running ? "disabled" : ""}>立即跑一次</button>
       <button class="btn" onclick="schedToggle()">${s.on ? "暂停" : "恢复"}</button>
       <button class="icon-btn" aria-label="更多" onclick="schedMenu(event)">${ICON.more}</button>
     </div>
     <div class="pane">
-      <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
+      <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${s.target.kind === "chat" && groupOf(s.target.id) ? `<a class="link" href="#/chats/${encodeURIComponent(s.target.id)}">${esc(schedTarget(s))}</a>` : esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
         <dt>结果</dt><dd>${esc(dl)}</dd>${s.target.kind === "agent" ? `<dt>对话</dt><dd>${s.session === "same" ? "接着同一个对话聊，记得之前跑过的" : "每次开一个新对话"}</dd>` : ""}</dl></div>
       <div class="sect"><h3>运行记录</h3>${s.runs.length ? s.runs.map((r, i) => `<div class="run ${open.has(r.id) || (!open.size && i === 0) ? "open" : ""}" data-id="${esc(r.id)}">
         <button class="run-head" onclick="this.parentElement.classList.toggle('open')"><span class="when" style="width:120px">${esc(fmtTs(r.at))}</span>${runState(r)}${ICON.chev}</button>
-        <div class="run-body">${r.state === "working" ? `<p class="muted">正在跑，跑完结果会出现在这里。</p>` : `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text || "")}</div>`}
+        <div class="run-body">${r.state === "working" ? `<p class="muted">正在跑，跑完结果会出现在这里。</p>` : r.state === "quiet" ? `<p class="muted">这次没有新情况，没在对话里出声。</p>` : `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text || "")}</div>`}
           ${r.chat ? `<a class="link" href="#/chats/${encodeURIComponent(r.chat)}">看完整对话</a>` : r.project ? `<a class="link" href="#/projects/${encodeURIComponent(r.project)}">去项目里看</a>` : ""}</div></div>`).join("")
         : `<p class="muted">还没跑过。可以先「立即跑一次」看看效果。</p>`}</div>
     </div></div>`;
@@ -4256,9 +4269,9 @@ async function renderScheduleForm(id){
   const today = new Date(), tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
   const iso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   sd = s ? {name: s.name, target: JSON.parse(JSON.stringify(s.target)), prompt: s.prompt, freq: s.freq, time: s.time, days: s.days || [], dom: s.dom || 1,
-            date: s.date || iso(tomorrow), deliver: s.deliver || [], session: s.session || "new"}
+            date: s.date || iso(tomorrow), deliver: s.deliver || [], session: s.session || "new", every: s.every || 60, quiet: !!s.quiet}
          : {name: "", target: {kind: "agent", id: (S.agents[0] || {}).id}, prompt: "", freq: "workday", time: "09:00", days: [0], dom: 1,
-            date: iso(tomorrow), deliver: [], session: "new"};
+            date: iso(tomorrow), deliver: [], session: "new", every: 60, quiet: false};
   sd._id = id || null;
   drawScheduleForm();
 }
@@ -4270,10 +4283,12 @@ function drawScheduleForm(){
   const [hh, mm] = d.time.split(":");
   const where = x => multi() ? "，在" + ((machineOf(x.machine) || {}).name || "") : "";
   const tgtOpts = [...S.agents.map(a => ["agent:" + a.id, a.name, BASE[a.base || "claude"] + where(a)]),
-                   ...S.chats.filter(c => c.agent && (c.members || []).length).map(c => ["group:" + c.id, `群聊「${c.title}」`, `${c.members.length + 1} 个 Agent` + where(c)])];
+                   ...S.chats.filter(c => c.agent && (c.members || []).length).map(c => ["group:" + c.id, `群聊「${c.title}」`, `${c.members.length + 1} 个 Agent` + where(c)]),
+                   ...(d.target.kind === "chat" ? [["chat:" + d.target.id, schedTarget(d), "到点在这个对话里跑"]] : [])];
   const g = d.target.kind === "group" ? groupOf(d.target.id) : null;
   const p = g ? {members: g.members} : null;          // 群聊里选交给谁（不选就是主 Agent）
-  const a = d.target.kind === "agent" ? agentOf(d.target.id) : g ? agentOf(g.agent) : null;
+  const c = d.target.kind === "chat" ? groupOf(d.target.id) : null;
+  const a = d.target.kind === "agent" ? agentOf(d.target.id) : g ? agentOf(g.agent) : c && c.agent ? agentOf(c.agent) : null;
   const ch = k => a && a.channels.find(c => (k === "weixin") === (c.kind === "weixin"));
   const dates = Array.from({length: 60}, (_, i) => { const x = new Date(); x.setDate(x.getDate() + i);
     const v = `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; return [v, fmtDay(x) + (i > 1 ? `（周${WEEK[(x.getDay() + 6) % 7]}）` : ""), ""]; });
@@ -4289,18 +4304,20 @@ function drawScheduleForm(){
           <div class="help">不选就交给「${esc((agentOf(g.agent) || {}).name || "")}」；选了就在群里 @ 他们。</div>` : ""}</div>
       <label for="sd-prompt">做什么</label><textarea id="sd-prompt" class="textarea" placeholder="写清楚每次要它做什么，就像平时发消息一样">${esc(d.prompt)}</textarea>
       <label>什么时候</label><div>
-        <div class="seg" id="sd-freq">${[["daily", "每天"], ["workday", "工作日"], ["weekly", "每周"], ["monthly", "每月"], ["once", "只一次"]].map(([k, n]) => `<button class="${d.freq === k ? "on" : ""}" data-f="${k}">${n}</button>`).join("")}</div>
+        <div class="seg" id="sd-freq">${[["every", "每隔"], ["daily", "每天"], ["workday", "工作日"], ["weekly", "每周"], ["monthly", "每月"], ["once", "只一次"]].map(([k, n]) => `<button class="${d.freq === k ? "on" : ""}" data-f="${k}">${n}</button>`).join("")}</div>
         <div class="row" style="margin-top:10px">
           ${d.freq === "weekly" ? `<span class="weekdays">${WEEK.map((w, i) => `<button class="${d.days.includes(i) ? "on" : ""}" data-d="${i}" aria-label="周${w}">${w}</button>`).join("")}</span>` : ""}
           ${d.freq === "monthly" ? `<span style="width:120px">${dd("sd-dom", Array.from({length: 28}, (_, i) => [String(i + 1), `${i + 1} 号`, ""]), String(d.dom), v => sd.dom = +v)}</span>` : ""}
           ${d.freq === "once" ? `<span style="width:170px">${dd("sd-date", dates, dates.some(x => x[0] === d.date) ? d.date : (sd.date = dates[0][0]), v => sd.date = v)}</span>` : ""}
+          ${d.freq === "every" ? `<span style="width:130px">${dd("sd-every", EVERY.map(n => [String(n), everyText(n).slice(2), ""]), String(EVERY.includes(d.every) ? d.every : (sd.every = 60)), v => sd.every = +v)}</span>` : `
           <span style="width:110px">${dd("sd-h", hours, hh, v => sd.time = v + ":" + sd.time.split(":")[1])}</span>
-          <span style="width:110px">${dd("sd-m", mins, mins.some(x => x[0] === mm) ? mm : "00", v => sd.time = sd.time.split(":")[0] + ":" + v)}</span>
+          <span style="width:110px">${dd("sd-m", mins, mins.some(x => x[0] === mm) ? mm : "00", v => sd.time = sd.time.split(":")[0] + ":" + v)}</span>`}
         </div></div>
       <label>结果发到哪</label><div class="checks">
-        <span class="check on locked">${ICON.check}留在这里</span>
+        <span class="check on locked">${ICON.check}${d.target.kind === "chat" ? "回到这个对话" : "留在这里"}</span>
         ${ch("feishu") ? `<button class="check ${d.deliver.includes("feishu") ? "on" : ""}" data-dl="feishu">${ICON.check}也发到飞书「${esc(ch("feishu").bot)}」</button>` : ""}
         ${ch("weixin") ? `<button class="check ${d.deliver.includes("weixin") ? "on" : ""}" data-dl="weixin">${ICON.check}也发到微信「${esc(ch("weixin").bot)}」</button>` : ""}
+        ${d.target.kind !== "project" ? `<button class="check ${d.quiet ? "on" : ""}" id="sd-quiet">${ICON.check}没有新情况就不出声</button>` : ""}
       </div>
       ${d.target.kind === "agent" && a ? `<label>对话</label><div><div class="seg" id="sd-sess"><button class="${d.session === "new" ? "on" : ""}" data-s="new">每次开新对话</button><button class="${d.session === "same" ? "on" : ""}" data-s="same">接着同一个对话</button></div>
         <div class="help">${d.session === "new" ? "每次从头开始，互不影响。" : "记得之前每次跑的结果，适合「和上次比有什么变化」这类任务。"}</div></div>` : ""}
@@ -4311,6 +4328,7 @@ function drawScheduleForm(){
   document.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { const i = +b.dataset.d; sd.days = sd.days.includes(i) ? sd.days.filter(x => x !== i) : [...sd.days, i].sort(); drawScheduleForm(); });
   document.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => { const k = b.dataset.dl; sd.deliver = sd.deliver.includes(k) ? sd.deliver.filter(x => x !== k) : [...sd.deliver, k]; drawScheduleForm(); });
   document.querySelectorAll("#sd-sess button").forEach(b => b.onclick = () => { sd.session = b.dataset.s; drawScheduleForm(); });
+  if ($("#sd-quiet")) $("#sd-quiet").onclick = () => { sd.quiet = !sd.quiet; drawScheduleForm(); };
   $("#sd-save").onclick = saveSchedule;
   $("#sd-try").onclick = trySchedule;
 }

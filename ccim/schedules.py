@@ -7,6 +7,8 @@
 给 Agent 的：每次一个新网页对话 s-<任务>-<运行>，或者一直用同一个 s-<任务>（session=same，记得之前跑过的）；
 这些对话 meta 里有 schedule，不进对话列表。给项目的：走项目派活（一起做，不对比），等各人都做完。
 deliver 里有 feishu / weixin 的，做完用这个 Agent 接的机器人私聊主人（channels.send_once）。
+给对话的（kind=chat，Agent 用 ccim schedule 在网页对话里建的，#122）：到点在那个对话里跑，接着它的上下文。
+quiet：提示里让它没有值得说的就只回 QUIET，这种回答网页不记（WebChannel.send_text），对话里那条任务也去掉，也不发飞书、微信。
 """
 import asyncio, datetime as dt, logging, time, uuid
 
@@ -16,8 +18,16 @@ log = logging.getLogger("ccim.schedules")
 
 TICK = 30
 CATCHUP_AFTER = 300                          # 比预定时间晚这么多秒才跑，算补跑
-FREQS = ("daily", "workday", "weekly", "monthly", "once")
+FREQS = ("daily", "workday", "weekly", "monthly", "once", "every")
+EVERY = (5, 24 * 60)                         # 每隔几分钟：最少、最多
+QUIET = "[无需通知]"
+QUIET_NOTE = (f"\n\n（这是定时任务到点自动发来的，用户这时不一定在看。这次没有值得告诉用户的新情况时，"
+              f"只回复「{QUIET}」这几个字，不要别的；有就照常回答。）")
 PROJECT_WAIT = 4 * 3600                      # 项目任务最多等这么久
+
+
+def is_quiet(text):
+    return (text or "").strip().strip("。.").strip() == QUIET
 
 
 class Problem(Exception):
@@ -26,6 +36,8 @@ class Problem(Exception):
 
 def next_time(s, after):
     """按频率算 after 之后的下一次运行时间（本地时间），返回时间戳；只跑一次且已经过了的返回 None。"""
+    if s["freq"] == "every":
+        return after + s["every"] * 60
     hh, mm = (int(x) for x in s["time"].split(":"))
     base = dt.datetime.fromtimestamp(after)
     if s["freq"] == "once":
@@ -91,7 +103,12 @@ class Schedules:
         if not prompt:
             raise Problem("写上要它做什么。")
         t = f.get("target") or {}
-        if t.get("kind") == "group":          # 群聊：不选人就是交给主 Agent
+        if t.get("kind") == "chat":           # 回到建任务的那个网页对话里跑
+            c = self.pf.chats().get(t.get("id") or "")
+            if not c or c.get("project") or c.get("schedule") or c.get("mention_of"):
+                raise Problem("找不到这个对话。")
+            target = {"kind": "chat", "id": t["id"]}
+        elif t.get("kind") == "group":        # 群聊：不选人就是交给主 Agent
             g = self.pf.chats().get(t.get("id") or "")
             if not g or not g.get("agent"):
                 raise Problem("找不到这个群聊。")
@@ -120,7 +137,8 @@ class Schedules:
                "days": sorted({int(d) for d in f.get("days") or [] if 0 <= int(d) <= 6}),
                "dom": min(max(int(f.get("dom") or 1), 1), 28), "date": f.get("date"),
                "deliver": [d for d in f.get("deliver") or [] if d in ("feishu", "weixin")],
-               "session": "same" if f.get("session") == "same" else "new"}
+               "session": "same" if f.get("session") == "same" else "new", "quiet": bool(f.get("quiet")),
+               "every": min(max(int(f.get("every") or 60), EVERY[0]), EVERY[1])}
         if freq == "weekly" and not out["days"]:
             raise Problem("选一下每周几。")
         if freq == "once":
@@ -249,9 +267,11 @@ class Schedules:
 
     async def _run(self, sid, rid, s):
         upd = {"type": "run", "id": rid}
-        prompt = f"[定时任务「{s['name']}」] {s['prompt']}"
+        prompt = f"[定时任务「{s['name']}」] {s['prompt']}" + (QUIET_NOTE if s.get("quiet") and s["target"]["kind"] != "project" else "")
         try:
-            if s["target"]["kind"] == "group":
+            if s["target"]["kind"] == "chat":
+                upd.update(await self._run_chat(s["target"]["id"], s, prompt, sid))
+            elif s["target"]["kind"] == "group":
                 upd.update(await self._run_group(s, prompt))
             elif s["target"]["kind"] == "project":
                 upd.update(await self._run_project(s, prompt))
@@ -260,6 +280,8 @@ class Schedules:
         except Exception as e:
             log.exception("定时任务 %s 出错", s.get("name"))
             upd.update(state="error", text=str(e))
+        if upd.get("state") == "done" and is_quiet(upd.get("text")):
+            upd.update(state="quiet", text="")
         self.pf.channel.logs.append(self._log(sid), upd)
         self._emit(sid)
         if upd.get("state") == "done" and s.get("deliver"):
@@ -318,15 +340,30 @@ class Schedules:
                     text = "\n\n".join(f"**{self.pf.mentions._agent_name(x['agent'])}**：{x.get('text') or ''}" for x in rs)
                     return {"state": "done" if ok else "error", "text": text, "chat": cid, "elapsed": round(time.time() - start, 1)}
             return {"state": "error", "text": "等了太久还没做完，去群聊里看看。", "chat": cid}
+        return await self._run_chat(cid, s, prompt)
+
+    async def _run_chat(self, cid, s, prompt, sid=None):
+        """在这个网页对话（单聊或群聊的主 Agent）里跑，接着它的上下文。对话里记一条任务（sched），不出声的那次再去掉。"""
         from .session import Task
+        from . import groups
+        start = time.time()
+        c = self.pf.chats().get(cid)
+        if not c:
+            raise Problem("建这个定时任务的对话已经删掉了。")
         b = self.pf._bridge(cid)
         chat = b.chat(cid, "p2p")
-        self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, {"type": "user", "text": prompt, "files": []}))
-        from . import groups
-        task = Task(groups.note_prefix(self.pf, cid, groups.MAIN) + self.pf.mentions.unseen(cid) + prompt)
+        rec = self.pf.channel.logs.append(cid, {"type": "user", "id": "sched-" + uuid.uuid4().hex[:10], "text": s["prompt"],
+                                                "files": [], "sched": s["name"], "sched_id": sid})
+        self.pf.channel._emit(cid, rec)
+        head = groups.note_prefix(self.pf, cid, groups.MAIN) + self.pf.mentions.unseen(cid) if c.get("members") else ""
+        task = Task(head + prompt)
         chat.submit(task)
         state, answer = await task.future
         state = {"ok": "done"}.get(state, state)
+        if state == "done" and is_quiet(answer):
+            self.pf.channel.logs.drop(cid, rec["id"])
+            self.pf.channel.events.publish({"type": "drop", "chat": cid, "id": rec["id"]})
+            return {"state": "done", "text": QUIET, "elapsed": round(time.time() - start, 1), "chat": cid}
         last = next((r for r in reversed(self.pf.channel.logs.read(cid))
                      if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
         return {"state": state, "text": answer or last.get("text") or "", "steps": last.get("steps") or [],
@@ -336,7 +373,7 @@ class Schedules:
         """把结果用这个 Agent 接的飞书、微信机器人私聊主人。发不出去不影响这次运行的结果。"""
         from .channels import load, send_once
         t = s["target"]
-        aid = t["id"] if t["kind"] == "agent" else (self.pf.chats().get(t["id"]) or {}).get("agent") if t["kind"] == "group" else None
+        aid = t["id"] if t["kind"] == "agent" else (self.pf.chats().get(t["id"]) or {}).get("agent") if t["kind"] in ("group", "chat") else None
         if not aid:
             return
         msg = f"【定时任务「{s['name']}」】\n\n{text}"
@@ -353,7 +390,10 @@ class Schedules:
     async def try_once(self, fields):
         """先试跑一次（不保存）：给 Agent 的开一个普通网页对话发出去，给项目的直接派到项目里。返回去哪看。"""
         f = self._clean(fields)
-        prompt = f"[定时任务「{f['name']}」试跑] {f['prompt']}"
+        prompt = f"[定时任务「{f['name']}」试跑] {f['prompt']}" + (QUIET_NOTE if f.get("quiet") and f["target"]["kind"] != "project" else "")
+        if f["target"]["kind"] == "chat":
+            await self.pf.send(f["target"]["id"], prompt)
+            return {"chat": f["target"]["id"]}
         if f["target"]["kind"] == "group":
             if f["target"]["agents"]:
                 await self.pf.mentions.send(f["target"]["id"], prompt, f["target"]["agents"])

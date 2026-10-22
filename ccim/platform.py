@@ -642,6 +642,52 @@ class Platform:
         self.store.write(chats)
         return cid
 
+    # ----- 对话之间转交（#121） -----
+
+    async def relay(self, src, sid, text, wait=0):
+        """把 text 交给会话 sid 所在的那个对话（同一个 Agent 的网页对话，或者终端、桌面端里的 Claude Code 对话），
+        排在它手头这一轮后面。wait 秒内等它回答完就返回 (state, 回答)，否则 ("sent", "")。
+        终端、桌面端正开着这个对话时不写进去（两边同时写会分叉），返回 ("open", 在哪开着)。"""
+        from . import history
+        from .session import Task
+        sm = self.chats().get(src) or {}
+        target = next((cid for cid, m in self.chats().items()
+                       if m.get("session_id") == sid and cid != src
+                       and not (m.get("mention_of") or m.get("project") or m.get("schedule"))), None)
+        if not target:
+            try:
+                r = self._external("x:" + sid)
+            except Problem:
+                raise Problem("找不到这个对话。")
+            if r.get("source") != "终端" or r.get("base") != "claude":
+                raise Problem(f"{r.get('source')}里的对话在那边的进程里，转交不了，请用户到那边说。")
+            if sm.get("agent") and r.get("agent") != sm.get("agent"):
+                raise Problem("只能转交给同一个 Agent 的对话；要和别的 Agent 协作，请用户拉群聊。")
+            where = history.open_elsewhere(sid)
+            if where:
+                return "open", where
+            target = self.new_chat(agent=r["agent"], link=sid, title=r["title"], source=r["source"])
+        elif self._linked(self.meta(target)) and history.open_elsewhere(sid):   # 接着终端对话聊的网页对话，那边又开着
+            return "open", history.open_elsewhere(sid)
+        title = (self.chat_view(src).get("title") if src in self.chats() else None) or "另一个对话"
+        mid = "u-" + uuid.uuid4().hex[:10]
+        self.channel._emit(target, self.channel.logs.append(target, {"type": "user", "id": mid, "text": text, "files": [],
+                                                                      "from_chat": src, "relay": True}))
+        chats = self.chats()
+        if target in chats:
+            chats[target]["last_active"] = registry.now()
+            self.store.write(chats)
+        task = Task(f"[用户在这个 Agent 的另一个对话「{title}」里，让那边的你把下面这段话转交过来，请照常处理] {text}")
+        task.relayed = True                   # 它处理这条时不能再往外转交，免得来回停不下来
+        self._bridge(target).chat(target, "p2p").submit(task)
+        if not wait:
+            return "sent", target
+        try:
+            state, answer = await asyncio.wait_for(asyncio.shield(task.future), wait)
+        except asyncio.TimeoutError:
+            return "waiting", target
+        return {"ok": "done"}.get(state, state), answer
+
     async def skip_step(self, cid):
         """结束卡住的那一步，接着做（#109）。"""
         c = self._bridge(cid).chats.get(cid)

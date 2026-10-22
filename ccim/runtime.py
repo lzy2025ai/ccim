@@ -178,10 +178,11 @@ def set_try(what):
     base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去（重启前还会等这一轮答完，#136）
     started = registry.now()
     paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
-    report = {"CCIM_RESTART_LABEL": f"切到 {label}" if label != "main" else "切回 main", "CCIM_RESTART_PATHS": json.dumps(paths)}
+    report = {"CCIM_RESTART_LABEL": f"切到 {label}" if label != "main" else "切回 main", "CCIM_RESTART_PATHS": json.dumps(paths),
+              "CCIM_RESTART_SINCE": started}   # 以这一刻为准判断各个进程重启过没有（#140：先重启好的不再误报没起来）
     for i, p in enumerate(paths):
         schedule_restart(p, delay=base + 3 * i, notify=False, env=report)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
-    names = "、".join(f"「{os.path.basename(p)}」" for p in paths)
+    names = "、".join(proc_label(p) for p in paths)
     if inner:
         return label, [f"{names} 会在这一轮回复发出去、手头的活做完后依次重启（最多等 {WAIT_IDLE // 60} 分钟），"
                        "重启好了在这里说一声；新版本起不来会用稳定版顶上。"]
@@ -191,12 +192,24 @@ def set_try(what):
         for p in list(left):
             st = registry.read_state(p)
             if st.get("started", "") >= started and st.get("online") and daemon.running(p):
-                out.append(f"「{os.path.basename(p)}」已重启，运行的是{describe(st.get('python'))}{'（顶替中）' if st.get('fallback') else ''}。")
+                out.append(f"{proc_label(p)}已重启，运行的是{describe(st.get('python'))}{'（顶替中）' if st.get('fallback') else ''}。")
                 left.remove(p)
         if not left:
             break
-    out += [f"「{os.path.basename(p)}」还没起来，用 ccim show {os.path.basename(p)} 看看。" for p in left]
+    out += [f"{proc_label(p)}还没起来，用 ccim show {os.path.basename(p)} 看看。" for p in left]
     return label, out
+
+
+def proc_label(path):
+    """给人看的进程名（#140）：网页平台、飞书机器人「名字」、微信「名字」。"""
+    from .channels import NAMES
+    e = registry.get(path) or {}
+    name = e.get("bot_name") or os.path.basename(path)
+    if e.get("kind") == "platform":
+        return "网页平台"
+    if e.get("kind") == "weixin":
+        return "微信" if name == "微信" else f"微信「{name}」"
+    return f"{NAMES.get(e.get('channel'), '飞书')}机器人「{name}」"
 
 
 def inside(path):
@@ -227,10 +240,10 @@ def safe_restart(path, delay=0, target=None, notify=True):
     from . import daemon
     time.sleep(delay)
     entry = registry.get(path)
-    name = os.path.basename(path)
+    name = proc_label(path)
     r = daemon.running(path)
     if r and r[1] == "fg":
-        msg = f"「{name}」正在终端前台运行，没法自动重启。在那个终端按 Ctrl+C，再运行 ccim start --always。"
+        msg = f"{name}正在终端前台运行，没法自动重启。在那个终端按 Ctrl+C，再运行 ccim start --always。"
         _tell(path, entry, msg, notify)
         return False, msg
     always = daemon.is_always(path) or not r
@@ -245,25 +258,25 @@ def safe_restart(path, delay=0, target=None, notify=True):
         if not daemon.running(path):
             raise SystemExit("启动后很快退出了：" + daemon._last_line(daemon.log_path(path)))
         registry.write_state(path, fallback=None)
-        msg = f"「{name}」已重启，运行的是{desc}。"
+        msg = f"{name}已重启，运行的是{desc}。"
         _tell(path, entry, msg, notify)
         return True, msg
     except SystemExit as e:
         err = str(e).split("\n")[0]
         fallback = stable_python(entry.get("stable_version")) or stable_python()
         if not fallback or _env(fallback) == _env(py):
-            msg = f"「{name}」重启失败，也没有别的版本可以顶上：{err}"
+            msg = f"{name}重启失败，也没有别的版本可以顶上：{err}"
             _tell(path, entry, msg, notify)
             return False, msg
         daemon.stop(path)
         try:
             (daemon.start_always if always else daemon.start_background)(path, entry["channel"], python=fallback)
         except SystemExit as e2:
-            msg = f"「{name}」新版本没起来，稳定版也没起来：{err}；{str(e2).splitlines()[0]}"
+            msg = f"{name}新版本没起来，稳定版也没起来：{err}；{str(e2).splitlines()[0]}"
             _tell(path, entry, msg, notify)
             return False, msg
         registry.write_state(path, fallback=True)
-        msg = f"「{name}」{desc}没起来，先用{describe(fallback)} 顶上了。\n报错：{err}"
+        msg = f"{name}{desc}没起来，先用{describe(fallback)} 顶上了。\n报错：{err}"
         _tell(path, entry, msg, notify)
         return False, msg
 
@@ -329,27 +342,27 @@ def promote(wait=180):
         print(f"稳定版：{old or '无'} → {label}")
     results = []
     for path, e in sorted(registry.all_projects().items()):
-        name = os.path.basename(path)
+        name = proc_label(path)
         if which(path, e)[1] == "开发版":
             continue
         if e.get("stable_version"):
             registry.update(path, stable_version=None)
         r = daemon.running(path)
         if not r:
-            results.append(f"「{name}」没在运行，下次启动就用新版本")
+            results.append(f"{name}没在运行，下次启动就用新版本")
             continue
         if r[1] == "fg":
-            results.append(f"「{name}」在终端前台运行，要到那个终端里手动重启")
+            results.append(f"{name}在终端前台运行，要到那个终端里手动重启")
             continue
         _wait_idle(path, wait)
         ok, _ = safe_restart(path, notify=False)
         if ok:
-            results.append(f"「{name}」已升级到 {label}")
+            results.append(f"{name}已升级到 {label}")
             continue
         if old:
             registry.update(path, stable_version=old)
             safe_restart(path, notify=False)
-        results.append(f"「{name}」新版本起不来，已退回 {old or '原来的版本'}，日志：{daemon.log_path(path)}")
+        results.append(f"{name}新版本起不来，已退回 {old or '原来的版本'}，日志：{daemon.log_path(path)}")
     _prune()
     return label, results
 
@@ -375,7 +388,7 @@ def _before_restart(path):
             paths = json.loads(os.environ.get("CCIM_RESTART_PATHS") or "[]") or [path]
         except ValueError:
             paths = [path]
-        changes["restart_report"] = {"chat": caller, "since": registry.now(), "paths": paths,
+        changes["restart_report"] = {"chat": caller, "since": os.environ.get("CCIM_RESTART_SINCE") or registry.now(), "paths": paths,
                                      "label": os.environ.get("CCIM_RESTART_LABEL") or "重启"}
     registry.write_state(path, **changes)
 
@@ -399,7 +412,7 @@ def after_restart_note(path):
                 break
             time.sleep(3)
         ok = {p for p, _ in up}
-        lines = [f"- 「{os.path.basename(p)}」" + (f"在线，运行的是{describe(s.get('python'))}{'（新版本没起来，先用它顶上）' if s.get('fallback') else ''}"
+        lines = [f"- {proc_label(p)}" + (f"在线，运行的是{describe(s.get('python'))}{'（新版本没起来，先用它顶上）' if s.get('fallback') else ''}"
                                                 if p in ok else "还没起来，用 ccim show 看看") for p, s in rows]
         out.append((rep["chat"], f"已{rep.get('label') or '重启'}：\n" + "\n".join(lines)))
     return out

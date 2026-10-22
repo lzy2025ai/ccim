@@ -1515,7 +1515,7 @@ function route(){
   else if (current.view === "board") renderBoard();
   else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
-    : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
+    : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
 addEventListener("hashchange", route);
@@ -3748,10 +3748,10 @@ function renderAgentForm(){
 // ================= 设置 =================
 function renderSettingsList(){
   const onChats = current.id === "chats";
-  const onMachines = !onChats && (current.id === "machines" || (S.hub && current.id !== "account"));
+  const onMachines = !onChats && (current.id === "machines" || (S.hub && current.id !== "account" && current.id !== "models"));
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
-    ${S.hub ? "" : `<a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用</span></span></a>`}
+    <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
     <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
@@ -4133,20 +4133,36 @@ async function setArchiveDays(v){
   toast(fail ? "有电脑没连上，那台下次再改" : "已保存");
   await loadState(); renderChatSettings();
 }
-function renderSettings(){
-  Object.assign(gs, {model: S.global.model || "", effort: S.global.effort || "", codex_model: S.global.codex_model || "", codex_effort: S.global.codex_effort || ""});
-  const [cm, ce] = S.defaults.claude || [], [xm, xe] = S.defaults.codex || [];
+let gsMachine = null, gsOf = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
+async function renderSettings(){
+  const ms = (S.machines || []).filter(m => m.online !== false);
+  if (!gsMachine || !ms.some(m => m.id === gsMachine)) gsMachine = (ms.find(m => m.me) || ms[0] || {}).id || S.me;
+  let st = S;
+  if (S.hub || gsMachine !== S.me) {              // 别的电脑：读它自己的设置和 Claude Code、Codex 的默认值
+    $("#main").innerHTML = `<div class="loading">…</div>`;
+    try { st = await api("/api/state?local=1", undefined, gsMachine); }
+    catch (e) { $("#main").innerHTML = `<div class="empty"><h2>读不到这台电脑的设置</h2><p>${esc(e.message)}</p></div>`; return; }
+    if (current.view !== "settings") return;
+  }
+  gsOf = st;
+  const G = st.global || {}, D = st.defaults || {};
+  Object.assign(gs, {model: G.model || "", effort: G.effort || "", codex_model: G.codex_model || "", codex_effort: G.codex_effort || ""});
+  const [cm, ce] = D.claude || [], [xm, xe] = D.codex || [];
+  const pick = multi() ? `<div class="sect"><h3>哪台电脑</h3><div class="seg">${ms.map(m => `<button class="${m.id === gsMachine ? "on" : ""}" aria-pressed="${m.id === gsMachine}" onclick="gsMachine=${q(m.id)};renderSettings()">${esc(m.name)}${m.me && !S.hub ? "（这台）" : ""}</button>`).join("")}</div></div>` : "";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
     <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。</div></div></div>
-    <div class="pane"><div class="sect"><h3>Claude Code</h3><div class="form">
-      <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`, gs.model), gs.model, v => gs.model = v)}
+    <div class="pane">${pick}<div class="sect"><h3>Claude Code</h3><div class="form">
+      <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`, gs.model, gsMachine), gs.model, v => gs.model = v)}
       <label>思考深度</label>${dd("g-ce", effortOpts("claude", `跟随 Claude Code 设置（${ce || "默认"}）`), gs.effort, v => gs.effort = v)}</div></div>
-      ${S.codex ? `<div class="sect"><h3>Codex</h3><div class="form">
-      <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`, gs.codex_model), gs.codex_model, v => gs.codex_model = v)}
+      ${st.codex ? `<div class="sect"><h3>Codex</h3><div class="form">
+      <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`, gs.codex_model, gsMachine), gs.codex_model, v => gs.codex_model = v)}
       <label>思考深度</label>${dd("g-xe", effortOpts("codex", `跟随 Codex 设置（${xe || "默认"}）`), gs.codex_effort, v => gs.codex_effort = v)}</div></div>` : ""}
       <button class="btn primary" onclick="saveGlobal()">保存</button></div></div>`;
 }
-async function saveGlobal(){ await act(() => api("/api/global", gs), "已保存，新开的对话开始用"); await loadState(); }
+async function saveGlobal(){
+  await act(() => api("/api/global", gs, gsMachine), multi() ? `已保存到「${(machineOf(gsMachine) || {}).name || "这台电脑"}」，新开的对话开始用` : "已保存，新开的对话开始用");
+  await loadState();
+}
 
 
 // ================= 项目（群聊） =================

@@ -1104,6 +1104,7 @@ const ICON = {
   shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   expand:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
   clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>`,
+  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 const $ = s => document.querySelector(s);
@@ -4841,12 +4842,17 @@ function drawDoc(){
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
       ${d && (d.kind === "md" || d.editable && d.latest) ? `<span class="seg mini">${[["view", "预览"], ...(d.kind === "md" ? [["wx", "公众号"]] : []), ...(d.editable && d.latest ? [["edit", "编辑"]] : [])]
         .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
+      ${d ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
       ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
     </div>
     ${d && !d.latest ? `<div class="doc-old"><span>${esc(verLabel(vs[d.v], d.v))}</span><span class="sp"></span>
       ${d.editable ? `<button class="btn" onclick="docRestore()">用这一版的内容</button>` : ""}<button class="btn" onclick="openDoc(DOC.path)">看最新的</button></div>` : ""}
     <div class="doc-body">${docBody()}</div>`;
   if (DOC.mode === "wx") wxImgTools();
+}
+function docFileUrl(){   // 正在看的这一版：最新的是原文件，旧版本是留底
+  return `/api/file?chat=${encodeURIComponent(DOC.chat)}&path=${encodeURIComponent(DOC.d.file || DOC.path)}`
+    + (isRemote(DOC.machine) ? `&machine=${encodeURIComponent(DOC.machine)}` : "");
 }
 function docVersions(e){
   const vs = DOC.d.versions;

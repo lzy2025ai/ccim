@@ -954,7 +954,7 @@ class Platform:
             out = docs.view(src, os.path.dirname(path))
         except docs.Problem as e:
             raise Problem(str(e))
-        out.update(name=os.path.basename(path), path=path, versions=[{"by": x["by"], "at": x["at"]} for x in vs],
+        out.update(name=os.path.basename(path), path=path, file=src, versions=[{"by": x["by"], "at": x["at"]} for x in vs],
                    v=len(vs) - 1 if src == path else int(v), latest=src == path)
         return out
 
@@ -1614,7 +1614,7 @@ def _handler(pf):
             if chat == devices.FS_CHAT:
                 return devices.allowed_file(path)
             return os.path.isfile(path) and any(
-                r.get("type") == "file" and r.get("path") == path
+                r.get("type") in ("file", "edit") and path in (r.get("path"), r.get("snap"))   # snap：旧版本的留底，下载用
                 or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
                 for r in pf.channel.logs.read(chat))
 

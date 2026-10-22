@@ -2616,8 +2616,9 @@ async function renderBoard(quick){
         const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
         const list = recentTab === "agents" ? withAgent : temps;
         const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
-        const body = list.length ? (showAllRecent ? list : list.slice(0, 5)).map(c => boardRow(c, "recent")).join("")
-            + (list.length > 5 && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - 5} 件</button>` : "")
+        const few = recentTab === "agents" ? 10 : 5;
+        const body = list.length ? (showAllRecent ? list : list.slice(0, few)).map(c => boardRow(c, "recent")).join("")
+            + (list.length > few && !showAllRecent ? `<button class="link" style="margin:4px 14px" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - few} 件</button>` : "")
           : `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;
         return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
       })()}

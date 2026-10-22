@@ -1379,6 +1379,10 @@ def _handler(pf):
                 "/api/skills/detail": lambda: skills_mod.detail(q.get("name", "")),
                 "/api/skills/local": lambda: {"skills": skills_mod.local_list()},
                 "/api/skills/file": lambda: skills_mod.read_file(q.get("name", ""), q.get("path", "")),
+                "/api/skills/market": lambda: skills_mod.market(q.get("name", ""), q.get("repo") or None),
+                "/api/agent/skills": lambda: {"groups": skills_mod.agent_skills(_agent(q.get("id")))},
+                "/api/agent/skill": lambda: skills_mod.agent_detail(_agent(q.get("id")), q.get("group", ""), q.get("name", "")),
+                "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
                 "/api/board": lambda: pf.call(board_mod.stats, pf),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
@@ -1436,6 +1440,9 @@ def _handler(pf):
                 "/api/skills/delete": lambda: skill_write(pf, skills_mod.delete, b("name")),
                 "/api/skills/update": lambda: skill_write(pf, skills_mod.update, b("name")),
                 "/api/skills/file/save": lambda: skill_write(pf, skills_mod.save_file, b("name"), b("path"), b("text"), b("mtime")),
+                "/api/agent/skill/file/save": lambda: skills_mod.agent_save(_agent(b("id")), b("group"), b("name"), b("path"), b("text"), b("mtime")),
+                "/api/agent/skill/share": lambda: skill_write(pf, lambda: {"names": skills_mod.agent_share(_agent(b("id")), b("group"), b("name"),
+                                                                                                           pf.peers.me.get("name") or "")}),
                 "/api/skills/export": lambda: skills_mod.export(b("keys")),
                 "/api/chat/seen": lambda: pf.call(pf.mark_seen, b("id")),
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
@@ -1621,6 +1628,13 @@ def list_dirs(path):
     except PermissionError:
         raise Problem("没有权限打开这个文件夹。")
     return {"path": d, "parent": os.path.dirname(d) if d != "/" else None, "home": home, "dirs": names[:500]}
+
+
+def _agent(aid):
+    a = agents.get(aid or "")
+    if not a:
+        raise Problem("找不到这个 Agent。")
+    return a
 
 
 def skill_write(pf, fn, *args):

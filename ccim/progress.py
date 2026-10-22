@@ -33,6 +33,11 @@ def describe_tool(name, inp):
         return "用管理员权限执行：" + short(inp.get("command"), 60)
     if name.startswith("mcp__ccim__ask_agents"):
         return "请 " + "、".join("@" + str(x) for x in (inp.get("to") or [])) + " 帮忙：" + short(inp.get("text"), 40)
+    if name.startswith("mcp__ccim__skill_"):     # Skill 助手（#116）
+        what = {"skill_list": "看 Skill 列表", "skill_files": "看 Skill 里的文件", "skill_read": "读", "skill_write": "改",
+                "skill_install": "安装 Skill", "skill_enable": "启用 / 停用 Skill", "skill_delete": "删除 Skill"}.get(name.split("__")[-1], "处理 Skill")
+        target = "/".join(x for x in (inp.get("name"), inp.get("path")) if x) or inp.get("source") or ""
+        return f"{what} {short(target, 50)}".strip()
     if name.startswith("mcp__ccim__send_file"):
         return f"发送文件 {base(inp.get('path'))}"
     if name.startswith("mcp__"):
@@ -50,6 +55,8 @@ def describe_request(name, inp):
         return f"修改文件 `{inp.get('file_path') or inp.get('notebook_path')}`"
     if name == "WebFetch":
         return f"访问网页 {inp.get('url')}"
+    if name.endswith("skill_delete"):
+        return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"
     return f"{name}\n```\n{short(inp, 600)}\n```"
 
 

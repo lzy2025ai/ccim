@@ -23,6 +23,17 @@ class Problem(Exception):
     pass
 
 
+ON_CHANGE = []                        # 平台 Skill 改了以后要做的事（平台进程登记：叫别的电脑来同步、刷新网页）
+
+
+def changed():
+    for fn in ON_CHANGE:
+        try:
+            fn()
+        except Exception:
+            log.debug("通知 Skill 改动出错", exc_info=True)
+
+
 def root():
     return os.path.join(registry.HOME, "skills")
 
@@ -339,6 +350,37 @@ def repo_of(source):
     except Problem:
         pass
     return None
+
+
+def write_any(name, rel, text):
+    """Skill 助手（#116）写文件：没有的 Skill、没有的文件都新建；写 SKILL.md 时校验开头的 name、description。"""
+    _check(name)
+    rel = (rel or "").strip().lstrip("/")
+    if not rel or ".." in rel.split("/") or rel.split("/")[0] in SKIP:
+        raise Problem("路径不对。")
+    if not isinstance(text, str):
+        raise Problem("内容不对。")
+    if rel == "SKILL.md" and not _front(text).get("description"):
+        raise Problem("SKILL.md 开头要有 --- 包起来的 name 和 description。")
+    with LOCK:
+        d = _lib(name)
+        if not os.path.isfile(os.path.join(d, "SKILL.md")) and rel != "SKILL.md":
+            raise Problem(f"还没有「{name}」这个 Skill，先写它的 SKILL.md。")
+        p = os.path.realpath(os.path.join(d, rel))
+        if not p.startswith(os.path.realpath(d) + os.sep):
+            raise Problem("路径不对。")
+        _write(p, text)
+        m = _read_meta(name) or {"name": name, "source": {"type": "assistant"}, "installed": time.time(), "disabled": False}
+        if rel == "SKILL.md":
+            m["desc"] = _front(text).get("description", "")
+        m.update(updated=time.time(), size=_size(d))
+        _write(_meta_path(name), json.dumps(m, ensure_ascii=False))
+        t = _tombs()
+        if name in t:
+            t.pop(name)
+            _write(os.path.join(root(), "_tombstones.json"), json.dumps(t))
+    changed()
+    return {"name": name, "path": rel}
 
 
 def local_list():

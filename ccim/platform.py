@@ -47,6 +47,18 @@ IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
 MARKS = ("title", "pin", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
+# 页面专用的助手（#116）
+HELPERS = {"skills": {"title": "Skill 助手", "role": (
+    "你是 ccim 平台的 Skill 助手，在 Skill 页面右侧和用户对话，帮他管理「平台 Skill」：装在平台上、同步到所有电脑、"
+    "所有 Agent 在 ccim 里对话时都能用的 Skill。\n"
+    "- 查看、修改、新建、安装、停用、删除平台 Skill 一律用 skill_ 开头的工具，不要直接改 ~/.ccim/skills 下的文件"
+    "（直接改不会同步到别的电脑）。\n"
+    "- 改文件前先用 skill_read 读原文，改完用一两句话说改了什么。新建 Skill 先写 SKILL.md（开头 --- 里要有 name 和 description）。\n"
+    "- 找 Skill：可以查 https://skills.sh/api/search?q=关键词（返回安装量）、https://clawhub.ai/api/v1/search?q=关键词、"
+    "https://skillsmp.com/api/skills?search=关键词，也可以上网搜；找到 GitHub 地址后用 skill_install 装，装之前说清楚装的是什么。\n"
+    "- 删除前工具会弹出确认，用户点了才会删。\n"
+    "- 用户消息开头括号里是他在页面上正看着的 Skill 和文件，「这个」一般就指它。\n"
+    "- 回答用中文，简短。")}}
 MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
@@ -334,6 +346,7 @@ class Platform:
         self.projects = Projects(self)
         self.schedules = Schedules(self)
         self.mentions = Mentions(self)
+        skills_mod.ON_CHANGE.append(lambda: (self.kb_changed(), self.channel.events.publish({"type": "skills", "chat": None})))
         self.cleaner = devices.Cleaner(registry.pdir(home))
 
     def handlers(self):
@@ -542,6 +555,10 @@ class Platform:
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
                      "effort": t.get("effort")}
             name = "临时对话"
+            if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
+                h = HELPERS[m["helper"]]
+                entry.update(helper=m["helper"], role=h["role"])
+                name = h["title"]
         entry.update(owner_open_id=OWNER, channel="web")
         b = self.bridges.get(key)
         if not b or b.path != path:
@@ -584,7 +601,7 @@ class Platform:
         self.store.write(chats)
         return cid
 
-    async def send(self, cid, text, files=()):
+    async def send(self, cid, text, files=(), ctx=None):
         b = self._bridge(cid)
         m = self.meta(cid)
         if m.get("fork_from") and cid not in b.chats:
@@ -600,9 +617,30 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
+        if ctx and m.get("helper") and text:      # 助手要知道用户在页面上正看着什么（不记进对话记录）
+            text = f"（{str(ctx)[:300]}）\n{text}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
+
+    async def helper_chat(self, kind, fresh=False):
+        """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个，不进对话列表；fresh 就换一个新的。"""
+        if kind not in HELPERS:
+            raise Problem("没有这个助手。")
+        old = [cid for cid, m in self.chats().items() if m.get("helper") == kind]
+        if old and not fresh:
+            return old[0]
+        for cid in old:
+            try:
+                await self.stop_chat(cid)
+                await self.delete_chat(cid)
+            except Problem:
+                pass
+        cid = self.new_chat(temp={"base": "claude"}, title=HELPERS[kind]["title"])
+        chats = self.chats()
+        chats[cid]["helper"] = kind
+        self.store.write(chats)
+        return cid
 
     async def skip_step(self, cid):
         """结束卡住的那一步，接着做（#109）。"""
@@ -772,7 +810,7 @@ class Platform:
 
     def chat_list(self):
         rows = [self.chat_view(cid) for cid, c in self.chats().items() if not c.get("project") and not c.get("schedule")
-                and not c.get("mention_of")] + \
+                and not c.get("mention_of") and not c.get("helper")] + \
             self.external_chats()
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
@@ -1419,7 +1457,8 @@ def _handler(pf):
             b = body.get
             routes = {
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"))},
-                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or []),
+                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx")),
+                "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh"))))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/skip": lambda: {"skipped": pf.run(pf.skip_step(b("id")))},
@@ -1597,10 +1636,10 @@ def check_message(pf, text, files):
             raise Problem("文件没传上来，再试一次。")
 
 
-def send(pf, cid, text, files):
+def send(pf, cid, text, files, ctx=None):
     check_message(pf, text, files)
     pf.meta(cid)
-    pf.bg(pf.send(cid, (text or "").strip(), files))
+    pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx))
     return {"ok": True}
 
 
@@ -1638,9 +1677,9 @@ def _agent(aid):
 
 
 def skill_write(pf, fn, *args):
-    """改了平台 Skill：叫别的电脑马上来同步。"""
+    """改了平台 Skill：叫别的电脑马上来同步，网页刷新。"""
     r = fn(*args)
-    pf.kb_changed()
+    skills_mod.changed()
     return r if isinstance(r, dict) else {"result": r}
 
 

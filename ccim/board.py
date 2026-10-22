@@ -58,7 +58,7 @@ def unread(meta, summ):
 
 
 def top_level(meta):
-    return not (meta.get("mention_of") or meta.get("project") or meta.get("schedule"))
+    return not (meta.get("mention_of") or meta.get("project") or meta.get("schedule") or meta.get("helper"))
 
 
 def stats(pf):

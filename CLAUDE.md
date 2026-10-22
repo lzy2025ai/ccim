@@ -121,6 +121,12 @@
   Agent 的本地 Skill（#115）：Agent 页「Skill」标签，`agent_skills` 按 `_groups` 分组（工作目录 .claude/skills、~/.claude/skills、开着的插件带的只读；
   Codex 是 ~/.codex/skills），接口 /api/agent/skill*（按 id 转到 Agent 所在的电脑）。查看编辑和平台 Skill 共用 SKV（src.kind platform / local），
   软链接过去的保存前提示改的是原件（原地写）。「提交成平台 Skill」= `agent_share` → `_put`（同名替换，source 记 agent）。
+  Skill 助手（#116）：Skill 页右侧对话栏（`skContent` 把 #main 分成内容和 #sk-chat，收起状态存 localStorage，手机上是全屏层）。
+  背后是每台电脑一个的网页对话，meta 里 helper=skills（`Platform.helper_chat`，/api/helper，不进对话列表、任务面板），
+  `_bridge` 按 HELPERS 给它角色说明和 entry.helper，`session._skill_tools` 给它 skill_list / files / read / write / install / enable / delete；
+  写文件走 `skills.write_any`（没有的新建），删除先弹审批卡片（approvals.ask）。改了平台 Skill 都调 `skills.changed()`：
+  叫别的电脑同步、推送 type=skills 让网页刷新。发消息带 ctx（正看着哪个 Skill、哪个文件），拼在交给助手的话前面，不进记录。
+  助手在哪台电脑上跑（`skcMid`）：localStorage 记的；没选过用总控那台，再不行用 S.me；标题下一行显示电脑 · 模型 · 思考深度，点开换（模型、思考深度走 /api/chat/set）；那台离线时提示并给「换到 xx」
   市场：`market` 查 skills.sh / ClawHub / SkillsMP 的公开搜索接口，名字相同的算，同一个 GitHub 仓库的优先（same），结果缓存 6 小时；网页显示安装、下载、仓库星数，没收录的链到市场搜索
 - 响应速度（#32）：别的电脑的 state 用缓存（peers.cache_at，60 秒内直接用，超过 10 秒后台再取），往那台发过 POST 或收到它的推送
   （正在干活的进度除外）就标 dirty、下次现问。history.read 按文件大小和修改时间缓存；`_external` 用最近列表里的那行，不再列一遍所有对话。

@@ -699,6 +699,55 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .sk-item svg{width:14px;height:14px;color:var(--faint);flex:none}
 .sk-head.inpage{padding:16px 32px 12px}
 .sk-body.inpage{height:calc(100vh - 300px);min-height:420px;border-top:1px solid var(--line)}
+.sk-shell{display:flex;flex:1;width:100%;height:100%;min-height:0;min-width:0}
+.sk-content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:auto}
+.sk-shell{--skc-w:460px}
+.sk-chat{display:none;width:var(--skc-w);flex:none;border-left:1px solid var(--line);background:var(--panel);flex-direction:column;min-height:0;min-width:0}
+.sk-shell.chat-on .sk-chat{display:flex}
+.skc-resizer{display:none;width:8px;margin:0 -4px;flex:none;cursor:col-resize;position:relative;z-index:5;touch-action:none}
+.sk-shell.chat-on .skc-resizer{display:block}
+.skc-resizer::after{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent;transition:background .15s}
+.skc-resizer:hover::after,.skc-resizer.drag::after{background:var(--qing)}
+.skc-av{width:26px;height:26px;border-radius:8px;background:var(--dai);color:#fff;display:grid;place-items:center;flex:none}
+.skc-av svg{width:14px;height:14px}
+.sk-chat-fab{position:fixed;right:22px;bottom:22px;z-index:12;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:22px;
+  background:var(--qing);color:#fff;font-size:13.5px;box-shadow:0 6px 20px rgba(29,34,43,.2)}
+.sk-chat-fab svg{width:15px;height:15px}
+.sk-shell.chat-on .sk-chat-fab{display:none}
+@media (max-width:760px){.sk-chat-fab{bottom:calc(72px + env(safe-area-inset-bottom))}}
+.skc-head{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line);min-height:58px}
+.skc-head .t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.skc-head .t b{font:600 15px var(--song)} .skc-head .t>span{font-size:12px;color:var(--muted)}
+.skc-where{display:inline-flex;align-items:center;gap:3px;align-self:flex-start;font-size:12px;color:var(--muted);padding:1px 4px;margin-left:-4px;border-radius:5px;max-width:100%}
+.skc-where:hover{background:var(--sunk);color:var(--ink)} .skc-where svg{width:11px;height:11px;flex:none}
+.skc-where.off{color:var(--bad);gap:8px} .skc-where.off .link{font-size:12px}
+.skc-body{flex:1;overflow:auto;padding:18px 18px 8px;min-height:0}
+.skc-msg{margin-bottom:20px;min-width:0}
+.skc-msg.me{display:flex;justify-content:flex-end}
+.skc-msg.me .bubble{max-width:88%;font-size:14px}
+.skc-msg.me.sending .bubble{opacity:.65}
+.skc-msg .from-row b{font:600 13px var(--song)}
+.skc-msg .answer{font-size:14px}
+.skc-msg .msg-acts{opacity:0;transition:opacity .15s;margin-top:4px}
+.skc-msg:hover .msg-acts{opacity:1}
+.skc-msg .steps{margin-bottom:6px}
+.skc-empty{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px 2px;color:var(--muted);font-size:13.5px}
+.skc-empty .skc-av{width:38px;height:38px;border-radius:11px} .skc-empty .skc-av svg{width:20px;height:20px}
+.skc-empty h3{margin:6px 0 0;font:600 17px var(--song);color:var(--ink)}
+.skc-empty p{margin:0 0 6px;line-height:1.6}
+.skc-empty button{display:block;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink-2)}
+.skc-empty button:hover{border-color:var(--qing);color:var(--qing)}
+.skc-foot{border-top:1px solid var(--line);padding:8px 14px 12px}
+.skc-ctx{display:inline-flex;align-items:center;gap:5px;max-width:100%;font-size:12px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:2px 8px;margin-bottom:6px}
+.skc-ctx svg{width:12px;height:12px;flex:none} .skc-ctx span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.skc-box{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line-strong);border-radius:12px;padding:6px 6px 6px 12px;background:var(--panel)}
+.skc-box:focus-within{border-color:var(--qing)}
+.skc-box textarea{flex:1;resize:none;border:0;outline:0;padding:5px 0;font:inherit;font-size:14px;line-height:1.55;background:none;color:var(--ink);max-height:220px}
+.skc-box .send{margin:0;flex:none}
+.skc-box .send.stop{background:var(--ink)}
+@media (max-width:760px){
+  .sk-shell.chat-on .sk-chat{position:fixed;inset:0;width:auto;z-index:40;border:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+}
 .sk-page{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden}
 .sk-head{padding:18px 28px 14px;border-bottom:1px solid var(--line)}
 .sk-back{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:8px}
@@ -1310,6 +1359,10 @@ let detail = null;                // 当前打开的对话
 let refreshTimer = null;
 async function loadState(){
   S = await api("/api/state");
+  if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
+    const on = (machineOf(SKC.mid) || {}).online !== false;
+    if (on !== SKC.on) { SKC.on = on; drawSkChat(); }
+  }
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
     clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(current.id), 300);   // 它的对话列表（含终端里的）单独拉
   }
@@ -1347,6 +1400,7 @@ function connectEvents(){
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
     if (ev.type === "idle") { refreshSoon(); return; }   // 一轮结束的状态记下了（#98）
+    if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
     if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
       if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }
       return;
@@ -1704,7 +1758,7 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
   }
   if (r.type === "card"){
-    const live = r.buttons && r.buttons.length;
+    const live = r.buttons && r.buttons.length && (!r.color || r.color === "orange");   // 处理过的卡片：记录合并后按钮还在，看颜色
     if (!live) return `<div class="msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
     return `<div class="msg"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='cardAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
@@ -2688,13 +2742,183 @@ const skApi = (path, body) => api(path, body, S.me);       // 每台电脑都有
 async function skillList(){ if (!skillsCache) skillsCache = (await skApi("/api/skills")).skills; return skillsCache; }
 function skillSrc(s){
   const x = s.source || {};
-  return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" && x.agent ? `${x.agent} 分享的` : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
+  return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" && x.agent ? `${x.agent} 分享的` : x.type === "assistant" ? "Skill 助手写的" : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
 }
 function skillMark(big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:var(--dai)">${ICON.star}</span>`; }
+// ---- Skill 页右侧的 Skill 助手（#116）：说话就能装、改、管理平台 Skill ----
+let SKC = null;   // {mid（在哪台电脑）, id, log, progress, busy, model, effort}
+function skcMid(){   // 助手在哪台电脑上跑：上次选的；没选过用总控那台，再不行用这台
+  const ms = S.machines || [];
+  let saved = null; try { saved = localStorage.getItem("ccim.skcMachine"); } catch {}
+  if (saved && (!ms.length || ms.some(m => m.id === saved))) return saved;
+  const hub = ms.find(m => m.hub && m.online !== false);
+  return hub ? hub.id : S.me;
+}
+const skcOpen = () => { try { return localStorage.getItem("ccim.skchat") !== "0"; } catch { return true; } };
+function skContent(){   // Skill 页：左边内容，右边助手
+  let c = $("#sk-content");
+  if (!c) {
+    $("#main").innerHTML = `<div class="sk-shell ${skcOpen() && !narrow() ? "chat-on" : ""}"><div class="sk-content" id="sk-content"></div>
+      <div class="skc-resizer" id="skc-rz" role="separator" aria-orientation="vertical" aria-label="拖动调整 Skill 助手的宽度" title="拖动调整宽度，双击恢复"></div>
+      <aside class="sk-chat" id="sk-chat" aria-label="Skill 助手"></aside>
+      <button class="sk-chat-fab" onclick="skcToggle(true)">${ICON.star}Skill 助手</button></div>`;
+    c = $("#sk-content");
+    skcResizer();
+    skcLoad();
+  }
+  return c;
+}
+function skcToggle(on){
+  try { localStorage.setItem("ccim.skchat", on ? "1" : "0"); } catch {}
+  document.querySelector(".sk-shell")?.classList.toggle("chat-on", on);
+  if (on) { drawSkChat(); setTimeout(() => $("#skc-in")?.focus(), 50); }
+}
+async function skcLoad(fresh){
+  const mid = skcMid();
+  try {
+    const {id} = await api("/api/helper", {kind: "skills", fresh: !!fresh}, mid);
+    const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, mid);
+    SKC = {mid, id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, model: d.model, effort: d.effort,
+           model_custom: d.model_custom, effort_custom: d.effort_custom};
+  } catch (e) { SKC = {mid, error: e.message}; }
+  drawSkChat();
+}
+function skcWhere(){   // 标题下面那行：在哪台电脑、什么模型；点开能换
+  if (!SKC) return "";
+  const m = machineOf(SKC.mid), name = (m || {}).name || "这台电脑";
+  if (m && m.online === false) {
+    const alt = (S.machines || []).find(x => x.online !== false && x.id !== SKC.mid);
+    return `<span class="skc-where off">「${esc(name)}」离线了${alt ? `<button class="link" onclick="skcUse(${q(alt.id)})">换到「${esc(alt.name)}」</button>` : ""}</span>`;
+  }
+  const parts = [multi() ? name : "", SKC.model ? modelName(SKC.model) : "", SKC.effort ? `思考 ${SKC.effort}` : ""].filter(Boolean);
+  return `<button class="skc-where" onclick="skcMenu(event)" title="换电脑、模型、思考深度">${esc(parts.join(" · ") || "默认设置")}${ICON.down}</button>`;
+}
+function skcMenu(e){
+  const ck = on => on ? `<span class="ck">✓</span>` : "";
+  const row = (fn, label, desc, on) => `<button onclick="closePop();${fn}"><span><div>${esc(label)}</div>${desc ? `<div class="desc">${esc(desc)}</div>` : ""}</span>${ck(on)}</button>`;
+  const ms = (S.machines || []).filter(m => m.online !== false);
+  const curM = SKC.model_custom ? SKC.model : "", curE = SKC.effort_custom ? SKC.effort : "";
+  pop(e, (multi() ? `<div class="sec">在哪台电脑</div>` + ms.map(m => row(`skcUse(${q(m.id)})`, m.name + (m.me ? "（这台）" : ""), m.hub ? "总控" : "", m.id === SKC.mid)).join("") : "")
+    + `<div class="sec">模型</div>` + modelOpts("claude", "跟随默认设置", curM, SKC.mid).map(([v, n, d]) => row(`skcSet('model',${q(v)})`, n, d, (curM || "") === v)).join("")
+    + `<div class="sec">思考深度</div>` + effortOpts("claude", "跟随默认设置").map(([v, n, d]) => row(`skcSet('effort',${q(v)})`, n, d, (curE || "") === v)).join(""), true);
+}
+async function skcUse(mid){
+  if (SKC && SKC.mid === mid) return;
+  if (SKC && SKC.busy && !await confirmBox("换一台电脑？", "助手还在干活，这边的会接着做完，换过去是另一个对话。", "换")) return;
+  try { localStorage.setItem("ccim.skcMachine", mid); } catch {}
+  SKC = null; drawSkChat(); await skcLoad();
+}
+async function skcSet(key, value){
+  await act(() => api("/api/chat/set", {id: SKC.id, key, value: value || null}, SKC.mid), key === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度");
+  const d = await api(`/api/chat?id=${encodeURIComponent(SKC.id)}`, undefined, SKC.mid);
+  Object.assign(SKC, {model: d.model, effort: d.effort, model_custom: d.model_custom, effort_custom: d.effort_custom});
+  drawSkChat();
+}
+async function skcNew(){
+  if (SKC && SKC.busy && !await confirmBox("开个新对话？", "助手还在干活，会被停下。", "开新对话")) return;
+  SKC = null; drawSkChat(); await skcLoad(true);
+}
+function skcCtx(){   // 用户正看着哪个 Skill、哪个文件
+  if (current.view === "skills" && current.id && SKV && SKV.src.kind === "platform" && SKV.name === current.id)
+    return `用户正在看平台 Skill「${SKV.name}」的 ${SKV.file}${SKV.dirty ? "（他改了还没保存）" : ""}`;
+  return current.view === "skills" ? "用户正在看平台 Skill 列表" : "";
+}
+const SKC_AV = `<span class="skc-av">${ICON.star}</span>`;
+function skcRec(r, i){
+  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${esc(r.text)}</div></div>`;
+  if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>
+    ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
+    ${r.text ? `<div class="msg-acts"><button onclick="skcCopy(this,${i})" title="复制">${ICON.copy}复制</button></div>` : ""}</div>`;
+  if (r.type === "card") {
+    if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
+    return `<div class="skc-msg"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
+      <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='skcAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
+  }
+  return "";
+}
+async function skcCopy(btn, i){
+  try { await navigator.clipboard.writeText(SKC.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
+  catch { toast("复制不了"); }
+}
+function skcLooking(){   // 输入框上方：它知道你正看着什么
+  if (current.view === "skills" && current.id && SKV && SKV.src.kind === "platform" && SKV.name === current.id)
+    return `<div class="skc-ctx" title="发消息时会告诉它">${ICON.file}<span>正在看 ${esc(SKV.name)} / ${esc(SKV.file)}</span></div>`;
+  return "";
+}
+function drawSkChat(){
+  const el = $("#sk-chat"); if (!el) return;
+  const typed = $("#skc-in") ? $("#skc-in").value : "";
+  const head = `<div class="skc-head">${SKC_AV}<div class="t"><b>Skill 助手</b>${skcWhere() || `<span>装、改、管理平台 Skill</span>`}</div>
+    <button class="icon-btn" title="新对话" aria-label="新对话" onclick="skcNew()">${ICON.plus}</button>
+    <button class="icon-btn" title="收起" aria-label="收起" onclick="skcToggle(false)">${ICON.x}</button></div>`;
+  if (!SKC) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
+  if (SKC.error) { el.innerHTML = head + `<div class="skc-body"><p class="muted">${esc(SKC.error)}</p></div>`; return; }
+  const p = SKC.progress, last = p && p.steps[p.steps.length - 1];
+  const empty = !SKC.log.length && !p ? `<div class="skc-empty">${SKC_AV}<h3>说一句，它来动手</h3>
+      <p>装 Skill、改说明、写一个新的、停用或删除都行。装好、改好会同步到所有电脑。</p>
+      ${["帮我找个处理 Excel 的 Skill 装上", "现在装了哪些 Skill，各是干什么的", "新建一个写周报的 Skill", "把这个 Skill 的说明改成中文"]
+        .map(t => `<button onclick="skcSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
+  const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
+  el.innerHTML = head + `<div class="skc-body" id="skc-body">${empty}${SKC.log.map(skcRec).join("")}
+      ${p ? `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
+        ${stallBar(p, SKC.id, SKC.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
+    <div class="skc-foot">${skcLooking()}<div class="skc-box"><textarea id="skc-in" rows="1" placeholder="${SKC.busy ? "补充说明，它做完这一步就会看到" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
+      <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div></div>`;
+  const b = $("#skc-body"); b.scrollTop = b.scrollHeight;
+  const ta = $("#skc-in"); ta.value = typed; skcFit();
+  ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); skcSend(); } };
+  ta.oninput = () => {
+    skcFit();
+    const s = el.querySelector(".send");
+    if (SKC.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => skcSend() : skcStop; }
+  };
+}
+function skcFit(){ const ta = $("#skc-in"); if (!ta) return; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight + 2, 220) + "px"; }
+function skcResizer(){   // 内容和助手之间的分隔线：拖动改宽度，记住；双击恢复
+  const shell = document.querySelector(".sk-shell"), rz = $("#skc-rz"); if (!shell || !rz) return;
+  try { const w = +localStorage.getItem("ccim.skcW"); if (w) shell.style.setProperty("--skc-w", w + "px"); } catch {}
+  let start = null;
+  rz.onpointerdown = e => { e.preventDefault(); start = {x: e.clientX, w: $("#sk-chat").getBoundingClientRect().width}; rz.classList.add("drag"); document.body.classList.add("resizing"); try { rz.setPointerCapture(e.pointerId); } catch {} };
+  rz.onpointermove = e => {
+    if (!start) return;
+    const max = Math.min(900, shell.getBoundingClientRect().width - 420);
+    shell.style.setProperty("--skc-w", Math.round(Math.min(Math.max(start.w - (e.clientX - start.x), 340), max)) + "px");
+  };
+  rz.onpointerup = rz.onpointercancel = () => {
+    if (!start) return;
+    start = null; rz.classList.remove("drag"); document.body.classList.remove("resizing");
+    try { localStorage.setItem("ccim.skcW", Math.round($("#sk-chat").getBoundingClientRect().width)); } catch {}
+  };
+  rz.ondblclick = () => { shell.style.removeProperty("--skc-w"); try { localStorage.removeItem("ccim.skcW"); } catch {} };
+}
+async function skcSend(text){
+  const ta = $("#skc-in"), v = (text || (ta ? ta.value : "")).trim();
+  if (!v || !SKC || !SKC.id) return;
+  if (ta) ta.value = "";
+  SKC.log.push({type: "user", text: v, sending: true});
+  if (!SKC.busy) SKC.progress = {steps: [], text: ""};
+  SKC.busy = true; drawSkChat();
+  try { await api("/api/chat/send", {id: SKC.id, text: v, files: [], ctx: skcCtx()}, SKC.mid); }
+  catch (e) { toast(e.message); SKC.log = SKC.log.filter(r => !r.sending); SKC.busy = false; SKC.progress = null; drawSkChat(); }
+}
+async function skcStop(){ if (SKC && SKC.id) await act(() => api("/api/chat/stop", {id: SKC.id}, SKC.mid)); }
+async function skcAct(mid, value){ await act(() => api("/api/chat/action", {id: SKC.id, mid, value}, SKC.mid)); }
+function skcEvent(ev){   // 推送：进度、记录
+  if (!SKC || ev.chat !== SKC.id) return;
+  const rec = {...ev}; delete rec.chat;
+  if (ev.type === "progress") { SKC.progress = ev.state === "working" ? ev : null; SKC.busy = ev.state === "working"; }
+  else if (ev.type === "user") { const i = SKC.log.findIndex(r => r.sending && r.text === ev.text); i >= 0 ? SKC.log[i] = rec : SKC.log.push(rec); }
+  else if (["answer", "note", "card"].includes(ev.type)) {
+    const i = ev.type === "card" ? SKC.log.findIndex(r => r.type === "card" && r.id === ev.id) : -1;
+    i >= 0 ? SKC.log[i] = rec : SKC.log.push(rec);
+    if (ev.type === "answer") SKC.progress = null;
+  } else return;
+  drawSkChat();
+}
 async function renderSkills(){
   if (current.id) return openSkill(current.id);
   let list = [];
-  try { list = await skillList(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开 Skill</h2><p>${esc(e.message)}</p></div>`; return; }
+  try { list = await skillList(); } catch (e) { skContent().innerHTML = `<div class="empty"><h2>打不开 Skill</h2><p>${esc(e.message)}</p></div>`; return; }
   if (current.view !== "skills" || current.id) return;
   const fresh = skFresh; skFresh = [];
   const body = list.length ? `<div class="cgrid">${list.map(s => `<a class="ccard ${s.disabled ? "off" : ""} ${fresh.includes(s.name) ? "fresh" : ""}" href="#/skills/${encodeURIComponent(s.name)}">
@@ -2704,7 +2928,7 @@ async function renderSkills(){
       <button class="ccard add" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`
     : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。</p>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`;
-  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
+  skContent().innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
       <button class="btn" onclick="marketsMenu(event)">逛 Skill 市场${ICON.down}</button>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>
     <div class="ov-sub">${syncLine()}</div><div class="ov-body">${body}</div></div>`;
@@ -2713,13 +2937,15 @@ let SKV = null;    // 打开的 Skill：{name, s（详情）, open（展开的�
 async function openSkill(name){
   let s;
   try { s = skillOpen = await skApi(`/api/skills/detail?name=${encodeURIComponent(name)}`); }
-  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个 Skill</h2><p>${esc(e.message)}</p><a class="btn" href="#/skills">返回 Skill 列表</a></div>`; return; }
+  catch (e) {
+    if (SKV && SKV.src.kind === "platform" && SKV.name === name) { SKV = null; toast(`「${name}」已经删了`); location.hash = "#/skills"; return; }   // 正看着的被删了（比如助手删的）
+    skContent().innerHTML = `<div class="empty"><h2>找不到这个 Skill</h2><p>${esc(e.message)}</p><a class="btn" href="#/skills">返回 Skill 列表</a></div>`; return; }
   if (current.view !== "skills" || current.id !== name) return;
   if (!SKV || SKV.src.kind !== "platform" || SKV.name !== name) SKV = {src: {kind: "platform", name}, name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
   SKV.s = s;
   if (!s.files.includes(SKV.file)) SKV.file = "SKILL.md";
   const offFor = S.agents.filter(a => (a.skills_off || []).includes(name));
-  $("#main").innerHTML = `<div class="sk-page">
+  skContent().innerHTML = `<div class="sk-page">
     <div class="sk-head">
       <a class="sk-back" href="#/skills">${ICON.left}Skill 列表</a>
       <div class="sk-title"><div class="grow"><h2>${esc(s.name)}${s.disabled ? `<span class="tag">已停用</span>` : ""}</h2>
@@ -2772,6 +2998,7 @@ function skToggleDir(p){ SKV.open.has(p) ? SKV.open.delete(p) : SKV.open.add(p);
 async function skOpenFile(path, first){
   if (!first && SKV.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
   SKV.file = path; SKV.f = null; SKV.dirty = false;
+  if (SKC && $("#sk-chat")) { const c = document.querySelector(".skc-foot .skc-ctx"); if (c) c.outerHTML = skcLooking(); }
   path.split("/").slice(0, -1).forEach((_, i, a) => SKV.open.add(a.slice(0, i + 1).join("/")));   // 打开文件所在的文件夹
   drawSkTree(); drawSkView();
   let f;
@@ -2808,8 +3035,8 @@ function skFront(text){   // SKILL.md 开头的名字、说明，预览里显示
   const rows = [];
   for (const l of m[1].split("\n")) {
     const r = /^([\w-]+):\s*(.*)$/.exec(l);
-    if (r) rows.push([r[1], r[2].replace(/^["']|["']$/g, "")]);
-    else if (rows.length && l.trim()) rows[rows.length - 1][1] += (rows[rows.length - 1][1] ? "\n" : "") + l.trim();   // 下一层的内容接在上一项后面
+    if (r) rows.push([r[1], /^[>|][-+]?$/.test(r[2].trim()) ? "" : r[2].replace(/^["']|["']$/g, ""), /^>/.test(r[2].trim())]);   // >- 是折叠的多行
+    else if (rows.length && l.trim()) { const x = rows[rows.length - 1]; x[1] += (x[1] ? (x[2] ? " " : "\n") : "") + l.trim(); }   // 下一层的内容接在上一项后面
   }
   return rows.length ? `<dl class="sk-fm">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
 }

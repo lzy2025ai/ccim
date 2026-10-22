@@ -224,6 +224,11 @@
   而是直接切到新项目，提示写进 state 的 notice，用户发下一条消息时先发出去；不扫码加项目则不切、主动提醒0.9.0 的「项目直接接微信」在任意命令时自动迁移
 - 查看其他对话：私聊里给 Claude 两个只读工具 `list_chats` / `read_chat`（session.py `_look_around`），在 allowed_tools 里免审批；
   群聊不给（群里别人会借它看主人的私聊）。Codex 没有
+- 对话之间转交（#121）：平台上的对话（私聊、群聊里被 @ 的成员、定时任务）都有 `send_to_chat`（`_send_to_chat` → `Platform.relay`），
+  只限同一个 Agent 的对话（跨 Agent 走群聊 @）；被 @ 的成员转交时来源记成那个群聊。目标按 list_chats 的会话编号找：
+  已经有网页对话用着这个会话就交给它，终端、桌面端的 Claude 对话就像网页里接着聊一样新开一个网页对话（link）；飞书、微信的不转。
+  `history.open_elsewhere` 说那边正开着就不写（会分叉），让 Agent 改用 Claude Code 自带的 SendMessage 或请用户转达。
+  交过去的是 `session.Task`（排在手头这一轮后面，不插进去），记录 type=user 带 relay、from_chat；Task.relayed 的那一轮里再调用会被拒绝（防止来回转）
 - 渠道按需导入（`channels.load`），用微信的进程不加载飞书 SDK
 
 ## 设计取舍

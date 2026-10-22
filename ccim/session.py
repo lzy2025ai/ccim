@@ -51,7 +51,9 @@ SCHEDULE = """
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND = """
 - 这个项目在别处（飞书、微信、终端或桌面端）还有别的对话，各聊各的。用户想知道别处聊过什么时，
-  先用 mcp__ccim__list_chats 列出来，再用 mcp__ccim__read_chat 读，读到的内容当作参考，不用照着做。"""
+  先用 mcp__ccim__list_chats 列出来，再用 mcp__ccim__read_chat 读，读到的内容当作参考，不用照着做。
+  用户让你给别的对话转达、交代事情时，用 mcp__ccim__send_to_chat（有这个工具时）。找这个项目的对话只看 list_chats，
+  不要拿 ListAgents 来找（它列的是这台电脑上所有项目的会话）；只有 send_to_chat 说对方正开着、让你改用 SendMessage 时才用它。"""
 
 
 class Caffeinate:
@@ -464,7 +466,8 @@ class Chat:
                 resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"] + CRON_TOOLS, env=self.ccim_env(),
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
-                               "mcp__ccim__ask_agents"] + SKILL_TOOLS,               # 只是在群里 @ 人，用户看得到；Skill 助手的（删除除外）
+                               "mcp__ccim__ask_agents",                             # 只是在群里 @ 人，用户看得到
+                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
@@ -812,6 +815,8 @@ class Chat:
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += _look_around(chat) + [run_as_admin]
+            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper"):
+                tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
         return create_sdk_mcp_server("ccim", tools=tools)
@@ -967,6 +972,44 @@ def ccim_bin():
     except OSError:
         log.warning("放 ccim 命令出错", exc_info=True)
     return d
+
+
+RELAY_WAIT = 20 * 60                          # send_to_chat 等回答最多等这么久
+
+
+def _send_to_chat(chat, pf):
+    @tool("send_to_chat", "把一段话转交给这个 Agent 的另一个对话（网页对话，或者终端、桌面端里的 Claude Code 对话），"
+          "由那个对话在它自己的上下文里处理，排在它手头这一轮后面。只在用户让你转达、交代事情给别的对话时用。"
+          "id 用 list_chats 给的编号。wait 为 true 时等它回答完把回答交给你（最多 20 分钟），否则发出去就返回。",
+          {"type": "object", "properties": {"id": {"type": "string", "description": "对话编号，前 8 位就行"},
+                                             "text": {"type": "string", "description": "要交给它的话，写清楚来龙去脉，它看不到这个对话"},
+                                             "wait": {"type": "boolean", "description": "要不要等它回答"}},
+           "required": ["id", "text"]})
+    async def send_to_chat(args):
+        cur = (getattr(chat, "current", None) or (None,))[0]
+        if getattr(cur, "relayed", False):
+            return _err("这条消息本身就是别的对话转交来的，不能再往外转交。需要的话在回答里说明，由用户决定。")
+        sid = (args.get("id") or "").strip().lower()
+        text = (args.get("text") or "").strip()
+        if not sid or not text:
+            return _err("id 和 text 都要写。")
+        from claude_agent_sdk import list_sessions
+        hits = [x.session_id for x in list_sessions(directory=chat.b.path, limit=40)
+                if x.session_id.startswith(sid) and x.session_id != chat.session_id]
+        if len(hits) != 1:
+            return _err("没有这个对话，先用 list_chats 看看编号。" if not hits else "编号对应了好几个对话，多写几位。")
+        try:
+            state, out = await pf.relay(chat.chat_id, hits[0], text, RELAY_WAIT if args.get("wait") else 0)
+        except Exception as e:
+            return _err(str(e))
+        msg = {"open": f"这个对话正在{out}里开着，直接写进去会和那边分叉，没有转交。"
+                       "如果 ListAgents 里能看到它，用 SendMessage 发给它；看不到就请用户在那边转达。",
+               "sent": "已经转交过去了，它会在手头这一轮之后处理。",
+               "waiting": "已经转交过去，20 分钟内还没回答完，之后的回答在那个对话里看。",
+               "done": f"它的回答：\n{out}", "stopped": "转交过去了，但它被停下了，没有回答。",
+               "error": f"转交过去了，但它出错了：{out}"}.get(state, f"{state}：{out}")
+        return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if state in ("open", "error") else {})}
+    return send_to_chat
 
 
 def kb_note(kbs):

@@ -592,6 +592,18 @@ class Platform:
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
 
+    async def skip_step(self, cid):
+        """结束卡住的那一步，接着做（#109）。"""
+        c = self._bridge(cid).chats.get(cid)
+        return bool(c and await c.skip())
+
+    def _stall(self, cid):
+        """这个对话（群聊连同里面被 @ 的成员）卡住的那一步：{step, secs, chat}。"""
+        p = self.channel.progress_of
+        hits = [dict(v["stall"], chat=k) for k, v in list(p.items())
+                if (k == cid or k.startswith(f"m-{cid}-")) and v.get("stall")]
+        return max(hits, key=lambda x: x["secs"]) if hits else None
+
     async def stop_chat(self, cid):
         hit = await self.mentions.stop_all(cid)
         b = self._bridge(cid)
@@ -685,6 +697,7 @@ class Platform:
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
                 **self._board_marks(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
+                "stall": self._stall(cid),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
 
     @staticmethod
@@ -1387,6 +1400,7 @@ def _handler(pf):
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or []),
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
+                "/api/chat/skip": lambda: {"skipped": pf.run(pf.skip_step(b("id")))},
                 "/api/chat/action": lambda: pf.run(pf.action(b("id"), b("mid"), b("value"))),
                 "/api/chat/set": lambda: pf.run(pf.set_chat(b("id"), b("key"), b("value"))),
                 "/api/chat/delete": lambda: pf.call(pf.delete_terminal, b("id")) if str(b("id")).startswith("x:")

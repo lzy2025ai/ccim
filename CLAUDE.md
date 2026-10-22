@@ -14,6 +14,10 @@
   这一轮结束后再等 INJECT_GRACE 秒，Claude 接着处理就读到下一个结果，没处理就排到队首重跑。
   /stop 时还有 Claude 没看到的补充（`t.unseen`）：Claude Code 打断后会自己开一轮处理它，要把那一轮也打断、读完扔掉（`t.drain`），
   否则它的回答会落到下一条消息头上；打断产生的「已中断」工具结果不能当成「已看到」
+- 卡住提醒（#109）：Turn.flight 记还没出结果的顶层工具调用，t.last 记最近一次收到 Claude 的任何消息；有工具在等、STALL（5 分钟）里没任何动静
+  就算卡住（`Turn.stalled`）：网页进度 snap 带 stall（对话列表、任务面板、群聊这一行按 `Platform._stall` 连同 @ 子对话显示），飞书卡片加一行，微信发一句。
+  「结束这一步」（网页按钮 /api/chat/skip、/skip、/跳过）= `Chat.skip`：interrupt_with 一条「这一步被结束了，不要原样重试，接着做」，
+  卡着期间的补充（t.unseen）一起写进去；派来的 Task 把 future 交给接着做的这一轮（carried），不当成停下
 - 一轮的结束不能只看第一个 `ResultMessage`：接上会话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空，
   要接着读（`STRAY_WAIT`）。session_id 在 `SystemMessage(init)` 时就存，第一轮被打断也能接上。见 docs/排查-2026-10-03-*.md
 - Claude 的消息由 `_pump` 一直读进 `Chat.inbox`，空闲时也读：后台任务（子 agent、后台命令）做完，Claude Code 会自己开一轮，

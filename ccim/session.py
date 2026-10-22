@@ -28,6 +28,7 @@ END = object()                # 收件箱里：和 Claude 的连接断了
 AWAKE = object()              # 没人问，Claude 自己开了一轮（比如后台任务做完了）
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
 STRAY_WAIT = 30           # 收到一个什么都没说的「一轮结束」（比如接上对话时补的后台任务通知那一轮）后，再等多久用户这一轮的结果
+STALL = 300               # 某一步这么久没结果、也没有任何新动静，就提醒用户（#109）
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
 # 优先用本机装的 claude，和终端里的版本、登录一致；找不到再用 SDK 自带的
@@ -102,11 +103,25 @@ class Turn:
         self.retry = None                     # 连不上 Claude 时第几次重试（api_retry），连上了就清掉
         self.uuid = None                      # 这一轮最后一条回答的编号（从这里分叉用）
         self.prompt = None                    # 开始这一轮的那条消息的编号（退回时把文件恢复到它之前）
+        self.flight = {}                      # 还没出结果的工具调用：编号 → (说明, 开始时刻)
+        self.last = time.monotonic()          # 最近一次收到 Claude 的任何消息
+        self.warned = None                    # 没有卡片的渠道：已经提醒过卡住的是哪一步
+
+    def stalled(self):
+        """卡住的那一步：(说明, 已经多少秒)。有工具调用没结果、而且 STALL 秒里没有任何新动静才算。"""
+        if not self.flight or time.monotonic() - self.last < STALL:
+            return None
+        key = min(self.flight, key=lambda k: self.flight[k][1])
+        desc, since = self.flight[key]
+        return key, desc, time.monotonic() - since
 
     def card(self, title, color):
         hidden = len(self.steps) - SHOW_STEPS
         lines = ([f"…前面还有 {hidden} 步"] if hidden > 0 else []) + [f"· {s}" for s in self.steps[-SHOW_STEPS:]]
         writing = self.live or self.text
+        st = self.stalled() if color == "blue" else None
+        if st:
+            lines.append(f"⚠️「{short(st[1], 40)}」已经 {int(st[2] // 60)} 分钟没有进展，发 /skip 结束这一步、接着做")
         if self.retry and color == "blue":
             lines.append(f"网络不稳，正在重试（第 {self.retry} 次）")
         if writing and color == "blue":
@@ -139,6 +154,8 @@ class Chat:
         self.stopping = False
         self.reconnect = False
         self.tail = None                      # 这一轮最后一条回答的编号，下一条消息前用它看别处有没有接着聊过
+        self.current = None                   # 正在做的这一轮：(消息, reply_to)
+        self.skipping = False                 # 正在结束卡住的一步（打断后接着做）
         self.outcome = None                   # 这一轮的结果 (状态, 回答)，交给 ccim ask 派的任务
 
     # ----- 对外 -----
@@ -190,6 +207,28 @@ class Chat:
                 prompt.finish("stopped")
             asyncio.create_task(self._unreact(react))
         return await self._interrupt()
+
+    async def skip(self):
+        """结束卡住的那一步：打断这一轮，马上接着做（#109）。补充过的话一起带上；ccim ask、@ 派的任务接着等新的这一轮。"""
+        t, cur = self.turn, self.current
+        if not t or not t.flight or self.stopping or not cur:
+            return False
+        desc, since = min(t.flight.values(), key=lambda x: x[1])
+        mins = max(1, int((time.monotonic() - since) // 60))
+        text = (f"刚才「{desc}」这一步 {mins} 分钟没有结果，被用户结束了。不要原样重试：要等的操作加上超时，"
+                "或者换个办法，接着把事情做完。")
+        extra = [str(p) for p, _ in t.unseen]
+        if extra:
+            text += "\n\n这期间用户补充了：\n" + "\n".join("- " + x for x in extra)
+        prompt, reply_to = cur
+        if isinstance(prompt, Task):          # 派来的任务：结果交给接着做的这一轮
+            nxt = Task(text)
+            nxt.future = prompt.future
+            prompt.carried = True
+            text = nxt
+        self.skipping = True
+        await self.interrupt_with(text, reply_to)
+        return True
 
     async def _interrupt(self):
         if not self.turn:
@@ -307,8 +346,9 @@ class Chat:
                 elif self.client and prompt is not AWAKE and self._stale():
                     log.info("[%s] 对话在别处接着聊过，重新接上", self.chat_id[-6:])
                     await self._disconnect()
-                self.stopping = False
+                self.stopping = self.skipping = False
                 self.outcome = None
+                self.current = (prompt, reply_to)
                 self.b.caffeinate.acquire()
                 try:
                     await self._turn(prompt, reply_to)
@@ -318,9 +358,9 @@ class Chat:
                     await self._disconnect()
                     await self._safe_text(f"出错了：{short(str(e) or type(e).__name__, 300)}", reply_to)
                 finally:
-                    if isinstance(prompt, Task):
+                    if isinstance(prompt, Task) and not getattr(prompt, "carried", False):
                         prompt.finish(*(self.outcome or ("stopped", "")))
-                    self.turn = None
+                    self.turn = self.current = None
                     self.b.caffeinate.release()
                     await self._unreact(react)
         finally:
@@ -495,6 +535,8 @@ class Chat:
                     if m is END:
                         await self._disconnect()
                         break
+                    if not isinstance(m, RateLimitEvent):
+                        t.last = time.monotonic()
                     if stray and not isinstance(m, RateLimitEvent):
                         stray = False
                     if isinstance(m, SystemMessage) and m.subtype == "api_retry":
@@ -518,6 +560,10 @@ class Chat:
                         if (t.prompt is None and m.uuid and not m.parent_tool_use_id and not (
                                 isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content))):
                             t.prompt = m.uuid         # 回显的这一轮的提问
+                        if isinstance(m.content, list):
+                            for b in m.content:
+                                if isinstance(b, ToolResultBlock):
+                                    t.flight.pop(b.tool_use_id, None)
                         if (isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content)
                                 and not self.stopping):    # 打断时那条「已中断」的工具结果不算
                             t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
@@ -537,6 +583,8 @@ class Chat:
                                 d = describe_tool(blk.name, blk.input)
                                 if d:
                                     t.steps.append(d)
+                                if not m.parent_tool_use_id:
+                                    t.flight[blk.id] = (d or blk.name, time.monotonic())
                             elif isinstance(blk, TextBlock) and blk.text.strip():
                                 t.text, t.live = blk.text, ""
                     elif isinstance(m, ResultMessage):
@@ -586,10 +634,15 @@ class Chat:
         self.outcome = ("stopped", "") if self.stopping else ("error", error) if error else ("ok", answer or "")
         if error:
             await self._safe_text(f"出错了：{short(error, 500)}", reply_to)
+        elif self.skipping:
+            if not t.card_id:
+                await self._safe_text("结束了卡住的一步，接着做。", reply_to)
         elif self.stopping and not t.card_id:
             await self._safe_text("已停止。", reply_to)
         elif answer:
             await self._deliver(answer, reply_to)
+        if self.skipping:
+            title = "结束了卡住的一步，接着做"
         if t.card_id and (t.steps or self.stopping or error):
             await self._safe_update(t.card_id, t.card(title, color))
         elif t.card_id:                       # 纯文字回答：卡片收成一行小字（撤回的话飞书会留「撤回了一条消息」，像出了错）
@@ -610,6 +663,9 @@ class Chat:
     def _snap(self, t, state="working"):
         snap = {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "retry": t.retry,
                 "elapsed": round(time.monotonic() - t.start, 1)}
+        st = t.stalled() if state == "working" else None
+        if st:
+            snap["stall"] = {"step": st[1], "secs": int(st[2])}
         if state == "done" and t.uuid and self.session_id:
             snap["fork"] = {"sid": self.session_id, "at": t.uuid}
         if state != "working" and t.prompt:
@@ -621,7 +677,7 @@ class Chat:
             last = None
             while True:
                 snap = self._snap(t)
-                key = (len(snap["steps"]), snap["text"], snap["retry"])
+                key = (len(snap["steps"]), snap["text"], snap["retry"], (snap.get("stall") or {}).get("secs", 0) // 60)
                 if key != last:
                     last = key
                     try:
@@ -629,9 +685,14 @@ class Chat:
                     except Exception:
                         log.debug("推送进度失败", exc_info=True)
                 await asyncio.sleep(0.3)
-        if not self.b.channel.cards:          # 消息发出去改不了的渠道：干活时只显示「正在输入」
+        if not self.b.channel.cards:          # 消息发出去改不了的渠道：干活时只显示「正在输入」，卡住了发一句提醒
             while True:
                 await self.b.channel.typing(self.chat_id, True)
+                st = t.stalled()
+                if st and t.warned != st[0]:
+                    t.warned = st[0]
+                    await self._safe_text(f"「{short(st[1], 40)}」这一步已经 {int(st[2] // 60)} 分钟没有进展。"
+                                          "发 /skip 结束这一步、接着做；发 /stop 整个停下。", reply_to)
                 await asyncio.sleep(TYPING_EVERY)
         while True:
             await asyncio.sleep(0.5 if not t.card_id else REFRESH)

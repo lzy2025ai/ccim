@@ -15,6 +15,7 @@ HELP = """\
 /new　开始新对话
 /resume　接上这个项目里的其他对话（包括在终端里开的）
 /stop　停下正在做的事
+/skip　某一步卡住了：结束这一步，接着做
 /queue 内容　排在后面：手头这件做完再处理（不加的话，干活时发的消息会直接补充进去）
 /restart　重启这个机器人（升级到新代码时用）
 /status　当前状态
@@ -120,6 +121,11 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         await say(await usage.report(bridge.path))
     elif cmd == "/stop":
         await say("正在停下。" if await chat.stop() else "现在没有在做的事。")
+    elif cmd in ("/skip", "/跳过"):
+        if codex:
+            await say("这个项目用的是 Codex，没有这个功能，可以用 /stop 停下。")
+        elif not await chat.skip():
+            await say("现在没有在等结果的一步。" if chat.busy else "现在没有在做的事。")
     elif cmd == "/status":
         if chat.turn:
             n = len(chat.turn.steps)

@@ -30,6 +30,18 @@ def _logging(mode):
     logging.getLogger("Lark").propagate = False   # 飞书 SDK 自己会打一遍，别再转给根日志重复打
 
 
+async def _after_restart(path, channel, log):
+    try:
+        notes = await asyncio.to_thread(runtime.after_restart_note, path)
+        for cid, text in notes:
+            try:
+                await channel.send_text(cid, text)
+            except Exception:
+                log.warning("重启后的说明没发出去（%s）", cid, exc_info=True)
+    except Exception:
+        log.exception("重启后的说明出错")
+
+
 async def _serve(path, entry, secret, mode):
     from .bridge import Bridge
     log = logging.getLogger("ccim")
@@ -43,6 +55,12 @@ async def _serve(path, entry, secret, mode):
         bridge = Bridge(path, entry)
     channel = load(entry["channel"])(path, entry, secret, bridge.handlers())
     bridge.attach(channel)
+    chats = registry.read_state(path).get("chats")
+    if isinstance(chats, dict) and any(isinstance(c, dict) and c.get("busy") for c in chats.values()):
+        for c in chats.values():              # 上次退出时正在干活的对话：新进程里它们都没在干活（#136，不清掉的话重启前会一直等它们）
+            if isinstance(c, dict) and c.get("busy"):
+                c.update(busy=False, asked=None, since=None, steps=[])
+        registry.write_state(path, chats=chats)
     registry.write_state(path, pid=os.getpid(), mode=mode, started=registry.now(), online=False, error=None,
                          caps=CAPS, python=sys.executable)
     try:
@@ -59,6 +77,8 @@ async def _serve(path, entry, secret, mode):
         log.info("已连上%s：在%s里给它发消息就行%s", channel.label, channel.label, end)
     if entry.get("claim_code"):
         log.info("先在飞书里私聊「%s」，发送 %s 认领这个机器人。", name, entry["claim_code"])
+    if entry.get("kind") != "weixin":         # 重启前没做完的对话、发起重启的对话：说一声（#136；微信主动发的消息可能被丢，不发）
+        asyncio.create_task(_after_restart(path, channel, log))
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -305,8 +325,8 @@ def cmd_restart(args):
         _apply_settings(path, args)
     if args.safe or runtime.inside(path):     # 在它自己里面（比如平台里的 Agent）重启它：停掉它会连带停掉这条命令，交给独立进程（#70）
         runtime.schedule_restart(path, delay=args.delay)
-        print(f"「{os.path.basename(path)}」{args.delay} 秒后重启；新版本起不来会用稳定版顶上，"
-              f"结果发到{NAMES[entry['channel']]}。")
+        when = "等这一轮回复发出去、手头的活做完就重启（最多等 3 分钟）" if runtime.inside(path) else f"{args.delay} 秒后重启"
+        print(f"「{os.path.basename(path)}」{when}；新版本起不来会用稳定版顶上，结果发到{NAMES[entry['channel']]}。")
         return
     if daemon.is_always(path):
         daemon.stop(path)

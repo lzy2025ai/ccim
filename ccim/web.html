@@ -701,27 +701,46 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .sk-body.inpage{height:calc(100vh - 300px);min-height:420px;border-top:1px solid var(--line)}
 .sk-shell{display:flex;flex:1;width:100%;height:100%;min-height:0;min-width:0}
 .sk-content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:auto}
-.sk-chat{display:none;width:380px;flex:none;border-left:1px solid var(--line);background:var(--panel);flex-direction:column;min-height:0}
+.sk-shell{--skc-w:460px}
+.sk-chat{display:none;width:var(--skc-w);flex:none;border-left:1px solid var(--line);background:var(--panel);flex-direction:column;min-height:0;min-width:0}
 .sk-shell.chat-on .sk-chat{display:flex}
+.skc-resizer{display:none;width:8px;margin:0 -4px;flex:none;cursor:col-resize;position:relative;z-index:5;touch-action:none}
+.sk-shell.chat-on .skc-resizer{display:block}
+.skc-resizer::after{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent;transition:background .15s}
+.skc-resizer:hover::after,.skc-resizer.drag::after{background:var(--qing)}
+.skc-av{width:26px;height:26px;border-radius:8px;background:var(--dai);color:#fff;display:grid;place-items:center;flex:none}
+.skc-av svg{width:14px;height:14px}
 .sk-chat-fab{position:fixed;right:22px;bottom:22px;z-index:12;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:22px;
   background:var(--qing);color:#fff;font-size:13.5px;box-shadow:0 6px 20px rgba(29,34,43,.2)}
 .sk-chat-fab svg{width:15px;height:15px}
 .sk-shell.chat-on .sk-chat-fab{display:none}
 @media (max-width:760px){.sk-chat-fab{bottom:calc(72px + env(safe-area-inset-bottom))}}
-.skc-head{display:flex;align-items:center;gap:4px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line);min-height:52px}
-.skc-head .grow{flex:1}
-.skc-body{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px;min-height:0}
-.skc-me{align-self:flex-end;background:var(--qing-soft);padding:8px 12px;border-radius:12px 12px 4px 12px;max-width:88%;white-space:pre-wrap;font-size:13.5px}
-.skc-bot .answer{font-size:13.5px}
-.skc-steps{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:4px}
-.skc-empty{color:var(--muted);font-size:13px}
-.skc-empty p{margin:0 0 8px}
-.skc-empty button{display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:6px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink-2)}
+.skc-head{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line);min-height:58px}
+.skc-head .t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.skc-head .t b{font:600 15px var(--song)} .skc-head .t span{font-size:12px;color:var(--muted)}
+.skc-body{flex:1;overflow:auto;padding:18px 18px 8px;min-height:0}
+.skc-msg{margin-bottom:20px;min-width:0}
+.skc-msg.me{display:flex;justify-content:flex-end}
+.skc-msg.me .bubble{max-width:88%;font-size:14px}
+.skc-msg.me.sending .bubble{opacity:.65}
+.skc-msg .from-row b{font:600 13px var(--song)}
+.skc-msg .answer{font-size:14px}
+.skc-msg .msg-acts{opacity:0;transition:opacity .15s;margin-top:4px}
+.skc-msg:hover .msg-acts{opacity:1}
+.skc-msg .steps{margin-bottom:6px}
+.skc-empty{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px 2px;color:var(--muted);font-size:13.5px}
+.skc-empty .skc-av{width:38px;height:38px;border-radius:11px} .skc-empty .skc-av svg{width:20px;height:20px}
+.skc-empty h3{margin:6px 0 0;font:600 17px var(--song);color:var(--ink)}
+.skc-empty p{margin:0 0 6px;line-height:1.6}
+.skc-empty button{display:block;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink-2)}
 .skc-empty button:hover{border-color:var(--qing);color:var(--qing)}
-.skc-box{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
-.skc-box textarea{flex:1;resize:none;border:1px solid var(--line-strong);border-radius:10px;padding:8px 10px;font:inherit;font-size:13.5px;max-height:160px;background:var(--panel);color:var(--ink)}
-.skc-box textarea:focus{outline:none;border-color:var(--qing)}
-.skc-box .send{margin:0 0 2px;flex:none}
+.skc-foot{border-top:1px solid var(--line);padding:8px 14px 12px}
+.skc-ctx{display:inline-flex;align-items:center;gap:5px;max-width:100%;font-size:12px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:2px 8px;margin-bottom:6px}
+.skc-ctx svg{width:12px;height:12px;flex:none} .skc-ctx span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.skc-box{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line-strong);border-radius:12px;padding:6px 6px 6px 12px;background:var(--panel)}
+.skc-box:focus-within{border-color:var(--qing)}
+.skc-box textarea{flex:1;resize:none;border:0;outline:0;padding:5px 0;font:inherit;font-size:14px;line-height:1.55;background:none;color:var(--ink);max-height:220px}
+.skc-box .send{margin:0;flex:none}
 .skc-box .send.stop{background:var(--ink)}
 @media (max-width:760px){
   .sk-shell.chat-on .sk-chat{position:fixed;inset:0;width:auto;z-index:40;border:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
@@ -2725,9 +2744,12 @@ const skcOpen = () => { try { return localStorage.getItem("ccim.skchat") !== "0"
 function skContent(){   // Skill 页：左边内容，右边助手
   let c = $("#sk-content");
   if (!c) {
-    $("#main").innerHTML = `<div class="sk-shell ${skcOpen() && !narrow() ? "chat-on" : ""}"><div class="sk-content" id="sk-content"></div><aside class="sk-chat" id="sk-chat" aria-label="Skill 助手"></aside>
+    $("#main").innerHTML = `<div class="sk-shell ${skcOpen() && !narrow() ? "chat-on" : ""}"><div class="sk-content" id="sk-content"></div>
+      <div class="skc-resizer" id="skc-rz" role="separator" aria-orientation="vertical" aria-label="拖动调整 Skill 助手的宽度" title="拖动调整宽度，双击恢复"></div>
+      <aside class="sk-chat" id="sk-chat" aria-label="Skill 助手"></aside>
       <button class="sk-chat-fab" onclick="skcToggle(true)">${ICON.star}Skill 助手</button></div>`;
     c = $("#sk-content");
+    skcResizer();
     skcLoad();
   }
   return c;
@@ -2754,35 +2776,73 @@ function skcCtx(){   // 用户正看着哪个 Skill、哪个文件
     return `用户正在看平台 Skill「${SKV.name}」的 ${SKV.file}${SKV.dirty ? "（他改了还没保存）" : ""}`;
   return current.view === "skills" ? "用户正在看平台 Skill 列表" : "";
 }
-function skcRec(r){
-  if (r.type === "user") return `<div class="skc-me">${esc(r.text)}</div>`;
-  if (r.type === "answer" || r.type === "note") return `<div class="skc-bot">${r.steps && r.steps.length ? `<div class="skc-steps">${r.steps.length} 步 · ${esc(r.steps[r.steps.length - 1])}</div>` : ""}<div class="answer">${md(r.text)}</div></div>`;
+const SKC_AV = `<span class="skc-av">${ICON.star}</span>`;
+function skcRec(r, i){
+  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${esc(r.text)}</div></div>`;
+  if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>
+    ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
+    ${r.text ? `<div class="msg-acts"><button onclick="skcCopy(this,${i})" title="复制">${ICON.copy}复制</button></div>` : ""}</div>`;
   if (r.type === "card") {
-    if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-bot"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
-    return `<div class="skc-bot"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
+    if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
+    return `<div class="skc-msg"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='skcAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
+  return "";
+}
+async function skcCopy(btn, i){
+  try { await navigator.clipboard.writeText(SKC.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
+  catch { toast("复制不了"); }
+}
+function skcLooking(){   // 输入框上方：它知道你正看着什么
+  if (current.view === "skills" && current.id && SKV && SKV.src.kind === "platform" && SKV.name === current.id)
+    return `<div class="skc-ctx" title="发消息时会告诉它">${ICON.file}<span>正在看 ${esc(SKV.name)} / ${esc(SKV.file)}</span></div>`;
   return "";
 }
 function drawSkChat(){
   const el = $("#sk-chat"); if (!el) return;
   const typed = $("#skc-in") ? $("#skc-in").value : "";
-  const head = `<div class="skc-head"><b>Skill 助手</b><span class="grow"></span>
+  const head = `<div class="skc-head">${SKC_AV}<div class="t"><b>Skill 助手</b><span>装、改、管理平台 Skill</span></div>
     <button class="icon-btn" title="新对话" aria-label="新对话" onclick="skcNew()">${ICON.plus}</button>
     <button class="icon-btn" title="收起" aria-label="收起" onclick="skcToggle(false)">${ICON.x}</button></div>`;
   if (!SKC) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
   if (SKC.error) { el.innerHTML = head + `<div class="skc-body"><p class="muted">${esc(SKC.error)}</p></div>`; return; }
   const p = SKC.progress, last = p && p.steps[p.steps.length - 1];
-  const empty = !SKC.log.length && !p ? `<div class="skc-empty"><p>可以这样说：</p>${["帮我找个处理 Excel 的 Skill 装上", "把这个 Skill 的说明改成中文", "新建一个写周报的 Skill", "现在装了哪些 Skill，各是干什么的"]
-    .map(t => `<button onclick="skcSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
+  const empty = !SKC.log.length && !p ? `<div class="skc-empty">${SKC_AV}<h3>说一句，它来动手</h3>
+      <p>装 Skill、改说明、写一个新的、停用或删除都行。装好、改好会同步到所有电脑。</p>
+      ${["帮我找个处理 Excel 的 Skill 装上", "现在装了哪些 Skill，各是干什么的", "新建一个写周报的 Skill", "把这个 Skill 的说明改成中文"]
+        .map(t => `<button onclick="skcSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
+  const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
   el.innerHTML = head + `<div class="skc-body" id="skc-body">${empty}${SKC.log.map(skcRec).join("")}
-      ${p ? `<div class="skc-bot"><div class="skc-steps"><span class="spin"></span>${p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}</div>${stallBar(p, SKC.id, S.me)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
-    <div class="skc-box"><textarea id="skc-in" rows="2" placeholder="${SKC.busy ? "补充说明，它会接着看" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
-      <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div>`;
+      ${p ? `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
+        ${stallBar(p, SKC.id, S.me)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
+    <div class="skc-foot">${skcLooking()}<div class="skc-box"><textarea id="skc-in" rows="1" placeholder="${SKC.busy ? "补充说明，它做完这一步就会看到" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
+      <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#skc-body"); b.scrollTop = b.scrollHeight;
-  const ta = $("#skc-in"); ta.value = typed;
+  const ta = $("#skc-in"); ta.value = typed; skcFit();
   ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); skcSend(); } };
-  ta.oninput = () => { const s = el.querySelector(".send"); if (SKC.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => skcSend() : skcStop; } };
+  ta.oninput = () => {
+    skcFit();
+    const s = el.querySelector(".send");
+    if (SKC.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => skcSend() : skcStop; }
+  };
+}
+function skcFit(){ const ta = $("#skc-in"); if (!ta) return; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight + 2, 220) + "px"; }
+function skcResizer(){   // 内容和助手之间的分隔线：拖动改宽度，记住；双击恢复
+  const shell = document.querySelector(".sk-shell"), rz = $("#skc-rz"); if (!shell || !rz) return;
+  try { const w = +localStorage.getItem("ccim.skcW"); if (w) shell.style.setProperty("--skc-w", w + "px"); } catch {}
+  let start = null;
+  rz.onpointerdown = e => { e.preventDefault(); start = {x: e.clientX, w: $("#sk-chat").getBoundingClientRect().width}; rz.classList.add("drag"); document.body.classList.add("resizing"); try { rz.setPointerCapture(e.pointerId); } catch {} };
+  rz.onpointermove = e => {
+    if (!start) return;
+    const max = Math.min(900, shell.getBoundingClientRect().width - 420);
+    shell.style.setProperty("--skc-w", Math.round(Math.min(Math.max(start.w - (e.clientX - start.x), 340), max)) + "px");
+  };
+  rz.onpointerup = rz.onpointercancel = () => {
+    if (!start) return;
+    start = null; rz.classList.remove("drag"); document.body.classList.remove("resizing");
+    try { localStorage.setItem("ccim.skcW", Math.round($("#sk-chat").getBoundingClientRect().width)); } catch {}
+  };
+  rz.ondblclick = () => { shell.style.removeProperty("--skc-w"); try { localStorage.removeItem("ccim.skcW"); } catch {} };
 }
 async function skcSend(text){
   const ta = $("#skc-in"), v = (text || (ta ? ta.value : "")).trim();
@@ -2891,6 +2951,7 @@ function skToggleDir(p){ SKV.open.has(p) ? SKV.open.delete(p) : SKV.open.add(p);
 async function skOpenFile(path, first){
   if (!first && SKV.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
   SKV.file = path; SKV.f = null; SKV.dirty = false;
+  if (SKC && $("#sk-chat")) { const c = document.querySelector(".skc-foot .skc-ctx"); if (c) c.outerHTML = skcLooking(); }
   path.split("/").slice(0, -1).forEach((_, i, a) => SKV.open.add(a.slice(0, i + 1).join("/")));   // 打开文件所在的文件夹
   drawSkTree(); drawSkView();
   let f;
@@ -2927,8 +2988,8 @@ function skFront(text){   // SKILL.md 开头的名字、说明，预览里显示
   const rows = [];
   for (const l of m[1].split("\n")) {
     const r = /^([\w-]+):\s*(.*)$/.exec(l);
-    if (r) rows.push([r[1], r[2].replace(/^["']|["']$/g, "")]);
-    else if (rows.length && l.trim()) rows[rows.length - 1][1] += (rows[rows.length - 1][1] ? "\n" : "") + l.trim();   // 下一层的内容接在上一项后面
+    if (r) rows.push([r[1], /^[>|][-+]?$/.test(r[2].trim()) ? "" : r[2].replace(/^["']|["']$/g, ""), /^>/.test(r[2].trim())]);   // >- 是折叠的多行
+    else if (rows.length && l.trim()) { const x = rows[rows.length - 1]; x[1] += (x[1] ? (x[2] ? " " : "\n") : "") + l.trim(); }   // 下一层的内容接在上一项后面
   }
   return rows.length ? `<dl class="sk-fm">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
 }

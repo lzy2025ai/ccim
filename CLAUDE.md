@@ -202,7 +202,8 @@
   工作目录（~/ccim共享/<名字>/ 里）；Agent 记 account，对话跟着 Agent（临时对话记 meta 的 account），定时任务跟着 target，知识库记 _lib.json；
   state 按人过滤（主人看不到访客的）；推送 `tag` 带 _a，总控 `visible` 只推给那个账号、fanout 不转给别的电脑。
   访客的 Agent 能接自己的飞书、微信（扫码的是它，机器人认它当主人），渠道管理按 `procs_of` 只管自己的，那些对话（x:）跟着 Agent 归它。
-  访客的会话（网页、飞书、微信，`session.guest_of` 按 agent_id 认）：不给 run_as_admin、不开 Chrome、只能用 Claude Code、不提示 ccim schedule；
+  访客的会话（网页、飞书、微信，`session.guest_of` 按 agent_id 认）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；
+  Codex 默认不给，主人共享时可以打开（nodes 的 share_opts → X-Account-Codex → 平台 state guests 的 codex），用时强制 -s workspace-write（只拦写不拦读，界面上提示）；
   `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录下除 ccim共享/<自己>、~/.ccim 的 kb（自己的库）和 skills 以外的一切，
   send_file 只发专属文件夹里的。仍以电脑主人的系统用户运行（防越界，不等于单独的系统用户）
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，

@@ -1429,7 +1429,7 @@ def _handler(pf):
             from urllib.parse import unquote
             name = unquote(self.headers.get("X-Account-Name") or "")
             try:
-                share.root(pf, acct, name)           # 第一次来：按名字建专属文件夹
+                share.remember(pf, acct, name, self.headers.get("X-Account-Codex") == "1")
                 share.check(pf, acct, name, method, path, q, body)
             except share.Denied as e:
                 self._send(403, {"error": str(e)})

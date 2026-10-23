@@ -288,7 +288,9 @@ class Hub:
             out.append({"id": aid, "name": a.get("name") or "", "state": state, "created": a.get("created"),
                         "expires": a.get("expires"), "invite_until": a.get("invite_until") if state == "invited" else None,
                         "machines": [m["name"] for m in self.peers.machines(aid, own=True)],
-                        "shared": [m["id"] for m in self.peers.machines(OWNER, own=True) if aid in m.get("shared_to") or []]})
+                        "shared": [m["id"] for m in self.peers.machines(OWNER, own=True) if aid in m.get("shared_to") or []],
+                        "codex": [m["id"] for m in self.peers.machines(OWNER, own=True)
+                                  if ((m.get("share_opts") or {}).get(aid) or {}).get("codex")]})
         return {"accounts": out}
 
     def _invite(self, a):
@@ -341,7 +343,7 @@ class Hub:
             sh = changes["share"] or {}
             if sh.get("machine") not in {m["id"] for m in self.peers.machines(OWNER, own=True)}:
                 raise ValueError("没有这台电脑。")
-            self.peers.share(sh["machine"], aid, bool(sh.get("on")))
+            self.peers.share(sh["machine"], aid, bool(sh.get("on")), sh.get("codex"))
         if a.get("disabled") or changes.get("relink"):
             self._drop_sessions(aid)
         self.channel.events.publish({"type": "machines"})
@@ -573,7 +575,7 @@ def _handler(hub):
                 from .filesend import serve_peer
                 return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                                                          "X-Content-Type-Options": "nosniff"},
-                                  hub.peers.guest_headers(self.acct) if hub.peers.guest_of(mid, self.acct) else None)
+                                  hub.peers.guest_headers(self.acct, mid) if hub.peers.guest_of(mid, self.acct) else None)
             return self._forward(b"", q)
 
         def do_POST(self):
@@ -638,7 +640,7 @@ def _handler(hub):
             """访客要用的共享电脑认不认访客：没问过就先问一次 state。"""
             if mid not in hub.peers.guest_ok:
                 try:
-                    st, _, data = hub.peers.forward(mid, "GET", "/api/state?local=1", b"", hub.peers.guest_headers(self.acct))
+                    st, _, data = hub.peers.forward(mid, "GET", "/api/state?local=1", b"", hub.peers.guest_headers(self.acct, mid))
                     hub.peers.guest_ready(mid, json.loads(data) if st == 200 else {})
                 except Exception:
                     return False
@@ -667,7 +669,7 @@ def _handler(hub):
             if hub.peers.guest_of(mid, self.acct):     # 别人共享给它的电脑：告诉那台电脑是谁（#154）
                 if not self._guest_ready(mid):
                     return self._send(409, {"error": f"「{name}」上的 ccim 版本较旧，请电脑的主人先升级。"})
-                hs.update(hub.peers.guest_headers(self.acct))
+                hs.update(hub.peers.guest_headers(self.acct, mid))
             try:
                 status, ctype, data = hub.peers.forward(mid, self.command, self.path, body, hs)
             except Offline:

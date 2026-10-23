@@ -157,6 +157,12 @@ class HubAccountTests(unittest.TestCase):
         self.assertEqual(p.machines(aid, own=True), [])
         self.assertEqual(self.hub.account_list()["accounts"][0]["shared"], ["m-own"])
         self.assertEqual(p.guest_headers(aid)["X-Account"], aid)
+        self.assertEqual(p.guest_headers(aid, "m-own")["X-Account-Codex"], "0")
+        self.hub.account_update(aid, {"share": {"machine": "m-own", "on": True, "codex": True}})
+        self.assertEqual(p.guest_headers(aid, "m-own")["X-Account-Codex"], "1")
+        self.assertEqual(self.hub.account_list()["accounts"][0]["codex"], ["m-own"])
+        self.hub.account_update(aid, {"share": {"machine": "m-own", "on": True}})   # 不带 codex：不改
+        self.assertEqual(p.guest_headers(aid, "m-own")["X-Account-Codex"], "1")
         # 推送：访客只收自己的，主人收不到访客的
         self.assertTrue(self.hub.visible(aid, {"_m": "m-own", "_a": aid, "chat": "w-1"}))
         self.assertFalse(self.hub.visible(aid, {"_m": "m-own", "chat": "w-2"}))

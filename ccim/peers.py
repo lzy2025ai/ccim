@@ -28,7 +28,7 @@ POLL_WAIT = 20                                # 长轮询最多挂这么久
 ONLINE_WINDOW = 45                            # 这么久没来轮询就算离线
 SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
-PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
+PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Account-Codex")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
 OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
@@ -239,8 +239,9 @@ class Peers:
             out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()
                     if account is None or not self.server_hub or self.owner_of(k) == account]
             if self.server_hub and account is not None:
-                for m in out:             # 主人：这台共享给了谁
+                for m in out:             # 主人：这台共享给了谁，各自能不能用 Codex
                     m["shared_to"] = list(self.nodes[m["id"]].get("shared") or [])
+                    m["share_opts"] = dict(self.nodes[m["id"]].get("share_opts") or {})
                 if not own:               # 别的账号共享给它的（#154）
                     out += [{"id": k, "name": v["name"], "hub": False, "shared": True} for k, v in self.nodes.items()
                             if self.owner_of(k) != account and account in (v.get("shared") or [])]
@@ -314,7 +315,8 @@ class Peers:
         return bool(self.server_hub and account and self.owner_of(mid) != account
                     and account in ((self.nodes.get(mid) or {}).get("shared") or []))
 
-    def share(self, mid, account, on):
+    def share(self, mid, account, on, codex=None):
+        """共享给 account（on）或取消；codex：对方能不能用 Codex（None 不改）。"""
         with self.lock:
             n = self.nodes.get(mid)
             if not n:
@@ -324,6 +326,13 @@ class Peers:
                 n["shared"] = s
             else:
                 n.pop("shared", None)
+            opts = n.setdefault("share_opts", {})
+            if not on:
+                opts.pop(account, None)
+            elif codex is not None:
+                opts[account] = dict(opts.get(account) or {}, codex=bool(codex))
+            if not opts:
+                n.pop("share_opts", None)
             _save("peers.json", self.nodes)
             self.dirty.add(mid)
         self._emit_machines()
@@ -405,7 +414,7 @@ class Peers:
         machines = self.machines(account)
         guest = {m["id"] for m in machines if m.get("shared")}   # 别人共享的电脑：按访客要，缓存也分开（#154）
         key = lambda mid: f"{mid}|{account}" if mid in guest else mid
-        hdr = lambda mid: self.guest_headers(account) if mid in guest else None
+        hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
                       "home": local.get("home"), "ccim": local.get("ccim")}}
         results = {}
@@ -472,7 +481,7 @@ class Peers:
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
-                              "home": s.get("home"), "ccim": s.get("ccim")}
+                              "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {})}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)
@@ -490,11 +499,12 @@ class Peers:
         self.guest_ok[mid] = ok
         return ok
 
-    def guest_headers(self, account):
-        """访客的请求转给共享电脑时带的头：账号编号和名字（名字 URL 编码，头里只能放 ASCII）。"""
+    def guest_headers(self, account, mid=None):
+        """访客的请求转给共享电脑时带的头：账号编号、名字（URL 编码，头里只能放 ASCII）、主人让不让它用 Codex。"""
         from urllib.parse import quote
         name = (self.pf.account(account) or {}).get("name") if hasattr(self.pf, "account") else ""
-        return {"X-Account": account, "X-Account-Name": quote(name or "")}
+        codex = (((self.nodes.get(mid) or {}).get("share_opts") or {}).get(account) or {}).get("codex")
+        return {"X-Account": account, "X-Account-Name": quote(name or ""), "X-Account-Codex": "1" if codex else "0"}
 
     def agent_home(self, aid):
         """这个 Agent 在哪台电脑上（本机的直接认；别的电脑看上次汇总的，没有就现问一遍）。找不到返回 None。"""

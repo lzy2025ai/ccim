@@ -43,11 +43,12 @@ class ShareTests(unittest.TestCase):
         self.port = self.server.server_address[1]
         self.owner_agent = agents.create(name="主人的助手")["id"]
 
-    def req(self, method, path, body=None, guest="a1"):
+    def req(self, method, path, body=None, guest="a1", codex=False):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
         h = {"X-CCIM": "1", "Host": f"127.0.0.1:{self.port}", "Content-Type": "application/json"}
         if guest:
-            h.update({"X-From-Peer": "1", "X-Account": guest, "X-Account-Name": "%E5%AE%B6%E4%BA%BA"})
+            h.update({"X-From-Peer": "1", "X-Account": guest, "X-Account-Name": "%E5%AE%B6%E4%BA%BA",
+                      "X-Account-Codex": "1" if codex else "0"})
         c.request(method, path, body=json.dumps(body).encode() if body is not None else None, headers=h)
         r = c.getresponse()
         out = r.status, json.loads(r.read() or b"{}")
@@ -188,6 +189,15 @@ class ShareTests(unittest.TestCase):
         _, t = self.req("POST", "/api/chat/new", {"temp": {"base": "codex"}})
         self.assertEqual(self.pf.chats()[t["id"]]["temp"]["base"], "claude")
         self.assertEqual(self.pf.chats()[t["id"]]["temp"]["dir"], os.path.join(self.home, "ccim共享", "家人"))
+        # 主人共享时勾了「也能用 Codex」
+        with patch("ccim.web._codex", lambda: True):
+            st, r = self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "c", "base": "codex"}}, codex=True)
+        self.assertEqual(st, 200, r)
+        self.assertTrue(share.codex_ok("a1"))
+        _, t = self.req("POST", "/api/chat/new", {"temp": {"base": "codex"}}, codex=True)
+        self.assertEqual(self.pf.chats()[t["id"]]["temp"]["base"], "codex")
+        self.req("GET", "/api/state?local=1")                # 主人又关掉了：下一次来就记下
+        self.assertFalse(share.codex_ok("a1"))
 
     def test_header_ignored_without_peer(self):
         """本机网页（没经过总控）带 X-Account 不算访客。"""

@@ -9,8 +9,9 @@
 - 推送带 _a（对话属于哪个访客），总控据此只推给那个账号
 
 访客的 Agent 照样以这台电脑主人的系统用户身份运行，靠 Claude Code 自己的隔离圈住（`fence`）：命令行开沙箱（macOS 系统级，
-不许绕过），读写文件的工具用权限规则；主目录里除了它的专属文件夹、平台 Skill、它自己的知识库，其余都不能读写。只能用 Claude Code
-（Codex 的沙箱拦不住读）。网络不限。这是防越界，不等于单独的系统用户。
+不许绕过），读写文件的工具用权限规则；主目录里除了它的专属文件夹、平台 Skill、它自己的知识库，其余都不能读写。网络不限。
+这是防越界，不等于单独的系统用户。Codex 的沙箱只拦写、不拦读，主人共享时勾了才给用（X-Account-Codex → guests 的 codex），
+用时强制 workspace-write（只能写它自己的目录）。
 """
 import os, re
 
@@ -96,6 +97,20 @@ def root(pf, acct, name=None):
         registry.write_state(pf.home, guests=guests)
     os.makedirs(g["root"], exist_ok=True)
     return os.path.realpath(g["root"])
+
+
+def remember(pf, acct, name, codex):
+    """每次访客来都记一下：专属文件夹（第一次建）、主人现在让不让它用 Codex（飞书、微信的进程读这里）。"""
+    root(pf, acct, name)
+    guests = registry.read_state(pf.home).get("guests") or {}
+    if bool(guests[acct].get("codex")) != bool(codex):
+        guests[acct]["codex"] = bool(codex)
+        registry.write_state(pf.home, guests=guests)
+
+
+def codex_ok(acct):
+    from . import platform
+    return bool(((registry.read_state(platform.home()).get("guests") or {}).get(acct) or {}).get("codex"))
 
 
 def inside(path, top):
@@ -201,7 +216,8 @@ def check(pf, acct, name, method, path, q, body):
         else:                                 # 临时对话：只能用 Claude Code，没选文件夹就在专属文件夹里
             t = b.get("temp") if isinstance(b.get("temp"), dict) else {}
             t["dir"] = guest_dir(pf, acct, name, t.get("dir") or "")
-            t["base"] = "claude"
+            if t.get("base") != "codex" or not codex_ok(acct):
+                t["base"] = "claude"
             b["temp"] = t
     elif path == "/api/chat/members":
         for aid in b.get("add") or []:
@@ -233,8 +249,8 @@ def check(pf, acct, name, method, path, q, body):
             elif "dir" in f:
                 f["dir"] = guest_dir(pf, acct, name, f.get("dir") or "")
             f["chrome"] = False
-            if f.get("base") == "codex":
-                raise Denied("共享的电脑上只能用 Claude Code。")
+            if f.get("base") == "codex" and not codex_ok(acct):
+                raise Denied("这台电脑上只能用 Claude Code。")
             if not b.get("id"):
                 f["account"] = acct
             b["fields"] = f
@@ -269,7 +285,7 @@ def filter_state(pf, st, acct):
         st["projects"] = []
         st["global"] = {}
         st["ccim"] = {k: v for k, v in (st.get("ccim") or {}).items() if k != "dev"}   # 开发页只给电脑主人
-        st["guest"] = {"root": root(pf, acct)}
+        st["guest"] = {"root": root(pf, acct), "codex": codex_ok(acct)}
     return st
 
 

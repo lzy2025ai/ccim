@@ -51,6 +51,7 @@ def set_members(pf, cid, add=None, remove=None):
         ms = [a for a in ms if a not in remove]
     m["members"] = ms
     pf.store.write(chats)
+    _changed(pf, cid)
     return ms
 
 
@@ -62,7 +63,13 @@ def set_note(pf, cid, text):
     m["note"] = (text or "").strip()[:4000]
     m["note_at"] = time.time()
     pf.store.write(chats)
+    _changed(pf, cid)
     return {}
+
+
+def _changed(pf, cid):
+    """成员、说明改了：开着这个对话的网页重新取一次（不一定是它自己改的，比如 @ 了群外的 Agent 被拉进来）。"""
+    pf.channel.events.publish({"type": "group", "chat": cid})
 
 
 def migrate_projects(pf):

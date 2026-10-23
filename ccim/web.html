@@ -532,6 +532,7 @@ body{overflow:hidden}
 .or{margin-top:22px;font-size:13px;color:var(--muted)}
 .link{color:var(--qing);text-decoration:underline;text-underline-offset:3px}
 .pop{max-height:60vh;overflow:auto}
+.pop.in-box{position:absolute;top:auto;bottom:calc(100% + 6px)}
 
 .select{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 10px;border-radius:8px;
   border:1px solid var(--line-strong);background:var(--panel);text-align:left}
@@ -1278,6 +1279,17 @@ function pop(e, html, below){
   const p = document.createElement("div"); p.className = "pop"; p.innerHTML = html; document.body.append(p);
   p.addEventListener("click", ev => ev.stopPropagation());
   const r = e.currentTarget.getBoundingClientRect();
+  const box = !below && e.currentTarget.closest && e.currentTarget.closest("#box");
+  if (box) {   // 输入框上的列表挂在输入框里往上展开：iPad、手机弹出键盘时 Safari 推页面，按屏幕坐标放会和输入框错开（#163）
+    box.append(p); p.classList.add("in-box");
+    const b = box.getBoundingClientRect(), vv = window.visualViewport;
+    p.style.left = Math.max(0, Math.min(r.left - b.left, b.width - p.offsetWidth)) + "px";
+    const kb = vv && vv.height < innerHeight - 80;   // 键盘开着：可见区域只剩输入框上面那块，这时 b.top 不可靠
+    const room = Math.max(120, (kb ? vv.height - b.height : b.top) - 24);
+    if (p.offsetHeight > room) p.style.maxHeight = room + "px";
+    p.querySelector("input")?.focus();
+    return p;
+  }
   if (below) p.style.minWidth = r.width + "px";
   p.style.left = Math.max(10, Math.min(r.left, innerWidth - p.offsetWidth - 10)) + "px";
   const h = p.offsetHeight, above = r.top - 16, under = innerHeight - r.bottom - 16;

@@ -467,11 +467,18 @@ body{overflow:hidden}
 .dirs .dir.up{color:var(--muted)}
 .tag.mach{background:#EEF0E8;color:#4F5A3B;margin-right:4px;display:inline-block;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .tag.mach.off{color:var(--faint);background:var(--sunk)}
-/* 对话列表右边：时间 + 电脑、来源标签。最多占四成宽，放不下就截断，标题优先（#13 第二轮） */
-.item-r{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:0 1 auto;min-width:0;max-width:40%}
-.item-tags{display:flex;justify-content:flex-end;max-width:100%;min-width:0}
+/* 对话列表的一行（#13 第三轮）：第一行标题 + 时间，第二行进度 + 电脑、来源标签，标签不占标题那一行。
+   「…」盖在时间那一格上，移上去、选中时别的东西不挪位置 */
+.item .t2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.item .r1,.item .r2{display:flex;align-items:center;gap:8px;min-width:0}
+.item .r1 .title,.item .r2 .sub{flex:1;min-width:0}
+.item-tags{display:flex;justify-content:flex-end;flex:0 1 auto;min-width:0;max-width:60%}
 .item-tags .tag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;display:inline-block}
 .item-tags .tag:not(.mach){flex:none}   /* 来源短，留全；电脑名字长的先截 */
+.item-tags .tag.mach{margin-right:4px}
+.item:not(.child) > .more{position:absolute;top:8px;right:8px;margin:0}
+.item:not(.child):hover .r1 .when,.item:not(.child).on .r1 .when{display:inline;visibility:hidden}
+@media (hover:none){.item:not(.child) .r1{padding-right:24px}.item:not(.child) .r1 .when,.item:not(.child):hover .r1 .when,.item:not(.child).on .r1 .when{visibility:visible}}
 .approve .pw{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);outline:none}
 .approve .pw:focus{border-color:var(--ink-2)}
 .box .rcpt:empty{display:none}
@@ -1717,8 +1724,8 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""} ${c.stall ? "stall" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${c.busy ? ANTS : ""}
-        ${iconOf(c, a)}<span class="t"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span></span>
-        <span class="item-r">${whenTag(c)}<span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span>${moreBtn(c)}</a>`;
+        ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span>${whenTag(c)}</span>
+          <span class="r2"><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){

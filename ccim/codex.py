@@ -6,14 +6,15 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 
 和 Claude Code 的不同：
 - 正在跑的 exec 不接受中途补充（`codex queue` 放进去它也看不到），任务进行中再来的消息排到这一轮之后。
-- 没有 send_file 工具，改成约定：回复里单独一行写「[发送文件] 路径」，ccim 发出去并从回复里去掉。
+- ccim 的工具（发文件、@ 群成员等）经 MCP 服务 mcpstdio.py 挂上（#178，每一轮用 -c 传），调用回到这个进程（toolsock）。
+  以前约定在回复里写「[发送文件] 路径」，老对话还会这样写，照旧认。
 - 模型、思考深度、沙箱、审批跟随 Codex 自己的设置（~/.codex/config.toml、项目 .codex/config.toml），ccim 只在用户单独设置时传。
 """
-import asyncio, glob, json, logging, os, re, signal, time, tomllib
+import asyncio, glob, json, logging, os, re, signal, sys, time, tomllib
 
-from .progress import short
+from .progress import describe_tool, short
 from . import share
-from .session import Chat, Turn, guest_of, prompt_note, role_note
+from .session import Chat, Turn, _tools_ready, guest_of, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
 
@@ -23,7 +24,7 @@ IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 NOTE = """\
 （以下是 ccim 的说明，不用回复这一段）你正在通过{label}和用户对话，用户多半在手机上看回复：
 - 回答简洁，{style}
-- 需要把图片、视频、文件交给用户时，在回复里单独一行写：[发送文件] 文件的绝对路径（一行一个），ccim 会把它发到聊天里。
+- 需要把图片、视频、文件交给用户时，调用 ccim 的 send_file 工具发到聊天里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里。
 - 没有交互式提问框，有问题直接在回复里问。
 - 用户要你到点或每隔一段时间做某件事时，用命令 `ccim schedule add` 建定时任务（用法看 `ccim schedule add --help`），
@@ -31,6 +32,21 @@ NOTE = """\
 
 """
 RECONNECT = "网络不稳，重连中"
+TOOL_WAIT = 25 * 60                           # 工具最多等这么久：问别的 Agent、转交要等它答完（最多 20 分钟）
+
+
+def mcp_args(env):
+    """把 ccim 的工具作为 MCP 服务挂到这一轮（#178）。Codex 不把自己的环境变量交给 MCP 服务，令牌要写明；
+    exec 里没人能批准，这个服务的工具自动放行（要人拍板的工具自己会弹确认）。"""
+    q = json.dumps
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcpstdio.py")
+    out = []
+    for k, v in (("command", q(sys.executable)), ("args", q(["-I", script])),
+                 ("env.CCIM_TOKEN", q(env["CCIM_TOKEN"])), ("env.CCIM_TOOLS", q(env["CCIM_TOOLS"])),
+                 ("default_tools_approval_mode", q("approve")), ("tool_timeout_sec", str(TOOL_WAIT)),
+                 ("startup_timeout_sec", "30")):
+        out += ["-c", f"mcp_servers.ccim.{k}={v}"]
+    return out
 SEND_RE = re.compile(r"^\s*\[发送文件\]\s*(.+?)\s*$", re.M)
 
 
@@ -89,7 +105,7 @@ def describe(item):
         names = [os.path.basename(c.get("path", "")) for c in item.get("changes") or []]
         return "修改 " + "、".join(n for n in names if n)[:80] if names else "修改文件"
     if kind == "mcp_tool_call":
-        return "调用工具 " + str(item.get("tool") or "")
+        return describe_tool(f"mcp__{item.get('server') or ''}__{item.get('tool') or ''}", item.get("arguments") or {})
     if kind == "web_search":
         return "搜索：" + short(item.get("query"), 50)
     return None
@@ -149,6 +165,9 @@ class CodexChat(Chat):
                 args += ["-s", "read-only"]
             elif guest:
                 args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"]
+            await _tools_ready()
+            env = self.ccim_env()
+            args += mcp_args(env)
             if self.model:
                 args += ["-m", self.model]
             if self.effort:
@@ -165,7 +184,7 @@ class CodexChat(Chat):
             self.proc = await asyncio.create_subprocess_exec(
                 *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True,
-                env={**os.environ, **self.ccim_env()})
+                env={**os.environ, **env})
             t.ready = time.monotonic()
             err_task = asyncio.create_task(self.proc.stderr.read())
             async for line in self.proc.stdout:

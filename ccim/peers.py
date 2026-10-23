@@ -28,6 +28,7 @@ POLL_WAIT = 20                                # 长轮询最多挂这么久
 ONLINE_WINDOW = 45                            # 这么久没来轮询就算离线
 SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
+OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
 STATE_REFRESH = 10                            # 超过这么久，返回缓存的同时后台再取一次
@@ -225,11 +226,16 @@ class Peers:
             return time.time() - self.hub_ok < ONLINE_WINDOW
         return any(m["id"] == mid and m.get("online") for m in self.machines_from_hub)
 
-    def machines(self):
-        """[{id, name, me, hub, online}]，第一个是总控。"""
+    def owner_of(self, mid):
+        """服务器上的总控：这台电脑归哪个账号（#154，以前加入的都归主人）。"""
+        return (self.nodes.get(mid) or {}).get("account") or OWNER
+
+    def machines(self, account=None, own=False):
+        """[{id, name, me, hub, online}]，第一个是总控。服务器上的总控给了 account 就只列这个账号的电脑。"""
         if self.is_hub():
             out = [] if self.server_hub else [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
-            out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()]
+            out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()
+                    if account is None or not self.server_hub or self.owner_of(k) == account]
         else:
             out = [dict(m) for m in self.machines_from_hub] or \
                 ([] if self.hub.get("server") else [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True}]) + \
@@ -241,14 +247,14 @@ class Peers:
 
     # ----- 配对（总控） -----
 
-    def new_code(self):
+    def new_code(self, account=None):
         if not self.is_hub():
             raise ValueError("这台电脑已经加入了别的电脑，要添加电脑请到那台电脑上操作。")
         self.serve()
         code = f"{secrets.randbelow(10 ** 6):06d}"
         with self.lock:
             self.codes = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
-            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0}
+            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0, "account": account}
         if self.public_url:                   # 服务器上的总控：给公网地址
             return {"code": code, "minutes": CODE_TTL // 60, "hosts": [self.public_url], "port": None}
         return {"code": code, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
@@ -263,12 +269,16 @@ class Peers:
                 if all(v["tries"] > 10 for v in live.values()):
                     self.codes = {}
                 raise PermissionError("配对码不对或者过期了，在那台电脑的网页里重新生成一个。")
-            del self.codes[code]
+            account = self.codes.pop(code).get("account")
             mid = str(body.get("id") or "")[:20] or "m" + uuid.uuid4().hex[:8]
             if mid == self.me["id"]:
                 raise PermissionError("不能加入自己。")
+            if self.server_hub and mid in self.nodes and self.owner_of(mid) != (account or OWNER):
+                raise PermissionError("这台电脑已经在别的账号下了，先在那个账号里移除它。")
             key = secrets.token_hex(32)
             self.nodes[mid] = {"name": str(body.get("name") or mid)[:40], "key": key, "added": registry.now()}
+            if self.server_hub and account and account != OWNER:
+                self.nodes[mid]["account"] = account
             _save("peers.json", self.nodes)
         self._emit_machines()
         return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL,
@@ -290,6 +300,12 @@ class Peers:
     def leave(self):
         leave()
         return {}
+
+    def same_account(self, a, b):
+        """服务器上的总控：两台电脑是不是同一个账号的（不同账号的电脑之间不互相调用、不转推送，#154）。"""
+        if not self.server_hub:
+            return True
+        return self.owner_of(a) == self.owner_of(b)
 
     def _emit_machines(self):
         self.pf.channel.events.publish({"type": "machines"})
@@ -353,12 +369,12 @@ class Peers:
 
     # ----- 汇总各台电脑的 state -----
 
-    def merged_state(self, local):
+    def merged_state(self, local, account=None):
         out = dict(local)
         me = self.me["id"]
         for k in ("agents", "chats", "projects", "schedules"):
             out[k] = [dict(x, machine=me) for x in local.get(k) or []]
-        machines = self.machines()
+        machines = self.machines(account)
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
                       "home": local.get("home"), "ccim": local.get("ccim")}}
         results = {}
@@ -483,7 +499,7 @@ class Peers:
                 continue
             origin = ev.get("_m") or self.me["id"]
             for mid in list(self.nodes):
-                if mid != origin and self.online(mid):
+                if mid != origin and self.online(mid) and self.same_account(mid, origin):
                     try:
                         self._box(mid).put_nowait({"kind": "ev", "ev": dict(ev, _m=origin)})
                     except queue.Full:
@@ -638,6 +654,8 @@ def _handler(peers):
                     method, p = self.headers.get("X-Method") or "GET", self.headers.get("X-Path") or "/"
                     if not p.startswith("/api/"):
                         return self._reply(400, {"error": "bad path"}, key, nonce)
+                    if peers.server_hub and (target not in peers.nodes or not peers.same_account(mid, target)):
+                        return self._reply(503, {"error": "offline"}, key, nonce)
                     hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
                     try:
                         status, ctype, data = peers.forward(target, method, p, body, hs)
@@ -672,7 +690,7 @@ def _handler(peers):
                 w = peers.waiting.get(m.get("rid") or "")
                 if w:
                     w[2].set()
-            return self._reply(200, {"machines": peers.machines(), "msgs": msgs}, key, nonce)
+            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs}, key, nonce)
 
     return Handler
 

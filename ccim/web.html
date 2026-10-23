@@ -1519,7 +1519,7 @@ function route(){
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "board") renderBoard();
   else if (current.view === "skills") renderSkills();
-  else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
+  else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
@@ -3772,15 +3772,80 @@ function renderAgentForm(){
 
 // ================= 设置 =================
 function renderSettingsList(){
-  const onChats = current.id === "chats";
-  const onMachines = !onChats && (current.id === "machines" || (S.hub && current.id !== "account" && current.id !== "models"));
+  const onChats = current.id === "chats", onAccounts = current.id === "accounts" && isOwner();
+  const onMachines = !onChats && !onAccounts && (current.id === "machines" || (S.hub && current.id !== "models" && current.id !== "dev"));
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
     <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑${oldMachines().length ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${oldMachines().length ? `${oldMachines().length} 台版本较旧，去升级` : multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
-    ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
+    ${isOwner() ? `<a class="item ${onAccounts ? "on" : ""}" href="#/settings/accounts" style="text-decoration:none;color:inherit"><span class="t"><span class="title">账号</span><span class="sub">给别人开账号</span></span></a>` : ""}
+    ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc([S.account && !S.account.owner ? S.account.name : "", S.hub.url || ""].filter(Boolean).join(" · "))}</span></span></button>` : ""}</div>`;
+}
+// ---- 账号（#154）：服务器上，主人给别人开账号 ----
+const isOwner = () => !!(S.hub && S.account && S.account.owner);
+let accDays = 0;
+const ACC_STATE = {ok: ["正常", "on"], invited: ["等对方设置登录", ""], disabled: ["已停用", ""], expired: ["已到期", ""]};
+async function renderAccounts(){
+  const days = [[0, "一直有效"], [30, "30 天"], [7, "7 天"]];
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>账号</h2>
+    <div class="role">各个账号用各自的电脑和 Agent，互相看不到。</div></div></div>
+    <div class="pane"><div class="sect" id="acc-list"><div class="loading">…</div></div>
+      <div class="sect"><h3>开账号</h3>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <input id="acc-name" class="input" maxlength="20" placeholder="名字" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')inviteAccount()">
+          <div class="seg" role="radiogroup">${days.map(([v, l]) => `<button role="radio" aria-checked="${accDays === v}" class="${accDays === v ? "on" : ""}" onclick="accDays=${v};this.parentNode.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b===this);b.setAttribute('aria-checked',b===this)})">${l}</button>`).join("")}</div>
+          <button class="btn primary" onclick="inviteAccount()">生成邀请链接</button></div>
+        <div id="acc-link"></div></div></div></div>`;
+  let r;
+  try { r = await api("/api/accounts"); } catch (e) { $("#acc-list").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const day = t => new Date(t * 1000).toLocaleDateString("zh-CN", {month: "numeric", day: "numeric"});
+  $("#acc-list").innerHTML = r.accounts.length ? r.accounts.map(a => {
+    const [label, cls] = ACC_STATE[a.state] || [a.state, ""];
+    const sub = [a.machines.length ? a.machines.join("、") : "还没有电脑", a.expires && a.state !== "expired" ? `${day(a.expires)} 到期` : ""].filter(Boolean).join(" · ");
+    return `<div class="mem" style="padding:10px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${esc(sub)}</span></span>
+      <span class="status ${cls}" style="margin-right:12px"><i></i>${label}</span>
+      <button class="link" onclick="accountMenu(${q(a.id)})">管理</button></div>`;
+  }).join("") : `<p class="muted">还没有别的账号。</p>`;
+  ACC = r.accounts;
+}
+let ACC = [];
+function showInvite(name, r){
+  $("#acc-link").innerHTML = `<p style="margin-top:14px">把这个链接发给${esc(name)}，${r.days} 天内打开设置登录，只能用一次：</p>
+    <div class="row" style="margin:6px 0"><pre style="flex:1;margin:0;padding:8px 10px;background:var(--sunk);border-radius:8px;white-space:pre-wrap;word-break:break-all">${esc(r.link)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(r.link)});toast('已复制')">复制</button></div>
+    <p class="muted" style="font-size:13px">设置时要用手机上的验证器 App（如 Google Authenticator、微软验证器）扫码。</p>`;
+}
+async function inviteAccount(){
+  const name = $("#acc-name").value.trim();
+  if (!name) { $("#acc-name").focus(); return; }
+  const r = await act(() => api("/api/accounts/invite", {name, days: accDays || null}));
+  await renderAccounts();
+  showInvite(name, r);
+}
+function accountMenu(id){
+  const a = ACC.find(x => x.id === id); if (!a) return;
+  const off = a.state === "disabled";
+  dialog(a.name, `<div>
+      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountRelink(${q(id)})">重新生成登录链接</button>
+      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{disabled:${!off}},'${off ? "已启用" : "已停用"}')">${off ? "启用" : "停用"}</button>
+      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:0},'已改成一直有效')">改成一直有效</button>
+      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:30},'已改成 30 天后到期')">从今天起 30 天后到期</button>
+      <button class="btn danger" style="width:100%;margin:4px 0" onclick="closeDialog();accountDelete(${q(id)})">删除</button></div>`, "");
+}
+async function accountSet(id, changes, ok){
+  await act(() => api("/api/accounts/update", {id, changes}), ok); renderAccounts();
+}
+async function accountRelink(id){
+  const a = ACC.find(x => x.id === id) || {};
+  if (a.state === "ok" && !await confirmBox(`重新生成「${a.name}」的登录链接？`, "原来的密码和验证器会失效，要用新链接重新设置。", "重新生成")) return;
+  const r = await act(() => api("/api/accounts/update", {id, changes: {relink: true}}));
+  await renderAccounts(); showInvite(a.name, r);
+}
+async function accountDelete(id){
+  const a = ACC.find(x => x.id === id) || {};
+  if (!await confirmBox(`删除「${a.name}」？`, "对方不能再登录，它加入的电脑也会被移除；那些电脑上的东西不受影响。", "删除")) return;
+  await act(() => api("/api/accounts/delete", {id}), "已删除"); renderAccounts();
 }
 async function logout(){
   await fetch("/auth/logout", {method: "POST", headers: {"X-CCIM": "1"}});

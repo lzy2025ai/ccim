@@ -2508,8 +2508,8 @@ function chatAt(e){
   const done = () => { removeEventListener("click", done); $("#input")?.focus(); };
   setTimeout(() => addEventListener("click", done, {once: true}), 0);
 }
-function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent
-  if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#chip-at") || $("#box"), stopPropagation(){}}), 0);
+function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent，和 / 命令列表一样从输入框左边展开（#163）
+  if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#box"), stopPropagation(){}}), 0);
 }
 // 开头打 / ：列出能用的命令（#82）
 const SLASH = [

@@ -15,7 +15,7 @@ TIMEOUT = 600
 YES = {"y", "yes", "允许", "同意", "可以", "好", "ok"}
 NO = {"n", "no", "拒绝", "不行", "不要", "不"}
 _ids = itertools.count(1)
-LABELS = {"ccim_promote": ("升级", "先不升")}   # 按钮上的字（默认 允许 / 拒绝）
+LABELS = {}                                   # 按钮上的字（默认 允许 / 拒绝）
 
 
 class Pending:
@@ -43,9 +43,6 @@ class Pending:
                 "note": "也可以直接回复 y 或 n"}
 
     def resolved_card(self, project, choice):
-        if self.name == "ccim_promote" and choice in ("allow", "deny"):
-            return {"title": f"{'开始升级' if choice == 'allow' else '先不升级'} · {project}",
-                    "color": "green" if choice == "allow" else "grey", "body": self.body()}
         title, color = {"allow": ("已允许", "green"), "always": ("已允许（本会话同类操作不再询问）", "green"),
                         "deny": ("已拒绝", "red"), "timeout": ("超时未处理，已拒绝", "grey"),
                         "cancel": ("已取消", "grey")}[choice]

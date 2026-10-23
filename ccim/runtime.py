@@ -485,8 +485,22 @@ def promote_run():
         except Exception as e:
             text = f"ccim 升级出错了：{e}"
     print(registry.now(), text, flush=True)
+    try:
+        with open(os.path.join(_stable(), "promote.json"), "w", encoding="utf-8") as f:
+            json.dump({"at": time.time(), "text": text, "ok": text.startswith("ccim 升级好了")}, f, ensure_ascii=False)
+    except OSError:
+        pass
     if proc and chat:
         post_note(proc, chat, text)
+
+
+def last_promote():
+    """上一次在后台升级的结果（开发页显示）。"""
+    try:
+        with open(os.path.join(_stable(), "promote.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 def _notes(path):

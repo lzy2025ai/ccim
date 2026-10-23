@@ -349,9 +349,26 @@ class Platform:
         self.mentions = Mentions(self)
         skills_mod.ON_CHANGE.append(lambda: (self.kb_changed(), self.channel.events.publish({"type": "skills", "chat": None})))
         self.cleaner = devices.Cleaner(registry.pdir(home))
+        from . import devpanel                # 开发页（#156）：只在跑开发版的电脑上有
+        self.dev = devpanel.Dev(self) if devpanel.enabled() else None
 
     def handlers(self):
         return {"platform": self}
+
+    def _dev_loop(self):
+        """开发页的数据（要问 GitHub）在后台定时刷新，红点读缓存。"""
+        from . import devpanel
+        while True:
+            before = self.dev.badge()
+            self.dev.refresh()
+            if self.dev.badge() != before:
+                self.dev._publish()
+            time.sleep(devpanel.REFRESH)
+
+    def _dev(self):
+        if not self.dev:
+            raise Problem("这台电脑上没有开发版。")
+        return self.dev
 
     def attach(self, channel):
         self.channel = channel
@@ -368,6 +385,8 @@ class Platform:
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
+        if self.dev:
+            threading.Thread(target=self._dev_loop, daemon=True).start()
         channel.kbs_of = lambda cid: (self.chats().get(cid) or {}).get("kbs") or []   # 挂在对话上的知识库（#27）
         from . import board                   # 任务面板（#48）：每轮回答完更新一句话进度
         channel.on_answer = lambda cid: self.background.add(asyncio.ensure_future(board.refresh_brief(self, cid)))
@@ -1473,6 +1492,7 @@ def _handler(pf):
                 "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
                 "/api/board": lambda: pf.call(board_mod.stats, pf),
+                "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
@@ -1574,6 +1594,9 @@ def _handler(pf):
                 "/api/channel/restart": lambda: console.restart(b("proc")),
                 "/api/channel/disconnect": lambda: console.disconnect(b("path"), b("kind"), b("proc")),
                 "/api/global": lambda: save_global(body),
+                "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
+                "/api/dev/merge": lambda: pf._dev().merge(b("pr")),
+                "/api/dev/upgrade": lambda: pf._dev().upgrade(),
                 "/api/pick": lambda: {"path": console.pick_folder()},
                 "/api/reveal": lambda: console.reveal(b("path")),
                 "/api/fs/mkdir": lambda: devices.mkdir(registry.pdir(pf.home), b("path"), b("name")),
@@ -1797,7 +1820,7 @@ def state(pf):
     from . import web as console
     g = registry.global_config()
     from . import upgrade
-    return {"ccim": upgrade.status(), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
+    return {"ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
             "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
             "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                       "codex": _defaults("codex", os.path.expanduser("~"))},

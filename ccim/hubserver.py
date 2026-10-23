@@ -568,6 +568,8 @@ def _handler(hub):
                 mid = self._machine(q)
                 if not mid:
                     return self._send(503 if not hub.allowed(self.acct) else 404, {"error": "还没有电脑连上来。"})
+                if hub.peers.guest_of(mid, self.acct) and not self._guest_ready(mid):
+                    return self._send(409, {"error": "那台电脑上的 ccim 版本较旧，请电脑的主人先升级。"})
                 from .filesend import serve_peer
                 return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                                                          "X-Content-Type-Options": "nosniff"},
@@ -632,6 +634,16 @@ def _handler(hub):
                 return self._send(400, {"error": str(e)})
             return self._send(404, {"error": "not found"})
 
+        def _guest_ready(self, mid):
+            """访客要用的共享电脑认不认访客：没问过就先问一次 state。"""
+            if mid not in hub.peers.guest_ok:
+                try:
+                    st, _, data = hub.peers.forward(mid, "GET", "/api/state?local=1", b"", hub.peers.guest_headers(self.acct))
+                    hub.peers.guest_ready(mid, json.loads(data) if st == 200 else {})
+                except Exception:
+                    return False
+            return hub.peers.guest_ok.get(mid, False)
+
         def _accounts(self, path, body):
             if self.acct != OWNER:
                 return self._send(403, {"error": "forbidden"})
@@ -653,6 +665,8 @@ def _handler(hub):
             name = next((m["name"] for m in hub.peers.machines() if m["id"] == mid), "那台电脑")
             hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
             if hub.peers.guest_of(mid, self.acct):     # 别人共享给它的电脑：告诉那台电脑是谁（#154）
+                if not self._guest_ready(mid):
+                    return self._send(409, {"error": f"「{name}」上的 ccim 版本较旧，请电脑的主人先升级。"})
                 hs.update(hub.peers.guest_headers(self.acct))
             try:
                 status, ctype, data = hub.peers.forward(mid, self.command, self.path, body, hs)

@@ -166,20 +166,32 @@ class HubAccountTests(unittest.TestCase):
         self.assertTrue(self.hub.visible(hubserver.OWNER, {"_m": "m-own", "chat": "w-2"}))
         self.assertFalse(self.hub.visible(aid, {"_m": "m-other", "_a": aid}))
         # 转交时带上访客身份
-        seen = []
-        p.forward = lambda mid, method, path, body=b"", headers=None: (seen.append(headers), (200, "application/json", b"{}"))[1]
+        seen, old = [], [True]
+
+        def fwd(mid, method, path, body=b"", headers=None):
+            seen.append(headers)
+            st = {"agents": [{"id": "x"}]} if old[0] else {"agents": [], "guest": {}}
+            return 200, "application/json", json.dumps(st if path.startswith("/api/state") else {}).encode()
+        p.forward = fwd
         tok = self.hub.new_session(aid)
         srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
-        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
-        c.request("GET", "/api/chat?id=w-1", headers={"X-CCIM": "1", "Cookie": f"ccim_hub={tok}", "Host": "127.0.0.1",
-                                                       "X-Machine": "m-own", "X-Account": "owner"})
-        r = c.getresponse()
-        r.read()
-        c.close()
-        self.assertEqual(r.status, 200)
+        def get():
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+            c.request("GET", "/api/chat?id=w-1", headers={"X-CCIM": "1", "Cookie": f"ccim_hub={tok}", "Host": "127.0.0.1",
+                                                           "X-Machine": "m-own", "X-Account": "owner"})
+            r = c.getresponse()
+            r.read()
+            c.close()
+            return r.status
+        self.assertEqual(get(), 409)                         # 那台还是旧版本：不认访客，不转
+        p.online = lambda mid: True
+        self.assertEqual(self.hub.state(aid)["agents"], [])  # 旧版本给的整份 state 也不显示
+        old[0] = False
+        p.guest_ok.clear()
+        self.assertEqual(get(), 200)
         self.assertEqual(seen[-1]["X-Account"], aid)
         self.hub.account_update(aid, {"share": {"machine": "m-own", "on": False}})
         self.assertEqual(p.machines(aid), [])

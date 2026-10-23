@@ -181,6 +181,7 @@ class Peers:
         self.cache_at = {}                    # 上次从那台电脑取 state 的时间：新的直接用，不每次都现问（#32）
         self.dirty = set()                    # 刚往那台电脑发过操作、或它有了新动静：下次要现问
         self.refreshing = set()
+        self.guest_ok = {}                    # 共享出去的电脑是不是认访客的新版本（guest_ready）
         self.stopping = False
 
     # ----- 启动 -----
@@ -413,7 +414,10 @@ class Peers:
             try:
                 status, _, data = self.forward(m["id"], "GET", "/api/state?local=1", b"", hdr(m["id"]))
                 if status == 200:
-                    results[m["id"]] = json.loads(data)
+                    s = json.loads(data)
+                    if m["id"] in guest and not self.guest_ready(m["id"], s):
+                        s = {}
+                    results[m["id"]] = s
             except Exception:
                 pass
 
@@ -440,7 +444,10 @@ class Peers:
                 try:
                     status, _, data = self.forward(m["id"], "GET", "/api/state?local=1", b"", hdr(m["id"]))
                     if status == 200:
-                        self.cache[k], self.cache_at[k] = json.loads(data), time.time()
+                        s = json.loads(data)
+                        if m["id"] in guest and not self.guest_ready(m["id"], s):
+                            s = {}
+                        self.cache[k], self.cache_at[k] = s, time.time()
                 except Exception:
                     pass
                 finally:
@@ -476,6 +483,12 @@ class Peers:
         if self.hub:
             out["hub_name"] = self.hub.get("hub_name")
         return out
+
+    def guest_ready(self, mid, st):
+        """共享出去的电脑认不认访客：新版本按访客给的 state 里有 guest。旧版本不认，会把主人的东西全给出去，一律不转（#154）。"""
+        ok = "guest" in (st or {})
+        self.guest_ok[mid] = ok
+        return ok
 
     def guest_headers(self, account):
         """访客的请求转给共享电脑时带的头：账号编号和名字（名字 URL 编码，头里只能放 ASCII）。"""

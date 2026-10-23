@@ -226,7 +226,7 @@ step "4/4 加入总控"
 report joining
 set -- "$HUB"
 [ -n "$CODE" ] && set -- "$@" "$CODE"
-[ "$ACTION" = upgrade ] && set -- "$@" --restart
+[ "$ACTION" != keep ] && set -- "$@" --restart     # 刚装过：在跑的（旧版本的）都重启成新的
 "$CCIM" join "$@" || fail "加入总控失败（原因见上面）" "按上面说的处理后，再运行一次。"
 
 if ! command -v ccim >/dev/null 2>&1 && [ -n "$UV" ]; then

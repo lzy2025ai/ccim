@@ -20,7 +20,7 @@ from lark_oapi.api.im.v1 import (CreateFileRequest, CreateFileRequestBody, Creat
 from lark_oapi.event.callback.model.p2_card_action_trigger import (CallBackCard, CallBackToast,
                                                                     P2CardActionTriggerResponse)
 
-from .base import CardAction, Channel, Incoming, parse_address, split_text as _split
+from .base import CardAction, Channel, Incoming, inbox_path, parse_address, split_text as _split
 
 log = logging.getLogger("ccim.feishu")
 
@@ -491,7 +491,7 @@ class Feishu(Channel):
         r = await self._call(self.api_files.im.v1.message_resource.get, req)
         name = name or r.file_name or (key + (".jpg" if kind == "image" else ""))
         name = re.sub(r"[/\\\x00]", "_", name)
-        path = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{name}")
+        path = inbox_path(folder, name)
         with open(path, "wb") as f:
             f.write(r.file.read())
         return path

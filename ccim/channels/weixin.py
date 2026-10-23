@@ -15,7 +15,7 @@ import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .. import registry
-from .base import Channel, Incoming, split_text
+from .base import Channel, Incoming, inbox_path, split_text
 
 log = logging.getLogger("ccim.weixin")
 
@@ -481,7 +481,7 @@ class Weixin(Channel):
             data = _decrypt(data, key)
         ext = {ITEM_IMAGE: ".jpg", ITEM_VIDEO: ".mp4"}.get(t, "")
         name = re.sub(r"[/\\\x00]", "_", name or payload.get("file_name") or f"{key_name(message_id)}{ext}")
-        path = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{name}")
+        path = inbox_path(folder, name)
         with open(path, "wb") as f:
             f.write(data)
         return path

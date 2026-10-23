@@ -24,7 +24,7 @@ from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
 from .schedules import is_quiet as schedules_quiet, listed
-from .channels.base import CardAction, Channel, Incoming
+from .channels.base import CardAction, Channel, Incoming, inbox_path
 
 log = logging.getLogger("ccim.platform")
 
@@ -276,7 +276,7 @@ class WebChannel(Channel):
     async def download(self, message_id, kind, key, name, folder):
         """网页上传的文件先放在平台的 uploads 里，这里挪到项目的收件箱。"""
         safe = re.sub(r"[/\\\\]", "_", name or "file")      # f-string 里不能有反斜杠（Python 3.11）
-        dest = os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{safe}")
+        dest = inbox_path(folder, safe)
         shutil.copy(key, dest)
         return dest
 

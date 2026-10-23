@@ -112,6 +112,16 @@ class Channel:
         return True
 
 
+def inbox_path(folder, name):
+    """收到的文件存到收件箱的路径：「月日-时分秒-原名」，同一秒里同名的（比如一次粘贴好几张 image.png）加 -2、-3，不覆盖（#167）。"""
+    import os, time
+    stem, ext = os.path.splitext(os.path.join(folder, f"{time.strftime('%m%d-%H%M%S')}-{name}"))
+    path, n = stem + ext, 2
+    while os.path.exists(path):
+        path, n = f"{stem}-{n}{ext}", n + 1
+    return path
+
+
 def split_text(s, limit):
     """按段落拆长消息，尽量不把代码块拆开。"""
     if len(s) <= limit:

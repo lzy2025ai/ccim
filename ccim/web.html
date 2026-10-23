@@ -1426,6 +1426,15 @@ function connectEvents(){
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
     if (ev.type === "idle") { refreshSoon(); return; }   // 一轮结束的状态记下了（#98）
+    if (ev.type === "group") {            // 群成员、群聊说明改了（#15）
+      if (detail && detail.id === ev.chat) { clearTimeout(window._grt); window._grt = setTimeout(async () => {
+        if (!detail || detail.id !== ev.chat) return;
+        const top = $("#thread") ? $("#thread").scrollTop : null;   // 正在往上翻的话留在原处
+        await reloadChat(); if (top != null && $("#thread")) $("#thread").scrollTop = top;
+      }, 300); }
+      else refreshSoon();
+      return;
+    }
     if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
     if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
       if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }

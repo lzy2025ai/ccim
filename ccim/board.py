@@ -40,6 +40,7 @@ def summary(logs, cid):
             day = time.strftime("%Y-%m-%d", time.localtime(r.get("at") or 0))
             s["days"][day] = s["days"].get(day, 0) + 1
             s["last_user"] = r.get("text") or ""
+            s["user_ats"] = (s.get("user_ats") or [])[-1:] + [r.get("at") or 0]   # 最近两次提问的时间（#157）
         elif t == "answer" or (t == "mention" and r.get("state") in ("done", "error")):
             s["answer_at"], s["answer_state"] = r.get("done_at") or r.get("at") or 0, r.get("state")
         if t == "card":

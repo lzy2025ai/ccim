@@ -54,6 +54,112 @@ def _checks(rollup):
     return "ok"
 
 
+LINK = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)")
+_scan = {}
+PR_ISSUE = {}                                 # (仓库, PR 编号) → 它关掉的 issue（开发页刷新时记下）
+
+
+def refs(logs, cid, meta, first=False):
+    """这个对话在做的 issue：(仓库, 编号) → 最近一次（first：第一次）提到的时间。先看对话里记下的（Agent 建、重开 issue 时，#156）；
+    这个功能之前的对话，从回答里贴过的 issue、PR 链接认。"""
+    out = {}
+    pick = min if first else max
+    for (repo, kind, n), (a0, a1) in (_mentioned(logs, cid) if logs else {}).items():
+        at = a0 if first else a1
+        if kind == "pull":                    # 贴的是 PR 链接：换成它关掉的 issue
+            n = PR_ISSUE.get((repo, n))
+            if not n:
+                continue
+        out[(repo, n)] = pick(out[(repo, n)], at) if (repo, n) in out else at
+    for x in meta.get("issues") or []:
+        if x.get("kind") == "issue" and x.get("repo") and x.get("n"):
+            k = (x["repo"], x["n"])
+            out[k] = 0 if first else max(out.get(k, 0), x.get("at", 0))   # 记下的就是提需求的对话：排最前
+    return out
+
+
+def _mentioned(logs, cid):
+    """回答里贴过的 issue、PR 链接：(仓库, issues / pull, 编号) → (第一次, 最后一次) 的时间。按文件大小和修改时间缓存。"""
+    f = logs._f(cid)
+    try:
+        st = os.stat(f)
+    except OSError:
+        return {}
+    hit = _scan.get(cid)
+    if hit and hit[0] == (st.st_size, st.st_mtime):
+        return hit[1]
+    found = {}
+    with open(f, encoding="utf-8", errors="replace") as fp:
+        for line in fp:
+            if '"answer"' not in line or ("/issues/" not in line and "/pull/" not in line):
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            at = r.get("at") or 0
+            for repo, kind, n in LINK.findall(r.get("text") or ""):
+                k = (repo, kind, int(n))
+                a0, a1 = found.get(k, (at, at))
+                found[k] = (min(a0, at), max(a1, at))
+    _scan[cid] = ((st.st_size, st.st_mtime), found)
+    return found
+
+
+class Titles:
+    """issue 标题（任务面板用，#157）：存在平台状态里，没有的在后台用 gh 取。"""
+
+    def __init__(self, pf):
+        self.pf = pf
+        self.known = dict(registry.read_state(pf.home).get("issue_titles") or {})
+        self.want, self.lock, self.busy = set(), threading.Lock(), False
+
+    def get(self, repo, n):
+        k = f"{repo}#{n}"
+        if k in self.known:
+            return self.known[k]
+        with self.lock:
+            self.want.add((repo, n))
+            if not self.busy:
+                self.busy = True
+                threading.Thread(target=self._fetch, daemon=True).start()
+        return None
+
+    def _fetch(self):
+        time.sleep(1)                         # 一次列表会问到好几个，攒一下
+        got = False
+        while True:
+            with self.lock:
+                if not self.want:
+                    self.busy = False
+                    break
+                repo, n = self.want.pop()
+            r = _gh(repo, ["issue", "view", str(n), "--json", "title"], timeout=20)
+            try:
+                title = json.loads(r.stdout).get("title") if r.returncode == 0 else None
+            except ValueError:
+                title = None
+            self.known[f"{repo}#{n}"] = runtime._change(title) if title else ""   # 取不到也记下，不反复问
+            got = got or bool(title)
+        registry.write_state(self.pf.home, issue_titles=self.known)
+        if got:
+            try:
+                self.pf.channel.events.publish({"type": "dev", "chat": None})
+            except Exception:
+                pass
+
+
+def issue_of(pf, cid, meta, since=0):
+    """任务面板上这个对话的标题用哪个 issue：最近两轮里提到的、最近的那个，还有几个。"""
+    rs = refs(getattr(pf.channel, "logs", None), cid, meta)
+    if not rs:
+        return None
+    (repo, n), at = max(rs.items(), key=lambda kv: kv[1])
+    if at < since:                            # 最近两轮已经在聊别的了
+        return None
+    return {"repo": repo, "n": n, "title": pf.titles.get(repo, n) or "", "more": len(rs) - 1}
+
+
 def _num(text):
     m = re.search(r"#(\d+)", text or "")
     return int(m.group(1)) if m else None
@@ -91,15 +197,26 @@ class Dev:
         if not repo:
             return {"error": "这个代码目录没有连到 GitHub。"}
         runtime._git("fetch", "-q", "origin", "main")
-        links = self._links(repo)
         wts = {b: p for p, b in runtime.worktrees()[1:]}
         trying = runtime.trying()
         r = _gh(repo, ["pr", "list", "--state", "open", "--limit", "50", "--json",
                        "number,title,headRefName,url,isDraft,mergeStateStatus,statusCheckRollup,closingIssuesReferences,updatedAt"])
         if r.returncode != 0:
             raise RuntimeError("读不到 GitHub 上的 PR：" + (r.stderr or r.stdout).strip()[-200:])
+        prs = json.loads(r.stdout or "[]")
+        for p in prs:
+            issues = [i["number"] for i in p.get("closingIssuesReferences") or []] or [n for n in [_num(p["title"])] if n]
+            if issues:
+                PR_ISSUE[(repo, p["number"])] = issues[0]
+        cur = (runtime._channel().get("current") or "").rsplit("-", 1)[-1]
+        log_out = runtime._git("log", "--format=%H%x09%s%x09%ct", f"{cur}..origin/main").stdout if cur else ""
+        for line in log_out.splitlines():     # 合并进来的提交：「… #issue (#PR)」
+            m = re.search(r"#(\d+)\D*\(#(\d+)\)\s*$", line.split("\t")[1] if "\t" in line else "")
+            if m:
+                PR_ISSUE[(repo, int(m.group(2)))] = int(m.group(1))
+        links = self._links(repo)
         review = []
-        for p in json.loads(r.stdout or "[]"):
+        for p in prs:
             issues = [i["number"] for i in p.get("closingIssuesReferences") or []] or [n for n in [_num(p["title"])] if n]
             n = issues[0] if issues else None
             review.append({"pr": p["number"], "url": p["url"], "issue": n, "title": runtime._change(p["title"]),
@@ -107,11 +224,9 @@ class Dev:
                            "trying": bool(trying and trying.get("branch") == p["headRefName"]),
                            "checks": _checks(p.get("statusCheckRollup")), "behind": p.get("mergeStateStatus") == "BEHIND",
                            "draft": p.get("isDraft"), "updated": p.get("updatedAt"), "chat": links.get(n)})
-        cur = (runtime._channel().get("current") or "").rsplit("-", 1)[-1]
         merged = []
         if cur:
-            out = runtime._git("log", "--format=%H%x09%s%x09%ct", f"{cur}..origin/main").stdout
-            for line in out.splitlines():
+            for line in log_out.splitlines():
                 sha, subj, ct = (line.split("\t") + ["", ""])[:3]
                 n = _num(subj)
                 merged.append({"commit": sha[:7], "issue": n, "title": runtime._change(subj), "at": int(ct or 0),
@@ -124,50 +239,16 @@ class Dev:
                 "at": time.time()}
 
     def _links(self, repo):
-        """issue 编号 → 最近在做它的对话（网页对话）。先看对话里记下的（建、重开 issue 时）；
-        这个功能之前的对话，从回答里贴过的 issue 链接认。"""
-        out, seen = {}, {}
-        pat = re.compile(r"github\.com/" + re.escape(repo) + r"/issues/(\d+)")
+        """issue 编号 → 提这个需求的对话（网页对话）：最早提到它的那个。"""
+        out = {}
         logs = getattr(self.pf.channel, "logs", None)
         for cid, m in self.pf.chats().items():
             if m.get("mention_of") or m.get("helper"):
                 continue
-            row = {"id": cid, "title": m.get("title") or "", "agent": m.get("agent")}
-            for x in m.get("issues") or []:
-                n = x.get("n") if x.get("kind") == "issue" and x.get("repo") == repo else None
-                if n and x.get("at", 0) >= (out.get(n) or {}).get("at", 0):
-                    out[n] = dict(row, at=x.get("at", 0))
-            if logs:
-                for n, at in self._mentioned(logs, cid, pat).items():
-                    if at >= (seen.get(n) or {}).get("at", 0):
-                        seen[n] = dict(row, at=at)
-        return {**seen, **out}
-
-    _scan = {}
-
-    def _mentioned(self, logs, cid, pat):
-        """这个对话的回答里贴过哪些 issue 链接：编号 → 最后一次的时间。按文件大小和修改时间缓存。"""
-        f = logs._f(cid)
-        try:
-            st = os.stat(f)
-        except OSError:
-            return {}
-        hit = self._scan.get(cid)
-        if hit and hit[0] == (st.st_size, st.st_mtime):
-            return hit[1]
-        found = {}
-        with open(f, encoding="utf-8", errors="replace") as fp:
-            for line in fp:
-                if '"answer"' not in line or "/issues/" not in line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue
-                for n in pat.findall(r.get("text") or ""):
-                    found[int(n)] = max(found.get(int(n), 0), r.get("at") or 0)
-        self._scan[cid] = ((st.st_size, st.st_mtime), found)
-        return found
+            for (r, n), at in refs(logs, cid, m, first=True).items():
+                if r == repo and (n not in out or at < out[n]["at"]):
+                    out[n] = {"id": cid, "title": m.get("title") or "", "agent": m.get("agent"), "at": at}
+        return out
 
     # ----- 做 -----
 

@@ -4044,9 +4044,14 @@ function devItem(r, btns, pick){
 }
 function drawDev(){
   const d = DEVP, j = d.job || {}, busy = j.state === "running", fresh = j.at && Date.now() / 1000 - j.at < 3600;
+  // 上线 / 更新做完时后台升级才刚开始，note 写的是「正在更新」；升级做完了（结果比这件事晚）就按结果改
+  const after = j.state === "done" && !d.updating && d.last && d.last.at > j.at - 60 ? d.last : null;
+  const note = !after ? j.note : !after.ok ? null
+    : j.kind === "update" ? "这台 Mac 已更新好" : (j.note || "").replace("这台 Mac 正在更新", "这台 Mac 已更新好");
   const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : "正在更新这台 Mac"}${j.step ? `：${esc(j.step)}` : ""}</p>`
     : j.state === "failed" && fresh ? `<p class="upg err">${esc(j.error || "没成功")}</p>`
-    : j.state === "done" && j.note && fresh ? `<p class="upg ok">${esc(j.note)}</p>` : "";
+    : after && !after.ok && fresh ? `<p class="upg err">${esc(after.text)}</p>`
+    : j.state === "done" && note && fresh ? `<p class="upg ok">${esc(note)}</p>` : "";
   const updating = d.updating && !busy;     // 后台还在升级这台 Mac：过一会儿再取，做完就消失
   clearTimeout(window._devPoll);
   if (updating) window._devPoll = setTimeout(() => { if (current.view === "settings" && current.id === "dev") renderDev(true); }, 5000);

@@ -2503,7 +2503,7 @@ function renderNewChat(){
           <div class="bar"><div class="opts">
             <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
-            <span class="seg mini">${["claude", "codex"].map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
+            <span class="seg mini">${(sharedM(d.machine || S.me) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
@@ -3592,7 +3592,7 @@ async function renderAgent(id){
     ${agentTab === "skills" ? `<div id="agent-sk"></div>` : agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
       <div class="sect"><h3>在哪能找到它</h3>
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
-        ${sharedM(ownerOf(a.id)) ? "" : channelHtml(a, "feishu") + channelHtml(a, "weixin")}
+        ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
       </div>
       <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `${sharedM(ownerOf(a.id)) ? "" : `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd>`}<dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
     </div>`}</div>`;
@@ -3717,7 +3717,7 @@ function formHtml(a){
     <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};drawSeal()">
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
-    <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
+    <label>底座</label><div class="seg">${(sharedM(fd.machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
     ${(fd.base || "claude") === "claude" ? `${sharedM(fd.machine) ? "" : `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
@@ -3833,7 +3833,7 @@ function accountMenu(id){
       ${mine.length ? `<div class="sec" style="margin:2px 0 6px;font-weight:600">共享电脑</div>
         ${mine.map(m => { const on = (a.shared || []).includes(m.id); return `<div class="mem" style="padding:6px 0"><span class="t" style="flex:1"><span class="title">${esc(m.name)}</span></span>
           <div class="seg"><button class="${on ? "" : "on"}" aria-pressed="${!on}" onclick="accountShare(${q(id)},${q(m.id)},false)">不共享</button><button class="${on ? "on" : ""}" aria-pressed="${on}" onclick="accountShare(${q(id)},${q(m.id)},true)">共享</button></div></div>`; }).join("")}
-        <p class="muted" style="font-size:12.5px;margin:6px 0 14px">对方在这台电脑上用自己的 Agent 和对话，看不到你的。对方的 Agent 能读写这台电脑上的文件。</p>` : ""}
+        <p class="muted" style="font-size:12.5px;margin:6px 0 14px">对方在这台电脑上用自己的 Agent 和对话，看不到你的。对方的 Agent 只能动主目录下「ccim共享」里它自己的文件夹，它接的飞书、微信也在这台电脑上运行。</p>` : ""}
       <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountRelink(${q(id)})">重新生成登录链接</button>
       <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{disabled:${!off}},'${off ? "已启用" : "已停用"}')">${off ? "启用" : "停用"}</button>
       ${a.expires ? `<button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:0},'已改成一直有效')">改成一直有效</button>` : ""}
@@ -4610,7 +4610,7 @@ function quickAgent(opts){
   const hasCodex = () => (((S.machine_info || {})[machine] || {}).codex ?? S.codex);
   const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model, machine), model, v => model = v)}</div>
       <label>默认思考深度</label><div>${dd("q-effort", effortOpts(base, "跟随全局设置"), effort, v => effort = v)}</div>`;
-  const bases = () => ["claude", "codex"].map(b => `<button class="${base === b ? "on" : ""}" data-b="${b}" ${b === "codex" && !hasCodex() ? "disabled" : ""}>${BASE[b]}</button>`).join("");
+  const bases = () => (sharedM(machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${base === b ? "on" : ""}" data-b="${b}" ${b === "codex" && !hasCodex() ? "disabled" : ""}>${BASE[b]}</button>`).join("");
   const machines = S.machines.filter(m => m.online || m.id === machine);
   dialog(opts.title, `<div class="form">
       ${multi() ? `<label>在哪台电脑</label><div>${dd("q-machine", machines.map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), machine, v => {

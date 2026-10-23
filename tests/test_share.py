@@ -113,10 +113,11 @@ class ShareTests(unittest.TestCase):
         for path, body in (("/api/fs/trash", {"paths": [self.home]}), ("/api/global", {"model": "x"}),
                            ("/api/chat/secret", {"id": "x", "run": "dialog"}), ("/api/upgrade", {}),
                            ("/api/channel/stop", {"proc": "x"}), ("/api/skills/delete", {"name": "x"}),
-                           ("/api/helper", {"kind": "skills"}), ("/api/peer/task", {}), ("/api/agent/connect", {"id": "x"}),
+                           ("/api/helper", {"kind": "skills"}), ("/api/peer/task", {}),
+                           ("/api/agent/connect", {"id": self.owner_agent, "channel": "weixin"}),
                            ("/api/project/save", {}), ("/api/chat/continue", {"id": "x:1"})):
             self.assertEqual(self.req("POST", path, body)[0], 403, path)
-        for path in ("/api/fs/ls", "/api/logs?proc=x", "/api/recent", "/api/skills/local", "/api/project?id=x"):
+        for path in ("/api/fs/ls", "/api/logs?proc=x", "/api/recent", "/api/skills/local", "/api/project?id=x", "/api/job?id=x"):
             self.assertEqual(self.req("GET", path)[0], 403, path)
 
     def test_kb_and_schedules(self):
@@ -134,11 +135,59 @@ class ShareTests(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/schedule/save", {"fields": dict(f, target={"kind": "agent", "id": self.owner_agent})})[0], 403)
         st, s = self.req("POST", "/api/schedule/save", {"fields": dict(f, target={"kind": "agent", "id": aid})})
         self.assertEqual(st, 200, s)
-        self.assertEqual(self.pf.schedules.all()[s["id"]]["deliver"], [])
+        self.assertEqual(self.pf.schedules.all()[s["id"]]["deliver"], ["feishu"])   # 发给它自己的 Agent 接的机器人
         _, o = self.req("GET", "/api/state?local=1", guest=None)
         self.assertEqual(o["schedules"], [])
         _, g = self.req("GET", "/api/schedule/list")
         self.assertEqual([x["id"] for x in g["schedules"]], [s["id"]])
+
+    def test_channels_of_own_agents(self):
+        """访客的 Agent 接的飞书、微信：渠道归它管，在里面的对话归它看；主人的碰不到。"""
+        aid = self.guest_agent()
+        mine = agents.get(aid)["dir"]
+        with patch.object(agents, "linked_paths", lambda a: [("feishu", mine, mine)] if a == aid
+                          else [("feishu", "/owner/proc", "/owner/proc")] if a == self.owner_agent else []):
+            self.assertEqual(share.procs_of("a1"), {mine: mine})
+            self.assertRaises(share.Denied, share._mine_proc, "a1", "/owner/proc")
+            self.assertRaises(share.Denied, share._mine_proc, "a1", mine, "/elsewhere")
+            share._mine_proc("a1", mine, mine)
+            self.assertEqual(self.req("POST", "/api/channel/stop", {"proc": "/owner/proc"})[0], 403)
+            self.assertEqual(self.req("GET", "/api/logs?proc=/owner/proc")[0], 403)
+        rows = [{"id": "x:s1", "sid": "s1", "agent": aid}, {"id": "x:s2", "sid": "s2", "agent": self.owner_agent}]
+        self.pf.external_chats = lambda *a, **k: [dict(r) for r in rows]
+        self.pf._external = lambda cid: next(r for r in rows if r["id"] == cid)
+        share._mine_chat(self.pf, "a1", "x:s1")
+        self.assertRaises(share.Denied, share._mine_chat, self.pf, "a1", "x:s2")
+        st = share.filter_state(self.pf, {"agents": [], "chats": [dict(r) for r in rows], "schedules": []}, "a1")
+        self.assertEqual([c["id"] for c in st["chats"]], ["x:s1"])
+        st = share.filter_state(self.pf, {"agents": [], "chats": [dict(r) for r in rows], "schedules": []}, None)
+        self.assertEqual([c["id"] for c in st["chats"]], ["x:s2"])
+        from ccim import session
+        b = type("B", (), {"entry": {"agent_id": aid}})()
+        self.assertEqual(session.guest_of(b), "a1")            # 飞书、微信里也不给管理员权限
+        b.entry = {"agent_id": self.owner_agent}
+        self.assertFalse(session.guest_of(b))
+
+    def test_fence(self):
+        """访客的会话：主目录里只留专属文件夹、平台 Skill、它自己的知识库；Codex 不给用。"""
+        aid = self.guest_agent()
+        os.makedirs(os.path.join(self.home, "Desktop"))
+        os.makedirs(os.path.join(self.home, "ccim共享", "别人"))
+        _, mine = self.req("POST", "/api/kb/lib/save", {"name": "我的"})
+        _, other = self.req("POST", "/api/kb/lib/save", {"name": "主人的"}, guest=None)
+        sb, rules = share.fence("a1")
+        self.assertFalse(sb["allowUnsandboxedCommands"])
+        deny = " ".join(rules["permissions"]["deny"])
+        for p in ("Desktop", "ccim共享/别人", f".ccim/kb/{other['id']}", ".ccim/agents.json"):
+            self.assertIn(f"Read(/{os.path.join(self.home, p)}/**)", deny, p)
+        for p in ("ccim共享/家人", f".ccim/kb/{mine['id']}", ".ccim/skills"):
+            self.assertNotIn(os.path.join(self.home, p) + ")", deny, p)
+        self.assertTrue(share.may_send("a1", os.path.join(agents.get(aid)["dir"], "a.txt")))
+        self.assertFalse(share.may_send("a1", os.path.join(self.home, "Desktop", "a.txt")))
+        self.assertEqual(self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "c", "base": "codex"}})[0], 403)
+        _, t = self.req("POST", "/api/chat/new", {"temp": {"base": "codex"}})
+        self.assertEqual(self.pf.chats()[t["id"]]["temp"]["base"], "claude")
+        self.assertEqual(self.pf.chats()[t["id"]]["temp"]["dir"], os.path.join(self.home, "ccim共享", "家人"))
 
     def test_header_ignored_without_peer(self):
         """本机网页（没经过总控）带 X-Account 不算访客。"""

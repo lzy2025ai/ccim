@@ -8,7 +8,9 @@
 - 工作目录只能在给它的专属文件夹里（主目录下的 ccim共享/<名字>，第一次来时建，记在平台 state 的 guests）
 - 推送带 _a（对话属于哪个访客），总控据此只推给那个账号
 
-这只是界面上的范围：访客的 Agent 照样以这台电脑主人的系统用户身份运行（执行层不隔离，第一版面向信任的人）。
+访客的 Agent 照样以这台电脑主人的系统用户身份运行，靠 Claude Code 自己的隔离圈住（`fence`）：命令行开沙箱（macOS 系统级，
+不许绕过），读写文件的工具用权限规则；主目录里除了它的专属文件夹、平台 Skill、它自己的知识库，其余都不能读写。只能用 Claude Code
+（Codex 的沙箱拦不住读）。网络不限。这是防越界，不等于单独的系统用户。
 """
 import os, re
 
@@ -18,6 +20,7 @@ GUEST_GET = {
     "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/dirs", "/api/file", "/api/file/part",
+    "/api/job", "/api/logs",
 }
 GUEST_POST = {
     "/api/upload", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
@@ -27,6 +30,8 @@ GUEST_POST = {
     "/api/kb/lib/save", "/api/kb/lib/delete", "/api/kb/entry/save", "/api/kb/entry/delete", "/api/kb/entry/move",
     "/api/agent/save", "/api/agent/delete", "/api/agent/pin",
     "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
+    "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
+    "/api/chat/continue",
 }
 
 
@@ -111,8 +116,33 @@ def guest_dir(pf, acct, name, path):
 # ---------- 访客的请求 ----------
 
 def _mine_chat(pf, acct, cid):
-    if not cid or str(cid).startswith("x:") or cid not in pf.chats() or chat_owner(pf, cid) != acct:
+    """网页对话，或者它的 Agent 在飞书、微信里的对话（x:，终端里的也算，在它的专属文件夹里）。"""
+    if cid and str(cid).startswith("x:"):
+        try:
+            agent = pf._external(cid).get("agent")
+        except Exception:
+            agent = None
+        if not agent or of_agent(agents.get(agent)) != acct:
+            raise Denied("找不到这个对话。")
+        return
+    if not cid or cid not in pf.chats() or chat_owner(pf, cid) != acct:
         raise Denied("找不到这个对话。")
+
+
+def procs_of(acct):
+    """访客的 Agent 接的飞书、微信进程：{进程: Agent 的目录}。"""
+    out = {}
+    for aid, a in agents.all_agents().items():
+        if of_agent(a) == acct:
+            for kind, proc, path in agents.linked_paths(aid):
+                out[proc] = path
+    return out
+
+
+def _mine_proc(acct, proc, path=None):
+    mine = procs_of(acct)
+    if proc not in mine or (path is not None and os.path.realpath(path) != os.path.realpath(mine[proc])):
+        raise Denied("找不到这个渠道。")
 
 
 def _mine_agent(acct, aid):
@@ -149,16 +179,29 @@ def check(pf, acct, name, method, path, q, body):
             _mine_lib(acct, q.get("id"))
         elif path == "/api/kb/entry":
             _mine_lib(acct, q.get("lib"))
+        elif path == "/api/logs":
+            _mine_proc(acct, q.get("proc"))
+        elif path == "/api/job":
+            from . import web as console
+            j = console.JOBS.get(q.get("id") or "")
+            if not j or not j.agent_id or of_agent(agents.get(j.agent_id)) != acct:
+                raise Denied("找不到这次接入。")
         return
+    if path == "/api/agent/connect":
+        _mine_agent(acct, b.get("id"))
+    elif path in ("/api/channel/start", "/api/channel/stop", "/api/channel/restart"):
+        _mine_proc(acct, b.get("proc"))
+    elif path == "/api/channel/disconnect":
+        _mine_proc(acct, b.get("proc"), b.get("path") or "")
     if path.startswith("/api/chat/") and path != "/api/chat/new":
         _mine_chat(pf, acct, b.get("id"))
     if path == "/api/chat/new":
         if b.get("agent"):
             _mine_agent(acct, b["agent"])
-        else:
+        else:                                 # 临时对话：只能用 Claude Code，没选文件夹就在专属文件夹里
             t = b.get("temp") if isinstance(b.get("temp"), dict) else {}
-            if (t.get("dir") or "").strip():
-                t["dir"] = guest_dir(pf, acct, name, t["dir"])
+            t["dir"] = guest_dir(pf, acct, name, t.get("dir") or "")
+            t["base"] = "claude"
             b["temp"] = t
     elif path == "/api/chat/members":
         for aid in b.get("add") or []:
@@ -190,6 +233,8 @@ def check(pf, acct, name, method, path, q, body):
             elif "dir" in f:
                 f["dir"] = guest_dir(pf, acct, name, f.get("dir") or "")
             f["chrome"] = False
+            if f.get("base") == "codex":
+                raise Denied("共享的电脑上只能用 Claude Code。")
             if not b.get("id"):
                 f["account"] = acct
             b["fields"] = f
@@ -200,7 +245,6 @@ def check(pf, acct, name, method, path, q, body):
                 raise Denied("找不到这个定时任务。")
             if of_schedule(pf, {"target": f.get("target") or {}}) != acct or (f.get("target") or {}).get("kind") == "project":
                 raise Denied("选一下交给哪个 Agent。")
-            f["deliver"] = []                 # 发到飞书、微信是发给电脑主人的
             b["fields"] = f
         elif of_schedule(pf, pf.schedules.all().get(b.get("id") or "")) != acct:
             raise Denied("找不到这个定时任务。")
@@ -214,8 +258,8 @@ def filter_state(pf, st, acct):
 
     def chat_ok(c):
         cid = str(c.get("id") or "")
-        if cid.startswith("x:"):
-            return acct is None and of_agent(agents.get(c.get("agent") or "")) is None
+        if cid.startswith("x:"):                  # 飞书、微信、终端里的：跟着它的 Agent
+            return of_agent(agents.get(c.get("agent") or "")) == acct
         return owners.get(cid) == acct
 
     st["agents"] = [a for a in st.get("agents") or [] if (a.get("account") or None) == acct]
@@ -262,3 +306,47 @@ def tag(pf, ev):
     except Exception:
         pass
     return ev
+
+
+# ---------- 访客的 Agent 能碰的范围 ----------
+
+SANDBOX = {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedCommands": False,
+           "network": {"allowedDomains": ["*"]}}
+
+
+def guest_root(acct):
+    """访客的专属文件夹（不在平台进程里时用：飞书、微信的进程）。还没建过返回 None。"""
+    from . import platform
+    g = (registry.read_state(platform.home()).get("guests") or {}).get(acct) or {}
+    return os.path.realpath(g["root"]) if g.get("root") else None
+
+
+def fence(acct):
+    """访客的会话：(沙箱设置, 权限规则)。主目录下除了专属文件夹、~/.ccim 里的平台 Skill 和它自己的知识库，都不许读写。"""
+    from . import kb
+    home = os.path.realpath(os.path.expanduser("~"))
+    ccim_home = os.path.realpath(registry.HOME)
+    mine = guest_root(acct)
+
+    def kids(d, keep=()):
+        try:
+            return [os.path.join(d, n) for n in os.listdir(d) if n not in keep]
+        except OSError:
+            return []
+    deny = kids(home, ("ccim共享", os.path.basename(ccim_home)))
+    deny += kids(ccim_home, ("kb", "skills"))
+    deny += [p for p in kids(os.path.join(home, "ccim共享")) if os.path.realpath(p) != mine]
+    deny += [os.path.join(kb.root(), x["id"]) for x in kb.libs() if (x.get("account") or None) != acct]
+    deny.append("/Volumes")
+    rules = []
+    for p in deny:
+        p = os.path.realpath(p)
+        for t in ("Read", "Edit"):
+            rules += [f"{t}(/{p})", f"{t}(/{p}/**)"]
+    return dict(SANDBOX), {"permissions": {"deny": rules}}
+
+
+def may_send(acct, path):
+    """访客的 Agent 用「发文件」只能发专属文件夹里的。"""
+    mine = guest_root(acct)
+    return bool(mine) and inside(path, mine)

@@ -1538,7 +1538,7 @@ def _handler(pf):
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
-                "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True, guest=bool(acct)),
+                "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
@@ -1842,7 +1842,7 @@ def _busy_of(a):
     return rows
 
 
-def agent_view(pf, aid, detail=False, guest=False):
+def agent_view(pf, aid, detail=False):
     from . import web as console
     a = agents.get(aid)
     if not a:
@@ -1862,7 +1862,7 @@ def agent_view(pf, aid, detail=False, guest=False):
                               [c.get("last_active") or "" for _, _, c in registry.all_chats(agents.cwd(a))] + [""]) or None
     if detail:
         view["chats"] = [pf.chat_view(cid) for cid, c in pf.chats().items() if c.get("agent") == aid] + \
-            ([] if guest else pf.external_chats(aid, terminal=True))
+            pf.external_chats(aid, terminal=True)
         view["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
     return view
 

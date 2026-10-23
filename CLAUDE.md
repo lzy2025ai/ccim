@@ -200,8 +200,11 @@
   （nodes 的 shared，`guest_of`）：转过去的请求带 X-Account / X-Account-Name（浏览器带的不传），merged_state 按「电脑|账号」分开缓存。
   `ccim/share.py`：电脑那边按 X-Account（只认 X-From-Peer）当访客：白名单接口（GUEST_GET / GUEST_POST）、`check` 查东西是不是它的并改写
   工作目录（~/ccim共享/<名字>/ 里）；Agent 记 account，对话跟着 Agent（临时对话记 meta 的 account），定时任务跟着 target，知识库记 _lib.json；
-  state 按人过滤（主人看不到访客的）；推送 `tag` 带 _a，总控 `visible` 只推给那个账号、fanout 不转给别的电脑。访客的会话不给 run_as_admin、不开 Chrome。
-  执行层不隔离：访客的 Agent 以电脑主人的系统用户运行
+  state 按人过滤（主人看不到访客的）；推送 `tag` 带 _a，总控 `visible` 只推给那个账号、fanout 不转给别的电脑。
+  访客的 Agent 能接自己的飞书、微信（扫码的是它，机器人认它当主人），渠道管理按 `procs_of` 只管自己的，那些对话（x:）跟着 Agent 归它。
+  访客的会话（网页、飞书、微信，`session.guest_of` 按 agent_id 认）：不给 run_as_admin、不开 Chrome、只能用 Claude Code、不提示 ccim schedule；
+  `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录下除 ccim共享/<自己>、~/.ccim 的 kb（自己的库）和 skills 以外的一切，
+  send_file 只发专属文件夹里的。仍以电脑主人的系统用户运行（防越界，不等于单独的系统用户）
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

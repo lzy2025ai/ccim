@@ -140,7 +140,8 @@ class Logs:
                         continue
                     if r.get("type") in MERGED and r.get("id") in pos:
                         old = out[pos[r["id"]]]
-                        out[pos[r["id"]]] = {**old, **r, "at": old["at"]}
+                        # 卡片每次都是整张：处理过的卡片没有按钮，合并的话旧按钮会留下，看着还在等批准（#48）
+                        out[pos[r["id"]]] = {**(r if r["type"] == "card" else {**old, **r}), "at": old["at"]}
                         continue
                     if r.get("type") in MERGED:
                         pos[r["id"]] = len(out)

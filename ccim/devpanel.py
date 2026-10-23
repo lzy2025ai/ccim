@@ -160,6 +160,29 @@ def issue_of(pf, cid, meta, since=0):
     return {"repo": repo, "n": n, "title": pf.titles.get(repo, n) or "", "more": len(rs) - 1}
 
 
+def _restarting():
+    """排着等重启的开发版进程（safe-restart-run 还在：等手头的对话做完、重启、看新进程起没起来）。"""
+    r = _run(["ps", "-axo", "command="], timeout=10)
+    paths = set(runtime.dev_projects())
+    out = []
+    for line in (r.stdout or "").splitlines():
+        if " ccim.cli safe-restart-run " in line:
+            p = line.split(" safe-restart-run ", 1)[1].split(" --", 1)[0].strip()
+            if p in paths:
+                out.append(p)
+    return out
+
+
+def _phase():
+    """这台 Mac 更新到哪一步了（#156）：装新版本 → 等手头的对话做完 → 重启。做完了返回空。
+    网页平台自己也在重启的进程里，所以重启做完之前一律算「正在更新」。"""
+    waiting = _restarting()
+    if waiting:
+        busy = any(c.get("busy") for p in waiting for c in (registry.read_state(p).get("chats") or {}).values())
+        return f"等手头的对话做完就重启（最多 {runtime.WAIT_IDLE // 60} 分钟）" if busy else "正在重启，网页会断开十几秒"
+    return "正在装新版本" if runtime.promoting() else ""
+
+
 def _num(text):
     m = re.search(r"#(\d+)", text or "")
     return int(m.group(1)) if m else None
@@ -234,8 +257,9 @@ class Dev:
                 merged.append({"commit": sha[:7], "issue": n, "title": runtime._change(subj), "at": int(ct or 0),
                                "chat": links.get(n)})
         main = runtime._git("rev-parse", "origin/main").stdout.strip()
-        updating = runtime.promoting()        # 升级做到一半时按旧版本算会说「有改动没用上」，这时不算
-        return {"repo": repo, "review": review, "merged": [] if updating else merged, "updating": updating,
+        phase = _phase()                      # 更新做到一半时按旧版本算会说「有改动没用上」，这时不算
+        updating = bool(phase)
+        return {"repo": repo, "review": review, "merged": [] if updating else merged, "updating": updating, "phase": phase,
                 "stable": runtime._channel().get("current"),
                 "last": runtime.last_promote(),
                 "local_url": f"http://127.0.0.1:{registry.read_state(self.pf.home).get('port') or 8977}/",
@@ -309,7 +333,7 @@ class Dev:
 
     def update(self):
         """已经合并了（比如 Agent 在对话里合的）、这台 Mac 还没用上：只做更新。"""
-        return self._start("update", lambda: (self._update(), "这台 Mac 已开始更新")[1])
+        return self._start("update", lambda: (self._update(), "")[1])
 
     def _ship(self, items):
         done, skipped, n = [], [], len(items)
@@ -320,7 +344,7 @@ class Dev:
                 done.append(tag)
             except Exception as e:
                 skipped.append(f"{tag}：{e}")
-        note = ("、".join(done) + " 已上线，这台 Mac 正在更新") if done else ""
+        note = ("、".join(done) + " 已上线") if done else ""    # 这台 Mac 更新到哪一步由网页按 phase 显示
         if skipped:
             note += ("；" if note else "") + "没上线的：" + "；".join(skipped)
         self._save_job(dict(self.job, note=note))

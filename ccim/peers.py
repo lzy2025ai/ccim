@@ -501,7 +501,7 @@ class Peers:
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
                               "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {}),
                               "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）
-                                         if k in ("model", "effort", "codex_model", "codex_effort")}}
+                                         if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)

@@ -2776,6 +2776,7 @@ const skApi = (path, body) => api(path, body, S.me);       // 每台电脑都有
 async function skillList(){ if (!skillsCache) skillsCache = (await skApi("/api/skills")).skills; return skillsCache; }
 function skillSrc(s){
   const x = s.source || {};
+  if (s.shared) return "电脑主人装的";       // 别人共享给我的电脑上，主人的 Skill：能用、只能看（#154）
   return x.type === "github" ? `GitHub · ${x.url.replace(/^https?:\/\/github\.com\//, "")}` : x.type === "local" && x.agent ? `${x.agent} 分享的` : x.type === "assistant" ? "Skill 助手写的" : x.type === "local" ? `从「${x.machine || "电脑"}」导入` : `上传${x.file ? ` · ${x.file}` : ""}`;
 }
 function skillMark(big){ return `<span class="kbmark ${big ? "lg" : ""}" style="background:var(--dai)">${ICON.star}</span>`; }
@@ -2977,6 +2978,7 @@ async function openSkill(name){
     skContent().innerHTML = `<div class="empty"><h2>找不到这个 Skill</h2><p>${esc(e.message)}</p><a class="btn" href="#/skills">返回 Skill 列表</a></div>`; return; }
   if (current.view !== "skills" || current.id !== name) return;
   if (!SKV || SKV.src.kind !== "platform" || SKV.name !== name) SKV = {src: {kind: "platform", name}, name, open: new Set(), file: "SKILL.md", f: null, mode: "view", draft: "", dirty: false};
+  if (s.shared) s.editable = false;
   SKV.s = s;
   if (!s.files.includes(SKV.file)) SKV.file = "SKILL.md";
   const offFor = S.agents.filter(a => (a.skills_off || []).includes(name));
@@ -2987,9 +2989,9 @@ async function openSkill(name){
           <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
           <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div>
           <div class="sk-market" id="sk-mk"></div></div>
-        <div class="sk-acts">${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
+        <div class="sk-acts">${s.shared ? "" : `${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
           <button class="btn" onclick="toggleSkill(${q(name)},${s.disabled ? "true" : "false"})">${s.disabled ? "启用" : "停用"}</button>
-          <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button></div></div></div>
+          <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button>`}</div></div></div>
     <div class="sk-body"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div></div>`;
   drawSkTree();
   SKV.dirty ? drawSkView() : skOpenFile(SKV.file, true);   // 页面重画时留着没保存的改动
@@ -3153,7 +3155,9 @@ async function deleteSkill(name){
 let skTab = "github";
 function installSkill(tab){
   skTab = tab || skTab;
-  const tabs = [["github", "GitHub 地址"], ["upload", "上传文件"], ["local", "从电脑导入"]];
+  const guest = sharedM(S.me);                // 共享给我的电脑：不能从主人电脑上的 ~/.claude/skills 导入
+  if (guest && skTab === "local") skTab = "github";
+  const tabs = [["github", "GitHub 地址"], ["upload", "上传文件"], ...(guest ? [] : [["local", "从电脑导入"]])];
   dialog("安装 Skill", `<div class="seg" style="margin-bottom:14px">${tabs.map(([k, n]) => `<button class="${skTab === k ? "on" : ""}" aria-pressed="${skTab === k}" onclick="installSkill('${k}')">${n}</button>`).join("")}</div>
     <div id="sk-body"></div>`, "");
   const b = $("#sk-body");

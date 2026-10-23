@@ -48,6 +48,8 @@ MARKS = ("title", "pin", "archived", "archived_at", "icon", "color", "hidden")  
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 # 页面专用的助手（#116）
+GUEST_HELPER = ("\n- 这个用户用的是别人共享给他的电脑：你装、改、删的是他自己的那一份 Skill，只有他自己的 Agent 能用，不会同步到别的电脑。"
+                "skill_list 里标了 shared 的是电脑主人的，只能看、能用，不能改也不能删。只能从 GitHub 地址安装。")
 HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "你是 ccim 平台的 Skill 助手，在 Skill 页面右侧和用户对话，帮他管理「平台 Skill」：装在平台上、同步到所有电脑、"
     "所有 Agent 在 ccim 里对话时都能用的 Skill。\n"
@@ -600,7 +602,7 @@ class Platform:
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
-                entry.update(helper=m["helper"], role=h["role"])
+                entry.update(helper=m["helper"], role=h["role"] + (GUEST_HELPER if viewer else ""))
                 name = h["title"]
         entry.update(owner_open_id=OWNER, channel="web")
         b = self.bridges.get(key)
@@ -670,11 +672,11 @@ class Platform:
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
 
-    async def helper_chat(self, kind, fresh=False):
-        """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个，不进对话列表；fresh 就换一个新的。"""
+    async def helper_chat(self, kind, fresh=False, account=None):
+        """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个（共享电脑上的访客各自一个），不进对话列表；fresh 就换一个新的。"""
         if kind not in HELPERS:
             raise Problem("没有这个助手。")
-        old = [cid for cid, m in self.chats().items() if m.get("helper") == kind]
+        old = [cid for cid, m in self.chats().items() if m.get("helper") == kind and (m.get("account") or None) == account]
         if old and not fresh:
             return old[0]
         for cid in old:
@@ -683,7 +685,8 @@ class Platform:
                 await self.delete_chat(cid)
             except Problem:
                 pass
-        cid = self.new_chat(temp={"base": "claude"}, title=HELPERS[kind]["title"])
+        cid = self.new_chat(temp={"base": "claude", "dir": share.root(account) if account else None},
+                            title=HELPERS[kind]["title"], account=account)
         chats = self.chats()
         chats[cid]["helper"] = kind
         self.store.write(chats)
@@ -1428,6 +1431,7 @@ def _handler(pf):
         def _guest(self, method, path, q, body):
             """共享电脑上访客的请求（#154）：不让做的回 403，返回访客的账号编号（主人返回 None）。"""
             acct = share.account_of(self.headers)
+            skills_mod.SPACE.set(acct)            # 访客装、改的 Skill 在它自己那一份里（#154）
             if not acct or not path.startswith("/api/") or path == "/api/events":
                 return None, False
             from urllib.parse import unquote
@@ -1528,7 +1532,7 @@ def _handler(pf):
                 "/api/kb/search": lambda: {"results": [r for r in kb_mod.search(q.get("q", ""))
                                                        if r["lib"] in {x["id"] for x in share.filter_libs(kb_mod.libs(), acct)}]},
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
-                "/api/skills": lambda: {"skills": skills_mod.listing()},
+                "/api/skills": lambda: {"skills": skills_mod.view_listing()},
                 "/api/skills/detail": lambda: skills_mod.detail(q.get("name", "")),
                 "/api/skills/local": lambda: {"skills": skills_mod.local_list()},
                 "/api/skills/file": lambda: skills_mod.read_file(q.get("name", ""), q.get("path", "")),
@@ -1582,7 +1586,7 @@ def _handler(pf):
             routes = {
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx")),
-                "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh"))))},
+                "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/skip": lambda: {"skipped": pf.run(pf.skip_step(b("id")))},

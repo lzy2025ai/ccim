@@ -22,7 +22,7 @@ GUEST_GET = {
     "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/dirs", "/api/file", "/api/file/part",
-    "/api/job", "/api/logs",
+    "/api/job", "/api/logs", "/api/skills/market",
 }
 GUEST_POST = {
     "/api/upload", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
@@ -34,6 +34,7 @@ GUEST_POST = {
     "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
     "/api/chat/continue",
+    "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
 }
 
 
@@ -264,6 +265,8 @@ def check(pf, acct, method, path, q, body):
             if not j or not j.agent_id or of_agent(agents.get(j.agent_id)) != acct:
                 raise Denied("找不到这次接入。")
         return
+    if path == "/api/skills/install" and b.get("local"):     # 主人电脑上 ~/.claude/skills 里的不给它导
+        raise Denied("这台电脑是共享给你的，这个操作只有电脑的主人能做。")
     if path == "/api/agent/connect":
         _mine_agent(acct, b.get("id"))
     elif path in ("/api/channel/start", "/api/channel/stop", "/api/channel/restart"):
@@ -411,7 +414,8 @@ SANDBOX = {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedC
 def allowed_dirs(acct, cwd=None):
     """访客的会话能读写的地方：共享文件夹、它自己 Agent 的目录、这个会话的工作目录、平台 Skill、它自己的知识库。"""
     from . import kb
-    out = [root(acct), cwd, os.path.join(registry.HOME, "skills")]
+    sk = os.path.join(registry.HOME, "skills")      # 主人的平台 Skill、会话挂的插件目录、它自己装的那份（别的访客的不给）
+    out = [root(acct), cwd, os.path.join(sk, "lib"), os.path.join(sk, "views"), os.path.join(sk, "guests", acct)]
     out += [a.get("dir") for a in agents.all_agents().values() if of_agent(a) == acct]
     out += [os.path.join(kb.root(), x["id"]) for x in kb.libs() if (x.get("account") or None) == acct]
     return sorted({os.path.realpath(p) for p in out if p})
@@ -450,4 +454,5 @@ def fence(acct, cwd=None):
 
 def may_send(acct, path, cwd=None):
     """访客的会话用「发文件」只能发它能读写的地方的文件。"""
-    return any(inside(path, d) for d in allowed_dirs(acct, cwd) if not d.endswith(os.sep + "skills"))
+    sk = os.path.realpath(os.path.join(registry.HOME, "skills"))
+    return any(inside(path, d) for d in allowed_dirs(acct, cwd) if not d.startswith(sk + os.sep))

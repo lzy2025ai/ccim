@@ -7,7 +7,7 @@
 同步和知识库一样：每台电脑一份完整的，定期问在线的其他电脑要清单（每个 Skill 的修改时间、删除记录），比自己新的整个拉过来
 （打包成 tar.gz、base64），后改的算数；服务器只转发。
 """
-import base64, io, json, logging, os, re, shutil, tarfile, tempfile, threading, time, urllib.request, zipfile
+import base64, contextlib, contextvars, io, json, logging, os, re, shutil, tarfile, tempfile, threading, time, urllib.request, zipfile
 
 from . import registry
 
@@ -34,8 +34,16 @@ def changed():
             log.debug("通知 Skill 改动出错", exc_info=True)
 
 
-def root():
-    return os.path.join(registry.HOME, "skills")
+# 共享电脑上的访客（#154）：它装的 Skill 放在自己那一份里（skills/guests/<账号>/），只有它看得到、只挂到它的 Agent 上，
+# 不同步到别的电脑。处理访客请求、访客的 Skill 助手时设上 SPACE，下面这些函数就都在它那一份里读写；主人的那份它只能看、能用。
+SPACE = contextvars.ContextVar("skill_space", default=None)
+
+
+def root(space=False):
+    """space=False：按当前的 SPACE；None：主人的那份。"""
+    acct = SPACE.get() if space is False else space
+    base = os.path.join(registry.HOME, "skills")
+    return os.path.join(base, "guests", acct) if acct else base
 
 
 def _lib(name=""):
@@ -131,10 +139,42 @@ def _files(base):
 
 
 def detail(name):
-    m = _read_meta(_check(name))
-    if not m:
-        raise Problem("找不到这个 Skill。")
-    return {**m, "files": _files(_lib(name)), "repo": repo_of(m.get("source"))}
+    with reading(name) as shared:
+        m = _read_meta(_check(name))
+        if not m:
+            raise Problem("找不到这个 Skill。")
+        return {**m, "files": _files(_lib(name)), "repo": repo_of(m.get("source")), **({"shared": True} if shared else {})}
+
+
+@contextlib.contextmanager
+def reading(name):
+    """访客看某个 Skill：它自己没有这个名字的，就看主人那份（停用的不给看），给出 True 表示是主人的、只能看。"""
+    acct = SPACE.get()
+    if not acct or _read_meta(name or "") or not NAME.fullmatch(name or ""):
+        yield False
+        return
+    tok = SPACE.set(None)
+    try:
+        if (_read_meta(name) or {}).get("disabled"):
+            raise Problem("找不到这个 Skill。")
+        yield True
+    finally:
+        SPACE.reset(tok)
+
+
+def view_listing():
+    """Skill 页的列表：访客看到自己装的，加上主人那份里没停用的（标 shared，同名的以它自己的为准）。"""
+    acct = SPACE.get()
+    if not acct:
+        return listing()
+    mine = [dict(m, mine=True) for m in listing()]
+    tok = SPACE.set(None)
+    try:
+        theirs = [dict(m, shared=True) for m in listing() if not m.get("disabled")]
+    finally:
+        SPACE.reset(tok)
+    have = {m["name"] for m in mine}
+    return sorted(mine + [m for m in theirs if m["name"] not in have], key=lambda m: m["name"].lower())
 
 
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
@@ -182,7 +222,8 @@ def _save_at(base, rel, text, mtime):
 
 
 def read_file(name, rel):
-    return _read_at(_lib(_check(name)), rel)
+    with reading(name):
+        return _read_at(_lib(_check(name)), rel)
 
 
 def save_file(name, rel, text, mtime):
@@ -604,14 +645,24 @@ def delete(name):
 def plugin_for(agent=None):
     """给这个 Agent 的会话用的本地插件目录（只放没停用、它没去掉的 Skill）；一个都没有返回 None。"""
     off = set((agent or {}).get("skills_off") or [])
-    names = [m["name"] for m in listing() if not m.get("disabled") and m["name"] not in off]
+    tok = SPACE.set(None)
+    try:
+        dirs = {m["name"]: _lib(m["name"]) for m in listing() if not m.get("disabled") and m["name"] not in off}
+        acct = (agent or {}).get("account")
+        if acct:                              # 共享电脑上访客的 Agent（#154）：再加上它自己装的，同名的用它自己的
+            SPACE.set(acct)
+            dirs.update({m["name"]: _lib(m["name"]) for m in listing() if not m.get("disabled") and m["name"] not in off})
+    finally:
+        SPACE.reset(tok)
+    names = sorted(dirs)
     if not names:
         return None
     key = re.sub(r"[^\w-]", "_", (agent or {}).get("id") or "all")
-    view = os.path.join(root(), "views", key)
+    view = os.path.join(root(None), "views", key)
     with LOCK:
         try:                                  # 没变就不重建：同一个 Agent 的别的会话可能正在用它
-            if sorted(os.listdir(os.path.join(view, "skills"))) == sorted(names):
+            sk = os.path.join(view, "skills")
+            if sorted(os.listdir(sk)) == names and all(os.readlink(os.path.join(sk, n)) == dirs[n] for n in names):
                 return view
         except OSError:
             pass
@@ -621,7 +672,7 @@ def plugin_for(agent=None):
         with open(os.path.join(view, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as f:
             json.dump({"name": PLUGIN, "description": "ccim 平台上装的 Skill", "version": "1.0.0"}, f, ensure_ascii=False)
         for n in names:
-            os.symlink(_lib(n), os.path.join(view, "skills", n))
+            os.symlink(dirs[n], os.path.join(view, "skills", n))
     return view
 
 

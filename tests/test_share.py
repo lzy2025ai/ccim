@@ -115,8 +115,7 @@ class ShareTests(unittest.TestCase):
     def test_owner_only_operations(self):
         for path, body in (("/api/fs/trash", {"paths": [self.home]}), ("/api/global", {"model": "x"}),
                            ("/api/chat/secret", {"id": "x", "run": "dialog"}), ("/api/upgrade", {}),
-                           ("/api/channel/stop", {"proc": "x"}), ("/api/skills/delete", {"name": "x"}),
-                           ("/api/helper", {"kind": "skills"}), ("/api/peer/task", {}),
+                           ("/api/channel/stop", {"proc": "x"}), ("/api/peer/task", {}),
                            ("/api/agent/connect", {"id": self.owner_agent, "channel": "weixin"}),
                            ("/api/project/save", {}), ("/api/chat/continue", {"id": "x:1"})):
             self.assertEqual(self.req("POST", path, body)[0], 403, path)
@@ -252,6 +251,61 @@ class ShareTests(unittest.TestCase):
         self.assertNotIn(f"Read(/{self.home}/Desktop/**)", deny)
         self.assertFalse(any("Desktop/proj" in r for r in deny))
         self.assertTrue(share.may_send("a1", os.path.join(proj, "a.txt"), proj))
+
+    def test_guest_skills(self):
+        """访客装的 Skill 在它自己那一份里：主人看不到；主人的它能看、能用，改不了。"""
+        from ccim import skills
+
+        def mk(name, guest=None):
+            tok = skills.SPACE.set(guest)
+            try:
+                skills.write_any(name, "SKILL.md", f"---\nname: {name}\ndescription: {name} 的说明\n---\n正文")
+            finally:
+                skills.SPACE.reset(tok)
+        mk("owner-skill")
+        mk("same")
+        self.assertEqual(self.req("POST", "/api/skills/install", {"local": "x"})[0], 403)
+        mk("my-skill", "a1")
+        mk("same", "a1")
+        _, g = self.req("GET", "/api/skills")
+        self.assertEqual({(m["name"], bool(m.get("shared"))) for m in g["skills"]},
+                         {("my-skill", False), ("same", False), ("owner-skill", True)})
+        _, o = self.req("GET", "/api/skills", guest=None)
+        self.assertEqual({m["name"] for m in o["skills"]}, {"owner-skill", "same"})
+        _, d = self.req("GET", "/api/skills/detail?name=owner-skill")
+        self.assertTrue(d.get("shared"))
+        st, _ = self.req("POST", "/api/skills/file/save", {"name": "owner-skill", "path": "SKILL.md", "text": "x", "mtime": 0})
+        self.assertEqual(st, 400)                             # 主人的改不了（它那一份里没有）
+        self.assertEqual(self.req("POST", "/api/skills/delete", {"name": "owner-skill"})[0], 200)
+        self.assertIn("owner-skill", {m["name"] for m in skills.listing()})   # 删的是它自己那份（没有这个），主人的还在
+        aid = self.guest_agent()
+        view = skills.plugin_for(agents.get(aid))
+        links = {n: os.readlink(os.path.join(view, "skills", n)) for n in os.listdir(os.path.join(view, "skills"))}
+        self.assertEqual(set(links), {"my-skill", "same", "owner-skill"})
+        self.assertIn(os.path.join("guests", "a1"), links["same"])      # 同名的用它自己的
+        self.assertNotIn("guests", skills.plugin_for(agents.get(self.owner_agent)) and
+                         os.readlink(os.path.join(skills.plugin_for(agents.get(self.owner_agent)), "skills", "same")))
+        self.req("GET", "/api/state?local=1")
+        _, rules = share.fence("a1")
+        deny = " ".join(rules["permissions"]["deny"])
+        self.assertNotIn(os.path.join(".ccim", "skills", "lib") + "/**", deny)
+        os.makedirs(os.path.join(self.home, ".ccim", "skills", "guests", "a2"), exist_ok=True)
+        _, rules = share.fence("a1")
+        self.assertIn(f"Read(/{os.path.join(self.home, '.ccim', 'skills', 'guests', 'a2')}/**)", rules["permissions"]["deny"])
+
+    def test_guest_skill_helper(self):
+        """Skill 助手：访客各自一个，在它的共享文件夹里，圈住；主人那个不受影响。"""
+        _, g = self.req("POST", "/api/helper", {"kind": "skills"})
+        _, g2 = self.req("POST", "/api/helper", {"kind": "skills"})
+        _, o = self.req("POST", "/api/helper", {"kind": "skills"}, guest=None)
+        self.assertEqual(g["id"], g2["id"])
+        self.assertNotEqual(g["id"], o["id"])
+        m = self.pf.chats()[g["id"]]
+        self.assertEqual((m["account"], m["temp"]["dir"]), ("a1", os.path.join(self.home, ".ccim", "shared", "家人")))
+        b = self.pf._bridge(g["id"])
+        self.assertEqual(b.entry["guest"], "a1")
+        self.assertIn("别人共享给他的电脑", b.entry["role"])
+        self.assertFalse(self.pf._bridge(o["id"]).entry["guest"])
 
     def test_header_ignored_without_peer(self):
         """本机网页（没经过总控）带 X-Account 不算访客。"""

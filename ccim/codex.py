@@ -227,7 +227,7 @@ class CodexChat(Chat):
             g = guest_of(self.b)
             if self.chat_type != "p2p" and not path.startswith(root + os.sep):
                 await self._safe_text(f"群聊里只能发送项目目录里的文件：{os.path.basename(path)}")
-            elif g and not share.may_send(g, path):
+            elif g and not share.may_send(g, path, self.b.path):
                 await self._safe_text(f"只能发送你的文件夹里的文件：{os.path.basename(path)}")
             elif not os.path.isfile(path):
                 await self._safe_text(f"文件不存在：{path}")

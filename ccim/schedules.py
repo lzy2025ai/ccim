@@ -145,6 +145,8 @@ class Schedules:
                "deliver": [d for d in f.get("deliver") or [] if d in ("feishu", "weixin")],
                "session": "new" if f.get("session") == "new" else "same", "quiet": bool(f.get("quiet")),
                "every": min(max(int(f.get("every") or 60), EVERY[0]), EVERY[1])}
+        if isinstance(f.get("account"), str) and f["account"]:   # 共享电脑上访客建的（#154，share.check 定）
+            out["account"] = f["account"]
         if freq == "weekly" and not out["days"]:
             raise Problem("选一下每周几。")
         if freq == "once":

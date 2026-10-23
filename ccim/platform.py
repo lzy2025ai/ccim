@@ -575,16 +575,20 @@ class Platform:
     def _bridge(self, cid):
         from .bridge import Bridge
         m = self.meta(cid)
+        viewer = share.chat_owner(self, cid)     # 共享电脑上访客的对话（#154）
         if m.get("agent"):
             a = agents.get(m["agent"])
             if not a:
                 raise Problem("这个对话的 Agent 已经删掉了。")
             path = m.get("cwd") or agents.cwd(a)         # 项目里的对话在项目目录（对比时在它自己的副本）里干活
             key = a["id"] if path == agents.cwd(a) else f"{a['id']}@{path}"
+            lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
+            if lent:
+                key += "#" + viewer
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not a.get("account"),
-                     "agent_id": a["id"], "guest": a.get("account")}
+                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
+                     "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
         else:
             t = m.get("temp") or {}
@@ -592,7 +596,7 @@ class Platform:
             path = t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
-                     "effort": t.get("effort"), "guest": m.get("account")}
+                     "effort": t.get("effort"), "guest": viewer}
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
@@ -614,7 +618,7 @@ class Platform:
         cid = "w-" + uuid.uuid4().hex[:10]
         rec = {"type": "p2p", "created": registry.now(), "last_active": registry.now()}
         account = account or (self.chats().get(parent) or {}).get("account") if parent else account
-        if account and not agent:             # 共享电脑上访客的临时对话（#154）；Agent 的对话跟着 Agent
+        if account:                           # 共享电脑上访客开的对话（#154）
             rec["account"] = account
         if agent:
             if not agents.get(agent):
@@ -1429,8 +1433,8 @@ def _handler(pf):
             from urllib.parse import unquote
             name = unquote(self.headers.get("X-Account-Name") or "")
             try:
-                share.remember(pf, acct, name, self.headers.get("X-Account-Codex") == "1")
-                share.check(pf, acct, name, method, path, q, body)
+                share.remember(pf, acct, name, share.share_of(self.headers))
+                share.check(pf, acct, method, path, q, body)
             except share.Denied as e:
                 self._send(403, {"error": str(e)})
                 return acct, True
@@ -1517,7 +1521,7 @@ def _handler(pf):
                 return self._file_part(q)
             routes = {
                 "/api/state": lambda: state(pf, acct) if q.get("local") else pf.peers.merged_state(state(pf)),
-                "/api/dirs": lambda: list_dirs(q.get("path") or "", share.root(pf, acct) if acct else None),
+                "/api/dirs": lambda: list_dirs(q.get("path") or "", share.root(acct) if acct else None),
                 "/api/kb": lambda: {"libs": share.filter_libs(kb_mod.libs(), acct)},
                 "/api/kb/lib": lambda: kb_mod.lib_detail(q.get("id", "")),
                 "/api/kb/entry": lambda: kb_mod.entry(q.get("lib", ""), q.get("id", "")),
@@ -1538,7 +1542,7 @@ def _handler(pf):
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
-                "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
+                "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),

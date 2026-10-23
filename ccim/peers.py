@@ -28,7 +28,7 @@ POLL_WAIT = 20                                # 长轮询最多挂这么久
 ONLINE_WINDOW = 45                            # 这么久没来轮询就算离线
 SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
-PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Account-Codex")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
+PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Account-Share")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
 OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
@@ -240,11 +240,11 @@ class Peers:
                     if account is None or not self.server_hub or self.owner_of(k) == account]
             if self.server_hub and account is not None:
                 for m in out:             # 主人：这台共享给了谁，各自能不能用 Codex
-                    m["shared_to"] = list(self.nodes[m["id"]].get("shared") or [])
-                    m["share_opts"] = dict(self.nodes[m["id"]].get("share_opts") or {})
+                    m["shares"] = dict(self.nodes[m["id"]].get("shares") or {})
                 if not own:               # 别的账号共享给它的（#154）
-                    out += [{"id": k, "name": v["name"], "hub": False, "shared": True} for k, v in self.nodes.items()
-                            if self.owner_of(k) != account and account in (v.get("shared") or [])]
+                    out += [{"id": k, "name": v["name"], "hub": False, "shared": True, "share": v["shares"][account]}
+                            for k, v in self.nodes.items()
+                            if self.owner_of(k) != account and account in (v.get("shares") or {})]
         else:
             out = [dict(m) for m in self.machines_from_hub] or \
                 ([] if self.hub.get("server") else [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True}]) + \
@@ -313,28 +313,24 @@ class Peers:
     def guest_of(self, mid, account):
         """服务器上的总控：account 用 mid 是作为访客（别人共享给它的），是就返回 True。"""
         return bool(self.server_hub and account and self.owner_of(mid) != account
-                    and account in ((self.nodes.get(mid) or {}).get("shared") or []))
+                    and account in ((self.nodes.get(mid) or {}).get("shares") or {}))
 
-    def share(self, mid, account, on, codex=None):
-        """共享给 account（on）或取消；codex：对方能不能用 Codex（None 不改）。"""
+    def share(self, mid, account, opts):
+        """主人给 account 在 mid 上开的权限（hubserver.clean_share 的结果）；None = 不共享。"""
         with self.lock:
             n = self.nodes.get(mid)
             if not n:
                 raise ValueError("没有这台电脑。")
-            s = [a for a in n.get("shared") or [] if a != account] + ([account] if on else [])
-            if s:
-                n["shared"] = s
+            sh = n.setdefault("shares", {})
+            if opts:
+                sh[account] = opts
             else:
-                n.pop("shared", None)
-            opts = n.setdefault("share_opts", {})
-            if not on:
-                opts.pop(account, None)
-            elif codex is not None:
-                opts[account] = dict(opts.get(account) or {}, codex=bool(codex))
-            if not opts:
-                n.pop("share_opts", None)
+                sh.pop(account, None)
+            if not sh:
+                n.pop("shares", None)
             _save("peers.json", self.nodes)
             self.dirty.add(mid)
+            self.dirty.add(f"{mid}|{account}")
         self._emit_machines()
         return {}
 
@@ -439,7 +435,7 @@ class Peers:
                  and key(m["id"]) not in self.refreshing]
         for m in now_:
             if m["id"] in self.dirty:     # 那台电脑有了变化：访客那份也要重取（编号本身就是主人那份的键）
-                self.dirty.update(f"{m['id']}|{a}" for a in (self.nodes.get(m["id"]) or {}).get("shared") or [])
+                self.dirty.update(f"{m['id']}|{a}" for a in (self.nodes.get(m["id"]) or {}).get("shares") or {})
             self.dirty.discard(key(m["id"]))
         threads = [threading.Thread(target=fetch, args=(m,)) for m in now_]
         for t in threads:
@@ -500,11 +496,12 @@ class Peers:
         return ok
 
     def guest_headers(self, account, mid=None):
-        """访客的请求转给共享电脑时带的头：账号编号、名字（URL 编码，头里只能放 ASCII）、主人让不让它用 Codex。"""
+        """访客的请求转给共享电脑时带的头：账号编号、名字、主人给它的权限（URL 编码，头里只能放 ASCII）。"""
         from urllib.parse import quote
         name = (self.pf.account(account) or {}).get("name") if hasattr(self.pf, "account") else ""
-        codex = (((self.nodes.get(mid) or {}).get("share_opts") or {}).get(account) or {}).get("codex")
-        return {"X-Account": account, "X-Account-Name": quote(name or ""), "X-Account-Codex": "1" if codex else "0"}
+        opts = ((self.nodes.get(mid) or {}).get("shares") or {}).get(account) or {}
+        return {"X-Account": account, "X-Account-Name": quote(name or ""),
+                "X-Account-Share": quote(json.dumps(opts, ensure_ascii=False))}
 
     def agent_home(self, aid):
         """这个 Agent 在哪台电脑上（本机的直接认；别的电脑看上次汇总的，没有就现问一遍）。找不到返回 None。"""

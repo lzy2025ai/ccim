@@ -1,4 +1,4 @@
-"""共享电脑（#154）：访客经总控转来的请求只能动自己的东西，主人看不到访客的；不读真实登记表、不碰真实主目录。"""
+"""共享电脑（#154）：访客经总控转来的请求只能动自己的、和主人共享给它的，主人看不到访客的；不读真实登记表、不碰真实主目录。"""
 import asyncio
 import http.client
 import json
@@ -43,12 +43,14 @@ class ShareTests(unittest.TestCase):
         self.port = self.server.server_address[1]
         self.owner_agent = agents.create(name="主人的助手")["id"]
 
-    def req(self, method, path, body=None, guest="a1", codex=False):
+    def req(self, method, path, body=None, guest="a1", codex=False, agents_=(), own=True, folder=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
         h = {"X-CCIM": "1", "Host": f"127.0.0.1:{self.port}", "Content-Type": "application/json"}
         if guest:
+            from urllib.parse import quote
+            opts = {"agents": list(agents_), "own": own, "codex": codex, "dir": folder}
             h.update({"X-From-Peer": "1", "X-Account": guest, "X-Account-Name": "%E5%AE%B6%E4%BA%BA",
-                      "X-Account-Codex": "1" if codex else "0"})
+                      "X-Account-Share": quote(json.dumps(opts))})
         c.request(method, path, body=json.dumps(body).encode() if body is not None else None, headers=h)
         r = c.getresponse()
         out = r.status, json.loads(r.read() or b"{}")
@@ -65,13 +67,13 @@ class ShareTests(unittest.TestCase):
         a = agents.get(aid)
         self.assertEqual(a["account"], "a1")
         self.assertFalse(a.get("chrome"))
-        self.assertEqual(a["dir"], os.path.join(self.home, "ccim共享", "家人", "写作"))
+        self.assertEqual(a["dir"], os.path.join(self.home, ".ccim", "shared", "家人", "写作"))
         st, r = self.req("POST", "/api/agent/save", {"id": aid, "fields": {"name": "写作", "dir": "/tmp"}})
         self.assertEqual(st, 403)
         st, r = self.req("POST", "/api/agent/save", {"id": aid, "fields": {"name": "写作", "account": None}})
         self.assertEqual(agents.get(aid)["account"], "a1")
         st, r = self.req("GET", "/api/dirs?path=/")          # 文件夹只能在自己的里面选
-        self.assertEqual(r["path"], os.path.join(self.home, "ccim共享", "家人"))
+        self.assertEqual(r["path"], os.path.join(self.home, ".ccim", "shared", "家人"))
         self.assertIsNone(r["parent"])
 
     def test_state_split(self):
@@ -173,22 +175,22 @@ class ShareTests(unittest.TestCase):
         """访客的会话：主目录里只留专属文件夹、平台 Skill、它自己的知识库；Codex 不给用。"""
         aid = self.guest_agent()
         os.makedirs(os.path.join(self.home, "Desktop"))
-        os.makedirs(os.path.join(self.home, "ccim共享", "别人"))
+        os.makedirs(os.path.join(self.home, ".ccim", "shared", "别人"))
         _, mine = self.req("POST", "/api/kb/lib/save", {"name": "我的"})
         _, other = self.req("POST", "/api/kb/lib/save", {"name": "主人的"}, guest=None)
         sb, rules = share.fence("a1")
         self.assertFalse(sb["allowUnsandboxedCommands"])
         deny = " ".join(rules["permissions"]["deny"])
-        for p in ("Desktop", "ccim共享/别人", f".ccim/kb/{other['id']}", ".ccim/agents.json"):
+        for p in ("Desktop", ".ccim/shared/别人", f".ccim/kb/{other['id']}", ".ccim/agents.json"):
             self.assertIn(f"Read(/{os.path.join(self.home, p)}/**)", deny, p)
-        for p in ("ccim共享/家人", f".ccim/kb/{mine['id']}", ".ccim/skills"):
+        for p in (".ccim/shared/家人", f".ccim/kb/{mine['id']}", ".ccim/skills", ".ccim", ".ccim/shared"):
             self.assertNotIn(os.path.join(self.home, p) + ")", deny, p)
         self.assertTrue(share.may_send("a1", os.path.join(agents.get(aid)["dir"], "a.txt")))
         self.assertFalse(share.may_send("a1", os.path.join(self.home, "Desktop", "a.txt")))
         self.assertEqual(self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "c", "base": "codex"}})[0], 403)
         _, t = self.req("POST", "/api/chat/new", {"temp": {"base": "codex"}})
         self.assertEqual(self.pf.chats()[t["id"]]["temp"]["base"], "claude")
-        self.assertEqual(self.pf.chats()[t["id"]]["temp"]["dir"], os.path.join(self.home, "ccim共享", "家人"))
+        self.assertEqual(self.pf.chats()[t["id"]]["temp"]["dir"], os.path.join(self.home, ".ccim", "shared", "家人"))
         # 主人共享时勾了「也能用 Codex」
         with patch("ccim.web._codex", lambda: True):
             st, r = self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "c", "base": "codex"}}, codex=True)
@@ -198,6 +200,58 @@ class ShareTests(unittest.TestCase):
         self.assertEqual(self.pf.chats()[t["id"]]["temp"]["base"], "codex")
         self.req("GET", "/api/state?local=1")                # 主人又关掉了：下一次来就记下
         self.assertFalse(share.codex_ok("a1"))
+
+    def test_owner_lends_agents(self):
+        """主人共享给它的 Agent：能开自己的对话，改不了、删不了、接不了飞书微信；两边的对话互相看不到。"""
+        lend = dict(agents_=[self.owner_agent])
+        _, g = self.req("GET", "/api/state?local=1", **lend)
+        self.assertEqual([(a["id"], a.get("shared")) for a in g["agents"]], [(self.owner_agent, True)])
+        _, o_chat = self.req("POST", "/api/chat/new", {"agent": self.owner_agent}, guest=None)
+        st, r = self.req("POST", "/api/chat/new", {"agent": self.owner_agent}, **lend)
+        self.assertEqual(st, 200)
+        cid = r["id"]
+        self.assertEqual(self.pf.chats()[cid]["account"], "a1")
+        for path, body in (("/api/agent/save", {"id": self.owner_agent, "fields": {"name": "x"}}),
+                           ("/api/agent/delete", {"id": self.owner_agent}), ("/api/agent/pin", {"id": self.owner_agent, "on": True}),
+                           ("/api/agent/connect", {"id": self.owner_agent, "channel": "weixin"})):
+            self.assertEqual(self.req("POST", path, body, **lend)[0], 403, path)
+        _, d = self.req("GET", f"/api/agent?id={self.owner_agent}", **lend)
+        self.assertEqual([c["id"] for c in d["chats"]], [cid])
+        self.assertEqual(d["channels"], [])
+        _, d = self.req("GET", f"/api/agent?id={self.owner_agent}", guest=None)
+        self.assertEqual([c["id"] for c in d["chats"]], [o_chat["id"]])
+        _, o = self.req("GET", "/api/state?local=1", guest=None)
+        self.assertNotIn(cid, [c["id"] for c in o["chats"]])
+        b = self.pf._bridge(cid)                              # 访客的对话单独一个 Bridge：圈住、不给看别的对话
+        self.assertEqual((b.entry["guest"], b.entry["lent"]), ("a1", True))
+        self.assertIsNot(b, self.pf._bridge(o_chat["id"]))
+        self.assertFalse(self.pf._bridge(o_chat["id"]).entry["guest"])
+        self.assertEqual(self.req("POST", "/api/chat/new", {"agent": self.owner_agent})[0], 403)   # 主人取消共享了
+        self.assertEqual(self.req("GET", f"/api/chat?id={cid}")[0], 200)     # 之前的对话还是它的
+
+    def test_owner_settings(self):
+        """主人关掉「自己建 Agent」、指定共享文件夹。"""
+        self.assertEqual(self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "x"}}, own=False)[0], 403)
+        d = os.path.join(self.home, "家人的地方")
+        self.req("GET", "/api/state?local=1", folder=d)
+        self.assertEqual(share.root("a1"), d)
+        self.req("GET", "/api/state?local=1", folder=self.home)   # 主目录不行：用默认的
+        self.assertEqual(share.root("a1"), os.path.join(self.home, ".ccim", "shared", "家人"))
+
+    def test_fence_keeps_lent_agent_dir(self):
+        """共享的 Agent 在主人的项目里干活：那个目录放行，旁边的照样拦。"""
+        proj = os.path.join(self.home, "Desktop", "proj")
+        os.makedirs(proj)
+        os.makedirs(os.path.join(self.home, "Desktop", "secret"))
+        open(os.path.join(self.home, "Desktop", "note.txt"), "w").close()
+        self.req("GET", "/api/state?local=1")
+        _, rules = share.fence("a1", proj)
+        deny = rules["permissions"]["deny"]
+        self.assertIn(f"Read(/{self.home}/Desktop/secret/**)", deny)
+        self.assertIn(f"Read(/{self.home}/Desktop/note.txt)", deny)
+        self.assertNotIn(f"Read(/{self.home}/Desktop/**)", deny)
+        self.assertFalse(any("Desktop/proj" in r for r in deny))
+        self.assertTrue(share.may_send("a1", os.path.join(proj, "a.txt"), proj))
 
     def test_header_ignored_without_peer(self):
         """本机网页（没经过总控）带 X-Account 不算访客。"""

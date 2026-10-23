@@ -194,18 +194,22 @@
   其余接口按 X-Machine 转发；开机密码、选文件夹、在访达里显示一律不经过服务器。网页里 S.hub 时每台电脑都按「别的电脑」处理。
   电脑那边 `ccim join https://IP 配对码`（hub.json 里 server=true，_conn 走 HTTPS、用 certifi 的根证书）。
   部署（服务器地址等记在本机，不写进仓库）：~/ccim-hub/venv（pip install --no-deps 源码 + qrcode、certifi），systemd ccim-hub，nginx sites-available/ccim-hub
-- 账号与共享电脑（#154，只在服务器总控上）：hubserver 的 accounts.json，主人 OWNER（老的 auth.json 迁过来），主人在「设置 → 账号」开账号
-  （一次性邀请链接，`_setup_target`），登录不填账号名、按密码认账号。电脑归配对码所属的账号（peers.json 的 account，没有就是主人）；
-  `Peers.machines(account)`、`same_account` 让网页、转交、推送、/peer/call、fanout 都只在同一个账号内。主人把电脑共享给某个账号
-  （nodes 的 shared，`guest_of`）：转过去的请求带 X-Account / X-Account-Name（浏览器带的不传），merged_state 按「电脑|账号」分开缓存。
-  `ccim/share.py`：电脑那边按 X-Account（只认 X-From-Peer）当访客：白名单接口（GUEST_GET / GUEST_POST）、`check` 查东西是不是它的并改写
-  工作目录（~/ccim共享/<名字>/ 里）；Agent 记 account，对话跟着 Agent（临时对话记 meta 的 account），定时任务跟着 target，知识库记 _lib.json；
-  state 按人过滤（主人看不到访客的）；推送 `tag` 带 _a，总控 `visible` 只推给那个账号、fanout 不转给别的电脑。
-  访客的 Agent 能接自己的飞书、微信（扫码的是它，机器人认它当主人），渠道管理按 `procs_of` 只管自己的，那些对话（x:）跟着 Agent 归它。
-  访客的会话（网页、飞书、微信，`session.guest_of` 按 agent_id 认）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；
-  Codex 默认不给，主人共享时可以打开（nodes 的 share_opts → X-Account-Codex → 平台 state guests 的 codex），用时强制 -s workspace-write（只拦写不拦读，界面上提示）；
-  `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录下除 ccim共享/<自己>、~/.ccim 的 kb（自己的库）和 skills 以外的一切，
-  send_file 只发专属文件夹里的。仍以电脑主人的系统用户运行（防越界，不等于单独的系统用户）
+- 账号与共享电脑（#154，只在服务器总控上）：hubserver 的 accounts.json，主人 OWNER（老的 auth.json 迁过来，账号名 admin，登录时留空也算主人，
+  密码 + 动态码）。主人在「设置 → 账号」建账号（`account_save`）：账号名 + 密码（默认 `new_password` 生成，只显示一次）、有效期、
+  动态码可选（要的话给对方一次性链接绑验证器，`_setup_target` / setup_finish 的 bind）、停用。登录：账号名 + 密码，要动态码的回 need_code。
+  电脑归配对码所属的账号（peers.json 的 account，没有就是主人）；`Peers.machines(account)`、`same_account` 让网页、转交、推送、/peer/call、
+  fanout 都只在同一个账号内。主人按电脑给某个账号开权限：nodes 的 shares[账号] = {agents 共享哪些 Agent, own 能不能自己建, codex, dir 共享文件夹}
+  （`clean_share`、`guest_of`），转过去的请求带 X-Account / X-Account-Name / X-Account-Share（浏览器带的不传），merged_state 按「电脑|账号」分开缓存；
+  那台电脑还是旧版本（给访客的 state 里没有 guest）时不转。
+  `ccim/share.py`：电脑那边按 X-Account（只认 X-From-Peer）当访客，每次来 `remember` 记到平台 state 的 guests（飞书、微信的进程读这里）；
+  白名单接口（GUEST_GET / GUEST_POST），`check` 查东西是不是它的、能不能用（`_mine_agent` 自己建的 / `_usable_agent` 加上共享的），并改写工作目录
+  （共享文件夹默认 ~/.ccim/shared/<账号名>，主人可以指定）。归属：Agent 记 account；对话 meta 的 account（没有就跟着 Agent；@ 子对话跟主对话，
+  定时任务的对话跟任务）；定时任务记 account；知识库记 _lib.json（`owner_map` 缓存）。state、Agent 详情按人过滤（主人看不到访客的）；推送 `tag` 带 _a，
+  总控 `visible` 只推给那个账号、fanout 不转给别的电脑。共享的 Agent：访客的对话单独一个 Bridge（key 加 #账号，entry lent），改不了设置、不能接飞书微信，
+  会话里不给 list_chats / read_chat / send_to_chat；主人那边的 list_chats 也不列访客的会话。访客自己的 Agent 能接自己的飞书、微信（渠道按 `procs_of` 只管自己的）。
+  访客的会话（`session.guest_of`）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；Codex 主人勾了才给，用时强制 -s workspace-write（只拦写不拦读，界面上提示）；
+  `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录里除 `allowed_dirs`（共享文件夹、自己 Agent 的目录、这个会话的工作目录、
+  ~/.ccim/skills、自己的知识库）以外的一切，`_deny_except` 一层层往下只拦旁边的；send_file 只发这些地方的。仍以电脑主人的系统用户运行（防越界）
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

@@ -1381,7 +1381,9 @@ const agentOf = id => S.agents.find(a => a.id === id);
 const multi = () => (S.machines || []).length > 1;
 const machineOf = id => (S.machines || []).find(m => m.id === id);
 const sharedM = id => !!(machineOf(id) || {}).shared;     // 别人共享给我的电脑（#154）：只能用自己的那块
-const noCodex = id => sharedM(id) && !(((S.machine_info || {})[id] || {}).guest || {}).codex;   // 主人没让用 Codex
+const guestOf = id => ((S.machine_info || {})[id] || {}).guest || {};
+const noCodex = id => sharedM(id) && !guestOf(id).codex;              // 主人没让用 Codex
+const canCreate = id => !sharedM(id) || guestOf(id).own !== false;     // 主人没让在这台上自己建 Agent
 let ctxMachine = null;            // 当前打开的东西在哪台电脑
 function ownerOf(id){
   if (!id) return null;
@@ -3472,7 +3474,7 @@ function machineSections(items, card, addLabel, addHref){
     if (machineTab === "all" && multi() && !rows.length) return "";
     const head = machineTab === "all" && multi() ? `<div class="sec-head"><i class="mdot ${m.online ? "" : "off"}"></i><b>${esc(m.name)}</b>${rows.length} 个${m.online ? "" : `<span class="off-note">，离线</span>`}</div>`
       : !m.online ? `<div class="sec-head"><span class="off-note">这台电脑离线，连上后才能对话、派活。</span></div>` : "";
-    const add = (machineTab !== "all" || !multi()) && m.online ? `<button class="ccard add" onclick="${addHref(m.id)}">${ICON.plus}${esc(addLabel(m))}</button>` : "";
+    const add = (machineTab !== "all" || !multi()) && m.online && (addHref !== newOnAgents || canCreate(m.id)) ? `<button class="ccard add" onclick="${addHref(m.id)}">${ICON.plus}${esc(addLabel(m))}</button>` : "";
     return `<div class="sec-m">${head}<div class="cgrid">${rows.map(card).join("")}${add}</div></div>`;
   }).join("");
 }
@@ -3480,7 +3482,7 @@ let cardFilter = "";
 function overviewHtml(title, items, body, newJs){
   return `<div class="overview"><div class="ov-head"><h1>${title}</h1><span class="grow"></span>
       <label class="search">${ICON.search}<input placeholder="搜索${title}" aria-label="搜索${title}" value="${esc(cardFilter)}" oninput="cardFilter=this.value.toLowerCase();route();const i=document.querySelector('.ov-head input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></label>
-      <button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title === "Agent" ? " Agent" : title}</button></div>
+      ${newJs ? `<button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title === "Agent" ? " Agent" : title}</button>` : ""}</div>
     ${machineTabs(items)}<div class="ov-body">${body}</div></div>`;
 }
 function agentCard(a){
@@ -3488,9 +3490,9 @@ function agentCard(a){
   const st = off ? `<span class="status"><i></i>电脑离线</span>` : a.busy ? `<span class="status busy"><i></i>${esc(a.doing || "干活中")}</span>` : `<span class="status on"><i></i>空闲</span>`;
   const ch = (a.channels || []).map(c => `<span class="tag ${c.kind === "weixin" ? "weixin" : "feishu"}">${c.kind === "weixin" ? "微信" : "飞书"}</span>`).join("");
   return `<a class="ccard ${off ? "off" : ""}" href="#/agents/${encodeURIComponent(a.id)}" oncontextmenu="agentMenu(event,${q(a.id)})">
-    <button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();agentMenu(event,${q(a.id)})">${ICON.more}</button>
-    <button class="pin ${a.pinned ? "on" : ""}" aria-label="${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="event.preventDefault();event.stopPropagation();pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>
-    <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${ch}</div></div></div>
+    ${a.shared ? "" : `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();agentMenu(event,${q(a.id)})">${ICON.more}</button>
+    <button class="pin ${a.pinned ? "on" : ""}" aria-label="${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="event.preventDefault();event.stopPropagation();pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>`}
+    <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${a.shared ? `<span class="tag">共享</span>` : ""}${ch}</div></div></div>
     <div class="role">${esc(a.role || "还没写角色说明")}</div>
     <span class="path">${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}</span>
     <div class="foot"><span class="grow">${waitOf(a.id) ? `<span class="wait"><i></i>${waitOf(a.id)} 个对话等你</span>` : st}</span><span>${when(a.last_active)}</span>${off ? "" : `<span class="go">对话</span>`}</div></a>`;
@@ -3499,10 +3501,11 @@ function renderAgentCards(listOnly){
   if (listOnly) return;
   const rows = S.agents.filter(a => !cardFilter || a.name.toLowerCase().includes(cardFilter))
     .sort((x, y) => (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || ((y.last_active || "") > (x.last_active || "") ? 1 : -1));
-  const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, mid => `newOn('agents',${q(mid)})`)
+  const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
     : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p></div>`;
-  $("#main").innerHTML = overviewHtml("Agent", S.agents, body, "newOn('agents')");
+  $("#main").innerHTML = overviewHtml("Agent", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
 }
+function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
 function newOn(view, mid){
   const m = mid || (machineTab !== "all" && (machineOf(machineTab) || {}).online ? machineTab : S.me);
   ctxMachine = m;
@@ -3513,7 +3516,7 @@ async function pinAgent(id, on){ await act(() => api("/api/agent/pin", {id, on})
 function agentMenu(e, id){
   e.preventDefault(); e.stopPropagation();
   const a = agentOf(id) || (agentSide && agentSide.id === id ? agentSide.a : null);
-  if (!a) return;
+  if (!a || a.shared) return;
   const at = e.type === "contextmenu"
     ? {stopPropagation(){}, currentTarget: {getBoundingClientRect: () => ({left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0})}}
     : e;
@@ -3564,7 +3567,7 @@ function renderAgentSide(){
     <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
     <div class="side-card">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div>
       <div class="sub">${[BASE[a.base || "claude"], ...ch, multi() && m ? m.name : ""].filter(Boolean).join(" · ")}</div></div>
-      <button class="icon-btn" aria-label="更多操作" title="更多操作" onclick="agentMenu(event,${q(id)})">${ICON.more}</button></div>
+      ${a.shared ? "" : `<button class="icon-btn" aria-label="更多操作" title="更多操作" onclick="agentMenu(event,${q(id)})">${ICON.more}</button>`}</div>
     <button class="side-new" onclick="startAgent(${q(id)})">${ICON.plus}和它开个新对话</button>
     <div class="scroll">${agentSide.error ? `<p class="muted" style="padding:10px">${esc(agentSide.error)}</p>` : rows.length ? chatSections(rows, id)
       : `<p class="muted" style="padding:10px">还没有对话。</p>`}</div>`;
@@ -3589,11 +3592,11 @@ async function renderAgent(id){
       <div class="grow"><h2>${esc(a.name)}</h2><div class="role">${esc(a.role || "还没写角色说明")}</div>
         <div class="row" style="margin-top:8px">${stat}<span class="tag">${BASE[a.base || "claude"]}</span>${mtag(ownerOf(a.id))}${a.dir ? `<span class="path">${esc(tilde(a.dir))}</span>` : `<span class="muted" style="font-size:12px">没有工作目录，用自己的工作区</span>`}</div></div>
     </div>
-    <div class="tabs" role="tablist">${[["overview", "概览"], ["edit", "设置"], ["skills", "Skill"]].map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';agentSk=null;renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
-    ${agentTab === "skills" ? `<div id="agent-sk"></div>` : agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
+    <div class="tabs" role="tablist">${(a.shared ? [["overview", "概览"], ["skills", "Skill"]] : [["overview", "概览"], ["edit", "设置"], ["skills", "Skill"]]).map(([k, n]) => `<button class="${agentTab === k ? "on" : ""}" onclick="agentTab='${k}';agentSk=null;renderAgent(${q(a.id)})">${n}</button>`).join("")}</div>
+    ${agentTab === "skills" ? `<div id="agent-sk"></div>` : agentTab === "edit" && !a.shared ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
       <div class="sect"><h3>在哪能找到它</h3>
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
-        ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
+        ${a.shared ? "" : channelHtml(a, "feishu") + channelHtml(a, "weixin")}
       </div>
       <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `${sharedM(ownerOf(a.id)) ? "" : `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd>`}<dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
     </div>`}</div>`;
@@ -3704,7 +3707,7 @@ function formHtml(a){
   fd.machine = (a && ownerOf(a.id)) || fd.machine || ctxMachine || S.me;
   ctxMachine = fd.machine;
   const hasCodex = ((S.machine_info || {})[fd.machine] || {}).codex ?? S.codex;
-  const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => m.online).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), fd.machine,
+  const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => m.online && canCreate(m.id)).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), fd.machine,
     v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if (fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) fd.base = "claude"; redrawForm(); })}</div>` : "";
   fd._sealSet = fd._sealSet ?? !!(a && a.seal);
   return `<div class="form">${machineRow}
@@ -3785,84 +3788,141 @@ function renderSettingsList(){
     ${isOwner() ? `<a class="item ${onAccounts ? "on" : ""}" href="#/settings/accounts" style="text-decoration:none;color:inherit"><span class="t"><span class="title">账号</span><span class="sub">给别人开账号</span></span></a>` : ""}
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc([S.account && !S.account.owner ? S.account.name : "", S.hub.url || ""].filter(Boolean).join(" · "))}</span></span></button>` : ""}</div>`;
 }
-// ---- 账号（#154）：服务器上，主人给别人开账号 ----
+// ---- 账号（#154）：服务器上，主人建账号、按电脑开权限 ----
 const isOwner = () => !!(S.hub && S.account && S.account.owner);
-let accDays = 0;
-const ACC_STATE = {ok: ["正常", "on"], invited: ["等对方设置登录", ""], disabled: ["已停用", ""], expired: ["已到期", ""]};
+const ACC_STATE = {ok: ["正常", "on"], disabled: ["已停用", ""], expired: ["已到期", "err"]};
+const ACC_DAYS = [[0, "一直有效"], [7, "7 天"], [30, "30 天"], [90, "90 天"], [365, "1 年"]];
+let ACC = {list: [], me: "admin"}, AE = null, accDone = null;   // AE：正在编辑的账号；accDone：刚建好 / 刚改的密码，只显示这一次
+const accDay = t => new Date(t * 1000).toLocaleDateString("zh-CN", {year: "numeric", month: "numeric", day: "numeric"});
+const ownMachines = () => (S.machines || []).filter(m => !m.shared);
+async function loadAccounts(){ const r = await api("/api/accounts"); ACC = {list: r.accounts, me: r.me}; }
 async function renderAccounts(){
-  const days = [[0, "一直有效"], [30, "30 天"], [7, "7 天"]];
-  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>账号</h2>
-    <div class="role">各个账号用各自的电脑和 Agent，互相看不到。也可以把你的电脑共享给某个账号。</div></div></div>
-    <div class="pane"><div class="sect" id="acc-list"><div class="loading">…</div></div>
-      <div class="sect"><h3>开账号</h3>
-        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
-          <input id="acc-name" class="input" maxlength="20" placeholder="名字" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')inviteAccount()">
-          <div class="seg" role="radiogroup">${days.map(([v, l]) => `<button role="radio" aria-checked="${accDays === v}" class="${accDays === v ? "on" : ""}" onclick="accDays=${v};this.parentNode.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b===this);b.setAttribute('aria-checked',b===this)})">${l}</button>`).join("")}</div>
-          <button class="btn primary" onclick="inviteAccount()">生成邀请链接</button></div>
-        <div id="acc-link"></div></div></div></div>`;
-  let r;
-  try { r = await api("/api/accounts"); } catch (e) { $("#acc-list").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-  const day = t => new Date(t * 1000).toLocaleDateString("zh-CN", {month: "numeric", day: "numeric"});
-  $("#acc-list").innerHTML = r.accounts.length ? r.accounts.map(a => {
-    const [label, cls] = ACC_STATE[a.state] || [a.state, ""];
-    const shared = (a.shared || []).map(id => (machineOf(id) || {}).name).filter(Boolean);
-    const sub = [a.machines.length ? a.machines.join("、") : "", shared.length ? `共享了 ${shared.join("、")}` : "", !a.machines.length && !shared.length ? "还没有电脑" : "", a.expires && a.state !== "expired" ? `${day(a.expires)} 到期` : ""].filter(Boolean).join(" · ");
-    return `<div class="mem" style="padding:10px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${esc(sub)}</span></span>
-      <span class="status ${cls}" style="margin-right:12px"><i></i>${label}</span>
-      <button class="link" onclick="accountMenu(${q(a.id)})">管理</button></div>`;
-  }).join("") : `<p class="muted">还没有别的账号。</p>`;
-  ACC = r.accounts;
+  if (current.sub) return renderAccountEdit(current.sub);
+  AE = accDone = null;
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>账号</h2></div>
+      <button class="btn primary" onclick="location.hash='#/settings/accounts/new'">${ICON.plus}新建账号</button></div>
+    <div class="pane"><div class="sect" id="acc-list"><div class="loading">…</div></div></div></div>`;
+  try { await loadAccounts(); } catch (e) { $("#acc-list").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  $("#acc-list").innerHTML = `<div class="mem" style="padding:10px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(ACC.me)}<span class="muted" style="font-weight:400">（你）</span></span><span class="sub">所有电脑</span></span>
+      <button class="link" onclick="ownerAccount()">改账号名、密码</button></div>`
+    + (ACC.list.length ? ACC.list.map(a => {
+      const [label, cls] = ACC_STATE[a.state] || [a.state, ""];
+      const ms = Object.keys(a.shares || {}).map(id => (machineOf(id) || {}).name).filter(Boolean);
+      const sub = [ms.length ? `能用 ${ms.join("、")}` : "还没开放电脑", a.machines.length ? `自己的电脑 ${a.machines.join("、")}` : "",
+                   a.expires ? `${accDay(a.expires)} 到期` : ""].filter(Boolean).join(" · ");
+      return `<a class="mem mlink" style="padding:10px 0;text-decoration:none;color:inherit" href="#/settings/accounts/${encodeURIComponent(a.id)}">
+        <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${esc(sub)}</span></span>
+        <span class="status ${cls}" style="margin-right:4px"><i></i>${label}</span>${ICON.chev}</a>`;
+    }).join("") : `<p class="muted" style="margin-top:12px">还没有别的账号。</p>`);
 }
-let ACC = [];
-function showInvite(name, r){
-  $("#acc-link").innerHTML = `<p style="margin-top:14px">把这个链接发给${esc(name)}，${r.days} 天内打开设置登录，只能用一次：</p>
-    <div class="row" style="margin:6px 0"><pre style="flex:1;margin:0;padding:8px 10px;background:var(--sunk);border-radius:8px;white-space:pre-wrap;word-break:break-all">${esc(r.link)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(r.link)});toast('已复制')">复制</button></div>
-    <p class="muted" style="font-size:13px">设置时要用手机上的验证器 App（如 Google Authenticator、微软验证器）扫码。</p>`;
+async function renderAccountEdit(id){
+  const isNew = id === "new";
+  if (!AE || AE.id !== id) {
+    $("#main").innerHTML = `<div class="loading">…</div>`;
+    try { await loadAccounts(); } catch (e) { return toast(e.message); }
+    const a = isNew ? null : ACC.list.find(x => x.id === id);
+    if (!isNew && !a) { location.hash = "#/settings/accounts"; return; }
+    AE = {id, name: a ? a.name : "", password: isNew ? genPassword() : "", days: null, expires: a ? a.expires : null,
+          totp: a ? a.totp : false, disabled: a ? a.state === "disabled" : false, shares: JSON.parse(JSON.stringify(a ? a.shares || {} : {}))};
+  }
+  const ms = ownMachines();
+  const exp = AE.days === null ? (AE.expires ? `${accDay(AE.expires)} 到期` : "") : "";
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow">
+      <a class="crumb" href="#/settings/accounts">账号</a><h2>${isNew ? "新建账号" : esc(AE.name)}</h2></div></div>
+    <div class="pane">${accDone && accDone.id === id ? accDoneHtml() : ""}<div class="form">
+      <label for="ae-name">账号名</label><input id="ae-name" class="input" maxlength="20" value="${esc(AE.name)}" autocapitalize="off" oninput="AE.name=this.value">
+      <label for="ae-pw">密码</label><div><div class="row" style="gap:8px">
+        <input id="ae-pw" class="input" style="flex:1;font-family:var(--mono,monospace)" value="${esc(AE.password)}" placeholder="${isNew ? "" : "不改就留空"}" autocomplete="new-password" oninput="AE.password=this.value">
+        <button class="btn" onclick="AE.password=genPassword();$('#ae-pw').value=AE.password">${isNew ? "换一个" : "生成新密码"}</button></div>
+        <div class="help">${isNew ? "可以改成你想要的，至少 8 位。" : "改了密码，对方要用新密码重新登录。"}</div></div>
+      <label>有效期</label><div><div class="seg" role="radiogroup">${ACC_DAYS.map(([v, l]) => { const on = AE.days === null ? (v === 0 && !AE.expires) : AE.days === v;
+          return `<button role="radio" aria-checked="${on}" class="${on ? "on" : ""}" onclick="AE.days=${v};renderAccountEdit(AE.id)">${l}</button>`; }).join("")}</div>
+        ${exp ? `<div class="help">${exp}</div>` : AE.days ? `<div class="help">从今天算起，${accDay(Date.now() / 1000 + AE.days * 86400)} 到期</div>` : ""}</div>
+      <label>动态码</label><div><div class="seg" role="radiogroup">${[[false, "不需要"], [true, "需要"]].map(([v, l]) =>
+          `<button role="radio" aria-checked="${AE.totp === v}" class="${AE.totp === v ? "on" : ""}" onclick="AE.totp=${v};renderAccountEdit(AE.id)">${l}</button>`).join("")}</div>
+        <div class="help">${AE.totp ? "登录时还要输手机验证器上的动态码。保存后给对方一个链接去绑验证器。" : "只用账号和密码登录。"}</div></div>
+      ${isNew ? "" : `<label>状态</label><div><div class="seg" role="radiogroup">${[[false, "正常"], [true, "停用"]].map(([v, l]) =>
+          `<button role="radio" aria-checked="${AE.disabled === v}" class="${AE.disabled === v ? "on" : ""}" onclick="AE.disabled=${v};renderAccountEdit(AE.id)">${l}</button>`).join("")}</div></div>`}
+    </div>
+    <div class="sect" style="margin-top:22px"><h3>能用哪些电脑</h3>${ms.length ? ms.map(accMachineHtml).join("") : `<p class="muted">你还没有加入电脑。</p>`}</div>
+    <div class="row" style="margin-top:6px;gap:10px"><button class="btn primary" onclick="saveAccount()">${isNew ? "建好账号" : "保存"}</button>
+      ${isNew ? "" : `<button class="btn danger" style="margin-left:auto" onclick="deleteAccount()">删除账号</button>`}</div>
+    </div></div>`;
 }
-async function inviteAccount(){
-  const name = $("#acc-name").value.trim();
-  if (!name) { $("#acc-name").focus(); return; }
-  const r = await act(() => api("/api/accounts/invite", {name, days: accDays || null}));
-  await renderAccounts();
-  showInvite(name, r);
+function accMachineHtml(m){
+  const sh = AE.shares[m.id], on = !!sh, mid = q(m.id);
+  const ags = (S.agents || []).filter(a => a.machine === m.id && !a.shared);
+  return `<div class="acc-m" style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0">
+    <div class="mem" style="padding:0"><span class="t" style="flex:1"><span class="title">${esc(m.name)}</span>${m.online ? "" : `<span class="sub">离线</span>`}</span>
+      <div class="seg"><button class="${on ? "" : "on"}" aria-pressed="${!on}" onclick="accShare(${mid},false)">不开放</button><button class="${on ? "on" : ""}" aria-pressed="${on}" onclick="accShare(${mid},true)">开放</button></div></div>
+    ${on ? `<div class="form" style="margin-top:12px">
+      <label>能用的 Agent</label><div>${ags.length ? ags.map(a => { const ck = (sh.agents || []).includes(a.id);
+          return `<button class="acc-ag ${ck ? "on" : ""}" aria-pressed="${ck}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 8px;border-radius:8px;border:1px solid ${ck ? "var(--qing)" : "var(--line)"};background:none;margin:4px 0;cursor:pointer;font:inherit;color:inherit" onclick="accAgent(${mid},${q(a.id)})">
+            ${seal(a, "sm", false)}<span style="flex:1"><div>${esc(a.name)}</div><div class="muted" style="font-size:12px">${esc(a.dir ? tilde(a.dir, m.id) : "自己的工作区")}</div></span>${ck ? `<span class="ck">✓</span>` : ""}</button>`; }).join("")
+          : `<span class="muted">这台电脑上还没有 Agent。</span>`}
+        ${(sh.agents || []).length ? `<div class="help">对方能和这些 Agent 对话，也能让它们修改各自工作目录里的文件；改不了它们的设置。</div>` : ""}</div>
+      <label>自己建 Agent</label><div class="seg">${[[true, "能"], [false, "不能"]].map(([v, l]) => `<button class="${sh.own === v ? "on" : ""}" aria-pressed="${sh.own === v}" onclick="accOpt(${mid},'own',${v})">${l}</button>`).join("")}</div>
+      <label>能用的助手</label><div><div class="seg">${[[false, "只有 Claude Code"], [true, "也能用 Codex"]].map(([v, l]) => `<button class="${!!sh.codex === v ? "on" : ""}" aria-pressed="${!!sh.codex === v}" onclick="accOpt(${mid},'codex',${v})">${l}</button>`).join("")}</div>
+        ${sh.codex ? `<div class="help state-err">用 Codex 时，对方的 Agent 能读这台电脑上的所有文件，包括你的 ChatGPT 登录信息，并且用的是你的 ChatGPT 额度。</div>` : ""}</div>
+      <label for="ae-dir-${esc(m.id)}">共享文件夹</label><div><div class="row" style="gap:8px">
+        <input id="ae-dir-${esc(m.id)}" class="input" style="flex:1" value="${esc(sh.dir || "")}" placeholder="~/.ccim/shared/${esc(AE.name.trim() || "账号名")}" oninput="AE.shares[${mid}].dir=this.value.trim()||null">
+        <button class="btn" ${m.online ? "" : "disabled"} onclick="browseDirs(${mid}, '', p => {AE.shares[${mid}].dir = p; renderAccountEdit(AE.id);})">${ICON.folder}选择…</button></div>
+        <div class="help">对方自己建的 Agent、临时对话都放在这里，Agent 只能读写这里面的文件。</div></div>
+    </div>` : ""}</div>`;
 }
-function accountMenu(id){
-  const a = ACC.find(x => x.id === id); if (!a) return;
-  const off = a.state === "disabled";
-  const mine = (S.machines || []).filter(m => !m.shared);
-  dialog(a.name, `<div>
-      ${mine.length ? `<div class="sec" style="margin:2px 0 6px;font-weight:600">共享电脑</div>
-        ${mine.map(m => { const on = (a.shared || []).includes(m.id), cx = (a.codex || []).includes(m.id); return `<div class="mem" style="padding:6px 0"><span class="t" style="flex:1"><span class="title">${esc(m.name)}</span></span>
-          <div class="seg"><button class="${on ? "" : "on"}" aria-pressed="${!on}" onclick="accountShare(${q(id)},${q(m.id)},false)">不共享</button><button class="${on ? "on" : ""}" aria-pressed="${on}" onclick="accountShare(${q(id)},${q(m.id)},true)">共享</button></div></div>
-          ${on ? `<div class="mem" style="padding:2px 0 8px 14px"><span class="t" style="flex:1"><span class="sub">能用的助手</span></span>
-            <div class="seg"><button class="${cx ? "" : "on"}" aria-pressed="${!cx}" onclick="accountShare(${q(id)},${q(m.id)},true,false)">只有 Claude Code</button><button class="${cx ? "on" : ""}" aria-pressed="${cx}" onclick="accountShare(${q(id)},${q(m.id)},true,true)">也能用 Codex</button></div></div>
-            ${cx ? `<p class="state-err" style="font-size:12.5px;margin:0 0 8px 14px">用 Codex 时，对方的 Agent 能读这台电脑上的所有文件，包括你的 ChatGPT 登录信息，并且用的是你的 ChatGPT 额度。</p>` : ""}` : ""}`; }).join("")}
-        <p class="muted" style="font-size:12.5px;margin:6px 0 14px">对方在这台电脑上用自己的 Agent 和对话，看不到你的。用 Claude Code 时，对方的 Agent 只能动主目录下「ccim共享」里它自己的文件夹。它接的飞书、微信也在这台电脑上运行。</p>` : ""}
-      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountRelink(${q(id)})">重新生成登录链接</button>
-      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{disabled:${!off}},'${off ? "已启用" : "已停用"}')">${off ? "启用" : "停用"}</button>
-      ${a.expires ? `<button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:0},'已改成一直有效')">改成一直有效</button>` : ""}
-      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:30},'已改成 30 天后到期')">从今天起 30 天后到期</button>
-      <button class="btn danger" style="width:100%;margin:4px 0" onclick="closeDialog();accountDelete(${q(id)})">删除</button></div>`, "");
+function accShare(mid, on){ AE.shares[mid] = on ? (AE.shares[mid] || {agents: [], own: true, codex: false, dir: null}) : null; if (!on) delete AE.shares[mid]; renderAccountEdit(AE.id); }
+function accAgent(mid, aid){ const s = AE.shares[mid]; s.agents = (s.agents || []).includes(aid) ? s.agents.filter(x => x !== aid) : [...(s.agents || []), aid]; renderAccountEdit(AE.id); }
+async function accOpt(mid, k, v){
+  if (k === "codex" && v && !await confirmBox("让对方也能用 Codex？", "用 Codex 时，对方的 Agent 能读这台电脑上的所有文件，包括你的 ChatGPT 登录信息，并且用的是你的 ChatGPT 额度。只给你信任的人打开。", "仍然打开")) return;
+  AE.shares[mid][k] = v; renderAccountEdit(AE.id);
 }
-async function accountShare(id, machine, on, codex){
-  if (codex && !await confirmBox("让对方也能用 Codex？", "用 Codex 时，对方的 Agent 能读这台电脑上的所有文件，包括你的 ChatGPT 登录信息，并且用的是你的 ChatGPT 额度。只给你信任的人打开。", "仍然打开")) return;
-  await act(() => api("/api/accounts/update", {id, changes: {share: {machine, on, ...(codex === undefined ? {} : {codex})}}}),
-            !on ? "已取消共享" : codex === undefined ? "已共享" : codex ? "已允许用 Codex" : "已改成只用 Claude Code");
-  await renderAccounts(); accountMenu(id);
+function genPassword(){
+  const cs = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789", r = crypto.getRandomValues(new Uint32Array(12));
+  return [0, 4, 8].map(i => [...r.slice(i, i + 4)].map(n => cs[n % cs.length]).join("")).join("-");
 }
-async function accountSet(id, changes, ok){
-  await act(() => api("/api/accounts/update", {id, changes}), ok); renderAccounts();
+async function saveAccount(){
+  const isNew = AE.id === "new", name = AE.name.trim();
+  if (!name) { toast("写个账号名"); return $("#ae-name").focus(); }
+  const fields = {name, totp: AE.totp};
+  if (AE.password) fields.password = AE.password;
+  if (AE.days !== null) fields.expires = AE.days ? Date.now() / 1000 + AE.days * 86400 : 0;
+  if (!isNew) fields.disabled = AE.disabled;
+  const shares = {};
+  for (const m of ownMachines()) shares[m.id] = AE.shares[m.id] || null;
+  fields.shares = shares;
+  const r = await act(() => api("/api/accounts/save", {id: isNew ? null : AE.id, fields}));
+  toast(isNew ? "账号建好了" : "已保存");
+  accDone = r.password || r.bind ? {id: r.id, name, password: r.password, bind: r.bind} : null;
+  AE = null;
+  if (isNew) location.hash = `#/settings/accounts/${encodeURIComponent(r.id)}`;   // 换地址会重画
+  else renderAccountEdit(r.id);
 }
-async function accountRelink(id){
-  const a = ACC.find(x => x.id === id) || {};
-  if (a.state === "ok" && !await confirmBox(`重新生成「${a.name}」的登录链接？`, "原来的密码和验证器会失效，要用新链接重新设置。", "重新生成")) return;
-  const r = await act(() => api("/api/accounts/update", {id, changes: {relink: true}}));
-  await renderAccounts(); showInvite(a.name, r);
+function accDoneHtml(){
+  const d = accDone, url = (S.hub && S.hub.url) || location.origin;
+  const text = d.password ? `地址：${url}\n账号：${d.name}\n密码：${d.password}` : "";
+  return `<div class="sect" style="background:var(--sunk);border-radius:12px;padding:14px 16px">
+    ${d.password ? `<h3 style="margin-top:0">把这些发给对方</h3><pre style="margin:0 0 10px;white-space:pre-wrap;word-break:break-all">${esc(text)}</pre>
+      <button class="btn" onclick="navigator.clipboard.writeText(${q(text)});toast('已复制')">复制</button>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">密码只显示这一次，离开这个页面就看不到了。</p>` : ""}
+    ${d.bind ? `<h3 style="${d.password ? "" : "margin-top:0"}">绑定验证器的链接</h3><p class="muted" style="font-size:13px;margin:0 0 6px">对方登录前先打开它，用手机上的验证器扫码。${d.bind.days} 天内有效，只能用一次。</p>
+      <div class="row" style="gap:8px"><pre style="flex:1;margin:0;white-space:pre-wrap;word-break:break-all">${esc(d.bind.link)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(d.bind.link)});toast('已复制')">复制</button></div>` : ""}</div>`;
 }
-async function accountDelete(id){
-  const a = ACC.find(x => x.id === id) || {};
-  if (!await confirmBox(`删除「${a.name}」？`, "对方不能再登录，它加入的电脑也会被移除；那些电脑上的东西不受影响。", "删除")) return;
-  await act(() => api("/api/accounts/delete", {id}), "已删除"); renderAccounts();
+async function deleteAccount(){
+  if (!await confirmBox(`删除「${AE.name}」？`, "对方不能再登录，它自己加入的电脑也会被移除；那些电脑上的东西不受影响。", "删除")) return;
+  await act(() => api("/api/accounts/delete", {id: AE.id}), "已删除"); AE = null; location.hash = "#/settings/accounts";
+}
+function ownerAccount(){
+  dialog("你的账号", `<div class="form" style="grid-template-columns:1fr">
+      <label for="oa-name">账号名</label><input id="oa-name" class="input" maxlength="20" value="${esc(ACC.me)}" autocapitalize="off">
+      <label for="oa-pw">新密码</label><input id="oa-pw" class="input" type="password" placeholder="不改就留空" autocomplete="new-password">
+      <div class="help">登录时还要输手机验证器上的动态码，这一点不变。</div></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveOwner()">保存</button>`);
+}
+async function saveOwner(){
+  const name = $("#oa-name").value.trim(), pw = $("#oa-pw").value;
+  if (pw && pw.length < 10) return toast("密码至少 10 位");
+  await act(() => api("/api/accounts/save", {id: "owner", fields: {name, ...(pw ? {password: pw} : {})}}), "已保存");
+  closeDialog(); renderAccounts();
 }
 async function logout(){
   await fetch("/auth/logout", {method: "POST", headers: {"X-CCIM": "1"}});

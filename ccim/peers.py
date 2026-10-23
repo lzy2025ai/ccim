@@ -238,7 +238,7 @@ class Peers:
             out = [] if self.server_hub else [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
             out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()
                     if account is None or not self.server_hub or self.owner_of(k) == account]
-            if self.server_hub and account is not None:
+            if self.multi() and account is not None:
                 for m in out:             # 主人：这台共享给了谁，各自能不能用 Codex
                     m["shares"] = dict(self.nodes[m["id"]].get("shares") or {})
                 if not own:               # 别的账号共享给它的（#154）
@@ -310,9 +310,13 @@ class Peers:
         leave()
         return {}
 
+    def multi(self):
+        """服务器上的总控打开了多账号（hubserver.accounts_on）。"""
+        return bool(self.server_hub and getattr(self.pf, "accounts_on", lambda: False)())
+
     def guest_of(self, mid, account):
         """服务器上的总控：account 用 mid 是作为访客（别人共享给它的），是就返回 True。"""
-        return bool(self.server_hub and account and self.owner_of(mid) != account
+        return bool(self.multi() and account and self.owner_of(mid) != account
                     and account in ((self.nodes.get(mid) or {}).get("shares") or {}))
 
     def share(self, mid, account, opts):

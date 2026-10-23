@@ -3789,7 +3789,7 @@ function renderSettingsList(){
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc([S.account && !S.account.owner ? S.account.name : "", S.hub.url || ""].filter(Boolean).join(" · "))}</span></span></button>` : ""}</div>`;
 }
 // ---- 账号（#154）：服务器上，主人建账号、按电脑开权限 ----
-const isOwner = () => !!(S.hub && S.account && S.account.owner);
+const isOwner = () => !!(S.hub && S.account && S.account.owner && S.account.multi);   // 主人、而且服务器上打开了多账号
 const ACC_STATE = {ok: ["正常", "on"], disabled: ["已停用", ""], expired: ["已到期", "err"]};
 const ACC_DAYS = [[0, "一直有效"], [7, "7 天"], [30, "30 天"], [90, "90 天"], [365, "1 年"]];
 let ACC = {list: [], me: "admin"}, AE = null, accDone = null;   // AE：正在编辑的账号；accDone：刚建好 / 刚改的密码，只显示这一次

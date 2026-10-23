@@ -9,6 +9,7 @@ Mac 们照旧用 peers.py 的方式主动连过来（/peer/* 由 Peers 自己的
 账号（#154）：accounts.json，主人是 OWNER（老的 auth.json 迁过来，账号名 admin；登录时账号名留空也算主人），
 主人在「设置 → 账号」建别的账号：账号名 + 密码（默认生成）、有效期、要不要动态码（要的话给对方一次性链接去绑验证器）。
 电脑归加入它的账号（peers.json 的 account），网页、转交、推送都只给这个账号的电脑；电脑之间的调用、推送也只在同一个账号内（peers.py）。
+多账号默认关闭（个人用就和以前一样：只有主人，密码 + 动态码），`ccim hub accounts on` 打开（settings.json 的 accounts）。
 主人还能按电脑给某个账号开权限（peers 的 shares：能用哪些 Agent、能不能自己建、能不能用 Codex、共享文件夹），
 转过去的请求带 X-Account*，那台电脑按它圈住对方（share.py）。
 连续输错：同一个地址 15 分钟里错 5 次锁 15 分钟；所有地址一小时里错 20 次全部锁 30 分钟。
@@ -134,6 +135,10 @@ class Hub:
 
     # ----- 账号（#154） -----
 
+    def accounts_on(self):
+        """多账号打开了没有。关着时只有主人能登录，没有账号管理、共享。"""
+        return bool(_load("settings.json", {}).get("accounts"))
+
     def accounts(self):
         acc = _load("accounts.json", None)
         if acc is None:                       # 只有一个账号时的 auth.json：迁成主人（留着 auth.json，装回旧版本还能登录）
@@ -208,7 +213,7 @@ class Hub:
         if not acc:
             raise PermissionError("还没设置密码。")
         with self.lock:
-            aid = self._by_name(acc, name)
+            aid = self._by_name(acc, name) if self.accounts_on() else OWNER
             a = acc.get(aid) if aid else None
             if a and self.active(a) and check_password(pw or "", a["password"]):
                 if not a.get("totp"):
@@ -242,6 +247,8 @@ class Hub:
         if isinstance(v, (int, float)):       # 只有一个账号时的登录
             v = {"exp": v, "acct": OWNER}
         if not v or v.get("exp", 0) <= time.time():
+            return None
+        if v["acct"] != OWNER and not self.accounts_on():
             return None
         return v["acct"] if self.active(self.account(v["acct"])) else None
 
@@ -440,7 +447,7 @@ class Hub:
         out = self.peers.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []}, account=aid)
         out["me"] = self.default_machine(aid)
         out["hub"] = {"name": self.peers.me["name"], "url": self.public_url}
-        out["account"] = self.account_view(aid)
+        out["account"] = dict(self.account_view(aid), multi=self.accounts_on())
         try:                                  # 服务器每次合并都自动部署 main，它的版本就是最新版（#37）
             from . import upgrade
             out["hub"]["commit"] = upgrade.info().get("commit") or None
@@ -488,11 +495,12 @@ __SCRIPT__
 </script></body></html>"""
 
 LOGIN_BODY = """<h1>ccim</h1><p>登录后使用你的 Agent。</p>
-<form id="f"><label for="nm">账号</label><input id="nm" autocomplete="username" autocapitalize="off" autofocus>
+<form id="f"><div id="nmbox"><label for="nm">账号</label><input id="nm" autocomplete="username" autocapitalize="off"></div>
 <label for="pw">密码</label><input id="pw" type="password" autocomplete="current-password">
 <div id="cb" hidden><label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
 <button>登录</button><div class="err" id="err"></div></form>"""
-LOGIN_SCRIPT = """document.getElementById("f").onsubmit = async e => { e.preventDefault();
+LOGIN_SCRIPT = """(nmbox.hidden ? pw : nm).focus();
+document.getElementById("f").onsubmit = async e => { e.preventDefault();
   const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
     body: JSON.stringify({name: nm.value, password: pw.value, code: code.value})});
   const d = await r.json().catch(() => ({}));
@@ -500,7 +508,7 @@ LOGIN_SCRIPT = """document.getElementById("f").onsubmit = async e => { e.prevent
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
   err.textContent = d.error || "出错了"; code.value = ""; };"""
 
-SETUP_BODY = """<h1>设置登录</h1><p id="lead">只需要设置一次。以后登录用账号 admin、密码和手机验证器上的动态码。</p>
+SETUP_BODY = """<h1>设置登录</h1><p id="lead">只需要设置一次。以后登录要密码和手机验证器上的动态码。</p>
 <div id="qrbox"><p>准备中…</p></div>
 <form id="f"><div id="pwbox"><label for="pw">设一个密码（至少 10 位）</label><input id="pw" type="password" autocomplete="new-password">
 <label for="pw2">再输一次</label><input id="pw2" type="password" autocomplete="new-password"></div>
@@ -604,7 +612,8 @@ def _handler(hub):
                     if hub.setup_token():
                         return self._send(200, _page("<h1>ccim</h1><p>还没设置登录。用服务器上 <code>ccim hub setup-link</code> 给出的链接打开。</p>", ""),
                                           "text/html; charset=utf-8")
-                    return self._send(200, _page(LOGIN_BODY, LOGIN_SCRIPT), "text/html; charset=utf-8")
+                    body = LOGIN_BODY if hub.accounts_on() else LOGIN_BODY.replace('<div id="nmbox">', '<div id="nmbox" hidden>')
+                    return self._send(200, _page(body, LOGIN_SCRIPT), "text/html; charset=utf-8")
                 with open(PAGE, "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             if not u.path.startswith("/api/"):
@@ -618,7 +627,8 @@ def _handler(hub):
             if u.path == "/api/state" and not (q.get("local") and self.headers.get("X-Machine")):   # 带 local 的是要某一台自己的（#140）
                 return self._send(200, hub.state(self.acct))
             if u.path == "/api/accounts":
-                return self._send(200, hub.account_list()) if self.acct == OWNER else self._send(403, {"error": "forbidden"})
+                return self._send(200, hub.account_list()) if self.acct == OWNER and hub.accounts_on() \
+                    else self._send(403, {"error": "forbidden"})
             if u.path == "/api/file":
                 mid = self._machine(q)
                 if not mid:
@@ -703,7 +713,7 @@ def _handler(hub):
             return hub.peers.guest_ok.get(mid, False)
 
         def _accounts(self, path, body):
-            if self.acct != OWNER:
+            if self.acct != OWNER or not hub.accounts_on():
                 return self._send(403, {"error": "forbidden"})
             b = json.loads(body or b"{}")
             if path == "/api/accounts/save":

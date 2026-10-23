@@ -978,7 +978,16 @@ def cmd_hub(args):
     from . import hubserver
     if args.action == "setup-link":
         link = hubserver.Hub(args.url, args.port).setup_link()
-        print(link or "已经设置过登录了。忘了密码的话删掉 ~/.ccim/hub/auth.json 再运行这个命令。")
+        print(link or "已经设置过登录了。忘了密码的话删掉 ~/.ccim/hub/accounts.json 和 auth.json 再运行这个命令（别的账号会一起删掉）。")
+        return
+    if args.action == "accounts":                 # 多账号（#154）：打开后在网页「设置 → 账号」里建账号、共享电脑
+        if args.value:
+            s = hubserver._load("settings.json", {})
+            s["accounts"] = args.value == "on"
+            hubserver._save("settings.json", s)
+        on = hubserver._load("settings.json", {}).get("accounts")
+        print("多账号已打开：在网页「设置 → 账号」里建账号、把电脑共享给别人。" if on
+              else "多账号是关着的：只有你自己能登录。要给别人开账号，运行 ccim hub accounts on。")
         return
     hubserver.run(args.url, args.port, args.peer_port)
 
@@ -1084,7 +1093,8 @@ def parser():
     s.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     s.set_defaults(fn=cmd_web)
     s = sub.add_parser("hub", help="在服务器上运行总控：各台电脑连上来，用浏览器登录后在哪都能管")
-    s.add_argument("action", nargs="?", choices=["run", "setup-link"], default="run")
+    s.add_argument("action", nargs="?", choices=["run", "setup-link", "accounts"], default="run")
+    s.add_argument("value", nargs="?", choices=["on", "off"], help="accounts 后面跟：打开 / 关掉多账号")
     s.add_argument("--url", help="对外的地址，比如 https://1.2.3.4")
     s.add_argument("--port", type=int, default=8977, help="网页端口（只听本机，前面用 nginx）")
     s.add_argument("--peer-port", type=int, default=8978, help="电脑连进来的端口（只听本机，前面用 nginx）")

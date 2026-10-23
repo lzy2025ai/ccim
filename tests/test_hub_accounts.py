@@ -27,6 +27,7 @@ class HubAccountTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.hub = hubserver.Hub("https://hub.example")
+        hubserver._save("settings.json", {"accounts": True})
 
     def owner(self):
         t = self.hub.setup_token()
@@ -222,6 +223,40 @@ class HubAccountTests(unittest.TestCase):
         req("GET", "/api/chat?id=w-1", "m-own", extra={"X-Account": "a1", "X-Account-Share": "{}"})
         self.assertNotIn("X-Account", seen[-1])
         self.assertNotIn("X-Account-Share", seen[-1])
+
+
+class AccountsOffTests(HubAccountTests):
+    """多账号关着（默认）：和以前一样只有主人；账号管理、共享都没有。"""
+
+    def test_off(self):
+        osec = self.owner()
+        aid, pw = self.member("家人")
+        self.add_node("m-own")
+        self.hub.account_save(aid, {"shares": {"m-own": {"own": True}}})
+        member_tok = self.hub.login("1.1.1.1", "家人", pw, "")
+        hubserver._save("settings.json", {})
+        self.assertFalse(self.hub.accounts_on())
+        self.assertIsNone(self.hub.session_account(member_tok))       # 已经登录的也不算了
+        with self.assertRaises(PermissionError):
+            self.hub.login("1.1.1.2", "家人", pw, "")
+        tok = self.hub.login("1.1.1.3", "", "owner-password", code(osec, 1))
+        self.assertEqual(self.hub.session_account(tok), hubserver.OWNER)
+        self.assertFalse(self.hub.peers.guest_of("m-own", aid))
+        self.assertNotIn("shares", self.hub.peers.machines(hubserver.OWNER)[0])
+        req = self.serve(hubserver.OWNER)
+        self.assertEqual(req("GET", "/api/accounts")[0], 403)
+        self.assertEqual(req("POST", "/api/accounts/save", body={"fields": {"name": "x"}})[0], 403)
+        self.hub.peers.online = lambda mid: False
+        self.assertFalse(self.hub.state(hubserver.OWNER)["account"]["multi"])
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+        c.request("GET", "/", headers={"Host": "127.0.0.1"})
+        page = c.getresponse().read().decode()
+        c.close()
+        self.assertIn('<div id="nmbox" hidden>', page)
 
 
 class PeerCallTests(unittest.TestCase):

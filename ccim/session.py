@@ -48,6 +48,8 @@ SCHEDULE = """
 - 用户要你到点或每隔一段时间做某件事（比如每 30 分钟查一次、每天早上汇总）时，用命令 `ccim schedule add` 建定时任务
   （用法看 `ccim schedule add --help`），到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。
   不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
+GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
+GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
 PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--help)")   # 升级稳定版：先让用户确认（#146）
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND = """
@@ -470,7 +472,8 @@ class Chat:
                                "mcp__ccim__ask_agents",                             # 只是在群里 @ 人，用户看得到
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
-                hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])]},
+                hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
+                       "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
@@ -783,23 +786,41 @@ class Chat:
         return await self.b.approvals.ask(self.chat_id, name, inp, ctx)
 
     async def _pre_bash(self, data, tool_use_id, ctx):
-        """要升级稳定版（ccim promote）：不管 auto 模式怎么判断，先在对话里弹卡片让用户确认（#146）。"""
+        """对话里不升级 ccim（ccim promote）：由用户在网页「设置 → 开发」里点（#156，原来是在对话里弹确认卡片，#146）。"""
         cmd = ((data or {}).get("tool_input") or {}).get("command") or ""
         if not PROMOTE.search(cmd):
             return {}
-        from . import runtime
-        try:
-            plan = await asyncio.to_thread(runtime.promote_plan)
-        except Exception:
-            log.warning("算升级计划出错", exc_info=True)
-            plan = "把 ccim 升级到最新版本，再把在跑的机器人依次重启到新版本。"
-        if plan is None:                      # 已经是最新、也没有要重启的：不用问，跑下去会说「已经是新版本」
-            return {}
-        r = await self.b.approvals.ask(self.chat_id, "ccim_promote", {"command": cmd, "plan": plan}, None)
-        if isinstance(r, PermissionResultAllow):
-            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                       "permissionDecisionReason": "用户选了先不升级。" if "拒绝" in r.message else r.message}}
+                                       "permissionDecisionReason": "升级 ccim 由用户在网页「设置 → 开发」里点，对话里不要运行。"
+                                                                   "告诉用户改动已经合并、到「设置 → 开发」里升级。"}}
+
+    async def _post_bash(self, data, tool_use_id, ctx):
+        """建了、重开了 issue 或开了 PR：记下这个对话在做哪个 issue（开发页、任务面板用，#156 #157）。"""
+        try:
+            cmd = ((data or {}).get("tool_input") or {}).get("command") or ""
+            m = GH_ISSUE.search(cmd)
+            if not m:
+                return {}
+            out = str((data or {}).get("tool_response") or "")
+            refs = []
+            for g in GH_REF.finditer(out):
+                repo, kind, n = (g.group(1), g.group(2), g.group(3)) if g.group(1) else (g.group(4), "issues", g.group(5))
+                refs.append((repo, "pr" if kind == "pull" else "issue", int(n)))
+            if m.group(1).startswith("pr"):   # 开 PR：它关掉的 issue 写在描述里（Closes #编号）
+                repo = refs[0][0] if refs else None
+                refs += [(repo, "issue", int(n)) for n in __import__("re").findall(r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)", cmd)]
+            if not refs:
+                return {}
+            have = list(self.b.saved(self.chat_id).get("issues") or [])
+            for repo, kind, n in refs[:4]:
+                if not repo:
+                    continue
+                have = [x for x in have if not (x.get("repo") == repo and x.get("n") == n)]
+                have.append({"repo": repo, "kind": kind, "n": n, "at": time.time()})
+            self.b.save(self.chat_id, issues=have[-30:])
+        except Exception:
+            log.warning("记 issue 出错", exc_info=True)
+        return {}
 
     def _tools(self):
         chat = self

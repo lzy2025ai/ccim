@@ -1052,7 +1052,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
-    <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置</a>
+    <a href="#/settings" data-nav="settings" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
   </nav>
   <button class="pback" id="pback" aria-label="返回" onclick="phoneBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>
   <section class="list" id="list"></section>
@@ -1446,6 +1446,7 @@ function connectEvents(){
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
     if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
+    if (ev.type === "dev") { clearTimeout(window._devt); window._devt = setTimeout(() => { loadState().then(drawAttention); if (current.view === "settings" && current.id === "dev") renderDev(true); }, 300); }
     if (ev.type === "skills") { skillsCache = null; if (current.view === "skills") { clearTimeout(window._skt); window._skt = setTimeout(route, 400); } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
@@ -1515,7 +1516,7 @@ function route(){
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "board") renderBoard();
   else if (current.view === "skills") renderSkills();
-  else if (current.view === "settings") current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
+  else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
@@ -2609,6 +2610,8 @@ function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");
   if (b) { b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
+  const d = devCount(), sb = $("#nav-set-n");
+  if (sb) { sb.hidden = !d; sb.textContent = d; }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
 async function markSeen(id, force){
@@ -3772,6 +3775,7 @@ function renderSettingsList(){
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
     <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
+    ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
 }
 async function logout(){
@@ -3797,6 +3801,71 @@ function renderMachines(){
         <div id="pair-box"><button class="btn primary" onclick="newPairCode()">生成配对码</button></div></div>`}
     </div></div>`;
 }
+// ---- 开发页（#156）：等验收、体验中、已合并没升级的需求 ----
+const clip = (t, n) => (t = String(t).replace(/\s+/g, " ").trim()).length > n ? t.slice(0, n) + "…" : t;
+function devMachine(){ const m = (S.machines || []).find(m => m.online !== false && "dev" in (verOf(m) || {})); return m ? m.id : null; }
+function devCount(){ const m = devMachine(); return m ? (verOf(machineOf(m)) || {}).dev || 0 : 0; }
+let DEVP = null;
+async function renderDev(quiet){
+  const mid = devMachine();
+  if (!mid) { $("#main").innerHTML = `<div class="empty"><h2>没有开发版</h2></div>`; return; }
+  if (!quiet || !DEVP) $("#main").innerHTML = `<div class="loading">…</div>`;
+  try { DEVP = await api("/api/dev" + (quiet === "fresh" ? "?fresh=1" : ""), undefined, mid); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>读不到开发版的情况</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (current.view !== "settings" || current.id !== "dev") return;
+  drawDev();
+}
+function devItem(r, btns){
+  const c = r.chat, href = c ? boardHref(c) : null;
+  const where = c ? `<a class="muted" href="${href}" style="font-size:12.5px">在「${esc(clip(((rowOf(c.id) || c).title || "对话").split(/\s*用户发来了/)[0], 24))}」里提的</a>` : "";
+  return `<div class="mem" style="padding:10px 0;align-items:flex-start">
+    <div class="t" style="flex:1;min-width:0"><span class="title">${r.issue ? `<a href="https://github.com/${esc(DEVP.repo)}/issues/${r.issue}" target="_blank" rel="noopener" class="muted" style="margin-right:6px">#${r.issue}</a>` : ""}${esc(r.title)}</span>
+      <span class="sub">${[r.state, where].filter(Boolean).join(" · ")}</span></div>
+    <div style="display:flex;gap:8px;flex-shrink:0">${btns || ""}</div></div>`;
+}
+function drawDev(){
+  const d = DEVP, j = d.job || {}, busy = j.state === "running";
+  const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "merge" ? `正在合并 #${j.issue || j.pr}` : "正在升级"}${j.step ? `：${esc(j.step)}` : ""}</p>`
+    : j.state === "failed" && Date.now() / 1000 - j.at < 3600 ? `<p class="upg err">${j.kind === "merge" ? "合并没成功" : "升级没成功"}：${esc(j.error || "")}</p>`
+    : j.state === "done" && j.note && Date.now() / 1000 - j.at < 600 ? `<p class="upg ok">${esc(j.note)}</p>` : "";
+  const st = r => r.trying ? "正在体验" : r.checks === "fail" ? "检查没通过" : r.checks === "running" ? "检查中" : r.behind ? "落后于最新代码，合并时自动同步" : "等你验收";
+  const review = (d.review || []).map(r => devItem({...r, state: st(r)},
+    (r.trying ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry('main')">切回正式版本</button>`
+      : r.local ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry(${r.pr})">体验</button>` : "")
+    + `<button class="btn primary" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devMerge(${r.pr})">合并</button>`)).join("");
+  const merged = (d.merged || []).map(r => devItem({...r, state: `${whenTs(r.at)}合并`})).join("");
+  const need = (d.merged || []).length || d.stale;
+  const last = d.last && Date.now() / 1000 - d.last.at < 86400 ? `<p class="${d.last.ok ? "upg ok" : "upg err"}" style="white-space:pre-wrap">上次升级：${esc(d.last.text)}</p>` : "";
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>开发</h2>
+    <div class="role">${d.trying ? `正在体验 ${esc(d.trying.label)}，这台电脑的网页和测试机器人跑的是它的版本。` : "这台电脑的网页和测试机器人跑的是正式版本。"}</div></div>
+    <button class="btn" onclick="renderDev('fresh')">刷新</button></div>
+    <div class="pane">${d.error ? `<p class="upg err">${esc(d.error)}</p>` : ""}${jobLine}
+      <div class="sect"><h3>等你验收 ${(d.review || []).length || ""}</h3>${review || `<p class="muted">没有等验收的。</p>`}</div>
+      <div class="sect"><h3>已合并，还没升级 ${(d.merged || []).length || ""}</h3>
+        ${merged || (d.stale ? `<p class="muted">这台电脑的网页还在跑合并前的代码。</p>` : `<p class="muted">都升级好了。</p>`)}
+        ${need ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devUpgrade()">全部升级</button>` : ""}${last}</div>
+    </div></div>`;
+}
+async function devTry(what){
+  const r = what === "main" ? null : (DEVP.review || []).find(x => x.pr === what);
+  const ok = await confirmBox(what === "main" ? "切回正式版本" : `体验 #${r.issue || r.pr}`,
+    "这台电脑的网页平台和测试机器人会重启，网页断开十几秒；正在干活的对话会等手头这一步做完再重启。", what === "main" ? "切回" : "体验");
+  if (!ok) return;
+  await act(() => api("/api/dev/try", {what}, devMachine()), what === "main" ? "正在切回，重启好了刷新网页" : "正在切换，重启好了刷新网页就是这个版本");
+}
+async function devMerge(pr){
+  const r = (DEVP.review || []).find(x => x.pr === pr);
+  if (!await confirmBox(`合并 #${r.issue || r.pr}`, `「${r.title}」合并进正式代码。合并后在下面「全部升级」才会用上。`, "合并")) return;
+  await act(() => api("/api/dev/merge", {pr}, devMachine()));
+  renderDev(true);
+}
+async function devUpgrade(){
+  const items = (DEVP.merged || []).map(r => `<li>${r.issue ? `#${r.issue} ` : ""}${esc(r.title)}</li>`).join("");
+  dialog("全部升级", `${items ? `<p>这次会带上：</p><ul>${items}</ul>` : ""}<p class="muted">这台电脑的网页平台、测试机器人和在跑的飞书、微信机器人会依次重启（各自等手头的活做完），网页断开十几秒。结果显示在这一页。</p>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="dev-up-ok">升级</button>`);
+  $("#dev-up-ok").onclick = async () => { closeDialog(); await act(() => api("/api/dev/upgrade", {}, devMachine()), "正在升级"); renderDev(true); };
+}
+
 // ---- 版本和升级（#37） ----
 function verOf(m){ return ((S.machine_info || {})[m.id] || {}).ccim || null; }
 function verLine(m){

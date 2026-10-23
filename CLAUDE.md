@@ -274,16 +274,18 @@
   用户在飞书里体验也一样：`ccim try <编号>` 之后回复用户（重启会断掉当前这一轮）。
 - **用户说验收通过**：合并 PR（squash），issue 自动关闭；没验收的不合并。main 开了保护：PR 要基于最新的 main 且检查通过才能合并，
   别的 PR 先合了就在自己的工作目录里 `git fetch && git rebase origin/main`、解决冲突、强推，再合并。合并后：
-  `git -C <主目录> pull --ff-only` → `ccim try main`（不管有没有在试它，都要跑）→ `ccim promote`（一律按最新的 main 装稳定版，
-  升级跑稳定版的项目）→ 删掉工作目录（`git worktree remove …`）和分支。不要直接 `ccim restart` 别的项目到开发版。
+  `git -C <主目录> pull --ff-only` → 删掉工作目录（`git worktree remove …`）和分支（正在体验它的话等用户升级后再删）→ 告诉用户到
+  网页「设置 → 开发」点「全部升级」（本机开发版进程切回 main、装稳定版，#156）。不要直接 `ccim restart` 别的项目到开发版。
   `ccim try main` 会重启本机跑开发版的进程（网页平台、ccim 测试机器人），它们才用上刚合并的 Python 代码。web.html 每次请求现读，
   刷新网页就是新的；后台没重启时，新网页配旧后台，新功能会悄悄失效（#61 合并后删终端对话就这样没生效）。
   重启会打断正在进行的对话（包括正在和用户说话的这一轮），所以先告诉用户、等用户同意再跑。
-- 在 ccim 的对话里跑 `ccim promote`（#146）：`Chat._pre_bash`（PreToolUse 钩子）先弹确认卡片（按钮「升级 / 先不升」，微信回 y / n），
-  确认后命令马上返回，独立进程 `promote-run` 在后台装、等各项目手头的活做完再重启，结果用 `runtime.post_note` 交给发起的进程
-  （状态目录 notes/，每秒取），发回那个对话。装稳定版时依赖沿用当前稳定版的版本（`_pins`，对不上再放开），下载 10 分钟超时。
-  在终端里跑、或带 `--wait` 还是前台等结果。卡片写这次的改动（提交说明冒号前那段）、会重启哪些；已经是最新、也都跑着新版本就不弹卡片，
-  promote 也不重启已经跑着新版本的项目
+- 开发页（#156，`ccim/devpanel.py`，网页「设置 → 开发」，只在跑开发版的电脑上有）：按需求列等验收（开着的 PR）、已合并没升级
+  （当前稳定版之后 main 上的提交）；体验 = `set_try`，合并（落后就在工作目录 rebase、强推，等检查过了 squash 合并、pull、删工作目录），
+  全部升级 = pull → `start_promote`（独立进程，结果写 stable/promote.json）→ `set_try("main")`。GitHub 数据后台每 2 分钟刷新，红点数
+  （state 的 ccim.dev）读缓存。每条链回提需求的对话：对话 meta 的 issues（`Chat._post_bash` 在 gh issue create / reopen、gh pr create 后记），
+  老对话从回答里贴过的 issue 链接认。
+  **对话里不再升级**：`Chat._pre_bash` 拦下 `ccim promote`（原来 #146 是弹确认卡片）。合并后不用 `ccim try main`、`ccim promote`，
+  告诉用户到「设置 → 开发」点「全部升级」（它会做这两步）。终端里照样能跑 promote（装依赖沿用当前稳定版的版本 `_pins`，10 分钟超时）
 - 合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）先用 Python 3.11 检查，再把服务器上的总控更新到这个版本。
   别的电脑在网页「设置 → 电脑」里点升级（#37）。
 - 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑

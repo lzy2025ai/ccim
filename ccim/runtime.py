@@ -301,6 +301,7 @@ def _git(*args):
 
 TIMEOUT_RC = -999                             # _run 超时时的返回码
 INSTALL_TIMEOUT = 600
+LOOSE = [False]                               # 这次装的时候依赖没能沿用原来的版本，按最新的装了
 
 
 def _run(cmd, env=None, timeout=60):
@@ -360,6 +361,7 @@ def build_stable():
             r = _run(install + (["-c", pins] if pins else []), env, INSTALL_TIMEOUT)
             if r.returncode not in (0, TIMEOUT_RC) and pins:
                 r = _run(install, env, INSTALL_TIMEOUT)
+                LOOSE[0] = r.returncode == 0
             if pins:
                 os.unlink(pins)
         if r.returncode != 0:
@@ -389,11 +391,16 @@ def promote(wait=180):
         name = proc_label(path)
         if which(path, e)[1] == "开发版":
             continue
-        if e.get("stable_version"):
+        pinned = e.get("stable_version")
+        if pinned:
             registry.update(path, stable_version=None)
         r = daemon.running(path)
         if not r:
             results.append(f"{name}没在运行，下次启动就用新版本")
+            continue
+        now = registry.read_state(path).get("python")
+        if not pinned and now and _env(now) == _env(stable_python(label)):
+            results.append(f"{name}已经是新版本，没有重启")
             continue
         if r[1] == "fg":
             results.append(f"{name}在终端前台运行，要到那个终端里手动重启")
@@ -414,13 +421,33 @@ def promote(wait=180):
 # ---------- 在对话里升级：先确认，后台做，做完回报（#146） ----------
 
 def promote_plan():
-    """确认卡片上写的：要做什么、会重启哪些。"""
+    """确认卡片上写的：升级的是什么、这次改了什么、会重启哪些。不用升级（已是最新、也没有要重启的）返回 None。"""
     from . import daemon
-    names = [proc_label(p) for p, e in sorted(registry.all_projects().items())
-             if which(p, e)[1] != "开发版" and daemon.running(p)]
-    return ("把最新的 main 装成新的稳定版" +
-            (f"，再把 {'、'.join(names)} 依次重启到新版本（各自等手头的活做完再重启）" if names else "（现在没有在跑稳定版的项目，不用重启）") +
-            "。\n\n在后台进行，这边接着做别的；做完在这个对话里说结果。")
+    _git("fetch", "-q", "origin", "main")
+    cur = (_channel().get("current") or "").rsplit("-", 1)[-1]
+    ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
+    new = _git("rev-parse", ref).stdout.strip()
+    py = stable_python()
+    stale = [proc_label(p) for p, e in sorted(registry.all_projects().items())
+             if which(p, e)[1] != "开发版" and daemon.running(p)
+             and (e.get("stable_version") or not py or _env(registry.read_state(p).get("python") or "") != _env(py))]
+    same = bool(cur) and new.startswith(cur)
+    if same and not stale:
+        return None
+    changes = []
+    if cur and not same:
+        # 提交说明冒号后面多是怎么改的，卡片上只留做了什么
+        changes = [re.sub(r"\s*\(?#\d+\)?", "", l).split("：")[0].strip() for l in _git("log", "--format=%s", f"{cur}..{new}").stdout.splitlines()]
+    names = stale if same else [proc_label(p) for p, e in sorted(registry.all_projects().items())
+                                if which(p, e)[1] != "开发版" and daemon.running(p)]
+    parts = ["把 ccim（在网页、飞书、微信里和 Agent 聊天的这套程序）升级到最新版本。"
+             if not same else "ccim 已经是最新版本，把还在跑旧版本的换上去。"]
+    if changes:
+        more = f"\n- 另外还有 {len(changes) - 8} 项" if len(changes) > 8 else ""
+        parts.append("这次的改动：\n" + "\n".join(f"- {c}" for c in changes[:8]) + more)
+    parts.append(f"升级后重启：{'、'.join(names)}（各自等手头的活做完再重启）。" if names else "现在没有要重启的。")
+    parts.append("Claude Code、Claude SDK 等依赖沿用现在的版本，不跟着升级。在后台进行，这边接着做别的，做完在这个对话里说结果。")
+    return "\n\n".join(parts)
 
 
 def start_promote():
@@ -445,11 +472,12 @@ def promote_run():
     else:
         try:
             label, results = promote()
-            text = f"稳定版升级好了（{label}）：\n" + "\n".join(f"- {r}" for r in results or ["没有跑稳定版的项目。"])
+            text = (f"ccim 升级好了（{label}）：\n" + "\n".join(f"- {r}" for r in results or ["没有要重启的。"]) +
+                    ("\n- 依赖没法沿用原来的版本，按新版本要求装了新的" if LOOSE[0] else ""))
         except SystemExit as e:
-            text = f"升级稳定版没成功：{e}"
+            text = f"ccim 升级没成功：{e}"
         except Exception as e:
-            text = f"升级稳定版出错了：{e}"
+            text = f"ccim 升级出错了：{e}"
     print(registry.now(), text, flush=True)
     if proc and chat:
         post_note(proc, chat, text)

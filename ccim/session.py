@@ -792,7 +792,9 @@ class Chat:
             plan = await asyncio.to_thread(runtime.promote_plan)
         except Exception:
             log.warning("算升级计划出错", exc_info=True)
-            plan = "把最新的 main 装成新的稳定版，再把跑稳定版的项目依次重启到新版本。"
+            plan = "把 ccim 升级到最新版本，再把在跑的机器人依次重启到新版本。"
+        if plan is None:                      # 已经是最新、也没有要重启的：不用问，跑下去会说「已经是新版本」
+            return {}
         r = await self.b.approvals.ask(self.chat_id, "ccim_promote", {"command": cmd, "plan": plan}, None)
         if isinstance(r, PermissionResultAllow):
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}

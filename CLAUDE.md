@@ -279,7 +279,8 @@
 - 在 ccim 的对话里跑 `ccim promote`（#146）：`Chat._pre_bash`（PreToolUse 钩子）先弹确认卡片（按钮「升级 / 先不升」，微信回 y / n），
   确认后命令马上返回，独立进程 `promote-run` 在后台装、等各项目手头的活做完再重启，结果用 `runtime.post_note` 交给发起的进程
   （状态目录 notes/，每秒取），发回那个对话。装稳定版时依赖沿用当前稳定版的版本（`_pins`，对不上再放开），下载 10 分钟超时。
-  在终端里跑、或带 `--wait` 还是前台等结果
+  在终端里跑、或带 `--wait` 还是前台等结果。卡片写这次的改动（提交说明冒号前那段）、会重启哪些；已经是最新、也都跑着新版本就不弹卡片，
+  promote 也不重启已经跑着新版本的项目
 - 合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）先用 Python 3.11 检查，再把服务器上的总控更新到这个版本。
   别的电脑在网页「设置 → 电脑」里点升级（#37）。
 - 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑

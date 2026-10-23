@@ -583,7 +583,7 @@ def cmd_safe_restart_run(args):
 def cmd_promote(args):
     if os.environ.get("CCIM_PROCESS") and os.environ.get("CCIM_CHAT") and not args.wait:   # 在 ccim 的对话里：后台做（#146）
         runtime.start_promote()
-        print("已经在后台升级稳定版：装好新版本后，跑稳定版的项目各自等手头的活做完再重启。做完会在这个对话里说结果，不用等，接着做别的。")
+        print("已经在后台升级 ccim：装好新版本后，在跑的机器人各自等手头的活做完再重启。做完会在这个对话里说结果，不用等，接着做别的。")
         return
     label, results = runtime.promote()
     for line in results:

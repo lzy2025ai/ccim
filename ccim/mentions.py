@@ -16,6 +16,19 @@ CONTEXT_LIMIT = 12000                         # 带过去的之前的内容，�
 SEEN_LIMIT = 6000                             # 交给原来助手的每份回答最多这么多字
 
 
+def _upto(m):
+    """群聊里各成员看到哪（ctx_upto，按 Agent 分）。子对话自己也能成群聊，老版本在子对话的 ctx_upto 里存的是一个时间，不算。"""
+    v = m.get("ctx_upto")
+    return v if isinstance(v, dict) else {}
+
+
+def _seen(sub):
+    """子对话上次看到主对话哪里。老版本存在 ctx_upto 里。"""
+    sub = sub or {}
+    v = sub.get("seen_upto", sub.get("ctx_upto"))
+    return v if isinstance(v, (int, float)) else 0
+
+
 class Mentions:
     def __init__(self, pf):
         self.pf = pf
@@ -63,7 +76,7 @@ class Mentions:
         chats = self.pf.chats()
         if sub not in chats:
             chats[sub] = {"type": "p2p", "agent": aid, "mention_of": cid, "cwd": cwd, "title": title,
-                          "created": registry.now(), "last_active": registry.now(), "ctx_upto": 0}
+                          "created": registry.now(), "last_active": registry.now(), "seen_upto": 0}
             self.pf.store.write(chats)
         return sub
 
@@ -86,8 +99,8 @@ class Mentions:
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         # 之前的内容在记下这条消息之前取，不把它自己算进去
-        upto = m.get("ctx_upto") or {}
-        ctx = {aid: self._context(cid, upto.get(aid) or (self.pf.chats().get(self.sub(cid, aid)) or {}).get("ctx_upto", 0))
+        upto = _upto(m)
+        ctx = {aid: self._context(cid, upto.get(aid) or _seen(self.pf.chats().get(self.sub(cid, aid))))
                for aid in to}
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
@@ -103,7 +116,7 @@ class Mentions:
         title = (chats.get(cid) or m).get("title") or "新对话"
         chats = self.pf.chats()
         if cid in chats:                      # 各人看到哪了
-            chats[cid]["ctx_upto"] = dict(chats[cid].get("ctx_upto") or {}, **{aid: user["at"] for aid in to})
+            chats[cid]["ctx_upto"] = dict(_upto(chats[cid]), **{aid: user["at"] for aid in to})
             self.pf.store.write(chats)
         for aid in to:
             sub = self.sub(cid, aid)
@@ -170,7 +183,7 @@ class Mentions:
         try:
             chats = self.pf.chats()
             if sub in chats:
-                chats[sub]["ctx_upto"] = upto
+                chats[sub]["seen_upto"] = upto
                 self.pf.store.write(chats)
             b = self.pf._bridge(sub)
             chat = b.chat(sub, "p2p")

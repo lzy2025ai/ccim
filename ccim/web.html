@@ -211,22 +211,26 @@ body{overflow:hidden}
 .bsec h2 i{width:7px;height:7px;border-radius:50%}
 .bsec h2 .n{font-weight:400;color:var(--faint)}
 .bempty{color:var(--faint);font-size:13px;margin:4px 0 0}
-.brow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;text-decoration:none;color:inherit}
+.brow{--bicon-size:34px;--report-bg:color-mix(in srgb,var(--qing-soft) 55%,var(--panel));display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;text-decoration:none;color:inherit}
 .brow:hover{border-color:var(--line-strong)}
-.brow.quiet{border-color:transparent;border-radius:0;padding:11px 14px;margin-bottom:0;border-bottom:1px solid var(--line)}
+.brow.quiet{--bicon-size:26px;border-color:transparent;border-radius:0;padding:11px 14px;margin-bottom:0;border-bottom:1px solid var(--line)}
 .brow.quiet:last-of-type{border-bottom-color:transparent}
 .brow.quiet:hover{background:var(--paper);border-radius:10px;border-bottom-color:transparent}
-.bmain{min-width:0;display:flex;flex-direction:column}
-.btop{display:flex;align-items:center;gap:8px;min-width:0;line-height:20px}
+.bmain{min-width:0;display:flex;flex-direction:column;align-self:start}
+.btop{display:flex;align-items:center;gap:8px;min-width:0;min-height:var(--bicon-size);line-height:20px}
 .btitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brow.quiet .btitle{font-weight:500}
-.bico{position:relative;display:flex;align-self:center}
+.bico{position:relative;display:flex;align-self:start}
+.bico .chaticon.sm{width:26px;height:26px}
 .bico .udot{position:absolute;top:-2px;right:-2px;margin:0;box-shadow:0 0 0 2px var(--panel)}
 .bico .udot.soft{background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--qing),0 0 0 2px var(--panel)}
-.bside{display:flex;flex-direction:column;align-items:flex-end;align-self:start;gap:4px;min-width:0;max-width:200px}
-.bwhen{color:var(--faint);font-size:12px;white-space:nowrap;line-height:20px}
+.bside{display:flex;flex-direction:column;align-items:flex-end;align-self:start;gap:12px;min-width:0;max-width:200px}
+.bwhen{display:flex;align-items:center;min-height:var(--bicon-size);color:var(--faint);font-size:12px;white-space:nowrap;line-height:20px}
 .bwho{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.bprog{color:var(--muted);font-size:13px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 标题与头像同一行，汇报气泡下移，名字和概要仍然同行（#126） */
+.bprog{position:relative;align-self:flex-start;max-width:100%;margin-top:8px;padding:6px 14px;border-radius:18px;background:var(--report-bg);color:var(--muted);font-size:13px;line-height:20px}
+.bprog::before{content:"";position:absolute;left:-6px;top:6px;width:12px;height:12px;background:var(--report-bg);border-bottom-left-radius:12px;transform:skewX(20deg)}
+.bsummary{position:relative;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bmeta{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;white-space:nowrap}
 .reason{font-size:11.5px;padding:1px 7px;border-radius:5px;white-space:nowrap;flex:none}
 .reason.done{background:var(--qing-soft);color:var(--qing)} .reason.ask{background:#F6ECD3;color:#8A6A12} .reason.err{background:#F6DEDA;color:var(--bad)}
@@ -247,7 +251,7 @@ body{overflow:hidden}
 .abar i{display:block;height:100%;background:var(--qing);border-radius:3px}
 .acnt{font-size:12px;color:var(--muted);white-space:nowrap}
 @media (max-width:1100px){.bgrid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
+@media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto minmax(0,1fr);gap:6px 10px}.bside{grid-column:2;flex-direction:row;align-items:center;gap:8px;max-width:100%}.bwhen{min-height:0}.bwho{min-width:0}.bmeta{grid-column:2;justify-content:flex-end}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
 .mem .btn{margin-right:12px}
@@ -2634,7 +2638,7 @@ async function loadBoardStats(){
 const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
 function boardRow(c, kind){
-  // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
+  // 标题对齐头像，下方气泡包住 Agent 名与进度，右侧保留来源（#126）
   const a = c.agent ? agentOf(c.agent) : null;
   const who = [(c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
   const said = c.ask && !c.ask.startsWith("/") ? c.ask : c.title;          // 最后一句是斜杠命令时用标题
@@ -2649,7 +2653,7 @@ function boardRow(c, kind){
   const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
   const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico">${iconOf(c, a, kind === "recent" ? "sm" : "")}${dot}</span>
     <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
-    <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
+    ${a || prog ? `<span class="bprog"><span class="bsummary">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog}</span></span>` : ""}</span>
     <span class="bside"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
   if (!replying) return row;
   return `<div class="bitem">${row}<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"

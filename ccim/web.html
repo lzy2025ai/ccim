@@ -150,6 +150,9 @@ body{overflow:hidden}
 .item.today .when{color:var(--qing);font-weight:500}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
+.ck-box{flex:none;width:18px;height:18px;margin:2px 10px 0 0;border:1.5px solid var(--line-strong);border-radius:5px;background:var(--panel,#fff);color:#fff;font-size:12px;line-height:15px;text-align:center;cursor:pointer;padding:0}
+.ck-box.on{background:var(--qing);border-color:var(--qing)}
+.ck-box:disabled{opacity:.4;cursor:default}
 .udot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--zhu);margin-right:6px;vertical-align:2px;flex:none}
 .item.new .title{font-weight:700;color:var(--ink)}
 /* 刚回答完、还没看（#54）：像邮件的未读，标题加粗 + 小圆点，第二行前面一个字的提示，不加底色和色条 */
@@ -2610,7 +2613,7 @@ function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");
   if (b) { b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
-  const d = devCount(), sb = $("#nav-set-n");
+  const d = devCount() + oldMachines().length, sb = $("#nav-set-n");
   if (sb) { sb.hidden = !d; sb.textContent = d; }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
@@ -3775,7 +3778,7 @@ function renderSettingsList(){
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
     <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
-    <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑</span><span class="sub">${multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
+    <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑${oldMachines().length ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${oldMachines().length ? `${oldMachines().length} 台版本较旧，去升级` : multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
     ${S.hub ? `<button class="item" onclick="logout()"><span class="t"><span class="title">退出登录</span><span class="sub">${esc(S.hub.url || "")}</span></span></button>` : ""}</div>`;
 }
@@ -3805,6 +3808,10 @@ function renderMachines(){
 // ---- 开发页（#156）：等验收、体验中、已合并没升级的需求 ----
 const clip = (t, n) => (t = String(t).replace(/\s+/g, " ").trim()).length > n ? t.slice(0, n) + "…" : t;
 function devMachine(){ const m = (S.machines || []).find(m => m.online !== false && "dev" in (verOf(m) || {})); return m ? m.id : null; }
+function oldMachines(){   // 比服务器（最新）旧的电脑（开发版的那台归开发页管）
+  const lt = latestOf();
+  return lt ? (S.machines || []).filter(m => { const v = verOf(m); return m.online !== false && v && v.kind === "release" && v.commit && v.commit !== lt; }) : [];
+}
 function devCount(){ const m = devMachine(); return m ? (verOf(machineOf(m)) || {}).dev || 0 : 0; }
 let DEVP = null;
 async function renderDev(quiet){
@@ -3816,55 +3823,58 @@ async function renderDev(quiet){
   if (current.view !== "settings" || current.id !== "dev") return;
   drawDev();
 }
-function devItem(r, btns){
+let shipPick = new Set();               // 勾选了要一起上线的（PR 编号）
+function devItem(r, btns, pick){
   const c = r.chat, href = c ? boardHref(c) : null;
   const where = c ? `<a class="muted" href="${href}" style="font-size:12.5px">在「${esc(clip(((rowOf(c.id) || c).title || "对话").split(/\s*用户发来了/)[0], 24))}」里提的</a>` : "";
-  return `<div class="mem" style="padding:10px 0;align-items:flex-start">
+  return `<div class="mem" style="padding:10px 0;align-items:flex-start">${pick || ""}
     <div class="t" style="flex:1;min-width:0"><span class="title">${r.issue ? `<a href="https://github.com/${esc(DEVP.repo)}/issues/${r.issue}" target="_blank" rel="noopener" class="muted" style="margin-right:6px">#${r.issue}</a>` : ""}${esc(r.title)}</span>
       <span class="sub">${[r.state, where].filter(Boolean).join(" · ")}</span></div>
     <div style="display:flex;gap:8px;flex-shrink:0">${btns || ""}</div></div>`;
 }
 function drawDev(){
-  const d = DEVP, j = d.job || {}, busy = j.state === "running";
-  const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "merge" ? `正在合并 #${j.issue || j.pr}` : "正在升级"}${j.step ? `：${esc(j.step)}` : ""}</p>`
-    : j.state === "failed" && Date.now() / 1000 - j.at < 3600 ? `<p class="upg err">${j.kind === "merge" ? "合并没成功" : "升级没成功"}：${esc(j.error || "")}</p>`
-    : j.state === "done" && j.note && Date.now() / 1000 - j.at < 600 ? `<p class="upg ok">${esc(j.note)}</p>` : "";
-  const st = r => r.trying ? "正在体验" : r.checks === "fail" ? "检查没通过" : r.checks === "running" ? "检查中" : r.behind ? "落后于最新代码，合并时自动同步" : "等你验收";
-  const review = (d.review || []).map(r => devItem({...r, state: st(r)},
-    (r.trying ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry('main')">切回正式版本</button>`
-      : r.local ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry(${r.pr})">体验</button>` : "")
-    + `<button class="btn primary" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devMerge(${r.pr})">合并</button>`)).join("");
-  const merged = (d.merged || []).map(r => devItem({...r, state: `${whenTs(r.at)}合并`})).join("");
-  const need = (d.merged || []).length || d.stale;
-  const last = d.last && Date.now() / 1000 - d.last.at < 86400 ? `<p class="${d.last.ok ? "upg ok" : "upg err"}" style="white-space:pre-wrap">上次升级：${esc(d.last.text)}</p>` : "";
+  const d = DEVP, j = d.job || {}, busy = j.state === "running", fresh = j.at && Date.now() / 1000 - j.at < 3600;
+  const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : "正在更新这台 Mac"}${j.step ? `：${esc(j.step)}` : ""}</p>`
+    : j.state === "failed" && fresh ? `<p class="upg err">${esc(j.error || "没成功")}</p>`
+    : j.state === "done" && j.note && fresh ? `<p class="upg ok">${esc(j.note)}</p>` : "";
+  const review = d.review || [];
+  shipPick = new Set([...shipPick].filter(n => review.some(r => r.pr === n && r.checks !== "fail")));
+  const st = r => r.trying ? "试用中" : r.checks === "fail" ? "检查没通过，回到对话让 Agent 看看" : r.checks === "running" ? "检查中" : "等你验收";
+  const rows = review.map(r => devItem({...r, state: st(r)},
+    (r.trying ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry('main')">换回来</button>`
+      : r.local ? `<button class="btn" ${busy ? "disabled" : ""} onclick="devTry(${r.pr})">试用</button>` : "")
+    + `<button class="btn primary" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devShip([${r.pr}])">上线</button>`,
+    `<button class="ck-box ${shipPick.has(r.pr) ? "on" : ""}" role="checkbox" aria-checked="${shipPick.has(r.pr)}" aria-label="选中" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devToggle(${r.pr})">${shipPick.has(r.pr) ? "✓" : ""}</button>`)).join("");
+  const behind = (d.merged || []).length || d.stale;
+  const tried = review.find(r => r.trying);
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>开发</h2>
-    <div class="role">${d.trying ? `正在体验 ${esc(d.trying.label)}，这台电脑的网页和测试机器人跑的是它的版本。` : "这台电脑的网页和测试机器人跑的是正式版本。"}</div></div>
+    <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在这台 Mac 的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
     <button class="btn" onclick="renderDev('fresh')">刷新</button></div>
     <div class="pane">${d.error ? `<p class="upg err">${esc(d.error)}</p>` : ""}${jobLine}
-      <div class="sect"><h3>等你验收 ${(d.review || []).length || ""}</h3>${review || `<p class="muted">没有等验收的。</p>`}</div>
-      <div class="sect"><h3>已合并，还没升级 ${(d.merged || []).length || ""}</h3>
-        ${merged || (d.stale ? `<p class="muted">这台电脑的网页还在跑合并前的代码。</p>` : `<p class="muted">都升级好了。</p>`)}
-        ${need ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devUpgrade()">全部升级</button>` : ""}${last}</div>
+      ${behind && !busy ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
+      <div class="sect"><h3>等你验收 ${review.length || ""}</h3>${rows || `<p class="muted">没有等验收的需求。</p>`}
+        ${shipPick.size > 1 ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devShip([...shipPick])">一起上线 ${shipPick.size} 个</button>` : ""}</div>
     </div></div>`;
 }
+function devToggle(pr){ shipPick.has(pr) ? shipPick.delete(pr) : shipPick.add(pr); drawDev(); }
 async function devTry(what){
   const r = what === "main" ? null : (DEVP.review || []).find(x => x.pr === what);
-  const ok = await confirmBox(what === "main" ? "切回正式版本" : `体验 #${r.issue || r.pr}`,
-    "这台电脑的网页平台和测试机器人会重启，网页断开十几秒；正在干活的对话会等手头这一步做完再重启。", what === "main" ? "切回" : "体验");
+  const ok = await confirmBox(what === "main" ? "换回正式版本" : `试用 #${r.issue || r.pr}`,
+    "这台 Mac 上的网页和测试机器人会重启，网页断开十几秒；正在干活的对话会等手头这一步做完。", what === "main" ? "换回来" : "试用");
   if (!ok) return;
-  await act(() => api("/api/dev/try", {what}, devMachine()), what === "main" ? "正在切回，重启好了刷新网页" : "正在切换，重启好了刷新网页就是这个版本");
+  await act(() => api("/api/dev/try", {what}, devMachine()), "正在切换，好了刷新网页");
 }
-async function devMerge(pr){
-  const r = (DEVP.review || []).find(x => x.pr === pr);
-  if (!await confirmBox(`合并 #${r.issue || r.pr}`, `「${r.title}」合并进正式代码。合并后在下面「全部升级」才会用上。`, "合并")) return;
-  await act(() => api("/api/dev/merge", {pr}, devMachine()));
+async function devShip(prs){
+  const items = prs.map(n => (DEVP.review || []).find(x => x.pr === n)).filter(Boolean);
+  dialog(items.length > 1 ? `一起上线 ${items.length} 个` : "上线", `<ul>${items.map(r => `<li>${r.issue ? `#${r.issue} ` : ""}${esc(r.title)}</li>`).join("")}</ul>
+    <p class="muted">${items.length > 1 ? "逐个合进正式版本（每个要等一分钟左右的检查），全部合好后" : "合进正式版本后，"}服务器上的网页和这台 Mac 一起更新。这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。</p>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="dev-ship-ok">上线</button>`);
+  $("#dev-ship-ok").onclick = async () => { closeDialog(); await act(() => api("/api/dev/ship", {prs}, devMachine())); shipPick = new Set(); renderDev(true); };
+}
+async function devUpdate(){
+  if (!await confirmBox("更新这台 Mac", "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。", "更新")) return;
+  await act(() => api("/api/dev/update", {}, devMachine()));
   renderDev(true);
-}
-async function devUpgrade(){
-  const items = (DEVP.merged || []).map(r => `<li>${r.issue ? `#${r.issue} ` : ""}${esc(r.title)}</li>`).join("");
-  dialog("全部升级", `${items ? `<p>这次会带上：</p><ul>${items}</ul>` : ""}<p class="muted">这台电脑的网页平台、测试机器人和在跑的飞书、微信机器人会依次重启（各自等手头的活做完），网页断开十几秒。结果显示在这一页。</p>`,
-    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="dev-up-ok">升级</button>`);
-  $("#dev-up-ok").onclick = async () => { closeDialog(); await act(() => api("/api/dev/upgrade", {}, devMachine()), "正在升级"); renderDev(true); };
 }
 
 // ---- 版本和升级（#37） ----
@@ -3889,6 +3899,8 @@ function upgradeBox(m){
   const note = recent && j.state === "done" && j.to !== j.from ? `<span class="upg ok">已升级到 ${esc(j.to)}</span>`
     : recent && j.state === "done" && j.note && Date.now() / 1000 - j.at < 600 ? `<span class="upg ok">${esc(j.note)}</span>`
     : recent && (j.state === "failed" || j.state === "rolled_back") ? `<span class="upg err" title="${esc(j.error || "")}">${j.state === "rolled_back" ? "新版本没起来，已装回原来的版本" : "升级失败"}</span>` : "";
+  if (v.kind === "dev" && latestOf() && v.commit && v.commit !== latestOf() && !note)
+    return `<a class="upg new" href="#/settings/dev">还没用上最新版本，去开发页更新</a>`;
   if (v.kind !== "release") return note;
   const lt = latestOf();
   if (lt && v.commit === lt) return note || `<span class="upg">已是最新</span>`;

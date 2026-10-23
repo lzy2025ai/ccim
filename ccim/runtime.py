@@ -509,6 +509,18 @@ def promote_run():
         post_note(proc, chat, text)
 
 
+def promoting():
+    """后台升级（promote-run）还在做：它一直拿着 .promote.lock。"""
+    import fcntl
+    try:
+        with open(os.path.join(_stable(), ".promote.lock"), "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+
+
 def last_promote():
     """上一次在后台升级的结果（开发页显示）。"""
     try:

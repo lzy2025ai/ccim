@@ -24,9 +24,16 @@
   `_next` 读到就当一轮处理（AWAKE，不提问、没有 reply_to），回答单独发出去。以前空闲时不读，这一轮积着，下一条消息先读到它（秒回），之后每条错一位
 - `ccim/codex.py`：`CodexChat`（继承 `Chat`，项目 `agent=codex` 时 bridge 用它）。一轮 = 一次 `codex exec --json`（接着聊加 `resume <thread_id>`），
   标准输入必须关掉否则一直等。只换了「怎么和助手说话」：`_turn_inner` / `_interrupt`（SIGINT）/ `inject`（恒 False，exec 不接受中途补充，
-  `codex queue` 放进去它也看不到）；进度卡片、排队、发回答（`Chat._finish`）都复用。发文件靠回复里的「[发送文件] 路径」行。
+  `codex queue` 放进去它也看不到）；进度卡片、排队、发回答（`Chat._finish`）都复用。ccim 的工具经 MCP 挂上（`mcp_args`，见下面 toolsock），
+  老对话里约定过的「[发送文件] 路径」行照旧认。
   codex 优先用 ChatGPT.app 自带的（不依赖 Node，后台进程里也能跑），模型等跟随 ~/.codex/config.toml。
   对话编号存的键按助手分开（`Chat.SID_KEY`：session_id / codex_session_id），`--agent` 切换后两边互不干扰
+- `ccim/toolsock.py` + `ccim/mcpstdio.py`：ccim 的工具和底座无关（#178）。`Chat._tool_list` 是这个对话能用的工具（Claude Code 照旧进程内挂上）；
+  每个 ccim 进程开一个只有本用户能连的 unix socket（~/.ccim/run/tools-<pid>.sock），会话环境变量带 CCIM_TOKEN（认出是哪个对话）和 CCIM_TOOLS（socket），
+  调的就是这个对话自己那份工具，权限、审批和 Claude Code 里一样。mcpstdio.py 是标准 MCP 服务（stdio，不 import ccim，用 `python -I` 跑），
+  Codex 每一轮用 -c mcp_servers.ccim.* 挂上：令牌要写进 env（Codex 不传自己的环境变量给 MCP 服务），工具要设自动放行
+  （exec 里没人批准，不设就被拒），等待时间放长（问别的 Agent 要等它答完）。不支持 MCP 的底座用 `ccim tool [名字 'JSON']`。
+  Codex 不给 send_to_chat（转交目标是 Claude Code 会话）
 - `ccim/approval.py`：`can_use_tool` → 审批卡片 → 按钮 / 文字 y n / 10 分钟超时
 - `ccim/commands.py`：`/new` `/resume` `/stop` `/status` `/model` `/effort` `/help`，其他斜杠命令原样交给 Claude
 - `ccim/handoff.py`：`ccim handoff`，把 Claude Code 里正在进行的对话（`CLAUDE_CODE_SESSION_ID`）转到飞书私聊。

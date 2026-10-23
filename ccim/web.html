@@ -582,6 +582,7 @@ body{overflow:hidden}
 .select:hover{border-color:var(--ink-2)}
 .select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
 .select svg{width:14px;height:14px;color:var(--muted);flex:none}
+.select.ro,.select.ro:hover{background:var(--sunk);border-color:var(--line);color:var(--ink-2);cursor:default}   /* 只能看的设置：和下拉框一样的格子 */
 
 /* ---------- 项目 ---------- */
 .pmark{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 16px var(--song);
@@ -648,6 +649,7 @@ body{overflow:hidden}
 .seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;gap:2px}
 .seg button{padding:5px 14px;border-radius:7px;font-size:13px;color:var(--muted)}
 .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.seg button:disabled{cursor:default}
 .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:12px}
 .pick{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid var(--line);text-align:left}
 .pick:hover{border-color:var(--ink-2)}
@@ -4638,8 +4640,7 @@ function renderChatSettings(){
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
     <div class="pane"><div class="sect"><h3>归档的对话</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">归档后多久没有新消息就删除<div class="muted" style="font-size:12.5px">存进知识库的内容会保留</div></div>
-        ${ro ? `<div>${(opts.find(o => o[0] === cur) || opts[1])[1]}</div>`
-          : `<div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" onclick="setArchiveDays('${v}')">${l}</button>`).join("")}</div>`}</div>
+        <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setArchiveDays('${v}')"`}>${l}</button>`).join("")}</div></div>
     </div></div></div>`;
 }
 async function setArchiveDays(v){
@@ -4665,10 +4666,10 @@ async function renderSettings(){
   Object.assign(gs, {model: G.model || "", effort: G.effort || "", codex_model: G.codex_model || "", codex_effort: G.codex_effort || ""});
   const [cm, ce] = D.claude || [], [xm, xe] = D.codex || [];
   const ro = sharedM(gsMachine);            // 共享给我的电脑：主人设的，只能看（#154）
-  const show = (v, dflt) => `<div style="padding:9px 0">${esc(v || dflt)}</div>`;
+  const show = (v, dflt) => `<div class="select ro">${esc(v || dflt)}</div>`;
   const pick = multi() ? `<div class="sect"><h3>哪台电脑</h3><div class="seg">${ms.map(m => `<button class="${m.id === gsMachine ? "on" : ""}" aria-pressed="${m.id === gsMachine}" onclick="gsMachine=${q(m.id)};renderSettings()">${esc(m.name)}${m.me && !S.hub ? "（这台）" : ""}</button>`).join("")}</div></div>` : "";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
-    <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。</div></div></div>
+    <div class="role">${ro ? "Agent 和对话里没单独设置时用这里的。" : "Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。"}</div></div></div>
     <div class="pane">${pick}${ro ? `<div class="sect"><h3>Claude Code</h3><div class="form">
       <label>模型</label>${show(gs.model && modelName(gs.model), `跟随 Claude Code 设置（${modelName(cm)}）`)}
       <label>思考深度</label>${show(gs.effort, `跟随 Claude Code 设置（${ce || "默认"}）`)}</div></div>

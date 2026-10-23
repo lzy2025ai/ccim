@@ -138,13 +138,16 @@ Opens ccim in your browser (only on this Mac); it keeps running in the backgroun
   bases when starting a chat (Claude Code only) and it checks them before answering and names the entries it used,
   or start a chat from the knowledge base page.
 - **Settings**: default model and effort level for Claude Code and for Codex; how long archived chats are kept.
-- **Two computers**: install ccim on the other Mac, create a pairing code under 设置 → 电脑 (Settings → Computers) on
-  this one, and run `ccim join <this Mac's address> <code>` there (both on the same network). From then on the web UI on
+- **Two computers**: create a pairing code under 设置 → 电脑 → 添加电脑 (Settings → Computers → Add) on this Mac and run the
+  one-line command it shows on the other computer (`curl -fsSL http://<this Mac's address>:8978/join.sh | sh -s <code>`;
+  both on the same network). It installs ccim if needed (downloaded from this Mac; dependencies and Python come from mirrors
+  in mainland China when PyPI or GitHub can't be reached), switches an older ccim to this Mac's version, joins and sets ccim
+  to start at login; the web page shows each step live. With ccim already installed, `ccim join <address> <code>` also works. From then on the web UI on
   either Mac shows and controls the agents, chats, projects and scheduled tasks of both, each labelled with its computer;
   work still runs on the computer it belongs to and files are not copied across. Messages to a computer that is offline
   are kept and sent when it reconnects. `ccim join --leave` disconnects. 设置 → 电脑 also shows each computer's ccim
   version; ones that are behind get an upgrade button that upgrades and restarts ccim on that computer, and goes back to
-  the previous version if the new one doesn't start (for installs made with `uv tool install`).
+  the previous version if the new one doesn't start (for installs made with `uv tool install` or the command above).
 
 ## In Feishu
 

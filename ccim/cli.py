@@ -954,23 +954,58 @@ def cmd_web(args):
 
 
 def cmd_join(args):
-    """加入另一台电脑（#13）：在一个网页里管理几台电脑的 Agent。"""
+    """加入另一台电脑（#13）：在一个网页里管理几台电脑的 Agent。
+    已经加入了这个总控就不再配对，只确认在运行（#175，新电脑接入脚本每次都会来这一步）。"""
     from . import daemon, peers, platform
     h, _ = platform.ensure_registered()
+    fresh = False
     if args.leave:
         if not os.path.exists(os.path.join(registry.HOME, "hub.json")):
             raise SystemExit("这台电脑没有加入别的电脑。")
         peers.leave()
         print("已断开。网页里只显示这台电脑自己的东西了。")
+        fresh = True
     else:
-        if not args.host or not args.code:
-            raise SystemExit("用法：ccim join 地址 配对码（配对码在总控网页的「设置」→「电脑」里生成，地址也在那里）")
-        name = peers.join(args.host, args.code)
-        print(f"已加入「{name}」。")
-    if daemon.running(h):
-        daemon.stop(h)
-    daemon.start_always(h, "web")
-    print(f"在这台电脑上打开 {platform.url()} 就能看到{'两台' if not args.leave else '这台'}电脑的 Agent 和对话。")
+        usage = "用法：ccim join 地址 配对码（配对码在总控网页的「设置」→「电脑」里生成，地址也在那里）"
+        if not args.host:
+            raise SystemExit(usage)
+        url = peers.hub_url(args.host)
+        hub = peers._load("hub.json", None)
+        same = bool(hub and hub.get("url") == url)
+        ok = peers.check_joined() if same else False
+        if same and ok is not False:
+            print(f"这台电脑已经加入「{hub.get('hub_name')}」了。" + ("" if ok else "现在连不上总控，连上后会自动接上。"))
+        elif not args.code:
+            raise SystemExit("总控不认这台电脑了（可能被移除了）。到网页「设置 → 电脑」里重新生成配对码，再运行网页上给的命令。"
+                             if same else usage)
+        else:
+            name = peers.join(args.host, args.code)
+            print(f"已加入「{name}」。")
+            fresh = True
+    if args.restart:                          # 刚换了版本（#175）：在跑的飞书、微信也换成新代码
+        from . import runtime
+        for p in registry.all_projects():
+            if p != h and daemon.running(p):
+                print(runtime.safe_restart(p, notify=False)[1])
+    if fresh or args.restart or not daemon.running(h):
+        if daemon.running(h):
+            daemon.stop(h)
+        _keep_running(h)
+        print("ccim 已在后台运行，开机后自动启动。" if sys.platform == "darwin" else "ccim 已在后台运行。")
+    else:
+        print("ccim 在运行。")
+    if args.code and not args.leave:
+        peers.report(peers.hub_url(args.host), args.code, "done", name=peers.identity()["name"])
+    print(f"在这台电脑上打开 {platform.url()} 就能看到{'各台' if not args.leave else '这台'}电脑的 Agent 和对话。")
+
+
+def _keep_running(h):
+    """网页平台常驻：macOS 交给 launchd；别的系统（Linux）先在后台跑起来。"""
+    from . import daemon
+    if sys.platform == "darwin":
+        daemon.start_always(h, "web")
+    else:
+        daemon.start_background(h, "web")
 
 
 def cmd_hub(args):
@@ -1103,6 +1138,7 @@ def parser():
     s.add_argument("host", nargs="?", help="那台电脑的地址（局域网 IP）")
     s.add_argument("code", nargs="?", help="配对码：在那台电脑的网页「设置」→「电脑」里生成")
     s.add_argument("--leave", action="store_true", help="断开，不再加入别的电脑")
+    s.add_argument("--restart", action="store_true", help="刚升级过 ccim：把在跑的都重启成新版本")
     s.set_defaults(fn=cmd_join)
     s = sub.add_parser("try", help="开发 ccim 时用：验收某个需求时把开发版切到它的工作目录上（ccim try 40），ccim try main 切回")
     s.add_argument("what", nargs="?", help="需求编号、分支名或工作目录；main 切回；不写就列出能试的")

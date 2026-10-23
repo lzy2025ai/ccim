@@ -263,10 +263,22 @@ class Peers:
         code = f"{secrets.randbelow(10 ** 6):06d}"
         with self.lock:
             self.codes = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
-            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0, "account": account}
+            pid = secrets.token_hex(8)        # 网页认进度用（#175），推送里不带配对码本身
+            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0, "account": account, "pid": pid}
         if self.public_url:                   # 服务器上的总控：给公网地址
-            return {"code": code, "minutes": CODE_TTL // 60, "hosts": [self.public_url], "port": None}
-        return {"code": code, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
+            return {"code": code, "pid": pid, "minutes": CODE_TTL // 60, "hosts": [self.public_url], "port": None}
+        return {"code": code, "pid": pid, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
+
+    def progress(self, body):
+        """新电脑上的 join.sh、ccim join 报进度（#175）：配对码对得上才推给网页。"""
+        from . import onboard
+        with self.lock:
+            rec = self.codes.get(str(body.get("code") or ""))
+            if not rec or rec["until"] < time.time():
+                return
+        ev = onboard.progress_event(rec, body)
+        if ev:
+            self.pf.channel.events.publish(ev)
 
     def pair(self, body):
         code = str(body.get("code") or "")
@@ -274,11 +286,13 @@ class Peers:
             live = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
             for v in live.values():
                 v["tries"] += 1
-            if code not in live or live[code]["tries"] > 10:
+            if code not in live or live[code]["tries"] > 10 or live[code].get("used"):
                 if all(v["tries"] > 10 for v in live.values()):
                     self.codes = {}
                 raise PermissionError("配对码不对或者过期了，在那台电脑的网页里重新生成一个。")
-            account = self.codes.pop(code).get("account")
+            rec = live[code]
+            rec["used"] = True                # 用过了，留到过期：那台电脑接着报的进度还要认（#175）
+            account = rec.get("account")
             mid = str(body.get("id") or "")[:20] or "m" + uuid.uuid4().hex[:8]
             if mid == self.me["id"]:
                 raise PermissionError("不能加入自己。")
@@ -290,6 +304,10 @@ class Peers:
                 self.nodes[mid]["account"] = account
             _save("peers.json", self.nodes)
         self._emit_machines()
+        from . import onboard
+        ev = onboard.progress_event(rec, {"step": "done", "name": self.nodes[mid]["name"]})
+        if ev:
+            self.pf.channel.events.publish(ev)
         return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL,
                 "server": self.server_hub}
 
@@ -679,6 +697,36 @@ def _handler(peers):
             self.end_headers()
             self.wfile.write(data)
 
+        def do_GET(self):
+            """新电脑接入（#175）：join.sh 和安装包，不用登录。"""
+            from . import onboard
+            path = urlparse(self.path).path
+            try:
+                if path in ("/join.sh", "/peer/join.sh"):
+                    base = peers.public_url or "http://" + (self.headers.get("Host") or f"127.0.0.1:{PEER_PORT}")
+                    return self._send_raw(200, onboard.script(base), "text/x-shellscript; charset=utf-8")
+                if path == "/peer/version":
+                    _, name, sha = onboard.wheel()
+                    return self._reply(200, {"commit": onboard.commit()[:7], "version": onboard.version(),
+                                             "wheel": name, "sha256": sha})
+                if path.startswith("/peer/dl/"):
+                    f = onboard.wheel_file(path.rsplit("/", 1)[-1])
+                    if f:
+                        with open(f, "rb") as fh:
+                            return self._send_raw(200, fh.read(), "application/octet-stream")
+            except Exception:
+                log.exception("提供 %s 出错", path)
+                return self._reply(500, {"error": "出错了"})
+            return self._reply(404, {"error": "not found"})
+
+        def _send_raw(self, status, data, ctype):
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_POST(self):
             n = int(self.headers.get("Content-Length") or 0)
             if n > 160 * 1024 * 1024:
@@ -693,6 +741,12 @@ def _handler(peers):
                     return self._reply(403, {"error": str(e)})
                 except ValueError:
                     return self._reply(400, {"error": "请求不对"})
+            if path == "/peer/progress":
+                try:
+                    peers.progress(json.loads(body or b"{}"))
+                except ValueError:
+                    pass
+                return self._reply(200, {})
             mid = self.headers.get("X-Node") or ""
             node = peers.nodes.get(mid)
             ts, nonce, sig = self.headers.get("X-Ts") or "0", self.headers.get("X-Nonce") or "", self.headers.get("X-Sig") or ""
@@ -772,14 +826,45 @@ def leave():
         pass
 
 
+def hub_url(host):
+    """ccim join 后面写的地址 → 总控的地址（和 hub.json 里存的一样写法）。"""
+    if host.startswith("https://"):
+        return host.rstrip("/")
+    if ":" not in host.split("//")[-1]:
+        host = f"{host}:{PEER_PORT}"
+    return (host if host.startswith("http") else "http://" + host).rstrip("/")
+
+
+def check_joined():
+    """已经加入的总控还认不认这台电脑：True 认 / False 不认了 / None 连不上。"""
+    p = Peers.__new__(Peers)
+    p.hub, p.me = _load("hub.json", None), identity()
+    try:
+        p._hub_request("/peer/push", b"[]", timeout=15)
+        return True
+    except PermissionError:
+        return False
+    except Exception:
+        return None
+
+
+def report(url, code, step, **kw):
+    """告诉总控这台电脑接入到哪一步了（网页上实时显示），连不上就算了。"""
+    try:
+        c = _conn(url, 5)
+        try:
+            c.request("POST", "/peer/progress", body=json.dumps(dict(kw, code=code, step=step)).encode(),
+                      headers={"Content-Type": "application/json"})
+            c.getresponse().read()
+        finally:
+            c.close()
+    except Exception:
+        pass
+
+
 def join(host, code):
     """加入另一台电脑或服务器上的总控。返回总控的名字。https:// 开头的是服务器（端口默认 443）。"""
-    if host.startswith("https://"):
-        url = host.rstrip("/")
-    else:
-        if ":" not in host.split("//")[-1]:
-            host = f"{host}:{PEER_PORT}"
-        url = host if host.startswith("http") else "http://" + host
+    url = hub_url(host)
     me = identity()
     u = urlparse(url)
     c = _conn(url, 15)

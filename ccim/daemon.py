@@ -111,7 +111,7 @@ def start_always(path, channel, python=None):
         "ProcessType": "Interactive",
         "StandardOutPath": log_path(path),
         "StandardErrorPath": log_path(path),
-        "EnvironmentVariables": {"PATH": env_path, "LANG": "zh_CN.UTF-8", "PYTHONUNBUFFERED": "1", **_launch_env(argv[0])},
+        "EnvironmentVariables": {"PATH": env_path, "HOME": home, "LANG": "zh_CN.UTF-8", "PYTHONUNBUFFERED": "1", **_launch_env(argv[0])},
     }
     os.makedirs(os.path.dirname(plist_path(path)), exist_ok=True)
     _launchctl("bootout", f"{_domain()}/{label(path)}")

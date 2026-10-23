@@ -195,6 +195,15 @@
   各人看到哪记在主对话 meta 的 ctx_upto。群聊说明改过后各人下一次被问到时在消息前面带上（note_seen）。
   启动时 `migrate_projects` 把每个项目复制成群聊（只做一次，state 的 groups_from_projects）：第一个本机成员当主 Agent 并 fork 它在项目里的会话，
   记录转成 user / answer / mention，指向项目的定时任务改成 kind=group
+- `ccim/onboard.py` + `ccim/join.sh`：新电脑一条命令接入（#175）。总控（服务器 /join.sh、局域网 Mac 的 8978 端口 /join.sh）给出填好地址、
+  版本、安装包校验值的 join.sh；安装包 /peer/dl/<文件名> 是总控把自己正在跑的 ccim 现打的 wheel（自己写 zip，版本号 0.19.0+g<提交>，
+  缓存在 ~/.ccim/dist），不经过 GitHub。脚本先看本机 ccim（没装 / 不同版本 / 一样 / 开发版不动）和 hub.json（已加入这个 / 别的总控：有终端就问，没有就停），
+  连不上 PyPI、GitHub 时 uv、依赖、Python 走国内镜像（阿里云等 PyPI 镜像、npmmirror 的 python-build-standalone），`uv tool install --no-build`
+  （新版 cryptography 不出 Intel Mac 的包，不让它在本机编译）。整个脚本包在 main 里（curl | sh 时子命令会读走后面的脚本）；sh 里中文紧跟变量名要写 ${VAR}。
+  进度：脚本和 `ccim join` POST /peer/progress（配对码对得上才推 type=pairing，只带 pid，服务器上只推给生成配对码的账号），配对码用过后留到过期。
+  `ccim join` 已加入同一个总控时先用签名请求问还认不认（`peers.check_joined`），认就不配对、只确认在运行；--restart 是脚本升级后重启在跑的进程。
+  `upgrade.info` 从版本号认出从总控装的（url=hub），网页升级从总控下载（`_from_hub`），装回原来版本用 ~/.ccim/dist 里的旧包。
+  测试：临时 HOME 起 `ccim hub --url http://127.0.0.1:18978 --port 18977 --peer-port 18978`，另一个临时 HOME、PATH 只留系统目录跑脚本（plist 里带 HOME，常驻进程用的也是临时目录）
 - `ccim/hubserver.py`：服务器上的总控（#16，`ccim hub --url https://IP`）。只做网页、登录、转发：Peers(server=True) 不把自己算一台电脑，
   /peer/* 和网页各听 127.0.0.1 的 8978 / 8977，前面 nginx 做 HTTPS（Let's Encrypt IP 证书，acme.sh shortlived 自动续）。
   登录：密码 scrypt + TOTP（同一个码不能用两次），第一次用 setup 链接（`ccim hub setup-link`）设置；Cookie 只存摘要，接口还要 X-CCIM 头；

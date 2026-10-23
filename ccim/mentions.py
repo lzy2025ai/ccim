@@ -54,14 +54,20 @@ class Mentions:
         if rec.get("type") == "mention":
             return self._agent_name(rec.get("agent"))
         a = agents.get(m.get("agent")) if m.get("agent") else None
-        return a["name"] if a else "助手"
+        if a:
+            return a["name"]
+        # 没选 Agent 的对话（#177）：写明是这个对话里的哪个助手，笼统写「助手」会被当成被 @ 的人自己说的
+        e = self.pf._effective(m, m)
+        return f"这个对话里的 {'Codex' if e['base'] == 'codex' else 'Claude'}" + (f"（{e['model']}）" if e.get("model") else "")
 
-    def _context(self, cid, since):
-        """对话里 since 之后的内容，整理成文字。"""
+    def _context(self, cid, since, aid=None):
+        """对话里 since 之后的内容，整理成文字。aid 自己说过的（被 @ 时的回答、它 @ 别人的话）已经在它的会话里，不再带。"""
         m = self.pf.meta(cid)
         lines = []
         for r in self.pf.channel.logs.read(cid):
             if r.get("at", 0) <= since or not (r.get("text") or "").strip():
+                continue
+            if aid and (r.get("by") == aid or (r.get("type") == "mention" and r.get("agent") == aid)):
                 continue
             if r.get("type") == "user":
                 lines.append(f"{self._agent_name(r['by']) if r.get('by') else '用户'}：{r['text']}")
@@ -100,7 +106,7 @@ class Mentions:
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         # 之前的内容在记下这条消息之前取，不把它自己算进去
         upto = _upto(m)
-        ctx = {aid: self._context(cid, upto.get(aid) or _seen(self.pf.chats().get(self.sub(cid, aid))))
+        ctx = {aid: self._context(cid, upto.get(aid) or _seen(self.pf.chats().get(self.sub(cid, aid))), aid)
                for aid in to}
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
@@ -121,7 +127,8 @@ class Mentions:
         for aid in to:
             sub = self.sub(cid, aid)
             prompt = groups.note_prefix(self.pf, cid, aid) + \
-                (f"（下面是这个对话之前的内容，供参考）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
+                (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
+                 f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
                 f"[{self._agent_name(by) if by else '用户'}在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)

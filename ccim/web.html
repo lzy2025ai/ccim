@@ -2035,6 +2035,7 @@ function drawChat(){
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
   if (prefill && !c.readonly) { input.value = prefill; prefill = ""; drawComposerState(); }
+  if (loadDraft("c:" + c.id)) drawComposerState();
   input.focus();
 }
 function drawComposerState(){
@@ -2119,11 +2120,11 @@ async function sendChat(){
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
   closePop();
-  const back = () => { $("#input").value = typed; if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
+  const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
   quotes.list = []; drawQuotes();
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt;
-    $("#input").value = ""; pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
+    $("#input").value = ""; saveDraft(); pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
     try {
       const r = await act(() => api("/api/chat/mention", {id: detail.id, text: v, files, to}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -2133,7 +2134,7 @@ async function sendChat(){
     return;
   }
   if (detail.readonly && starting) return;
-  $("#input").value = ""; pendingFiles = []; drawPending();
+  $("#input").value = ""; saveDraft(); pendingFiles = []; drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
     starting = true;
     const src = detail, mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
@@ -2301,6 +2302,21 @@ async function answerSecret(sid, run, form){
 }
 
 // ---- @ 其他 Agent ----
+// 输入框里没发出去的文字（#148）：每个输入框各记各的，存在这个浏览器里，切走、刷新、关掉再回来都还在。
+// 打字时记（input 事件）；代码改了输入框（发出去清空、发送失败退回）后调 saveDraft
+const DRAFT = "ccim.draft.", draftKeys = {input: "", "skc-in": "skills"};
+function saveDraft(id = "input"){
+  const el = $("#" + id), k = draftKeys[id]; if (!el || !k) return;
+  try { el.value.trim() ? localStorage.setItem(DRAFT + k, el.value) : localStorage.removeItem(DRAFT + k); } catch {}
+}
+function loadDraft(key, id = "input"){   // 换到 key 这个输入框；输入框是空的就填上记着的，返回填上的文字
+  draftKeys[id] = key;
+  const el = $("#" + id); if (!el || el.value) return "";
+  const v = localStorage.getItem(DRAFT + key) || "";
+  if (v) el.value = v;
+  return v;
+}
+document.addEventListener("input", e => { if (e.target && e.target.id in draftKeys) saveDraft(e.target.id); });
 let chatRcpt = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
@@ -2494,7 +2510,7 @@ function renderNewChat(){
       <div class="or">想和某个 Agent 聊？<button class="link" onclick="pickAgent(event)">选一个 Agent</button></div>
     </div>`;
   drawPending(); drawChatRcpt();
-  const i = $("#input"); i.value = draftText; i.focus();
+  const i = $("#input"); i.value = draftText; draftText = draftText || loadDraft("new"); draftKeys.input = "new"; i.focus();
   i.addEventListener("input", e => { draftText = i.value; atTyped(e); });
   i.addEventListener("keydown", ev => {
     if (sendKey(ev)) { ev.preventDefault(); startTemp(); }
@@ -2564,7 +2580,7 @@ async function startTemp0(v, files){
   if (draft.base === "claude" && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
   const to = chatRcpt; closePop();
   await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}, m) : api("/api/chat/send", {id, text: v, files}, m));
-  pendingFiles = []; chatRcpt = []; draftText = "";
+  pendingFiles = []; chatRcpt = []; draftText = ""; localStorage.removeItem(DRAFT + "new");
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 async function startAgent(aid){
@@ -2867,7 +2883,7 @@ function drawSkChat(){
     <div class="skc-foot">${skcLooking()}<div class="skc-box"><textarea id="skc-in" rows="1" placeholder="${SKC.busy ? "补充说明，它做完这一步就会看到" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
       <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#skc-body"); b.scrollTop = b.scrollHeight;
-  const ta = $("#skc-in"); ta.value = typed; skcFit();
+  const ta = $("#skc-in"); ta.value = typed; loadDraft("skills", "skc-in"); skcFit();
   ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); skcSend(); } };
   ta.oninput = () => {
     skcFit();
@@ -2896,12 +2912,13 @@ function skcResizer(){   // 内容和助手之间的分隔线：拖动改宽度�
 async function skcSend(text){
   const ta = $("#skc-in"), v = (text || (ta ? ta.value : "")).trim();
   if (!v || !SKC || !SKC.id) return;
-  if (ta) ta.value = "";
+  if (ta) { ta.value = ""; saveDraft("skc-in"); }
   SKC.log.push({type: "user", text: v, sending: true});
   if (!SKC.busy) SKC.progress = {steps: [], text: ""};
   SKC.busy = true; drawSkChat();
   try { await api("/api/chat/send", {id: SKC.id, text: v, files: [], ctx: skcCtx()}, SKC.mid); }
-  catch (e) { toast(e.message); SKC.log = SKC.log.filter(r => !r.sending); SKC.busy = false; SKC.progress = null; drawSkChat(); }
+  catch (e) { toast(e.message); SKC.log = SKC.log.filter(r => !r.sending); SKC.busy = false; SKC.progress = null; drawSkChat();
+    const t = $("#skc-in"); if (t && !t.value && !text) { t.value = v; saveDraft("skc-in"); skcFit(); } }
 }
 async function skcStop(){ if (SKC && SKC.id) await act(() => api("/api/chat/stop", {id: SKC.id}, SKC.mid)); }
 async function skcAct(mid, value){ await act(() => api("/api/chat/action", {id: SKC.id, mid, value}, SKC.mid)); }
@@ -4343,7 +4360,7 @@ function drawProject(){
   drawRcpt();
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const i = $("#input");
-  i.value = keep;
+  i.value = keep; loadDraft("p:" + p.id);
   i.addEventListener("keydown", e => {
     if (e.key === "@" && !e.isComposing) setTimeout(() => atMenu({currentTarget: $("#atchip"), stopPropagation(){}}), 0);
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); dispatch(); }
@@ -4387,9 +4404,9 @@ async function dispatch(){
   if (!rcpt.length) return toast("先 @ 选派给谁");
   if (!v) return $("#input").focus();
   const body = {id: proj.id, text: v, to: rcpt, compare: rcpt.length > 1 && compareMode, quote: quote ? {task: quote.task, agent: quote.agent} : null};
-  $("#input").value = "";
+  $("#input").value = ""; saveDraft();
   try { await act(() => api("/api/project/dispatch", body)); }
-  catch (e) { $("#input").value = v; return; }
+  catch (e) { $("#input").value = v; saveDraft(); return; }
   rcpt = []; quote = null; await openProject(proj.id); loadState();
 }
 async function stopReply(task, agent){ await act(() => api("/api/project/stop", {id: proj.id, task, agent}), "正在停下"); }

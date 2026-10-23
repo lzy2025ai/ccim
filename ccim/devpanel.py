@@ -169,8 +169,9 @@ class Dev:
     def __init__(self, pf):
         self.pf = pf
         self.cache, self.at, self.lock = None, 0, threading.Lock()
-        self.job = None                       # 正在做的合并 / 升级：{kind, pr, state, step, error, at}
+        self.job = None                       # 正在做的上线 / 更新：{kind, prs, names, state, step, note, error, at}
         self.started = runtime._git("rev-parse", "HEAD").stdout.strip()   # 这个进程启动时用的代码
+        self.job = self._load_job()
 
     # ----- 读 -----
 
@@ -234,6 +235,7 @@ class Dev:
         main = runtime._git("rev-parse", "origin/main").stdout.strip()
         return {"repo": repo, "review": review, "merged": merged, "stable": runtime._channel().get("current"),
                 "last": runtime.last_promote(),
+                "local_url": f"http://127.0.0.1:{registry.read_state(self.pf.home).get('port') or 8977}/",
                 "trying": trying and {"label": trying.get("label"), "branch": trying.get("branch")},
                 "stale": bool(main and self.started and not main.startswith(self.started[:7]) and not trying),
                 "at": time.time()}
@@ -272,6 +274,7 @@ class Dev:
                 log.warning("开发页 %s 出错", kind, exc_info=True)
                 self.job.update(state="failed", error=str(e))
             self.job["at"] = time.time()
+            self._save_job(self.job)
             self.refresh()
             self._publish()
         threading.Thread(target=go, daemon=True).start()
@@ -292,70 +295,113 @@ class Dev:
         self.refresh()
         return {"label": label, "results": results}
 
-    def merge(self, pr):
-        p = next((x for x in (self.cache or {}).get("review") or [] if x["pr"] == int(pr)), None)
-        if not p:
-            raise ValueError("找不到这个 PR，刷新一下再试。")
-        return self._start("merge", lambda: self._merge(p), pr=p["pr"], issue=p["issue"])
+    def ship(self, prs):
+        """上线（#156 第二轮）：选中的需求逐个合并，最后本机一起更新（只重启一次）。"""
+        review = (self.cache or {}).get("review") or []
+        items = [next((x for x in review if x["pr"] == int(n)), None) for n in prs or []]
+        if not items or None in items:
+            raise ValueError("找不到要上线的需求，刷新一下再试。")
+        return self._start("ship", lambda: self._ship(items), prs=[x["pr"] for x in items],
+                           names=[f"#{x['issue'] or x['pr']}" for x in items])
 
-    def _merge(self, p):
+    def update(self):
+        """已经合并了（比如 Agent 在对话里合的）、这台 Mac 还没用上：只做更新。"""
+        return self._start("update", lambda: (self._update(), "这台 Mac 已开始更新")[1])
+
+    def _ship(self, items):
+        done, skipped, n = [], [], len(items)
+        for i, p in enumerate(items):
+            tag = f"#{p['issue'] or p['pr']}"
+            try:
+                self._merge(p, f"{tag}{f'（{i + 1}/{n}）' if n > 1 else ''}")
+                done.append(tag)
+            except Exception as e:
+                skipped.append(f"{tag}：{e}")
+        note = ("、".join(done) + " 已上线，这台 Mac 正在更新") if done else ""
+        if skipped:
+            note += ("；" if note else "") + "没上线的：" + "；".join(skipped)
+        self._save_job(dict(self.job, note=note))
+        if not done:
+            raise RuntimeError(note)
+        self._update()
+        return note
+
+    def _merge(self, p, tag):
         repo, wt = _repo(), dict((b, x) for x, b in runtime.worktrees()[1:]).get(p["branch"])
-        if p["behind"] or p["checks"] == "fail":
-            if not wt:
-                raise RuntimeError("落后于最新代码，这台电脑上又没有它的工作目录，没法自动同步。")
-            self._step("同步最新代码")
-            _run(["git", "-C", wt, "fetch", "-q", "origin"], timeout=60)
-            r = _run(["git", "-C", wt, "rebase", "-q", "origin/main"], timeout=120)
-            if r.returncode != 0:
-                _run(["git", "-C", wt, "rebase", "--abort"], timeout=30)
-                raise RuntimeError("和最新代码有冲突，没法自动同步。回到提这个需求的对话，让 Agent 处理冲突。")
-            r = _run(["git", "-C", wt, "push", "-q", "-f"], timeout=120)
-            if r.returncode != 0:
-                raise RuntimeError("推送失败：" + (r.stderr or "").strip()[-200:])
-            time.sleep(10)
-        self._step("等检查通过")
-        deadline = time.time() + 600
-        while True:
-            r = _gh(repo, ["pr", "view", str(p["pr"]), "--json", "statusCheckRollup,mergeStateStatus"])
+        synced, deadline = 0, time.time() + 900
+        self._step(f"{tag} 等检查通过")
+        while True:                           # 前一个合进去后，后面的会落后：每次现问
+            r = _gh(repo, ["pr", "view", str(p["pr"]), "--json", "state,statusCheckRollup,mergeStateStatus"])
             info = json.loads(r.stdout or "{}") if r.returncode == 0 else {}
-            st = _checks(info.get("statusCheckRollup"))
-            if st == "fail":
-                raise RuntimeError("检查没通过，回到提这个需求的对话让 Agent 看看。")
-            if st == "ok" and info.get("mergeStateStatus") not in ("BEHIND", "UNKNOWN"):
+            if info.get("state") == "MERGED":
                 break
+            ms, st = info.get("mergeStateStatus"), _checks(info.get("statusCheckRollup"))
+            if ms == "BEHIND" or (st == "fail" and not synced):
+                if synced >= 2 or not wt:
+                    raise RuntimeError("落后于最新代码，没法自动同步")
+                self._step(f"{tag} 同步最新代码")
+                _run(["git", "-C", wt, "fetch", "-q", "origin"], timeout=60)
+                r = _run(["git", "-C", wt, "rebase", "-q", "origin/main"], timeout=120)
+                if r.returncode != 0:
+                    _run(["git", "-C", wt, "rebase", "--abort"], timeout=30)
+                    raise RuntimeError("和别的改动有冲突，回到提这个需求的对话让 Agent 处理")
+                r = _run(["git", "-C", wt, "push", "-q", "-f"], timeout=120)
+                if r.returncode != 0:
+                    raise RuntimeError("推送失败：" + (r.stderr or "").strip()[-200:])
+                synced += 1
+                self._step(f"{tag} 等检查通过")
+                time.sleep(15)
+                continue
+            if st == "fail":
+                raise RuntimeError("检查没通过，回到提这个需求的对话让 Agent 看看")
+            if st == "ok" and ms not in ("UNKNOWN", None):
+                self._step(f"{tag} 合并")
+                r = _gh(repo, ["pr", "merge", str(p["pr"]), "--squash", "--delete-branch"], timeout=120)
+                if r.returncode == 0 or "already merged" in (r.stderr or ""):
+                    break
+                if "not up to date" not in (r.stderr or "") and "behind" not in (r.stderr or "").lower():
+                    raise RuntimeError("合并失败：" + (r.stderr or r.stdout).strip()[-200:])
             if time.time() > deadline:
-                raise RuntimeError("检查 10 分钟还没跑完，稍后再试。")
+                raise RuntimeError("检查 15 分钟还没跑完")
             time.sleep(10)
-        self._step("合并")
-        r = _gh(repo, ["pr", "merge", str(p["pr"]), "--squash", "--delete-branch"], timeout=120)
-        if r.returncode != 0 and "already merged" not in (r.stderr or ""):
-            raise RuntimeError("合并失败：" + (r.stderr or r.stdout).strip()[-200:])
-        self._step("更新本机代码")
         main = runtime._repo()
+        _run(["git", "-C", main, "fetch", "-q", "origin"], timeout=60)
         _run(["git", "-C", main, "pull", "-q", "--ff-only"], timeout=120)
         trying = runtime.trying()
-        if wt and not (trying and trying.get("branch") == p["branch"]):   # 正在体验它的：工作目录还在用，升级时切回 main 后再清
+        if wt and not (trying and trying.get("branch") == p["branch"]):   # 正在试用它的：工作目录还在用，更新时切回 main 后再清
             _run(["git", "-C", main, "worktree", "remove", wt], timeout=60)
             _run(["git", "-C", main, "branch", "-D", p["branch"]], timeout=30)
-        return f"已合并 #{p['issue'] or p['pr']}"
 
-    def upgrade(self):
-        return self._start("upgrade", self._upgrade)
-
-    def _upgrade(self):
+    def _update(self):
         main = runtime._repo()
-        self._step("更新本机代码")
+        self._step("更新这台 Mac")
         _run(["git", "-C", main, "pull", "-q", "--ff-only"], timeout=120)
         trying = runtime.trying()
-        self._step("升级稳定版")
         runtime.start_promote()               # 独立进程：装新版本、等各项目手头的活做完再重启
-        if trying:                            # 切回 main 后，体验用的工作目录（已合并的）可以清掉
+        if trying:                            # 切回 main 后，试用的工作目录（已合并的）可以清掉
             merged = trying.get("branch")
             r = _run(["git", "-C", main, "branch", "-r", "--list", f"origin/{merged}"], timeout=30)
             if not r.stdout.strip():          # 分支已经合并删掉了：等平台重启好（不再用这个目录）再清，平台重启也不影响
                 subprocess.Popen(["sh", "-c", 'sleep 300; git -C "$1" worktree remove "$2" && git -C "$1" branch -D "$3"', "sh",
                                   main, trying["src"], merged], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, start_new_session=True, cwd="/")
-        self._step("重启本机网页平台")
         runtime.set_try("main")               # 本机跑开发版的进程（网页平台也是）用上最新代码；平台会重启，网页断开一会儿
-        return "已开始升级"
+
+    # 平台重启后还能看到上一次上线的结果
+    def _job_file(self):
+        return os.path.join(runtime._stable(), "dev-job.json")
+
+    def _save_job(self, job):
+        try:
+            os.makedirs(runtime._stable(), exist_ok=True)
+            with open(self._job_file(), "w", encoding="utf-8") as f:
+                json.dump(dict(job, state="done" if job.get("state") == "running" else job.get("state")), f, ensure_ascii=False)
+        except OSError:
+            pass
+
+    def _load_job(self):
+        try:
+            with open(self._job_file(), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None

@@ -274,19 +274,21 @@
   用户在飞书里体验也一样：`ccim try <编号>` 之后回复用户（重启会断掉当前这一轮）。
 - **用户说验收通过**：合并 PR（squash），issue 自动关闭；没验收的不合并。main 开了保护：PR 要基于最新的 main 且检查通过才能合并，
   别的 PR 先合了就在自己的工作目录里 `git fetch && git rebase origin/main`、解决冲突、强推，再合并。合并后：
-  `git -C <主目录> pull --ff-only` → 删掉工作目录（`git worktree remove …`）和分支（正在体验它的话等用户升级后再删）→ 告诉用户到
-  网页「设置 → 开发」点「全部升级」（本机开发版进程切回 main、装稳定版，#156）。不要直接 `ccim restart` 别的项目到开发版。
+  `git -C <主目录> pull --ff-only` → 删掉工作目录（`git worktree remove …`）和分支（正在试用它的话等更新后再删）→ 告诉用户到
+  网页「设置 → 开发」点「更新这台 Mac」（#156）。最好直接请用户在开发页点「上线」，这些都会自动做。不要直接 `ccim restart` 别的项目到开发版。
   `ccim try main` 会重启本机跑开发版的进程（网页平台、ccim 测试机器人），它们才用上刚合并的 Python 代码。web.html 每次请求现读，
   刷新网页就是新的；后台没重启时，新网页配旧后台，新功能会悄悄失效（#61 合并后删终端对话就这样没生效）。
   重启会打断正在进行的对话（包括正在和用户说话的这一轮），所以先告诉用户、等用户同意再跑。
-- 开发页（#156，`ccim/devpanel.py`，网页「设置 → 开发」，只在跑开发版的电脑上有）：按需求列等验收（开着的 PR）、已合并没升级
-  （当前稳定版之后 main 上的提交）；体验 = `set_try`，合并（落后就在工作目录 rebase、强推，等检查过了 squash 合并、pull、删工作目录），
-  全部升级 = pull → `start_promote`（独立进程，结果写 stable/promote.json）→ `set_try("main")`。GitHub 数据后台每 2 分钟刷新，红点数
-  （state 的 ccim.dev）读缓存。每条链回提需求的对话：对话 meta 的 issues（`Chat._post_bash` 在 gh issue create / reopen、gh pr create 后记），
+- 开发页（#156，`ccim/devpanel.py`，网页「设置 → 开发」，只在跑开发版的电脑上有）：每个等验收的需求（开着的 PR）只有「试用」「上线」。
+  试用 = `set_try`（显示本机地址，只在这台 Mac 上能打开）；上线（可多选）= 逐个 `_merge`（每次现问 PR 状态，落后就在工作目录 rebase、强推，
+  等检查过了 squash 合并，有冲突的跳过）→ `_update`（pull → `start_promote` → `set_try("main")`），只重启一次。结果存 stable/dev-job.json，
+  平台重启后还看得到。别处合并了、这台 Mac 没用上（当前稳定版之后 main 上有提交，或进程启动时的代码不是最新）时显示「更新这台 Mac」。
+  GitHub 数据后台每 2 分钟刷新，红点数（state 的 ccim.dev）读缓存；设置图标的红点再加上比服务器旧的电脑（`oldMachines`，「电脑」页给升级按钮）。
+  每条链回提需求的对话：对话 meta 的 issues（`Chat._post_bash` 在 gh issue create / reopen、gh pr create 后记），
   老对话从回答里贴过的 issue 链接认（`devpanel.refs`）。任务面板（#157）：chat_view 带 issue（最近两轮里提到的最近那个，`issue_of`，
   标题 `Titles` 存平台 state 的 issue_titles，没有的后台用 gh 取），面板这一行标题换成「#编号 issue 标题」，做过好几个的标「还有 N 个」。
-  **对话里不再升级**：`Chat._pre_bash` 拦下 `ccim promote`（原来 #146 是弹确认卡片）。合并后不用 `ccim try main`、`ccim promote`，
-  告诉用户到「设置 → 开发」点「全部升级」（它会做这两步）。终端里照样能跑 promote（装依赖沿用当前稳定版的版本 `_pins`，10 分钟超时）
+  **对话里不再升级**：`Chat._pre_bash` 拦下 `ccim promote`（原来 #146 是弹确认卡片）。用户在对话里说验收通过时，请用户到「设置 → 开发」
+  点「上线」（合并 + 本机更新一步做完）；自己合并了的，提醒用户点「更新这台 Mac」。终端里照样能跑 promote（装依赖沿用当前稳定版的版本 `_pins`，10 分钟超时）
 - 合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）先用 Python 3.11 检查，再把服务器上的总控更新到这个版本。
   别的电脑在网页「设置 → 电脑」里点升级（#37）。
 - 部署：Actions 用 `git archive` 打包从标准输入交给服务器，部署钥匙在服务器 authorized_keys 里限定成只能跑

@@ -884,16 +884,21 @@ def _skill_tools(chat):
     def ok(x):
         return {"content": [{"type": "text", "text": x if isinstance(x, str) else json.dumps(x, ensure_ascii=False)}]}
 
+    guest = guest_of(chat.b)                  # 共享电脑上访客的助手（#154）：管它自己那一份，主人的只能看
+
     def guard(fn):
         async def run(args):
+            tok = skills.SPACE.set(guest)
             try:
                 return ok(await asyncio.to_thread(fn, args))
             except (skills.Problem, OSError, ValueError) as e:
                 return _err(str(e))
+            finally:
+                skills.SPACE.reset(tok)
         return run
 
     t_list = tool("skill_list", "列出平台上装的所有 Skill：名字、说明、来源、是否停用。", {})(
-        guard(lambda a: [{k: m.get(k) for k in ("name", "desc", "source", "disabled", "updated")} for m in skills.listing()]))
+        guard(lambda a: [{k: m.get(k) for k in ("name", "desc", "source", "disabled", "updated", "shared")} for m in skills.view_listing()]))
     t_files = tool("skill_files", "列出某个平台 Skill 里的所有文件（相对路径）。", {"name": str})(
         guard(lambda a: skills.detail(a.get("name") or "")["files"]))
     t_read = tool("skill_read", "读平台 Skill 里的一个文件，path 是相对路径，比如 SKILL.md。", {"name": str, "path": str})(
@@ -905,6 +910,8 @@ def _skill_tools(chat):
     def install(a):
         src = (a.get("source") or "").strip()
         pf = getattr(chat.b.channel, "platform", None)
+        if guest and not src.startswith("http"):
+            raise skills.Problem("这里只能从 GitHub 地址装。")
         names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, pf.peers.me.get("name") if pf else "")
         skills.changed()
         return {"installed": names}
@@ -920,12 +927,20 @@ def _skill_tools(chat):
     @tool("skill_delete", "删除一个平台 Skill，所有电脑上都删掉。会先请用户确认。", {"name": str})
     async def t_delete(args):
         name = args.get("name") or ""
-        if not any(m["name"] == name for m in skills.listing()):
-            return _err(f"没有「{name}」这个平台 Skill。")
+        tok = skills.SPACE.set(guest)
+        try:
+            if not any(m["name"] == name for m in skills.listing()):
+                return _err(f"没有「{name}」这个平台 Skill。" if not guest else f"你装的 Skill 里没有「{name}」。")
+        finally:
+            skills.SPACE.reset(tok)
         r = await chat.b.approvals.ask(chat.chat_id, "skill_delete", {"name": name}, None)
         if not isinstance(r, PermissionResultAllow):
             return _err("用户没有同意删除。")
-        await asyncio.to_thread(skills.delete, name)
+        tok = skills.SPACE.set(guest)
+        try:
+            await asyncio.to_thread(skills.delete, name)
+        finally:
+            skills.SPACE.reset(tok)
         skills.changed()
         return ok(f"已删除「{name}」")
     return [t_list, t_files, t_read, t_write, t_install, t_enable, t_delete]

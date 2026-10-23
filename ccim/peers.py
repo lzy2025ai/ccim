@@ -416,7 +416,7 @@ class Peers:
         key = lambda mid: f"{mid}|{account}" if mid in guest else mid
         hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
-                      "home": local.get("home"), "ccim": local.get("ccim")}}
+                      "home": local.get("home"), "ccim": local.get("ccim"), "global": local.get("global") or {}}}
         results = {}
 
         def fetch(m):
@@ -481,7 +481,9 @@ class Peers:
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
-                              "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {})}
+                              "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {}),
+                              "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）
+                                         if k in ("model", "effort", "codex_model", "codex_effort")}}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)

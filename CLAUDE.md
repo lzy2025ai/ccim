@@ -209,7 +209,10 @@
   会话里不给 list_chats / read_chat / send_to_chat；主人那边的 list_chats 也不列访客的会话。访客自己的 Agent 能接自己的飞书、微信（渠道按 `procs_of` 只管自己的）。
   访客的会话（`session.guest_of`）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；Codex 主人勾了才给，用时强制 -s workspace-write（只拦写不拦读，界面上提示）；
   `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录里除 `allowed_dirs`（共享文件夹、自己 Agent 的目录、这个会话的工作目录、
-  ~/.ccim/skills、自己的知识库）以外的一切，`_deny_except` 一层层往下只拦旁边的；send_file 只发这些地方的。仍以电脑主人的系统用户运行（防越界）
+  ~/.ccim/skills 的 lib、views 和它自己那份、自己的知识库）以外的一切，`_deny_except` 一层层往下只拦旁边的；send_file 只发这些地方的。仍以电脑主人的系统用户运行（防越界）
+  访客的 Skill：`skills.SPACE`（contextvar，平台处理访客请求时设上、访客的 Skill 助手工具里设上）让 skills 的读写落到 skills/guests/<账号>/，
+  不同步；`view_listing` / `reading` 让它看到主人那份里没停用的（shared，只读），`plugin_for` 给它的 Agent 挂两份（同名用它自己的）。
+  Skill 助手每个访客一个（helper_chat 按 account，在共享文件夹里，role 加 GUEST_HELPER），只能从 GitHub 装
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

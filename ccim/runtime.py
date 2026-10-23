@@ -103,7 +103,19 @@ def describe(python):
     if _in_stable(python):
         return "稳定版 " + os.path.relpath(real, os.path.realpath(_stable())).split(os.sep)[0]
     t = trying()
-    return f"开发版（在试 {t['label']}）" if t else "开发版"
+    v = code_version(t["src"] if t else _repo())
+    return (f"试用版 {v}" if t else f"开发版 {v}") if v else ("试用版" if t else "开发版")
+
+
+def code_version(src):
+    """代码目录的版本号：pyproject 里的版本 + 提交，和稳定版的写法一样（0.19.0-6f11bf9）。给用户看，不提需求编号。"""
+    try:
+        with open(os.path.join(src, "pyproject.toml"), encoding="utf-8") as f:
+            ver = re.search(r'^version\s*=\s*"([^"]+)"', f.read(), re.M).group(1)
+    except (OSError, AttributeError):
+        return ""
+    r = _run(["git", "-C", src, "rev-parse", "--short=7", "HEAD"], timeout=10)
+    return f"{ver}-{r.stdout.strip()}" if r.returncode == 0 and r.stdout.strip() else ver
 
 
 # ---------- 验收时试某个需求（#42） ----------
@@ -178,7 +190,9 @@ def set_try(what):
     base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去（重启前还会等这一轮答完，#136）
     started = registry.now()
     paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
-    report = {"CCIM_RESTART_LABEL": f"切到 {label}" if label != "main" else "切回 main", "CCIM_RESTART_PATHS": json.dumps(paths),
+    v = code_version(path if what not in (None, "", "main") else _repo())
+    report = {"CCIM_RESTART_LABEL": (f"切到试用版 {v}" if what not in (None, "", "main") else f"切回正式版本 {v}").strip(),
+              "CCIM_RESTART_PATHS": json.dumps(paths),
               "CCIM_RESTART_SINCE": started}   # 以这一刻为准判断各个进程重启过没有（#140：先重启好的不再误报没起来）
     for i, p in enumerate(paths):
         schedule_restart(p, delay=base + 3 * i, notify=False, env=report)   # 结果由执行 ccim try 的人看，不再推到飞书、微信

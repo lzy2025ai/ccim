@@ -984,9 +984,10 @@ def cmd_join(args):
             fresh = True
     if args.restart:                          # 刚换了版本（#175）：在跑的飞书、微信也换成新代码
         from . import runtime
-        for p in registry.all_projects():
-            if p != h and daemon.running(p):
-                print(runtime.safe_restart(p, notify=False)[1])
+        for p, e in registry.all_projects().items():
+            if e.get("kind") != "platform" and daemon.running(p):
+                ok, msg = runtime.safe_restart(p, notify=False)
+                print(f"已重启{runtime.proc_label(p)}。" if ok else msg)
     if fresh or args.restart or not daemon.running(h):
         if daemon.running(h):
             daemon.stop(h)

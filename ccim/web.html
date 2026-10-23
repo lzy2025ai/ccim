@@ -4027,7 +4027,7 @@ async function devUpdate(){
 }
 
 function sharedTo(m){
-  const n = (m.shared_to || []).length;
+  const n = Object.keys(m.shares || {}).length;    // 主人：这台开放给了几个账号（#154）
   return n ? ` · 共享给 ${n} 个账号` : "";
 }
 // ---- 版本和升级（#37） ----

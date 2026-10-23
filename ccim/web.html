@@ -4029,10 +4029,12 @@ async function renderDev(quiet){
   if (!mid) { $("#main").innerHTML = `<div class="empty"><h2>没有开发版</h2></div>`; return; }
   if (!quiet || !DEVP) $("#main").innerHTML = `<div class="loading">…</div>`;
   try { DEVP = await api("/api/dev" + (quiet === "fresh" ? "?fresh=1" : ""), undefined, mid); }
-  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>读不到开发版的情况</h2><p>${esc(e.message)}</p></div>`; return; }
+  catch (e) { if (quiet === true && DEVP && DEVP.updating) return devPoll();   // 更新中网页平台在重启，连不上就接着等
+    $("#main").innerHTML = `<div class="empty"><h2>读不到开发版的情况</h2><p>${esc(e.message)}</p></div>`; return; }
   if (current.view !== "settings" || current.id !== "dev") return;
   drawDev();
 }
+function devPoll(){ clearTimeout(window._devPoll); window._devPoll = setTimeout(() => { if (current.view === "settings" && current.id === "dev") renderDev(true); }, 5000); }
 let shipPick = new Set();               // 勾选了要一起上线的（PR 编号）
 function devItem(r, btns, pick){
   const c = r.chat, href = c ? boardHref(c) : null;
@@ -4044,17 +4046,18 @@ function devItem(r, btns, pick){
 }
 function drawDev(){
   const d = DEVP, j = d.job || {}, busy = j.state === "running", fresh = j.at && Date.now() / 1000 - j.at < 3600;
-  // 上线 / 更新做完时后台升级才刚开始，note 写的是「正在更新」；升级做完了（结果比这件事晚）就按结果改
-  const after = j.state === "done" && !d.updating && d.last && d.last.at > j.at - 60 ? d.last : null;
-  const note = !after ? j.note : !after.ok ? null
-    : j.kind === "update" ? "这台 Mac 已更新好" : (j.note || "").replace("这台 Mac 正在更新", "这台 Mac 已更新好");
+  const updating = d.updating && !busy;     // 这台 Mac 还没更新完（装新版本、等对话做完、重启）：过一会儿再取，做完就变
+  // 这次上线 / 更新带出来的那次后台升级的结果；上线的说明里不再写这台 Mac 的情况（旧版本写的「，这台 Mac 正在更新」去掉）
+  const done = j.state === "done" && fresh, shipped = done ? (j.note || "").replace("，这台 Mac 正在更新", "") : "";
+  const after = done && d.last && d.last.at > j.at - 60 ? d.last : null;
   const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : "正在更新这台 Mac"}${j.step ? `：${esc(j.step)}` : ""}</p>`
     : j.state === "failed" && fresh ? `<p class="upg err">${esc(j.error || "没成功")}</p>`
-    : after && !after.ok && fresh ? `<p class="upg err">${esc(after.text)}</p>`
-    : j.state === "done" && note && fresh ? `<p class="upg ok">${esc(note)}</p>` : "";
-  const updating = d.updating && !busy;     // 后台还在升级这台 Mac：过一会儿再取，做完就消失
+    : updating ? `<p class="upg busy"><span class="spin"></span>${shipped ? `${esc(shipped)}。` : ""}正在更新这台 Mac：${esc(d.phase || "")}</p>`
+    : after && !after.ok ? `<p class="upg err">${shipped ? `${esc(shipped)}。` : ""}${esc(after.text)}</p>`
+    : after && !d.stale ? `<p class="upg ok">${shipped ? `${esc(shipped)}，` : ""}这台 Mac 已更新好</p>`
+    : shipped ? `<p class="upg ok">${esc(shipped)}</p>` : "";
   clearTimeout(window._devPoll);
-  if (updating) window._devPoll = setTimeout(() => { if (current.view === "settings" && current.id === "dev") renderDev(true); }, 5000);
+  if (updating) devPoll();
   const review = d.review || [];
   shipPick = new Set([...shipPick].filter(n => review.some(r => r.pr === n && r.checks !== "fail")));
   const st = r => r.trying ? "试用中" : r.checks === "fail" ? "检查没通过，回到对话让 Agent 看看" : r.checks === "running" ? "检查中" : "等你验收";
@@ -4069,7 +4072,6 @@ function drawDev(){
     <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在这台 Mac 的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
     <button class="btn" onclick="renderDev('fresh')">刷新</button></div>
     <div class="pane">${d.error ? `<p class="upg err">${esc(d.error)}</p>` : ""}${jobLine}
-      ${updating ? `<p class="upg busy"><span class="spin"></span>这台 Mac 正在更新，好了这里会自动刷新</p>` : ""}
       ${behind && !busy && !updating ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
       <div class="sect"><h3>等你验收 ${review.length || ""}</h3>${rows || `<p class="muted">没有等验收的需求。</p>`}
         ${shipPick.size > 1 ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devShip([...shipPick])">一起上线 ${shipPick.size} 个</button>` : ""}</div>

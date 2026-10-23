@@ -219,6 +219,10 @@ class WebChannel(Channel):
             ev["rec_chat"] = rec["chat"]
         self.events.publish(ev)
 
+    def context(self, chat_id, ctx):
+        """答完取到了上下文占用：开着这个对话的网页更新进度圈（#183）。"""
+        self._emit(chat_id, {"type": "ctx", "ctx": ctx})
+
     def idle(self, chat_id):
         """这一轮结束的状态已经记下：叫网页再取一次列表。"""
         self.events.publish({"type": "idle", "chat": chat_id})
@@ -929,7 +933,7 @@ class Platform:
                 **self._board_marks(cid, m), "issue": self._issue(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "stall": self._stall(cid),
-                "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}
+                "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"), **self._effective(m, m)}
 
     @staticmethod
     def _linked(m):

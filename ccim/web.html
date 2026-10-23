@@ -519,6 +519,15 @@ body{overflow:hidden}
 .send{margin-left:auto;width:32px;height:32px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center}
 .send:disabled{background:var(--line-strong);cursor:default}
 .send.stop{background:var(--ink)}
+.ctx-ring{width:28px;height:32px;display:grid;place-items:center;border-radius:7px;flex:none;color:var(--qing)}
+.ctx-ring:hover{background:var(--sunk)}
+.ctx-ring.warn{color:var(--warn)} .ctx-ring.bad{color:var(--bad)}
+.ctx-ring svg{width:18px;height:18px} .ctx-ring circle{fill:none;stroke-width:2.4}
+.ctx-ring .bg{stroke:var(--line-strong)} .ctx-ring .fg{stroke:currentColor;stroke-linecap:round}
+.ctx-pop{padding:6px 10px 8px;min-width:220px}
+.ctx-num{font-size:13px;color:var(--ink-2)} .ctx-num b{font-size:15px;color:var(--ink)}
+.ctx-bar{height:6px;border-radius:3px;background:var(--sunk);margin-top:8px;overflow:hidden}
+.ctx-bar i{display:block;height:100%;background:var(--qing);border-radius:3px}
 .send svg{width:16px;height:16px}
 .hint{font-size:12px;color:var(--faint);text-align:center;margin-top:6px}
 
@@ -1478,6 +1487,8 @@ function connectEvents(){
         detail.progress = ev.state === "working" ? ev : null;
         detail.busy = ev.state === "working";
         drawThread(); drawComposerState();
+      } else if (ev.type === "ctx"){
+        detail.ctx = ev.ctx; drawCtxRing(detail);
       } else {
         const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
@@ -2076,6 +2087,7 @@ function drawChat(){
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
           ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
           ${c.readonly || c.base === "codex" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}</div>
+          <button class="ctx-ring" id="ctx-ring" hidden onclick="ctxPop(event)"></button>
           <button class="send" id="send"></button>
         </div>
       </div>
@@ -2104,6 +2116,7 @@ function drawComposerState(){
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
   $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
   $("#chip-effort").innerHTML = `思考 ${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
+  drawCtxRing(c);
   const s = $("#send");
   s.className = "send" + (c.busy ? " stop" : "");
   s.innerHTML = c.busy ? ICON.stop : ICON.up;
@@ -2112,6 +2125,27 @@ function drawComposerState(){
   if (c.readonly) { s.className = "send"; s.innerHTML = ICON.up; }
   $("#input").oninput = drawComposerState;
   fitInput();
+}
+// 上下文占用（#183）：发送按钮旁一个小圈，点开看已用多少
+const kTok = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
+  : n < 100000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(n / 1000) + "k";
+function drawCtxRing(c){
+  const el = $("#ctx-ring"); if (!el) return;
+  const x = c.ctx; el.hidden = !x || c.readonly;
+  if (el.hidden) return;
+  const pct = Math.max(0, Math.min(100, x.pct || 0)), r = 7, len = 2 * Math.PI * r;
+  el.className = "ctx-ring" + (pct >= 90 ? " bad" : pct >= 75 ? " warn" : "");
+  el.title = `上下文已用 ${pct}%`;
+  el.setAttribute("aria-label", el.title);
+  el.innerHTML = `<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="${r}" class="bg"/><circle cx="9" cy="9" r="${r}" class="fg"
+    stroke-dasharray="${len * pct / 100} ${len}" transform="rotate(-90 9 9)"/></svg>`;
+}
+function ctxPop(e){
+  const x = detail && detail.ctx; if (!x) return;
+  pop(e, `<div class="ctx-pop"><div class="sec" style="padding:0 0 4px">上下文</div>
+    <div class="ctx-num"><b>${kTok(x.used)}</b> / ${kTok(x.max)} token · ${x.pct || 0}%</div>
+    <div class="ctx-bar"><i style="width:${Math.min(100, x.pct || 0)}%"></i></div>
+    ${x.compact ? `<div class="muted" style="font-size:12px;margin-top:6px">用到 ${kTok(x.compact)} 左右会自动压缩较早的内容</div>` : ""}</div>`);
 }
 // 输入框跟着内容变高；拖上边框手动拉高（记住），双击恢复；字多了右上角可以展开、收起
 let inputH = +localStorage.getItem("ccim.inputH") || 0;

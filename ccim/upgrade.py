@@ -203,17 +203,26 @@ def _restart_all():
 
 MIRRORS = ("https://mirrors.aliyun.com/pypi/simple", "https://mirrors.cloud.tencent.com/pypi/simple",
            "https://pypi.tuna.tsinghua.edu.cn/simple")
+PYPI_PROBE = ("https://files.pythonhosted.org/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/"
+              "pip-24.0-py3-none-any.whl")
 
 
 def _index_env():
     """PyPI 连不上时走国内镜像（和 join.sh 一样）。"""
     import httpx
-    for u in ("https://pypi.org/simple/six/",) + MIRRORS:
+    try:                                      # 下得动才算：6 秒内下完一个 2 MB 的包
+        t = time.time()
+        httpx.get(PYPI_PROBE, timeout=6).raise_for_status()
+        if time.time() - t < 6:
+            return {}
+    except Exception:
+        pass
+    for u in MIRRORS:
         try:
-            httpx.get(u if u.endswith("/six/") else u + "/six/", timeout=4).raise_for_status()
+            httpx.get(u + "/six/", timeout=4).raise_for_status()
         except Exception:
             continue
-        return {} if "pypi.org" in u else {"UV_DEFAULT_INDEX": u, "UV_INDEX_URL": u}
+        return {"UV_DEFAULT_INDEX": u, "UV_INDEX_URL": u}
     return {}
 
 

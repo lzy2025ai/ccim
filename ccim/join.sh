@@ -15,6 +15,7 @@ PY_VERSION=3.12
 PYPI_MIRRORS="https://mirrors.aliyun.com/pypi/simple https://mirrors.cloud.tencent.com/pypi/simple https://pypi.tuna.tsinghua.edu.cn/simple"
 PYTHON_MIRROR="https://registry.npmmirror.com/-/binary/python-build-standalone"
 DIST="$HOME/.ccim/dist"
+PYPI_PROBE="https://files.pythonhosted.org/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl"
 
 if [ -t 1 ]; then B="$(printf '\033[1m')"; R="$(printf '\033[31m')"; G="$(printf '\033[32m')"; N="$(printf '\033[0m')"; else B=; R=; G=; N=; fi
 step() { printf '\n%s%s%s\n' "$B" "$*" "$N"; }
@@ -127,7 +128,8 @@ if [ "$ACTION" != keep ]; then
     1) GH_SLOW=1; MIRROR=pick ;;
     0) ;;
     *)
-      reach https://pypi.org/simple/six/ 4 || MIRROR=pick
+      # 不只看连不连得上，还要下得动：6 秒内下完一个 2 MB 的包
+      reach "$PYPI_PROBE" 6 || MIRROR=pick
       reach https://github.com/ 4 || GH_SLOW=1 ;;
   esac
   if [ "$MIRROR" = pick ]; then

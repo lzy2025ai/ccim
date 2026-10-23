@@ -194,6 +194,14 @@
   其余接口按 X-Machine 转发；开机密码、选文件夹、在访达里显示一律不经过服务器。网页里 S.hub 时每台电脑都按「别的电脑」处理。
   电脑那边 `ccim join https://IP 配对码`（hub.json 里 server=true，_conn 走 HTTPS、用 certifi 的根证书）。
   部署（服务器地址等记在本机，不写进仓库）：~/ccim-hub/venv（pip install --no-deps 源码 + qrcode、certifi），systemd ccim-hub，nginx sites-available/ccim-hub
+- 账号与共享电脑（#154，只在服务器总控上）：hubserver 的 accounts.json，主人 OWNER（老的 auth.json 迁过来），主人在「设置 → 账号」开账号
+  （一次性邀请链接，`_setup_target`），登录不填账号名、按密码认账号。电脑归配对码所属的账号（peers.json 的 account，没有就是主人）；
+  `Peers.machines(account)`、`same_account` 让网页、转交、推送、/peer/call、fanout 都只在同一个账号内。主人把电脑共享给某个账号
+  （nodes 的 shared，`guest_of`）：转过去的请求带 X-Account / X-Account-Name（浏览器带的不传），merged_state 按「电脑|账号」分开缓存。
+  `ccim/share.py`：电脑那边按 X-Account（只认 X-From-Peer）当访客：白名单接口（GUEST_GET / GUEST_POST）、`check` 查东西是不是它的并改写
+  工作目录（~/ccim共享/<名字>/ 里）；Agent 记 account，对话跟着 Agent（临时对话记 meta 的 account），定时任务跟着 target，知识库记 _lib.json；
+  state 按人过滤（主人看不到访客的）；推送 `tag` 带 _a，总控 `visible` 只推给那个账号、fanout 不转给别的电脑。访客的会话不给 run_as_admin、不开 Chrome。
+  执行层不隔离：访客的 Agent 以电脑主人的系统用户运行
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json

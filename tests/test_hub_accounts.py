@@ -141,6 +141,70 @@ class HubAccountTests(unittest.TestCase):
         self.assertEqual(req("POST", "/api/peers/remove", body={"id": "m-own"})[0], 400)
         self.assertIn("m-own", self.hub.peers.nodes)
 
+    def test_share_machine(self):
+        self.owner()
+        aid, _ = self.invite("家人")
+        self.add_node("m-own")
+        self.add_node("m-other")
+        p = self.hub.peers
+        with self.assertRaises(ValueError):                  # 只能共享主人自己的电脑
+            self.hub.account_update(aid, {"share": {"machine": "m-nope", "on": True}})
+        self.hub.account_update(aid, {"share": {"machine": "m-own", "on": True}})
+        ms = p.machines(aid)
+        self.assertEqual([(m["id"], m.get("shared")) for m in ms], [("m-own", True)])
+        self.assertTrue(p.guest_of("m-own", aid))
+        self.assertFalse(p.guest_of("m-own", hubserver.OWNER))
+        self.assertEqual(p.machines(aid, own=True), [])
+        self.assertEqual(self.hub.account_list()["accounts"][0]["shared"], ["m-own"])
+        self.assertEqual(p.guest_headers(aid)["X-Account"], aid)
+        # 推送：访客只收自己的，主人收不到访客的
+        self.assertTrue(self.hub.visible(aid, {"_m": "m-own", "_a": aid, "chat": "w-1"}))
+        self.assertFalse(self.hub.visible(aid, {"_m": "m-own", "chat": "w-2"}))
+        self.assertFalse(self.hub.visible(aid, {"_m": "m-own", "type": "schedule", "schedule": "s1"}))
+        self.assertTrue(self.hub.visible(aid, {"_m": "m-own", "type": "skills", "chat": None}))
+        self.assertFalse(self.hub.visible(hubserver.OWNER, {"_m": "m-own", "_a": aid, "chat": "w-1"}))
+        self.assertTrue(self.hub.visible(hubserver.OWNER, {"_m": "m-own", "chat": "w-2"}))
+        self.assertFalse(self.hub.visible(aid, {"_m": "m-other", "_a": aid}))
+        # 转交时带上访客身份
+        seen = []
+        p.forward = lambda mid, method, path, body=b"", headers=None: (seen.append(headers), (200, "application/json", b"{}"))[1]
+        tok = self.hub.new_session(aid)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+        c.request("GET", "/api/chat?id=w-1", headers={"X-CCIM": "1", "Cookie": f"ccim_hub={tok}", "Host": "127.0.0.1",
+                                                       "X-Machine": "m-own", "X-Account": "owner"})
+        r = c.getresponse()
+        r.read()
+        c.close()
+        self.assertEqual(r.status, 200)
+        self.assertEqual(seen[-1]["X-Account"], aid)
+        self.hub.account_update(aid, {"share": {"machine": "m-own", "on": False}})
+        self.assertEqual(p.machines(aid), [])
+        self.hub.account_update(aid, {"share": {"machine": "m-own", "on": True}})
+        self.hub.account_delete(aid)
+        self.assertNotIn("shared", p.nodes["m-own"])
+
+    def test_owner_request_cannot_claim_account(self):
+        """浏览器自己带的 X-Account 不往下传。"""
+        self.owner()
+        self.add_node("m-own")
+        seen = []
+        self.hub.peers.forward = lambda mid, method, path, body=b"", headers=None: (seen.append(headers), (200, "application/json", b"{}"))[1]
+        tok = self.hub.new_session(hubserver.OWNER)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+        c.request("GET", "/api/chat?id=w-1", headers={"X-CCIM": "1", "Cookie": f"ccim_hub={tok}", "Host": "127.0.0.1",
+                                                       "X-Machine": "m-own", "X-Account": "a1"})
+        c.getresponse().read()
+        c.close()
+        self.assertNotIn("X-Account", seen[-1])
+
 
 class PeerCallTests(unittest.TestCase):
     """电脑之间经服务器调用：不同账号的电脑互相调不到。"""

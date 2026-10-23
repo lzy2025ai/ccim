@@ -1380,6 +1380,7 @@ function refreshSoon(){ clearTimeout(refreshTimer); refreshTimer = setTimeout(lo
 const agentOf = id => S.agents.find(a => a.id === id);
 const multi = () => (S.machines || []).length > 1;
 const machineOf = id => (S.machines || []).find(m => m.id === id);
+const sharedM = id => !!(machineOf(id) || {}).shared;     // 别人共享给我的电脑（#154）：只能用自己的那块
 let ctxMachine = null;            // 当前打开的东西在哪台电脑
 function ownerOf(id){
   if (!id) return null;
@@ -3591,9 +3592,9 @@ async function renderAgent(id){
     ${agentTab === "skills" ? `<div id="agent-sk"></div>` : agentTab === "edit" ? `<div class="pane">${formHtml(a)}</div>` : `<div class="pane">
       <div class="sect"><h3>在哪能找到它</h3>
         <div class="channel"><span class="ci" style="background:var(--qing-soft);color:var(--qing)">网</span><div class="grow"><div>这个网页</div><div class="muted" style="font-size:12px">随时可以对话</div></div></div>
-        ${channelHtml(a, "feishu")}${channelHtml(a, "weixin")}
+        ${sharedM(ownerOf(a.id)) ? "" : channelHtml(a, "feishu") + channelHtml(a, "weixin")}
       </div>
-      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd><dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
+      <div class="sect"><h3>默认设置</h3><dl class="kv"><dt>模型</dt><dd>${a.model ? esc(modelName(a.model)) : "跟随全局设置"}</dd><dt>思考深度</dt><dd>${esc(a.effort || "跟随全局设置")}</dd>${(a.base || "claude") === "claude" ? `${sharedM(ownerOf(a.id)) ? "" : `<dt>Chrome 浏览器</dt><dd>${a.chrome ? "可以用" : "不用"}</dd>`}<dt>平台 Skill</dt><dd>${agentSkills(a)}</dd>` : ""}</dl></div>
     </div>`}</div>`;
   if (agentTab === "skills") drawAgentSkills(a);
 }
@@ -3719,8 +3720,8 @@ function formHtml(a){
     <label>底座</label><div class="seg">${["claude", "codex"].map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
-    ${(fd.base || "claude") === "claude" ? `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
-      <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>
+    ${(fd.base || "claude") === "claude" ? `${sharedM(fd.machine) ? "" : `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
+      <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>`}
       <label>平台 Skill</label><div>${skillRows()}</div>` : ""}
     <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
@@ -3790,7 +3791,7 @@ const ACC_STATE = {ok: ["正常", "on"], invited: ["等对方设置登录", ""],
 async function renderAccounts(){
   const days = [[0, "一直有效"], [30, "30 天"], [7, "7 天"]];
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>账号</h2>
-    <div class="role">各个账号用各自的电脑和 Agent，互相看不到。</div></div></div>
+    <div class="role">各个账号用各自的电脑和 Agent，互相看不到。也可以把你的电脑共享给某个账号。</div></div></div>
     <div class="pane"><div class="sect" id="acc-list"><div class="loading">…</div></div>
       <div class="sect"><h3>开账号</h3>
         <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
@@ -3803,7 +3804,8 @@ async function renderAccounts(){
   const day = t => new Date(t * 1000).toLocaleDateString("zh-CN", {month: "numeric", day: "numeric"});
   $("#acc-list").innerHTML = r.accounts.length ? r.accounts.map(a => {
     const [label, cls] = ACC_STATE[a.state] || [a.state, ""];
-    const sub = [a.machines.length ? a.machines.join("、") : "还没有电脑", a.expires && a.state !== "expired" ? `${day(a.expires)} 到期` : ""].filter(Boolean).join(" · ");
+    const shared = (a.shared || []).map(id => (machineOf(id) || {}).name).filter(Boolean);
+    const sub = [a.machines.length ? a.machines.join("、") : "", shared.length ? `共享了 ${shared.join("、")}` : "", !a.machines.length && !shared.length ? "还没有电脑" : "", a.expires && a.state !== "expired" ? `${day(a.expires)} 到期` : ""].filter(Boolean).join(" · ");
     return `<div class="mem" style="padding:10px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${esc(sub)}</span></span>
       <span class="status ${cls}" style="margin-right:12px"><i></i>${label}</span>
       <button class="link" onclick="accountMenu(${q(a.id)})">管理</button></div>`;
@@ -3826,12 +3828,21 @@ async function inviteAccount(){
 function accountMenu(id){
   const a = ACC.find(x => x.id === id); if (!a) return;
   const off = a.state === "disabled";
+  const mine = (S.machines || []).filter(m => !m.shared);
   dialog(a.name, `<div>
+      ${mine.length ? `<div class="sec" style="margin:2px 0 6px;font-weight:600">共享电脑</div>
+        ${mine.map(m => { const on = (a.shared || []).includes(m.id); return `<div class="mem" style="padding:6px 0"><span class="t" style="flex:1"><span class="title">${esc(m.name)}</span></span>
+          <div class="seg"><button class="${on ? "" : "on"}" aria-pressed="${!on}" onclick="accountShare(${q(id)},${q(m.id)},false)">不共享</button><button class="${on ? "on" : ""}" aria-pressed="${on}" onclick="accountShare(${q(id)},${q(m.id)},true)">共享</button></div></div>`; }).join("")}
+        <p class="muted" style="font-size:12.5px;margin:6px 0 14px">对方在这台电脑上用自己的 Agent 和对话，看不到你的。对方的 Agent 能读写这台电脑上的文件。</p>` : ""}
       <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountRelink(${q(id)})">重新生成登录链接</button>
       <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{disabled:${!off}},'${off ? "已启用" : "已停用"}')">${off ? "启用" : "停用"}</button>
-      <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:0},'已改成一直有效')">改成一直有效</button>
+      ${a.expires ? `<button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:0},'已改成一直有效')">改成一直有效</button>` : ""}
       <button class="btn" style="width:100%;margin:4px 0" onclick="closeDialog();accountSet(${q(id)},{expires_days:30},'已改成 30 天后到期')">从今天起 30 天后到期</button>
       <button class="btn danger" style="width:100%;margin:4px 0" onclick="closeDialog();accountDelete(${q(id)})">删除</button></div>`, "");
+}
+async function accountShare(id, machine, on){
+  await act(() => api("/api/accounts/update", {id, changes: {share: {machine, on}}}), on ? "已共享" : "已取消共享");
+  await renderAccounts(); accountMenu(id);
 }
 async function accountSet(id, changes, ok){
   await act(() => api("/api/accounts/update", {id, changes}), ok); renderAccounts();
@@ -3858,9 +3869,11 @@ function renderMachines(){
     <div class="role">把电脑加进来，各台电脑的 Agent、对话、定时任务都在这里管。活还是在各自的电脑上干，文件不会传到别的电脑。</div>
     ${latestOf() ? `<div class="role" style="margin-top:4px">最新版本 ${esc(latestOf())}</div>` : ""}</div></div>
     <div class="pane">
-      <div class="sect">${ms.map(m => `<div class="mem" style="padding:10px 0">
+      <div class="sect">${ms.map(m => m.shared ? `<div class="mem" style="padding:10px 0">
+        <span class="t" style="flex:1;min-width:0"><span class="title">${esc(m.name)}</span><span class="sub">共享给你的电脑</span></span>
+        <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span></div>` : `<div class="mem" style="padding:10px 0">
         <a class="t mlink" href="${devHref(m.id)}" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
-        <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}</span></a>
+        <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}${sharedTo(m)}</span></a>
         ${upgradeBox(m)}
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
@@ -3942,6 +3955,10 @@ async function devUpdate(){
   renderDev(true);
 }
 
+function sharedTo(m){
+  const n = (m.shared_to || []).length;
+  return n ? ` · 共享给 ${n} 个账号` : "";
+}
 // ---- 版本和升级（#37） ----
 function verOf(m){ return ((S.machine_info || {})[m.id] || {}).ccim || null; }
 function verLine(m){
@@ -4292,7 +4309,7 @@ function renderChatSettings(){
     </div></div></div>`;
 }
 async function setArchiveDays(v){
-  const targets = multi() ? (S.machines || []).filter(m => m.online).map(m => m.id) : [S.me];   // 每台电脑各自清理，一起改
+  const targets = multi() ? (S.machines || []).filter(m => m.online && !m.shared).map(m => m.id) : [S.me];   // 每台电脑各自清理，一起改
   let fail = 0;
   for (const mid of targets) { try { await api("/api/archive_days", {value: v}, mid); } catch { fail++; } }
   toast(fail ? "有电脑没连上，那台下次再改" : "已保存");
@@ -4300,7 +4317,7 @@ async function setArchiveDays(v){
 }
 let gsMachine = null, gsOf = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
 async function renderSettings(){
-  const ms = (S.machines || []).filter(m => m.online !== false);
+  const ms = (S.machines || []).filter(m => m.online !== false && !m.shared);
   if (!gsMachine || !ms.some(m => m.id === gsMachine)) gsMachine = (ms.find(m => m.me) || ms[0] || {}).id || S.me;
   let st = S;
   if (S.hub || gsMachine !== S.me) {              // 别的电脑：读它自己的设置和 Claude Code、Codex 的默认值

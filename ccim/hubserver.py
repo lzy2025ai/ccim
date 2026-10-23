@@ -287,7 +287,8 @@ class Hub:
                 else "ok" if a.get("password") else "invited"
             out.append({"id": aid, "name": a.get("name") or "", "state": state, "created": a.get("created"),
                         "expires": a.get("expires"), "invite_until": a.get("invite_until") if state == "invited" else None,
-                        "machines": [m["name"] for m in self.peers.machines(aid)]})
+                        "machines": [m["name"] for m in self.peers.machines(aid, own=True)],
+                        "shared": [m["id"] for m in self.peers.machines(OWNER, own=True) if aid in m.get("shared_to") or []]})
         return {"accounts": out}
 
     def _invite(self, a):
@@ -336,6 +337,11 @@ class Hub:
                     a.pop(k, None)
                 out = self._invite(a)
             self._save_accounts(acc)
+        if "share" in changes:                # {machine, on}：把主人的一台电脑共享给它
+            sh = changes["share"] or {}
+            if sh.get("machine") not in {m["id"] for m in self.peers.machines(OWNER, own=True)}:
+                raise ValueError("没有这台电脑。")
+            self.peers.share(sh["machine"], aid, bool(sh.get("on")))
         if a.get("disabled") or changes.get("relink"):
             self._drop_sessions(aid)
         self.channel.events.publish({"type": "machines"})
@@ -350,11 +356,14 @@ class Hub:
                 raise ValueError("没有这个账号。")
             self._save_accounts(acc)
         self._drop_sessions(aid)
-        for m in self.peers.machines(aid):
+        for m in self.peers.machines(aid, own=True):
             try:
                 self.peers.remove(m["id"])
             except ValueError:
                 pass
+        for m in self.peers.machines(OWNER, own=True):
+            if aid in m.get("shared_to") or []:
+                self.peers.share(m["id"], aid, False)
         return {}
 
     # ----- 接口 -----
@@ -364,9 +373,16 @@ class Hub:
         return {m["id"] for m in self.peers.machines(aid)}
 
     def visible(self, aid, ev):
-        """推送给这个账号的网页：只要它能用的电脑上来的（电脑列表变了的通知谁都给）。"""
+        """推送给这个账号的网页：只要它能用的电脑上来的（电脑列表变了的通知谁都给）。
+        共享的电脑（#154）：访客只收标了自己（_a）的，和 Skill、知识库有变化这类不属于哪个对话的；主人收不到访客的。"""
         mid = ev.get("_m")
-        return not mid or mid in self.allowed(aid)
+        if not mid:
+            return True
+        if mid not in self.allowed(aid):
+            return False
+        if self.peers.guest_of(mid, aid):
+            return ev.get("_a") == aid or (not ev.get("_a") and not ev.get("chat") and ev.get("type") in ("skills", "kb"))
+        return not ev.get("_a")
 
     def default_machine(self, aid=OWNER):
         ms = self.peers.machines(aid)
@@ -554,7 +570,8 @@ def _handler(hub):
                     return self._send(503 if not hub.allowed(self.acct) else 404, {"error": "还没有电脑连上来。"})
                 from .filesend import serve_peer
                 return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
-                                                         "X-Content-Type-Options": "nosniff"})
+                                                         "X-Content-Type-Options": "nosniff"},
+                                  hub.peers.guest_headers(self.acct) if hub.peers.guest_of(mid, self.acct) else None)
             return self._forward(b"", q)
 
         def do_POST(self):
@@ -635,11 +652,13 @@ def _handler(hub):
                 return self._send(404, {"error": "没有这台电脑。"})
             name = next((m["name"] for m in hub.peers.machines() if m["id"] == mid), "那台电脑")
             hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
+            if hub.peers.guest_of(mid, self.acct):     # 别人共享给它的电脑：告诉那台电脑是谁（#154）
+                hs.update(hub.peers.guest_headers(self.acct))
             try:
                 status, ctype, data = hub.peers.forward(mid, self.command, self.path, body, hs)
             except Offline:
                 path = urlparse(self.path).path
-                if self.command == "POST" and path in ("/api/chat/send", "/api/chat/mention"):
+                if self.command == "POST" and path in ("/api/chat/send", "/api/chat/mention") and "X-Account" not in hs:
                     hub.peers.queue_out(mid, "POST", self.path, body)
                     return self._send(200, {"queued": True, "machine": name})
                 return self._send(503, {"error": f"「{name}」现在离线，等它连上再试。"})

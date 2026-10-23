@@ -475,7 +475,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ("" if self.b.entry.get("guest") else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -856,7 +856,7 @@ class Chat:
         if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent"):
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
-            tools += _look_around(chat) + [run_as_admin]
+            tools += _look_around(chat) + ([] if chat.b.entry.get("guest") else [run_as_admin])   # 共享电脑上的访客不给（#154）
             if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper"):
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）

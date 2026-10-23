@@ -151,7 +151,7 @@ def dirs(ids):
 
 # ----- 写 -----
 
-def save_lib(lib, name, desc="", color=None):
+def save_lib(lib, name, desc="", color=None, account=None):
     name = " ".join((name or "").split())[:40]
     if not name:
         raise ValueError("给知识库起个名字。")
@@ -164,6 +164,8 @@ def save_lib(lib, name, desc="", color=None):
         info = {"name": name, "desc": (desc or "").strip()[:200], "color": color if color in COLORS else
                 (old or {}).get("color") or COLORS[n % len(COLORS)], "created": (old or {}).get("created") or time.time(),
                 "updated": time.time()}
+        if (old or {}).get("account") or account:     # 共享电脑上访客的库（#154），建的时候定
+            info["account"] = (old or {}).get("account") or account
         _write(os.path.join(_lib_dir(lib), "_lib.json"), json.dumps(info, ensure_ascii=False))
     return dict(info, id=lib)
 

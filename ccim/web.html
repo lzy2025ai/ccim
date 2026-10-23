@@ -4010,6 +4010,9 @@ function drawDev(){
   const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : "正在更新这台 Mac"}${j.step ? `：${esc(j.step)}` : ""}</p>`
     : j.state === "failed" && fresh ? `<p class="upg err">${esc(j.error || "没成功")}</p>`
     : j.state === "done" && j.note && fresh ? `<p class="upg ok">${esc(j.note)}</p>` : "";
+  const updating = d.updating && !busy;     // 后台还在升级这台 Mac：过一会儿再取，做完就消失
+  clearTimeout(window._devPoll);
+  if (updating) window._devPoll = setTimeout(() => { if (current.view === "settings" && current.id === "dev") renderDev(true); }, 5000);
   const review = d.review || [];
   shipPick = new Set([...shipPick].filter(n => review.some(r => r.pr === n && r.checks !== "fail")));
   const st = r => r.trying ? "试用中" : r.checks === "fail" ? "检查没通过，回到对话让 Agent 看看" : r.checks === "running" ? "检查中" : "等你验收";
@@ -4024,7 +4027,8 @@ function drawDev(){
     <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在这台 Mac 的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
     <button class="btn" onclick="renderDev('fresh')">刷新</button></div>
     <div class="pane">${d.error ? `<p class="upg err">${esc(d.error)}</p>` : ""}${jobLine}
-      ${behind && !busy ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
+      ${updating ? `<p class="upg busy"><span class="spin"></span>这台 Mac 正在更新，好了这里会自动刷新</p>` : ""}
+      ${behind && !busy && !updating ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
       <div class="sect"><h3>等你验收 ${review.length || ""}</h3>${rows || `<p class="muted">没有等验收的需求。</p>`}
         ${shipPick.size > 1 ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devShip([...shipPick])">一起上线 ${shipPick.size} 个</button>` : ""}</div>
     </div></div>`;

@@ -176,14 +176,15 @@ class Dev:
     # ----- 读 -----
 
     def overview(self, fresh=False):
-        if fresh or not self.cache or time.time() - self.at > REFRESH:
+        ttl = 5 if (self.cache or {}).get("updating") else REFRESH   # 后台升级还没做完：做完马上重算（#156 第三轮）
+        if fresh or not self.cache or time.time() - self.at > ttl:
             self.refresh()
         return dict(self.cache or {}, job=self.job)
 
     def badge(self):
         """红点上的数：等验收的 + （有没升级的就算一个）。只读缓存，不现取。"""
         c = self.cache or {}
-        return len(c.get("review") or []) + (1 if c.get("merged") or c.get("stale") else 0)
+        return len(c.get("review") or []) + (1 if (c.get("merged") or c.get("stale")) and not c.get("updating") else 0)
 
     def refresh(self):
         with self.lock:
@@ -233,11 +234,13 @@ class Dev:
                 merged.append({"commit": sha[:7], "issue": n, "title": runtime._change(subj), "at": int(ct or 0),
                                "chat": links.get(n)})
         main = runtime._git("rev-parse", "origin/main").stdout.strip()
-        return {"repo": repo, "review": review, "merged": merged, "stable": runtime._channel().get("current"),
+        updating = runtime.promoting()        # 升级做到一半时按旧版本算会说「有改动没用上」，这时不算
+        return {"repo": repo, "review": review, "merged": [] if updating else merged, "updating": updating,
+                "stable": runtime._channel().get("current"),
                 "last": runtime.last_promote(),
                 "local_url": f"http://127.0.0.1:{registry.read_state(self.pf.home).get('port') or 8977}/",
                 "trying": trying and {"label": trying.get("label"), "branch": trying.get("branch")},
-                "stale": bool(main and self.started and not main.startswith(self.started[:7]) and not trying),
+                "stale": bool(main and self.started and not main.startswith(self.started[:7]) and not trying and not updating),
                 "at": time.time()}
 
     def _links(self, repo):

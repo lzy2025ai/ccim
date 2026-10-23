@@ -307,6 +307,16 @@ class ShareTests(unittest.TestCase):
         self.assertIn("别人共享给他的电脑", b.entry["role"])
         self.assertFalse(self.pf._bridge(o["id"]).entry["guest"])
 
+    def test_guest_defaults_shown(self):
+        """访客看得到主人设的默认模型（只读）；在共享文件夹里新填的目录自动建好。"""
+        registry.set_global(model="opus", effort="medium")
+        _, g = self.req("GET", "/api/state?local=1")
+        self.assertEqual((g["global"].get("model"), g["global"].get("effort")), ("opus", "medium"))
+        d = os.path.join(self.home, ".ccim", "shared", "家人", "新的")
+        st, r = self.req("POST", "/api/agent/save", {"id": None, "fields": {"name": "新的", "dir": d}})
+        self.assertEqual(st, 200, r)
+        self.assertTrue(os.path.isdir(d))
+
     def test_header_ignored_without_peer(self):
         """本机网页（没经过总控）带 X-Account 不算访客。"""
         self.assertIsNone(share.account_of({"X-Account": "a1"}))

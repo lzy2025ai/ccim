@@ -2491,15 +2491,17 @@ let draft = {base:"claude", model:"", effort:"", dir:""};
 function renderNewChat(){
   detail = null;
   if (!draft.machine || !machineOf(draft.machine)) draft.machine = S.me;
+  if (sharedM(draft.machine) && !draft.dir) draft.dir = guestOf(draft.machine).root || "";   // 共享给我的电脑：默认在共享文件夹里
   ctxMachine = draft.machine;
-  const d = draft, g = S.global, px = d.base === "claude" ? "" : "codex_";
-  const dm = g[px + "model"] || (S.defaults[d.base] || [])[0], de = g[px + "effort"] || (S.defaults[d.base] || [])[1];
+  const d = draft, mi = (S.machine_info || {})[d.machine] || {}, px = d.base === "claude" ? "" : "codex_";
+  const g = mi.global || S.global, dfl = mi.defaults || S.defaults;   // 按选的那台电脑自己的默认设置（服务器上打开时也是）
+  const dm = g[px + "model"] || (dfl[d.base] || [])[0], de = g[px + "effort"] || (dfl[d.base] || [])[1];
   $("#main").innerHTML = `
     <div class="newchat">
       <h2>新对话</h2>
       <div class="where-row">
         ${multi() ? `<button class="wchip" onclick="pickMachine(event)" title="在哪台电脑上干活">${ICON.monitor}<span>${esc((machineOf(d.machine) || {}).name || "")}</span>${ICON.down}</button>` : ""}
-        <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(tilde(d.dir)) : "不选工作目录"}</span>${ICON.down}</button>
+        <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(dirLabel(d.dir, d.machine)) : "不选工作目录"}</span>${ICON.down}</button>
         ${d.base === "claude" ? `${(d.kbs || []).map(k => `<span class="wchip kbm">${ICON.kb}<span>${esc(kbName(k))}</span><button aria-label="取下" onclick="draft.kbs=draft.kbs.filter(x=>x!==${q(k)});renderNewChat()">${ICON.x}</button></span>`).join("")}
         <button class="wchip add" onclick="pickKbs(event,true)">${ICON.plus}<span>挂知识库</span></button>` : ""}
       </div>
@@ -2541,11 +2543,24 @@ function pickMachine(e){
 async function pickDir(e){
   const anchor = e.currentTarget, ev = {currentTarget: anchor, stopPropagation(){}};
   e.stopPropagation();
+  if (sharedM(draft.machine)) return pickSharedDir(ev);
   let recent = [];
   try { recent = (await api("/api/recent", undefined, draft.machine)).folders; } catch {}
   pop(ev, `<div class="sec">工作目录</div><button onclick="draft.dir='';closePop();renderNewChat()">不选${!draft.dir ? `<span class="ck">✓</span>` : ""}</button>`
     + (recent.length ? `<div class="sec">最近用过</div>` + recent.map(r => `<button onclick="draft.dir=${q(r.path)};closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(r.home)}</span>${draft.dir === r.path ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "")
     + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();}, draft.machine)">${ICON.folder}选择其他文件夹…</button>`);
+}
+function dirLabel(p, mid){   // 共享给我的电脑：共享文件夹里的显示成「共享文件夹/…」
+  const root = sharedM(mid) && (guestOf(mid).root || "").replace(/\/$/, "");
+  return root && (p === root || p.startsWith(root + "/")) ? "共享文件夹" + p.slice(root.length) : tilde(p);
+}
+async function pickSharedDir(ev){   // 共享给我的电脑：只能在共享文件夹里，列出它和下面的子文件夹
+  const root = guestOf(draft.machine).root || "";
+  let subs = [];
+  try { const d = await api(`/api/dirs?path=${encodeURIComponent(root)}`, undefined, draft.machine); subs = d.dirs.map(n => d.path.replace(/\/$/, "") + "/" + n); } catch {}
+  const row = (p, label) => `<button onclick="draft.dir=${q(p)};closePop();renderNewChat()"><span class="path" style="color:var(--ink)">${esc(label)}</span>${draft.dir === p ? `<span class="ck">✓</span>` : ""}</button>`;
+  pop(ev, `<div class="sec">工作目录</div>` + row(root, "共享文件夹") + subs.map(p => row(p, "共享文件夹/" + p.split("/").pop())).join("")
+    + `<button onclick="closePop();chooseFolder(p => {draft.dir = p; renderNewChat();}, draft.machine)">${ICON.folder}选择更深的文件夹…</button>`);
 }
 async function chooseFolder(done, machine){
   if (isRemote(machine)) return browseDirs(machine, "", done);   // 另一台电脑：在网页里一层层点进去选
@@ -3510,8 +3525,10 @@ function renderAgentCards(listOnly){
   if (listOnly) return;
   const rows = S.agents.filter(a => !cardFilter || a.name.toLowerCase().includes(cardFilter))
     .sort((x, y) => (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || ((y.last_active || "") > (x.last_active || "") ? 1 : -1));
+  const addable = (S.machines || [{id: S.me, online: true}]).filter(m => m.online && canCreate(m.id) && (machineTab === "all" || !multi() || m.id === machineTab));
   const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
-    : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p></div>`;
+    : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p></div>`
+      + (addable.length ? `<div class="cgrid" style="max-width:720px;margin:20px auto 0">${addable.map(m => `<button class="ccard add" onclick="${newOnAgents(m.id)}">${ICON.plus}在「${esc(m.name || "这台电脑")}」上新建 Agent</button>`).join("")}</div>` : "");
   $("#main").innerHTML = overviewHtml("Agent", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
 }
 function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
@@ -3710,13 +3727,16 @@ function freeAvatar(){   // 新建 Agent 默认用图片头像：挑一个还没
   const pool = free.length ? free : AVATARS;
   return pool[Math.floor(Math.random() * pool.length)][0];
 }
+function autoDir(){ return (guestOf(fd.machine).root || "").replace(/\/$/, "") + "/" + (fd.name.trim().replace(/[\/:]/g, "_") || "新 Agent"); }
 function formHtml(a){
   fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", avatar: freeAvatar(), ...(agentDraftFrom || {})};
   agentDraftFrom = null;
   fd.machine = (a && ownerOf(a.id)) || fd.machine || ctxMachine || S.me;
   ctxMachine = fd.machine;
+  fd._autoDir = !a && sharedM(fd.machine) && !fd._dirSet;   // 共享给我的电脑：默认在共享文件夹里给它建一个同名的
+  if (fd._autoDir) fd.dir = autoDir();
   const hasCodex = ((S.machine_info || {})[fd.machine] || {}).codex ?? S.codex;
-  const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => m.online && canCreate(m.id)).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), fd.machine,
+  const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => canCreate(m.id)).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), m.online ? "" : "离线，连上后才能在它上面建"]), fd.machine,
     v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if (fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) fd.base = "claude"; redrawForm(); })}</div>` : "";
   fd._sealSet = fd._sealSet ?? !!(a && a.seal);
   return `<div class="form">${machineRow}
@@ -3727,7 +3747,7 @@ function formHtml(a){
       <div class="avatar-grid" aria-label="选择图片头像" ${fd.avatar ? "" : "hidden"}>${AVATARS.map(([id, name]) => `<button class="avatar-choice ${fd.avatar === id ? "on" : ""}" data-avatar="${id}" aria-label="${name}" aria-pressed="${fd.avatar === id}" onclick="chooseAvatar('${id}')"><img src="/avatars/${id}.webp" alt="" width="48" height="48" decoding="async"><span>${name}</span></button>`).join("")}</div>
       <div class="avatar-text" ${fd.avatar ? "hidden" : ""}><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="${{qing:'青',lu:'绿',zhe:'褐',huang:'黄',zhu:'朱',dai:'黛'}[k]}色" data-c="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal()"></button>`).join("")}</div>
         <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input id="f-seal" class="input" aria-label="印章文字" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;fd._sealSet=!!this.value;drawSeal()"></div></div></div>
-    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};drawSeal()">
+    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};if(fd._autoDir){fd.dir=autoDir();$('#f-dir').value=tilde(fd.dir)};drawSeal()">
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
     <label>底座</label><div class="seg">${(noCodex(fd.machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
@@ -3736,8 +3756,8 @@ function formHtml(a){
     ${(fd.base || "claude") === "claude" ? `${sharedM(fd.machine) ? "" : `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
       <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>`}
       <label>平台 Skill</label><div>${skillRows()}</div>` : ""}
-    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
-      <div class="help">它在这个目录里读写文件、跑命令。不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。</div></div>
+    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value;fd._dirSet=true;fd._autoDir=false"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; fd._dirSet = true; fd._autoDir = false; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
+      <div class="help">它在这个目录里读写文件、跑命令。${sharedM(fd.machine) ? "" : "不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。"}</div></div>
     <span></span><div class="row" style="margin-top:6px">
       <button class="btn primary" onclick="saveAgent(${a ? `${q(a.id)}` : "null"})">${a ? "保存" : "新建 Agent"}</button>
       ${a ? `<button class="btn danger" style="margin-left:auto" onclick="deleteAgent(${q(a.id)},${q(a.name)})">删除这个 Agent</button>` : ""}</div>
@@ -4392,7 +4412,7 @@ async function setArchiveDays(v){
 }
 let gsMachine = null, gsOf = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
 async function renderSettings(){
-  const ms = (S.machines || []).filter(m => m.online !== false && !m.shared);
+  const ms = (S.machines || []).filter(m => m.online !== false);
   if (!gsMachine || !ms.some(m => m.id === gsMachine)) gsMachine = (ms.find(m => m.me) || ms[0] || {}).id || S.me;
   let st = S;
   if (S.hub || gsMachine !== S.me) {              // 别的电脑：读它自己的设置和 Claude Code、Codex 的默认值
@@ -4405,16 +4425,23 @@ async function renderSettings(){
   const G = st.global || {}, D = st.defaults || {};
   Object.assign(gs, {model: G.model || "", effort: G.effort || "", codex_model: G.codex_model || "", codex_effort: G.codex_effort || ""});
   const [cm, ce] = D.claude || [], [xm, xe] = D.codex || [];
+  const ro = sharedM(gsMachine);            // 共享给我的电脑：主人设的，只能看（#154）
+  const show = (v, dflt) => `<div style="padding:9px 0">${esc(v || dflt)}</div>`;
   const pick = multi() ? `<div class="sect"><h3>哪台电脑</h3><div class="seg">${ms.map(m => `<button class="${m.id === gsMachine ? "on" : ""}" aria-pressed="${m.id === gsMachine}" onclick="gsMachine=${q(m.id)};renderSettings()">${esc(m.name)}${m.me && !S.hub ? "（这台）" : ""}</button>`).join("")}</div></div>` : "";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
     <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。</div></div></div>
-    <div class="pane">${pick}<div class="sect"><h3>Claude Code</h3><div class="form">
+    <div class="pane">${pick}${ro ? `<div class="sect"><h3>Claude Code</h3><div class="form">
+      <label>模型</label>${show(gs.model && modelName(gs.model), `跟随 Claude Code 设置（${modelName(cm)}）`)}
+      <label>思考深度</label>${show(gs.effort, `跟随 Claude Code 设置（${ce || "默认"}）`)}</div></div>
+      ${st.codex && !noCodex(gsMachine) ? `<div class="sect"><h3>Codex</h3><div class="form">
+      <label>模型</label>${show(gs.codex_model, `跟随 Codex 设置（${xm || "默认"}）`)}
+      <label>思考深度</label>${show(gs.codex_effort, `跟随 Codex 设置（${xe || "默认"}）`)}</div></div>` : ""}` : `<div class="sect"><h3>Claude Code</h3><div class="form">
       <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`, gs.model, gsMachine), gs.model, v => gs.model = v)}
       <label>思考深度</label>${dd("g-ce", effortOpts("claude", `跟随 Claude Code 设置（${ce || "默认"}）`), gs.effort, v => gs.effort = v)}</div></div>
       ${st.codex ? `<div class="sect"><h3>Codex</h3><div class="form">
       <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`, gs.codex_model, gsMachine), gs.codex_model, v => gs.codex_model = v)}
       <label>思考深度</label>${dd("g-xe", effortOpts("codex", `跟随 Codex 设置（${xe || "默认"}）`), gs.codex_effort, v => gs.codex_effort = v)}</div></div>` : ""}
-      <button class="btn primary" onclick="saveGlobal()">保存</button></div></div>`;
+      <button class="btn primary" onclick="saveGlobal()">保存</button>`}</div></div>`;
 }
 async function saveGlobal(){
   await act(() => api("/api/global", gs, gsMachine), multi() ? `已保存到「${(machineOf(gsMachine) || {}).name || "这台电脑"}」，新开的对话开始用` : "已保存，新开的对话开始用");

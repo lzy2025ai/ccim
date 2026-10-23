@@ -42,6 +42,13 @@ async def _after_restart(path, channel, log):
         log.exception("重启后的说明出错")
 
 
+async def _note(channel, cid, text, log):
+    try:
+        await channel.send_text(cid, text)
+    except Exception:
+        log.warning("回报没发出去（%s）", cid, exc_info=True)
+
+
 async def _serve(path, entry, secret, mode):
     from .bridge import Bridge
     log = logging.getLogger("ccim")
@@ -93,6 +100,8 @@ async def _serve(path, entry, secret, mode):
                 tick += 1
                 for task in asks.take(path):  # agent 派的任务（ccim ask）
                     bridge.ask(task)
+                for cid, text in runtime.take_notes(path):   # 后台做完的事回报给发起的对话（#146）
+                    asyncio.create_task(_note(channel, cid, text, log))
                 req = handoff.take(path)      # Claude Code 那边要把对话转过来（ccim handoff）
                 if req:
                     try:
@@ -572,11 +581,19 @@ def cmd_safe_restart_run(args):
 
 
 def cmd_promote(args):
+    if os.environ.get("CCIM_PROCESS") and os.environ.get("CCIM_CHAT") and not args.wait:   # 在 ccim 的对话里：后台做（#146）
+        runtime.start_promote()
+        print("已经在后台升级稳定版：装好新版本后，跑稳定版的项目各自等手头的活做完再重启。做完会在这个对话里说结果，不用等，接着做别的。")
+        return
     label, results = runtime.promote()
     for line in results:
         print(line)
     if not results:
         print("没有跑稳定版的项目。")
+
+
+def cmd_promote_run(args):
+    runtime.promote_run()
 
 
 def cmd_try(args):
@@ -1081,7 +1098,10 @@ def parser():
     s.add_argument("what", nargs="?", help="需求编号、分支名或工作目录；main 切回；不写就列出能试的")
     s.set_defaults(fn=cmd_try)
     s = sub.add_parser("promote", help="验收通过后：把最新的 main 装成稳定版，逐个升级跑稳定版的项目")
+    s.add_argument("--wait", action="store_true", help="在 ccim 的对话里也等它做完再返回")
     s.set_defaults(fn=cmd_promote)
+    s = sub.add_parser("promote-run", help=argparse.SUPPRESS)
+    s.set_defaults(fn=cmd_promote_run)
     s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程
     s.add_argument("path")
     s.add_argument("--delay", type=float, default=0)

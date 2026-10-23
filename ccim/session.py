@@ -7,7 +7,7 @@ import asyncio, json, logging, os, shutil, subprocess, sys, time, uuid, warnings
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, RateLimitEvent, ResultMessage,
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
-                              PermissionResultAllow, create_sdk_mcp_server, tool)
+                              HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
 from . import registry, usage
 from .progress import clock, describe_tool, short
@@ -48,6 +48,7 @@ SCHEDULE = """
 - 用户要你到点或每隔一段时间做某件事（比如每 30 分钟查一次、每天早上汇总）时，用命令 `ccim schedule add` 建定时任务
   （用法看 `ccim schedule add --help`），到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。
   不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
+PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--help)")   # 升级稳定版：先让用户确认（#146）
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND = """
 - 这个项目在别处（飞书、微信、终端或桌面端）还有别的对话，各聊各的。用户想知道别处聊过什么时，
@@ -469,6 +470,7 @@ class Chat:
                                "mcp__ccim__ask_agents",                             # 只是在群里 @ 人，用户看得到
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
+                hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
@@ -779,6 +781,23 @@ class Chat:
 
     async def _can_use_tool(self, name, inp, ctx):
         return await self.b.approvals.ask(self.chat_id, name, inp, ctx)
+
+    async def _pre_bash(self, data, tool_use_id, ctx):
+        """要升级稳定版（ccim promote）：不管 auto 模式怎么判断，先在对话里弹卡片让用户确认（#146）。"""
+        cmd = ((data or {}).get("tool_input") or {}).get("command") or ""
+        if not PROMOTE.search(cmd):
+            return {}
+        from . import runtime
+        try:
+            plan = await asyncio.to_thread(runtime.promote_plan)
+        except Exception:
+            log.warning("算升级计划出错", exc_info=True)
+            plan = "把最新的 main 装成新的稳定版，再把跑稳定版的项目依次重启到新版本。"
+        r = await self.b.approvals.ask(self.chat_id, "ccim_promote", {"command": cmd, "plan": plan}, None)
+        if isinstance(r, PermissionResultAllow):
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                       "permissionDecisionReason": "用户选了先不升级。" if "拒绝" in r.message else r.message}}
 
     def _tools(self):
         chat = self

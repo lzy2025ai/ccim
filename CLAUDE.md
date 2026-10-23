@@ -164,6 +164,9 @@
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删
   群聊里的 Agent 自己也能 @ 群成员：`ask_agents` 工具（session.py `_ask_agents`，只给网页里 Agent 的 w- 对话）→ `Mentions.ask`，
   记录带 by（网页显示成它说的），等各人回答完（waiters，最多 20 分钟）把回答作为工具结果交回，所以 unseen 不再重复带
+  子对话只装群里 @ 它的内容（#150）：用户在子对话里自己开口（发消息、@ 人、拉人）就 `Platform.split_sub` 另开这个 Agent 的独立对话
+  （fork 子对话的会话，记录带过去，meta 的 split_from 指回外层群聊，网页跳过去）；子对话跟着外层群聊一起删，单独聊的不能挂在它下面。
+  升级前在子对话里说过话、拉过人的，平台启动时 `_split_old_subs` 迁一次（成员、群聊说明、它里面 @ 过的人的本机子对话一起搬）
 - `ccim/admin.py`：管理员权限（#12）。私聊里给 Claude 一个 `run_as_admin` 工具（在 allowed_tools 里，它自己让用户确认）。
   渠道有 `ask_secret`（只有网页：本机）时弹卡片看命令、输开机密码，密码从标准输入交给 `sudo -S -k`（每次都要输），
   不进记录、不进日志、不回给 Claude；卡片 type=secret 按 id 合并，平台重启后没处理的显示作废。

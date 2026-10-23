@@ -1953,6 +1953,17 @@ function forkFrom(c){
   const p = c.parent && S.chats.find(x => x.id === c.parent);
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
 }
+function splitFrom(c){
+  const p = c.split_from;
+  return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">从「${esc(p.title)}」单独聊出来</a>` : "";
+}
+async function toSplit(r, src){          // 在群成员的子对话里开口：另开成独立对话（#150），跳过去
+  if (!r || !r.chat || r.chat === src.id) return false;
+  await loadState();
+  quietOpen = r.chat;
+  location.hash = `#/agents/${encodeURIComponent(src.agent)}/${encodeURIComponent(r.chat)}`;
+  return true;
+}
 // ---- 群聊（#15）：Agent 的对话里拉人进来 ----
 let showGroup = (() => { try { return localStorage.getItem("ccim.groupPanel") !== "0"; } catch { return true; } })();
 function toggleGroup(on){ showGroup = on; try { localStorage.setItem("ccim.groupPanel", on ? "1" : "0"); } catch {} drawChat(); }
@@ -1988,15 +1999,18 @@ function pullMenu(e){
     + `<button onclick="closePop();quickAgentForChat()">${ICON.plus}新建一个 Agent 拉进来</button>`, true);
   pp.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     closePop();
-    await act(() => api("/api/chat/members", {id: detail.id, add: [b.dataset.a]}), "已拉进来，@ 它就能让它回答");
-    showGroup = true; await reloadChat();
+    const src = detail, r = await act(() => api("/api/chat/members", {id: src.id, add: [b.dataset.a]}), "已拉进来，@ 它就能让它回答");
+    showGroup = true;
+    if (!await toSplit(r, src)) await reloadChat();
   });
 }
 function quickAgentForChat(){
-  const cid = detail.id;
+  const src = detail, cid = detail.id;
   quickAgent({title: "新建 Agent，拉进这个对话", machine: ownerOf(cid) || ctxMachine, done: async (id, name) => {
-    await act(() => api("/api/chat/members", {id: cid, add: [id]}));
-    closeDialog(); await loadState(); showGroup = true; await reloadChat(); toast(`「${name}」已拉进来，@ 它就能让它回答`);
+    const r = await act(() => api("/api/chat/members", {id: cid, add: [id]}));
+    closeDialog(); await loadState(); showGroup = true;
+    if (!await toSplit(r, src)) await reloadChat();
+    toast(`「${name}」已拉进来，@ 它就能让它回答`);
   }});
 }
 async function removeMember(aid){
@@ -2025,7 +2039,7 @@ function drawChat(){
     <div class="chat-head">${a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}
+        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
@@ -2157,11 +2171,12 @@ async function sendChat(){
   const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
   quotes.list = []; drawQuotes();
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
-    const to = chatRcpt;
+    const to = chatRcpt, src = detail;
     $("#input").value = ""; saveDraft(); pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
     try {
-      const r = await act(() => api("/api/chat/mention", {id: detail.id, text: v, files, to}));
+      const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
+      else if (await toSplit(r, src)) {}
       else if (detail.agent && to.some(a => !(detail.members || []).includes(a))) { toast("已拉进群聊"); reloadChat(); }
     }
     catch { back(); chatRcpt = to; drawChatRcpt(); drawComposerState(); }
@@ -2193,12 +2208,13 @@ async function sendChat(){
   drawThread(); drawComposerState();
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
-  try { r = await act(() => api("/api/chat/send", {id: detail.id, text: v, files})); }
+  const src = detail;
+  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files})); }
   catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
-  }
+  } else await toSplit(r, src);
 }
 async function stopChat(){ await act(() => api("/api/chat/stop", {id: detail.id})); }
 async function cardAct(mid, value){ await act(() => api("/api/chat/action", {id: detail.id, mid, value})); }

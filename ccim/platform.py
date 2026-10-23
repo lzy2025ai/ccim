@@ -171,6 +171,12 @@ class Logs:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
             os.replace(tmp, self._f(chat))
 
+    def rename(self, chat, new):
+        with self.lock:
+            for a, b in ((self._f(chat), self._f(new)), (docs.snap_dir(self.folder, chat), docs.snap_dir(self.folder, new))):
+                if os.path.exists(a):
+                    os.replace(a, b)
+
     def remove(self, chat):
         try:
             os.remove(self._f(chat))
@@ -390,6 +396,10 @@ class Platform:
             groups.migrate_projects(self)
         except Exception:
             log.exception("项目复制成群聊出错")
+        try:
+            self._split_old_subs()
+        except Exception:
+            log.exception("子对话另开成独立对话出错")
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
@@ -650,6 +660,74 @@ class Platform:
         self.store.write(chats)
         return cid
 
+    def split_sub(self, cid, force=False):
+        """群成员的子对话（#150）：用户在里面自己开口（发消息、@ 人、拉人）就另开这个 Agent 的独立对话，
+        接着子对话的会话（分支），之前的记录带过去；子对话只留群里 @ 它的内容。子对话跟着外层群聊（不进列表、
+        一起删），单独聊出来的东西不能挂在它下面。不是子对话就原样返回。在主循环里调。"""
+        from .mentions import Mentions
+        m = self.meta(cid)
+        if not m.get("mention_of"):
+            return cid
+        if m.get("busy") and not force:
+            raise Problem("它正在回答群里的问题，等它答完再接着聊。")
+        if not agents.get(m.get("agent")):
+            raise Problem("这个对话的 Agent 已经删掉了。")
+        sid = m.get("codex_session_id" if self._effective(m)["base"] == "codex" else "session_id")
+        of = m["mention_of"]
+        new = self.new_chat(agent=m["agent"])
+        chats = self.chats()
+        rec, old = chats[new], chats[cid]
+        if sid:
+            rec["fork_from"] = sid
+        if m.get("title") and m["title"] != (chats.get(of) or {}).get("title"):   # 子对话的标题默认就是群聊的
+            rec["title"] = m["title"]
+        rec["split_from"] = of
+        for k in ("cwd", "kbs", "members", "note", "note_at", "note_seen", "mention_seen"):
+            if m.get(k):
+                rec[k] = m[k]
+        if isinstance(m.get("ctx_upto"), dict):   # 子对话自己当过群聊（老版本）：各人看到哪
+            rec["ctx_upto"] = dict(m["ctx_upto"])
+            old.pop("ctx_upto")
+        for k in ("members", "note", "note_at", "note_seen", "mention_seen"):
+            old.pop(k, None)
+        moved = {}                            # 它里面 @ 过的人的子对话（本机的）搬到新对话下面
+        for c, x in list(chats.items()):
+            if x.get("mention_of") == cid:
+                moved[c] = Mentions.sub(new, x["agent"])
+                chats[moved[c]] = dict(x, mention_of=new)
+                del chats[c]
+                self.store.deleted.add(c)
+        logs = self.channel.logs
+        rows = logs.read(cid)
+        for r in rows:
+            if r.get("type") == "mention" and r.get("machine") and r.get("agent") in rec.get("ctx_upto", {}):
+                rec["ctx_upto"].pop(r["agent"])       # 别的电脑上的子对话搬不过去，下次带上全部内容
+        self.store.write(chats)
+        for c, to in moved.items():
+            logs.rename(c, to)
+        for r in rows:
+            if r.get("type") in ("user", "answer", "file", "note", "mention"):
+                logs.append(new, dict(r, chat=moved[r["chat"]]) if r.get("chat") in moved else r)
+        if any(r.get("type") == "mention" for r in rows):
+            logs._rewrite(cid, [r for r in rows if r.get("type") != "mention"])
+        log.info("子对话 %s 另开成独立对话 %s", cid, new)
+        return new
+
+    def _split_old_subs(self):
+        """升级前用户在子对话里说过话、拉过人的，另开成独立对话（只做一次）。"""
+        st = registry.read_state(self.home)
+        if st.get("subs_split"):
+            return
+        for cid, m in list(self.chats().items()):
+            if not m.get("mention_of") or not agents.get(m.get("agent")):
+                continue
+            mine = isinstance(m.get("ctx_upto"), dict) or [a for a in m.get("members") or [] if a != m.get("agent")]
+            if not mine and not m.get("remote_project"):   # 群里 @ 它时记的那条带 from_chat；别的电脑派来的老记录没带，只看成员
+                mine = any(r.get("type") == "user" and not r.get("from_chat") for r in self.channel.logs.read(cid))
+            if mine:
+                self.split_sub(cid, force=True)
+        registry.write_state(self.home, subs_split=True)
+
     async def send(self, cid, text, files=(), ctx=None):
         b = self._bridge(cid)
         m = self.meta(cid)
@@ -839,6 +917,8 @@ class Platform:
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
                 "mention_of": m.get("mention_of"),
+                "split_from": {"id": m["split_from"], "title": (self.chats().get(m["split_from"]) or {}).get("title") or "群聊"}
+                if m.get("split_from") else None,
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
@@ -1318,7 +1398,8 @@ class Platform:
         start = time.time()
         b = self._bridge(cid)
         chat = b.chat(cid, "p2p")
-        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": shown or prompt, "files": []}))
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": shown or prompt, "files": [],
+                                                                **({"from_chat": of} if kind == "mention" else {})}))
         task = Task(prompt)
         chat.submit(task)
         token = uuid.uuid4().hex
@@ -1623,7 +1704,7 @@ def _handler(pf):
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"))),
-                "/api/chat/members": lambda: {"members": pf.call(groups_mod.set_members, pf, b("id"), b("add") or [], b("remove") or [])},
+                "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
                 "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
@@ -1769,9 +1850,17 @@ def check_message(pf, text, files):
 
 def send(pf, cid, text, files, ctx=None):
     check_message(pf, text, files)
-    pf.meta(cid)
+    if pf.meta(cid).get("mention_of"):       # 在群成员的子对话里开口：另开独立对话（#150），网页跳过去
+        cid = pf.call(pf.split_sub, cid)
     pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx))
-    return {"ok": True}
+    return {"ok": True, "chat": cid}
+
+
+def set_members(pf, cid, add, remove):
+    from . import groups
+    if add and pf.meta(cid).get("mention_of"):
+        cid = pf.call(pf.split_sub, cid)
+    return {"members": pf.call(groups.set_members, pf, cid, add, remove), "chat": cid}
 
 
 def answer_secret(pf, sid, password, run, from_peer=False):
@@ -1837,8 +1926,9 @@ def leave_hub(pf):
 
 def mention(pf, cid, text, to, files):
     check_message(pf, text, files)
-    pf.meta(cid)
-    return pf.run(pf.mentions.send(cid, (text or "").strip(), to, files))
+    if pf.meta(cid).get("mention_of"):
+        cid = pf.call(pf.split_sub, cid)
+    return dict(pf.run(pf.mentions.send(cid, (text or "").strip(), to, files)), chat=cid)
 
 
 def _busy_of(a):

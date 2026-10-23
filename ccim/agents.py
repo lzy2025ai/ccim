@@ -17,7 +17,8 @@ COLORS = ("qing", "zhu", "huang", "lu", "zhe", "dai")
 AVATARS = ("01-navigator", "02-coder", "03-designer", "04-writer", "05-researcher", "06-analyst",
            "07-engineer", "08-assistant", "09-explorer", "10-guardian", "11-maker", "12-planner",
            "13-spark", "14-archivist", "15-buddy", "16-sprout")
-FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome", "skills_off")
+FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome", "skills_off",
+          "account")   # account：共享电脑上访客建的（#154）
 SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role", "chrome": "chrome"}   # Agent 字段 → 登记里的字段
 
 

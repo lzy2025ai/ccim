@@ -172,14 +172,14 @@ def serve_remote(handler, fetch, extra=None):
         handler.close_connection = True
 
 
-def serve_peer(handler, peers, mid, extra=None):
+def serve_peer(handler, peers, mid, extra=None, headers=None):
     """文件在别的电脑上（网页请求的 /api/file 带 machine）：按段取，边收边发。错误用 handler._send 回。"""
     from .peers import Offline
     q = {k: v[0] for k, v in parse_qs(urlparse(handler.path).query).items()}
     base = "/api/file/part?" + urlencode({"chat": q.get("chat", ""), "path": q.get("path", "")})
 
     def fetch(start, n):
-        status, _, data = peers.forward(mid, "GET", f"{base}&start={start}&len={n}", b"", {})
+        status, _, data = peers.forward(mid, "GET", f"{base}&start={start}&len={n}", b"", headers or {})
         if status == 404:
             raise Gone()
         if status != 200:
@@ -190,7 +190,7 @@ def serve_peer(handler, peers, mid, extra=None):
     except Gone:
         # 没这个文件，或者那台电脑还是旧版本（没有分段接口）：照原来的整个取过来，结果原样转回
         try:
-            status, ctype, data = peers.forward(mid, "GET", handler.path, b"", {})
+            status, ctype, data = peers.forward(mid, "GET", handler.path, b"", headers or {})
         except Offline:
             return _offline(handler, peers, mid)
         handler._send(status, data, ctype)

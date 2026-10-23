@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
-from . import devices, docs, filesend
+from . import devices, docs, filesend, share
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
@@ -86,6 +86,7 @@ class Events:
     def __init__(self):
         self.lock = threading.Lock()
         self.subs = []
+        self.tag = None                       # 平台：本机的推送标上属于哪个访客（#154）
 
     def subscribe(self):
         q = queue.Queue(maxsize=1000)
@@ -103,6 +104,8 @@ class Events:
             return q in self.subs
 
     def publish(self, ev):
+        if self.tag and not ev.get("_m"):
+            ev = self.tag(ev)
         with self.lock:
             for q in list(self.subs):
                 try:
@@ -318,6 +321,7 @@ class Store:
     def __init__(self, home):
         self.home = home
         self.deleted = set()                  # 删掉的对话：Chat 断开时还会写一次状态，不能让它冒回来
+        self.ver = 0                          # 写过几次：share.owner_map 据此重算
 
     def read(self):
         return registry.read_state(self.home).get("chats") or {}
@@ -326,6 +330,7 @@ class Store:
         for cid in self.deleted:
             chats.pop(cid, None)
         registry.write_state(self.home, chats=chats)
+        self.ver += 1
 
 
 class Problem(Exception):
@@ -400,6 +405,7 @@ class Platform:
             registry.write_state(self.home, board_seen_init=True)
         self.kb_wake = threading.Event()
         threading.Thread(target=self._kb_sync_loop, daemon=True).start()
+        channel.events.tag = lambda ev: share.tag(self, ev)
 
     # ----- 知识库（#27） -----
 
@@ -569,15 +575,20 @@ class Platform:
     def _bridge(self, cid):
         from .bridge import Bridge
         m = self.meta(cid)
+        viewer = share.chat_owner(self, cid)     # 共享电脑上访客的对话（#154）
         if m.get("agent"):
             a = agents.get(m["agent"])
             if not a:
                 raise Problem("这个对话的 Agent 已经删掉了。")
             path = m.get("cwd") or agents.cwd(a)         # 项目里的对话在项目目录（对比时在它自己的副本）里干活
             key = a["id"] if path == agents.cwd(a) else f"{a['id']}@{path}"
+            lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
+            if lent:
+                key += "#" + viewer
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome"), "agent_id": a["id"]}
+                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
+                     "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
         else:
             t = m.get("temp") or {}
@@ -585,7 +596,7 @@ class Platform:
             path = t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
-                     "effort": t.get("effort")}
+                     "effort": t.get("effort"), "guest": viewer}
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
@@ -602,9 +613,13 @@ class Platform:
             b.name = b.approvals.project = name
         return b
 
-    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None, parent=None, fork_at=None, link=None):
+    def new_chat(self, agent=None, temp=None, fork_from=None, title=None, source=None, parent=None, fork_at=None, link=None,
+                 account=None):
         cid = "w-" + uuid.uuid4().hex[:10]
         rec = {"type": "p2p", "created": registry.now(), "last_active": registry.now()}
+        account = account or (self.chats().get(parent) or {}).get("account") if parent else account
+        if account:                           # 共享电脑上访客开的对话（#154）
+            rec["account"] = account
         if agent:
             if not agents.get(agent):
                 raise Problem("找不到这个 Agent。")
@@ -1410,6 +1425,21 @@ def _handler(pf):
             self.end_headers()
             self.wfile.write(data)
 
+        def _guest(self, method, path, q, body):
+            """共享电脑上访客的请求（#154）：不让做的回 403，返回访客的账号编号（主人返回 None）。"""
+            acct = share.account_of(self.headers)
+            if not acct or not path.startswith("/api/") or path == "/api/events":
+                return None, False
+            from urllib.parse import unquote
+            name = unquote(self.headers.get("X-Account-Name") or "")
+            try:
+                share.remember(pf, acct, name, share.share_of(self.headers))
+                share.check(pf, acct, method, path, q, body)
+            except share.Denied as e:
+                self._send(403, {"error": str(e)})
+                return acct, True
+            return acct, False
+
         def _guard(self):
             if not self._host_ok() or self.headers.get("X-CCIM") != "1":
                 self._send(403, {"error": "forbidden"})
@@ -1470,6 +1500,9 @@ def _handler(pf):
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             if u.path.startswith("/api/") and u.path != "/api/events" and self._remote():
                 return
+            acct, denied = self._guest("GET", u.path, q, None)
+            if denied:
+                return
             if u.path in ("/", "/index.html"):
                 if not self._host_ok():
                     return self._send(403, b"forbidden", "text/plain")
@@ -1487,12 +1520,13 @@ def _handler(pf):
             if u.path == "/api/file/part":
                 return self._file_part(q)
             routes = {
-                "/api/state": lambda: state(pf) if q.get("local") else pf.peers.merged_state(state(pf)),
-                "/api/dirs": lambda: list_dirs(q.get("path") or ""),
-                "/api/kb": lambda: {"libs": kb_mod.libs()},
+                "/api/state": lambda: state(pf, acct) if q.get("local") else pf.peers.merged_state(state(pf)),
+                "/api/dirs": lambda: list_dirs(q.get("path") or "", share.root(acct) if acct else None),
+                "/api/kb": lambda: {"libs": share.filter_libs(kb_mod.libs(), acct)},
                 "/api/kb/lib": lambda: kb_mod.lib_detail(q.get("id", "")),
                 "/api/kb/entry": lambda: kb_mod.entry(q.get("lib", ""), q.get("id", "")),
-                "/api/kb/search": lambda: {"results": kb_mod.search(q.get("q", ""))},
+                "/api/kb/search": lambda: {"results": [r for r in kb_mod.search(q.get("q", ""))
+                                                       if r["lib"] in {x["id"] for x in share.filter_libs(kb_mod.libs(), acct)}]},
                 "/api/kb/manifest": lambda: kb_mod.manifest(),
                 "/api/skills": lambda: {"skills": skills_mod.listing()},
                 "/api/skills/detail": lambda: skills_mod.detail(q.get("name", "")),
@@ -1503,16 +1537,17 @@ def _handler(pf):
                 "/api/agent/skill": lambda: skills_mod.agent_detail(_agent(q.get("id")), q.get("group", ""), q.get("name", "")),
                 "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
-                "/api/board": lambda: pf.call(board_mod.stats, pf),
+                "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct),
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
-                "/api/agent": lambda: agent_view(pf, q.get("id", ""), detail=True),
+                "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
-                "/api/schedule/list": lambda: {"schedules": pf.call(pf.schedules.summary)},   # ccim schedule list
+                "/api/schedule/list": lambda: {"schedules": [x for x in pf.call(pf.schedules.summary)
+                                                             if share.of_schedule(pf, x) == acct]},   # ccim schedule list
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -1531,14 +1566,21 @@ def _handler(pf):
             if self.headers.get("X-From-Peer") and u.path in ("/api/pick", "/api/reveal"):
                 return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
+                if self._guest("POST", u.path, {}, None)[1]:
+                    return
                 return self._api(self._upload)
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except ValueError:
                 body = {}
+            if not isinstance(body, dict):
+                body = {}
+            acct, denied = self._guest("POST", u.path, {}, body)
+            if denied:
+                return
             b = body.get
             routes = {
-                "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"))},
+                "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx")),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh"))))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
@@ -1549,7 +1591,7 @@ def _handler(pf):
                 "/api/chat/delete": lambda: pf.call(pf.delete_terminal, b("id")) if str(b("id")).startswith("x:")
                     else pf.run(pf.delete_chat(b("id"))),
                 "/api/chat/mark": lambda: pf.call(pf.mark_chat, b("id"), b("changes")),
-                "/api/kb/lib/save": lambda: kb_write(pf, kb_mod.save_lib, b("id"), b("name"), b("desc") or "", b("color")),
+                "/api/kb/lib/save": lambda: kb_write(pf, kb_mod.save_lib, b("id"), b("name"), b("desc") or "", b("color"), acct),
                 "/api/kb/lib/delete": lambda: kb_write(pf, kb_mod.delete_lib, b("id")),
                 "/api/kb/entry/save": lambda: kb_write(pf, kb_mod.save_entry, b("lib"), b("id"), b("title"), b("content"), b("source")),
                 "/api/kb/entry/delete": lambda: kb_write(pf, kb_mod.delete_entry, b("lib"), b("id")),
@@ -1587,7 +1629,7 @@ def _handler(pf):
                 "/api/peers/code": lambda: pf.peers.new_code(),
                 "/api/peers/remove": lambda: pf.peers.remove(b("id")),
                 "/api/peers/leave": lambda: leave_hub(pf),
-                "/api/agent/save": lambda: save_agent(pf, b("id"), b("fields") or {}),
+                "/api/agent/save": lambda: save_agent(pf, b("id"), b("fields") or {}, acct),
                 "/api/project/save": lambda: pf.call(pf.projects.save, b("id"), b("name"), b("dir"), b("members")),
                 "/api/project/delete": lambda: pf.run(pf.projects.delete(b("id")), 120),
                 "/api/project/member": lambda: pf.call(pf.projects.member, b("id"), b("add"), b("remove")),
@@ -1741,17 +1783,19 @@ def answer_secret(pf, sid, password, run, from_peer=False):
     return {}
 
 
-def list_dirs(path):
-    """网页里选另一台电脑上的文件夹：列出子文件夹。"""
-    home = os.path.expanduser("~")
+def list_dirs(path, top=None):
+    """网页里选另一台电脑上的文件夹：列出子文件夹。top：共享电脑上的访客只能在它的专属文件夹里选（#154）。"""
+    home = top or os.path.expanduser("~")
     d = os.path.realpath(os.path.expanduser(path or "~"))
+    if top and not share.inside(d, top):
+        d = top
     if not os.path.isdir(d):
         raise Problem("找不到这个文件夹。")
     try:
         names = sorted(n for n in os.listdir(d) if not n.startswith(".") and os.path.isdir(os.path.join(d, n)))
     except PermissionError:
         raise Problem("没有权限打开这个文件夹。")
-    return {"path": d, "parent": os.path.dirname(d) if d != "/" else None, "home": home, "dirs": names[:500]}
+    return {"path": d, "parent": os.path.dirname(d) if d != "/" and d != top else None, "home": home, "dirs": names[:500]}
 
 
 def _agent(aid):
@@ -1827,20 +1871,24 @@ def agent_view(pf, aid, detail=False):
     return view
 
 
-def state(pf):
+def state(pf, acct=None):
+    """acct：共享电脑上访客的账号，只给它自己的；主人（None）看不到访客的（#154）。"""
     from . import models
     from . import web as console
     g = registry.global_config()
     from . import upgrade
-    return {"ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
-            "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
-            "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
-                                      "codex": _defaults("codex", os.path.expanduser("~"))},
-            "codex": console._codex(), "home": os.path.expanduser("~"),
-            "models": {"claude": models.claude(), "codex": models.codex()}}
+    return share.filter_state(pf, {
+        "ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
+        "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
+        "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
+                                  "codex": _defaults("codex", os.path.expanduser("~"))},
+        "codex": console._codex(), "home": os.path.expanduser("~"),
+        "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
 
-def save_agent(pf, aid, fields):
+def save_agent(pf, aid, fields, acct=None):
+    if not acct:                              # 账号只在访客新建时由 share.check 定
+        fields.pop("account", None)
     if fields.get("base") == "codex":
         from . import web as console
         if not console._codex():

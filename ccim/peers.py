@@ -28,6 +28,8 @@ POLL_WAIT = 20                                # 长轮询最多挂这么久
 ONLINE_WINDOW = 45                            # 这么久没来轮询就算离线
 SKEW = 120                                    # 签名时间戳允许的误差
 CODE_TTL = 600
+PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Account-Share")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
+OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
 STATE_REFRESH = 10                            # 超过这么久，返回缓存的同时后台再取一次
@@ -132,7 +134,7 @@ def local_request(pf, method, path, body=b"", headers=None, timeout=CALL_TIMEOUT
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     try:
         h = {"X-CCIM": "1", "X-From-Peer": "1", "Host": f"127.0.0.1:{port}"}
-        for k in ("X-Name", "Content-Type"):
+        for k in PASS_HEADERS:
             if (headers or {}).get(k):
                 h[k] = headers[k]
         c.request(method, path, body=body or None, headers=h)
@@ -179,6 +181,7 @@ class Peers:
         self.cache_at = {}                    # 上次从那台电脑取 state 的时间：新的直接用，不每次都现问（#32）
         self.dirty = set()                    # 刚往那台电脑发过操作、或它有了新动静：下次要现问
         self.refreshing = set()
+        self.guest_ok = {}                    # 共享出去的电脑是不是认访客的新版本（guest_ready）
         self.stopping = False
 
     # ----- 启动 -----
@@ -225,11 +228,23 @@ class Peers:
             return time.time() - self.hub_ok < ONLINE_WINDOW
         return any(m["id"] == mid and m.get("online") for m in self.machines_from_hub)
 
-    def machines(self):
-        """[{id, name, me, hub, online}]，第一个是总控。"""
+    def owner_of(self, mid):
+        """服务器上的总控：这台电脑归哪个账号（#154，以前加入的都归主人）。"""
+        return (self.nodes.get(mid) or {}).get("account") or OWNER
+
+    def machines(self, account=None, own=False):
+        """[{id, name, me, hub, online}]，第一个是总控。服务器上的总控给了 account 就只列这个账号的电脑。"""
         if self.is_hub():
             out = [] if self.server_hub else [{"id": self.me["id"], "name": self.me["name"], "hub": True}]
-            out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()]
+            out += [{"id": k, "name": v["name"], "hub": False} for k, v in self.nodes.items()
+                    if account is None or not self.server_hub or self.owner_of(k) == account]
+            if self.multi() and account is not None:
+                for m in out:             # 主人：这台共享给了谁，各自能不能用 Codex
+                    m["shares"] = dict(self.nodes[m["id"]].get("shares") or {})
+                if not own:               # 别的账号共享给它的（#154）
+                    out += [{"id": k, "name": v["name"], "hub": False, "shared": True, "share": v["shares"][account]}
+                            for k, v in self.nodes.items()
+                            if self.owner_of(k) != account and account in (v.get("shares") or {})]
         else:
             out = [dict(m) for m in self.machines_from_hub] or \
                 ([] if self.hub.get("server") else [{"id": self.hub["hub_id"], "name": self.hub["hub_name"], "hub": True}]) + \
@@ -241,14 +256,14 @@ class Peers:
 
     # ----- 配对（总控） -----
 
-    def new_code(self):
+    def new_code(self, account=None):
         if not self.is_hub():
             raise ValueError("这台电脑已经加入了别的电脑，要添加电脑请到那台电脑上操作。")
         self.serve()
         code = f"{secrets.randbelow(10 ** 6):06d}"
         with self.lock:
             self.codes = {c: v for c, v in self.codes.items() if v["until"] > time.time()}
-            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0}
+            self.codes[code] = {"until": time.time() + CODE_TTL, "tries": 0, "account": account}
         if self.public_url:                   # 服务器上的总控：给公网地址
             return {"code": code, "minutes": CODE_TTL // 60, "hosts": [self.public_url], "port": None}
         return {"code": code, "minutes": CODE_TTL // 60, "hosts": lan_ips(), "port": PEER_PORT}
@@ -263,12 +278,16 @@ class Peers:
                 if all(v["tries"] > 10 for v in live.values()):
                     self.codes = {}
                 raise PermissionError("配对码不对或者过期了，在那台电脑的网页里重新生成一个。")
-            del self.codes[code]
+            account = self.codes.pop(code).get("account")
             mid = str(body.get("id") or "")[:20] or "m" + uuid.uuid4().hex[:8]
             if mid == self.me["id"]:
                 raise PermissionError("不能加入自己。")
+            if self.server_hub and mid in self.nodes and self.owner_of(mid) != (account or OWNER):
+                raise PermissionError("这台电脑已经在别的账号下了，先在那个账号里移除它。")
             key = secrets.token_hex(32)
             self.nodes[mid] = {"name": str(body.get("name") or mid)[:40], "key": key, "added": registry.now()}
+            if self.server_hub and account and account != OWNER:
+                self.nodes[mid]["account"] = account
             _save("peers.json", self.nodes)
         self._emit_machines()
         return {"hub_id": self.me["id"], "hub_name": self.me["name"], "key": key, "protocol": PROTOCOL,
@@ -290,6 +309,40 @@ class Peers:
     def leave(self):
         leave()
         return {}
+
+    def multi(self):
+        """服务器上的总控打开了多账号（hubserver.accounts_on）。"""
+        return bool(self.server_hub and getattr(self.pf, "accounts_on", lambda: False)())
+
+    def guest_of(self, mid, account):
+        """服务器上的总控：account 用 mid 是作为访客（别人共享给它的），是就返回 True。"""
+        return bool(self.multi() and account and self.owner_of(mid) != account
+                    and account in ((self.nodes.get(mid) or {}).get("shares") or {}))
+
+    def share(self, mid, account, opts):
+        """主人给 account 在 mid 上开的权限（hubserver.clean_share 的结果）；None = 不共享。"""
+        with self.lock:
+            n = self.nodes.get(mid)
+            if not n:
+                raise ValueError("没有这台电脑。")
+            sh = n.setdefault("shares", {})
+            if opts:
+                sh[account] = opts
+            else:
+                sh.pop(account, None)
+            if not sh:
+                n.pop("shares", None)
+            _save("peers.json", self.nodes)
+            self.dirty.add(mid)
+            self.dirty.add(f"{mid}|{account}")
+        self._emit_machines()
+        return {}
+
+    def same_account(self, a, b):
+        """服务器上的总控：两台电脑是不是同一个账号的（不同账号的电脑之间不互相调用、不转推送，#154）。"""
+        if not self.server_hub:
+            return True
+        return self.owner_of(a) == self.owner_of(b)
 
     def _emit_machines(self):
         self.pf.channel.events.publish({"type": "machines"})
@@ -330,7 +383,7 @@ class Peers:
         ev, picked = threading.Event(), threading.Event()
         self.waiting[rid] = [ev, None, picked]
         self._box(mid).put({"kind": "req", "rid": rid, "method": method, "path": path,
-                            "headers": {k: v for k, v in (headers or {}).items() if k in ("X-Name", "Content-Type")},
+                            "headers": {k: v for k, v in (headers or {}).items() if k in PASS_HEADERS},
                             "body": base64.b64encode(body or b"").decode()})
         try:
             if not picked.wait(POLL_WAIT + 10):      # 一直没人来取：那台电脑其实已经断了，撤回，免得它回来后又执行一次
@@ -353,52 +406,64 @@ class Peers:
 
     # ----- 汇总各台电脑的 state -----
 
-    def merged_state(self, local):
+    def merged_state(self, local, account=None):
         out = dict(local)
         me = self.me["id"]
         for k in ("agents", "chats", "projects", "schedules"):
             out[k] = [dict(x, machine=me) for x in local.get(k) or []]
-        machines = self.machines()
+        machines = self.machines(account)
+        guest = {m["id"] for m in machines if m.get("shared")}   # 别人共享的电脑：按访客要，缓存也分开（#154）
+        key = lambda mid: f"{mid}|{account}" if mid in guest else mid
+        hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
                       "home": local.get("home"), "ccim": local.get("ccim")}}
         results = {}
 
         def fetch(m):
             try:
-                status, _, data = self.forward(m["id"], "GET", "/api/state?local=1")
+                status, _, data = self.forward(m["id"], "GET", "/api/state?local=1", b"", hdr(m["id"]))
                 if status == 200:
-                    results[m["id"]] = json.loads(data)
+                    s = json.loads(data)
+                    if m["id"] in guest and not self.guest_ready(m["id"], s):
+                        s = {}
+                    results[m["id"]] = s
             except Exception:
                 pass
 
         now = time.time()
         others = [m for m in machines if not m["me"] and m["online"]]
         # 刚操作过、有新动静、或者太久没取的现问；其余用上次取的，后台再更新一下
-        now_ = [m for m in others if m["id"] in self.dirty or m["id"] not in self.cache or now - self.cache_at.get(m["id"], 0) > STATE_FRESH]
-        later = [m for m in others if m not in now_ and now - self.cache_at.get(m["id"], 0) > STATE_REFRESH
-                 and m["id"] not in self.refreshing]
+        now_ = [m for m in others if m["id"] in self.dirty or key(m["id"]) in self.dirty or key(m["id"]) not in self.cache
+                or now - self.cache_at.get(key(m["id"]), 0) > STATE_FRESH]
+        later = [m for m in others if m not in now_ and now - self.cache_at.get(key(m["id"]), 0) > STATE_REFRESH
+                 and key(m["id"]) not in self.refreshing]
         for m in now_:
-            self.dirty.discard(m["id"])
+            if m["id"] in self.dirty:     # 那台电脑有了变化：访客那份也要重取（编号本身就是主人那份的键）
+                self.dirty.update(f"{m['id']}|{a}" for a in (self.nodes.get(m["id"]) or {}).get("shares") or {})
+            self.dirty.discard(key(m["id"]))
         threads = [threading.Thread(target=fetch, args=(m,)) for m in now_]
         for t in threads:
             t.start()
         for t in threads:
             t.join(STATE_TIMEOUT + 1)
         for m in later:
-            self.refreshing.add(m["id"])
+            self.refreshing.add(key(m["id"]))
 
-            def bg(m=m):
+            def bg(m=m, k=key(m["id"])):
                 try:
-                    status, _, data = self.forward(m["id"], "GET", "/api/state?local=1")
+                    status, _, data = self.forward(m["id"], "GET", "/api/state?local=1", b"", hdr(m["id"]))
                     if status == 200:
-                        self.cache[m["id"]], self.cache_at[m["id"]] = json.loads(data), time.time()
+                        s = json.loads(data)
+                        if m["id"] in guest and not self.guest_ready(m["id"], s):
+                            s = {}
+                        self.cache[k], self.cache_at[k] = s, time.time()
                 except Exception:
                     pass
                 finally:
-                    self.refreshing.discard(m["id"])
+                    self.refreshing.discard(k)
             threading.Thread(target=bg, daemon=True).start()
         for mid in results:
-            self.cache_at[mid] = time.time()
+            self.cache_at[key(mid)] = time.time()
         fresh = {m["id"] for m in others if m not in now_}       # 用的是缓存，也算在线
         changed = False
         for m in machines:
@@ -406,17 +471,17 @@ class Peers:
                 continue
             s = results.get(m["id"])
             if s:
-                self.cache[m["id"]] = s
+                self.cache[key(m["id"])] = s
                 changed = True
             else:
-                s = self.cache.get(m["id"])
+                s = self.cache.get(key(m["id"]))
                 m["online"] = m["online"] and m["id"] in fresh
             if not s:
                 continue
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
-                              "home": s.get("home"), "ccim": s.get("ccim")}
+                              "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {})}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)
@@ -428,6 +493,20 @@ class Peers:
             out["hub_name"] = self.hub.get("hub_name")
         return out
 
+    def guest_ready(self, mid, st):
+        """共享出去的电脑认不认访客：新版本按访客给的 state 里有 guest。旧版本不认，会把主人的东西全给出去，一律不转（#154）。"""
+        ok = "guest" in (st or {})
+        self.guest_ok[mid] = ok
+        return ok
+
+    def guest_headers(self, account, mid=None):
+        """访客的请求转给共享电脑时带的头：账号编号、名字、主人给它的权限（URL 编码，头里只能放 ASCII）。"""
+        from urllib.parse import quote
+        name = (self.pf.account(account) or {}).get("name") if hasattr(self.pf, "account") else ""
+        opts = ((self.nodes.get(mid) or {}).get("shares") or {}).get(account) or {}
+        return {"X-Account": account, "X-Account-Name": quote(name or ""),
+                "X-Account-Share": quote(json.dumps(opts, ensure_ascii=False))}
+
     def agent_home(self, aid):
         """这个 Agent 在哪台电脑上（本机的直接认；别的电脑看上次汇总的，没有就现问一遍）。找不到返回 None。"""
         from . import agents
@@ -437,7 +516,7 @@ class Peers:
             if again:
                 self.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
             for mid, s in list(self.cache.items()):
-                if any(a.get("id") == aid for a in s.get("agents") or []):
+                if "|" not in mid and any(a.get("id") == aid for a in s.get("agents") or []):
                     return mid
         return None
 
@@ -482,8 +561,10 @@ class Peers:
                     q = self.pf.channel.events.subscribe()
                 continue
             origin = ev.get("_m") or self.me["id"]
+            if ev.get("_a"):                  # 共享电脑上访客的推送：只给服务器上访客的网页
+                continue
             for mid in list(self.nodes):
-                if mid != origin and self.online(mid):
+                if mid != origin and self.online(mid) and self.same_account(mid, origin):
                     try:
                         self._box(mid).put_nowait({"kind": "ev", "ev": dict(ev, _m=origin)})
                     except queue.Full:
@@ -638,6 +719,8 @@ def _handler(peers):
                     method, p = self.headers.get("X-Method") or "GET", self.headers.get("X-Path") or "/"
                     if not p.startswith("/api/"):
                         return self._reply(400, {"error": "bad path"}, key, nonce)
+                    if peers.server_hub and (target not in peers.nodes or not peers.same_account(mid, target)):
+                        return self._reply(503, {"error": "offline"}, key, nonce)
                     hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
                     try:
                         status, ctype, data = peers.forward(target, method, p, body, hs)
@@ -672,7 +755,7 @@ def _handler(peers):
                 w = peers.waiting.get(m.get("rid") or "")
                 if w:
                     w[2].set()
-            return self._reply(200, {"machines": peers.machines(), "msgs": msgs}, key, nonce)
+            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs}, key, nonce)
 
     return Handler
 

@@ -12,7 +12,8 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 import asyncio, glob, json, logging, os, re, signal, time, tomllib
 
 from .progress import short
-from .session import Chat, Turn, prompt_note, role_note
+from . import share
+from .session import Chat, Turn, guest_of, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
 
@@ -140,6 +141,11 @@ class CodexChat(Chat):
             if not exe:
                 raise RuntimeError("这台电脑上找不到 Codex，先安装 ChatGPT 桌面版或 Codex 命令行")
             args = [exe, "exec", "--json", "--skip-git-repo-check", "-C", self.b.path]
+            guest = guest_of(self.b)
+            if guest:                         # 共享电脑上的访客（#154）：主人允许才能用，只能写自己的目录
+                if not share.codex_ok(guest):
+                    raise RuntimeError("这台电脑现在只能用 Claude Code，去 Agent 设置里把底座换成 Claude Code")
+                args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"]
             if self.model:
                 args += ["-m", self.model]
             if self.effort:
@@ -218,8 +224,11 @@ class CodexChat(Chat):
         root = os.path.realpath(self.b.path)
         for raw in SEND_RE.findall(text):
             path = os.path.realpath(os.path.join(self.b.path, os.path.expanduser(raw.strip("`'\""))))
+            g = guest_of(self.b)
             if self.chat_type != "p2p" and not path.startswith(root + os.sep):
                 await self._safe_text(f"群聊里只能发送项目目录里的文件：{os.path.basename(path)}")
+            elif g and not share.may_send(g, path, self.b.path):
+                await self._safe_text(f"只能发送你的文件夹里的文件：{os.path.basename(path)}")
             elif not os.path.isfile(path):
                 await self._safe_text(f"文件不存在：{path}")
             else:

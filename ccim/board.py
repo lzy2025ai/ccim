@@ -74,7 +74,7 @@ def top_level(meta, cid):
                 or (meta.get("schedule") and not listed(cid, meta)))
 
 
-def stats(pf):
+def stats(pf, keep=None):
     """概览：近 26 周每天发了几条、本周对话轮数、本周完成（归档）几件、各 Agent 本周轮数和最近活跃。"""
     now = datetime.date.today()
     week0 = (now - datetime.timedelta(days=now.weekday())).isoformat()
@@ -82,7 +82,7 @@ def stats(pf):
     heat, agents = {}, {}
     turns_week = done_week = 0
     for cid, m in pf.chats().items():
-        if m.get("project") or (m.get("schedule") and not listed(cid, m)):
+        if m.get("project") or (m.get("schedule") and not listed(cid, m)) or keep and not keep(cid):
             continue
         s = summary(pf.channel.logs, cid)
         aid = m.get("agent")

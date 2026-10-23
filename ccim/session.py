@@ -460,8 +460,12 @@ class Chat:
         except Exception:
             log.warning("挂平台 Skill 出错", exc_info=True)
             view = None
+        guest = guest_of(self.b)
+        if guest:                             # 共享电脑上访客的 Agent：圈在它的文件夹里（#154）
+            from . import share
+            sandbox, rules = share.fence(guest, self.b.path)
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
+            opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
                 fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
@@ -475,7 +479,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + SCHEDULE + (LOOK_AROUND + ADMIN if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest else SCHEDULE) + (("" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -831,6 +835,11 @@ class Chat:
             path = os.path.realpath(os.path.join(chat.b.path, os.path.expanduser(args.get("path", ""))))
             if chat.chat_type != "p2p" and not path.startswith(os.path.realpath(chat.b.path) + os.sep):
                 return _err("群聊里只能发送项目目录里的文件。")
+            g = guest_of(chat.b)
+            if g:
+                from . import share
+                if not share.may_send(g, path, chat.b.path):
+                    return _err("只能发送你的文件夹里的文件。")
             if not os.path.isfile(path):
                 return _err(f"文件不存在：{path}")
             try:
@@ -855,9 +864,10 @@ class Chat:
         pf = getattr(chat.b.channel, "platform", None)
         if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent"):
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
+        lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
-            tools += _look_around(chat) + [run_as_admin]
-            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper"):
+            tools += ([] if lent else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
+            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
@@ -954,6 +964,17 @@ def _ask_agents(chat, pf):
     return ask_agents
 
 
+def guest_of(b):
+    """共享电脑上访客的 Agent（#154）：网页对话在 entry 里带着；飞书、微信按 agent_id 查 Agent 的 account。"""
+    if b.entry.get("guest"):
+        return b.entry["guest"]
+    try:
+        from . import agents
+        return (agents.get(b.entry.get("agent_id") or "") or {}).get("account")
+    except Exception:
+        return None
+
+
 def _look_around(chat):
     """查看这个项目的其他对话（只读）：飞书、各个微信号、终端或桌面端开的 Claude Code。"""
     from claude_agent_sdk import list_sessions
@@ -962,7 +983,15 @@ def _look_around(chat):
     def others():
         where = {c.get("session_id"): w for w, _, c in registry.all_chats(chat.b.path)}
         sessions = list_sessions(directory=chat.b.path, limit=40)
-        return [(x, where.get(x.session_id, "终端或桌面端")) for x in sessions if x.session_id != chat.session_id]
+        hide = set()
+        pf = getattr(chat.b.channel, "platform", None)
+        if pf:                                # 共享出去的 Agent（#154）：别的账号在同一个目录里的对话不列
+            from . import share
+            owners = share.owner_map(pf)
+            me = owners.get(chat.chat_id)
+            hide = {m.get("session_id") for cid, m in pf.chats().items() if owners.get(cid) != me}
+        return [(x, where.get(x.session_id, "终端或桌面端")) for x in sessions
+                if x.session_id != chat.session_id and x.session_id not in hide]
 
     @tool("list_chats", "列出这个项目在其他地方的对话（飞书、微信、终端或桌面端），最近的在前。", {})
     async def list_chats(args):

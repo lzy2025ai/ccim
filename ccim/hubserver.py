@@ -6,6 +6,12 @@ Mac 们照旧用 peers.py 的方式主动连过来（/peer/* 由 Peers 自己的
 
 登录：密码（scrypt）+ 手机验证器动态码（TOTP，RFC 6238）。第一次打开要用设置链接（setup-token 文件里的一次性口令）设密码、绑验证器。
 登录后发一个 Cookie（HttpOnly、Secure、SameSite=Strict，30 天），服务器只存它的摘要。接口还要带 X-CCIM 头（别的网站发不过来）。
+账号（#154）：accounts.json，主人是 OWNER（老的 auth.json 迁过来，账号名 admin；登录时账号名留空也算主人），
+主人在「设置 → 账号」建别的账号：账号名 + 密码（默认生成）、有效期、要不要动态码（要的话给对方一次性链接去绑验证器）。
+电脑归加入它的账号（peers.json 的 account），网页、转交、推送都只给这个账号的电脑；电脑之间的调用、推送也只在同一个账号内（peers.py）。
+多账号默认关闭（个人用就和以前一样：只有主人，密码 + 动态码），`ccim hub accounts on` 打开（settings.json 的 accounts）。
+主人还能按电脑给某个账号开权限（peers 的 shares：能用哪些 Agent、能不能自己建、能不能用 Codex、共享文件夹），
+转过去的请求带 X-Account*，那台电脑按它圈住对方（share.py）。
 连续输错：同一个地址 15 分钟里错 5 次锁 15 分钟；所有地址一小时里错 20 次全部锁 30 分钟。
 从这里转出去的请求，到了 Mac 那边都带 X-From-Peer：开机密码、选文件夹弹窗、在访达里显示这些 Mac 会拒绝。
 """
@@ -14,11 +20,32 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import registry
+from .peers import OWNER
 
 log = logging.getLogger("ccim.hub")
 
 WEB_PORT = 8977
 SESSION_DAYS = 30
+INVITE_DAYS = 7
+OWNER_NAME = "admin"
+PW_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"   # 去掉了 0 O 1 l I，抄的时候不会看错
+
+
+class NeedCode(PermissionError):
+    """密码对了，这个账号还要动态码。"""
+
+
+def new_password():
+    return "-".join("".join(secrets.choice(PW_CHARS) for _ in range(4)) for _ in range(3))
+
+
+def clean_share(opts):
+    """主人给某个账号在某台电脑上开的权限；None / False = 不共享。"""
+    if not opts:
+        return None
+    o = opts if isinstance(opts, dict) else {}
+    return {"agents": [str(x) for x in o.get("agents") or [] if x][:200], "own": bool(o.get("own", True)),
+            "codex": bool(o.get("codex")), "dir": (str(o.get("dir") or "").strip() or None)}
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 ISSUER = "ccim"
 
@@ -106,13 +133,49 @@ class Hub:
         self.all_fails = []
         self.pending_totp = {}                # 设置时：口令 → 新的验证器密钥（还没确认）
 
+    # ----- 账号（#154） -----
+
+    def accounts_on(self):
+        """多账号打开了没有。关着时只有主人能登录，没有账号管理、共享。"""
+        return bool(_load("settings.json", {}).get("accounts"))
+
+    def accounts(self):
+        acc = _load("accounts.json", None)
+        if acc is None:                       # 只有一个账号时的 auth.json：迁成主人（留着 auth.json，装回旧版本还能登录）
+            a = _load("auth.json", None)
+            acc = {OWNER: dict(a, name=OWNER_NAME, role=OWNER)} if a else {}
+            if acc:
+                _save("accounts.json", acc)
+        return acc
+
+    def _save_accounts(self, acc):
+        _save("accounts.json", acc)
+
+    @staticmethod
+    def active(a):
+        return bool(a and a.get("password") and not a.get("disabled")
+                    and not (a.get("expires") and a["expires"] < time.time()))
+
+    def account(self, aid):
+        return self.accounts().get(aid or "")
+
+    def account_view(self, aid):
+        a = self.account(aid) or {}
+        return {"id": aid, "name": a.get("name") or "", "owner": aid == OWNER}
+
+    def _by_name(self, acc, name):
+        name = (name or "").strip().lower()
+        if not name:
+            return OWNER if OWNER in acc else None
+        return next((aid for aid, a in acc.items() if (a.get("name") or "").lower() == name), None)
+
     # ----- 登录 -----
 
     def auth(self):
-        return _load("auth.json", None)
+        return self.account(OWNER)
 
     def setup_token(self):
-        """还没设置密码时的一次性设置口令（没有就生成），设置好了返回 None。"""
+        """主人还没设置密码时的一次性设置口令（没有就生成），设置好了返回 None。"""
         if self.auth():
             return None
         t = _load("setup.json", {}).get("token")
@@ -121,9 +184,12 @@ class Hub:
             _save("setup.json", {"token": t})
         return t
 
+    def _link(self, token):
+        return f"{self.public_url or f'http://127.0.0.1:{self.port}'}/setup?token={token}"
+
     def setup_link(self):
         t = self.setup_token()
-        return f"{self.public_url or f'http://127.0.0.1:{self.port}'}/setup?token={t}" if t else None
+        return self._link(t) if t else None
 
     def locked(self, ip):
         now = time.time()
@@ -139,79 +205,249 @@ class Hub:
             self.fails.setdefault(ip, []).append(time.time())
             self.all_fails.append(time.time())
 
-    def login(self, ip, pw, code):
+    def login(self, ip, name, pw, code):
+        """账号名 + 密码，账号要动态码的再加动态码（没给就抛 NeedCode，不算输错）。"""
         if self.locked(ip):
             raise PermissionError("错的次数太多了，等一刻钟再试。")
-        a = self.auth()
-        if not a:
+        acc = self.accounts()
+        if not acc:
             raise PermissionError("还没设置密码。")
-        used = totp_check(a["totp"], code, a.get("totp_last", 0)) if check_password(pw or "", a["password"]) else None
-        if used is None:
-            self.failed(ip)
-            raise PermissionError("密码或动态码不对。")
-        a["totp_last"] = used
-        _save("auth.json", a)
-        return self.new_session()
+        with self.lock:
+            aid = self._by_name(acc, name) if self.accounts_on() else OWNER
+            a = acc.get(aid) if aid else None
+            if a and self.active(a) and check_password(pw or "", a["password"]):
+                if not a.get("totp"):
+                    return self.new_session(aid)
+                if not str(code or "").strip():
+                    raise NeedCode("输入手机验证器上的 6 位动态码。")
+                used = totp_check(a["totp"], code, a.get("totp_last", 0))
+                if used is not None:
+                    a["totp_last"] = used
+                    self._save_accounts(acc)
+                    return self.new_session(aid)
+        self.failed(ip)
+        if a and not self.active(a) and a.get("password") and check_password(pw or "", a["password"]):
+            raise PermissionError("这个账号已停用或到期了，请联系开账号的人。")
+        raise PermissionError("账号、密码或动态码不对。")
 
-    def new_session(self):
+    def new_session(self, aid=OWNER):
         tok = secrets.token_urlsafe(32)
         s = _load("sessions.json", {})
         now = time.time()
-        s = {k: v for k, v in s.items() if v > now}
-        s[hashlib.sha256(tok.encode()).hexdigest()] = now + SESSION_DAYS * 86400
+        s = {k: v for k, v in s.items() if (v if isinstance(v, (int, float)) else v.get("exp", 0)) > now}
+        s[hashlib.sha256(tok.encode()).hexdigest()] = {"exp": now + SESSION_DAYS * 86400, "acct": aid}
         _save("sessions.json", s)
         return tok
 
-    def session_ok(self, tok):
+    def session_account(self, tok):
+        """登录着的账号编号；没登录、过期、账号停用了返回 None。"""
         if not tok:
-            return False
-        exp = _load("sessions.json", {}).get(hashlib.sha256(tok.encode()).hexdigest())
-        return bool(exp and exp > time.time())
+            return None
+        v = _load("sessions.json", {}).get(hashlib.sha256(tok.encode()).hexdigest())
+        if isinstance(v, (int, float)):       # 只有一个账号时的登录
+            v = {"exp": v, "acct": OWNER}
+        if not v or v.get("exp", 0) <= time.time():
+            return None
+        if v["acct"] != OWNER and not self.accounts_on():
+            return None
+        return v["acct"] if self.active(self.account(v["acct"])) else None
+
+    def session_ok(self, tok):
+        return bool(self.session_account(tok))
 
     def logout(self, tok):
         s = _load("sessions.json", {})
         s.pop(hashlib.sha256((tok or "").encode()).hexdigest(), None)
         _save("sessions.json", s)
 
+    def _drop_sessions(self, aid):
+        s = _load("sessions.json", {})
+        _save("sessions.json", {k: v for k, v in s.items() if not (isinstance(v, dict) and v.get("acct") == aid)})
+
+    def _setup_target(self, token):
+        """设置链接对应的账号编号：主人第一次设置，或者给某个账号绑验证器。不对返回 None。"""
+        if not token:
+            return None
+        if token == self.setup_token():
+            return OWNER
+        h = hashlib.sha256(token.encode()).hexdigest()
+        for aid, a in self.accounts().items():
+            if a.get("invite") and hmac.compare_digest(a["invite"], h) and a.get("invite_until", 0) > time.time() \
+                    and not a.get("disabled"):
+                return aid
+        return None
+
     def setup_begin(self, token):
-        if not token or token != self.setup_token():
-            raise PermissionError("设置链接不对或者已经用过了。")
+        aid = self._setup_target(token)
+        if not aid:
+            raise PermissionError("链接不对、过期了或者已经用过了。")
         secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
         self.pending_totp[token] = secret
-        label = quote(f"{ISSUER}:{urlparse(self.public_url).hostname or 'hub'}")
+        a = self.account(aid) or {}
+        name = a.get("name") if aid != OWNER else ""
+        label = quote(f"{ISSUER}:{name or urlparse(self.public_url).hostname or 'hub'}")
         uri = f"otpauth://totp/{label}?secret={secret}&issuer={ISSUER}"
-        return {"secret": secret, "qr": qr_svg(uri)}
+        return {"secret": secret, "qr": qr_svg(uri), "name": name or "", "bind": bool(a.get("password"))}
 
     def setup_finish(self, token, pw, code):
-        if not token or token != self.setup_token() or token not in self.pending_totp:
-            raise PermissionError("设置链接不对或者已经用过了。")
-        if len(pw or "") < 10:
+        """主人第一次设置：密码 + 验证器。给已有账号绑验证器（bind）：不改密码，只要动态码。"""
+        aid = self._setup_target(token)
+        if not aid or token not in self.pending_totp:
+            raise PermissionError("链接不对、过期了或者已经用过了。")
+        acc = self.accounts()
+        bind = bool((acc.get(aid) or {}).get("password"))
+        if not bind and len(pw or "") < 10:
             raise ValueError("密码至少 10 位。")
         secret = self.pending_totp[token]
         used = totp_check(secret, code)
         if used is None:
             raise ValueError("动态码不对：看看手机上的时间对不对，再输一次。")
-        salt, h = hash_password(pw)
-        _save("auth.json", {"password": {"salt": salt, "hash": h}, "totp": secret, "totp_last": used,
-                            "set_at": registry.now()})
-        try:
-            os.remove(_f("setup.json"))
-        except OSError:
-            pass
-        self.pending_totp.clear()
-        return self.new_session()
+        with self.lock:
+            acc = self.accounts()
+            a = acc.get(aid) or {"name": OWNER_NAME, "role": OWNER}
+            if not bind:
+                salt, h = hash_password(pw)
+                a["password"] = {"salt": salt, "hash": h}
+            a.update({"totp": secret, "totp_last": used, "set_at": registry.now()})
+            a.pop("invite", None)
+            a.pop("invite_until", None)
+            acc[aid] = a
+            self._save_accounts(acc)
+        if aid == OWNER:
+            try:
+                os.remove(_f("setup.json"))
+            except OSError:
+                pass
+        self.pending_totp.pop(token, None)
+        return self.new_session(aid)
+
+    # ----- 主人管理账号 -----
+
+    def account_list(self):
+        now = time.time()
+        acc = self.accounts()
+        mine = self.peers.machines(OWNER, own=True)
+        out = []
+        for aid, a in acc.items():
+            if aid == OWNER:
+                continue
+            state = "disabled" if a.get("disabled") else "expired" if a.get("expires") and a["expires"] < now else "ok"
+            out.append({"id": aid, "name": a.get("name") or "", "state": state, "created": a.get("created"),
+                        "expires": a.get("expires"), "totp": bool(a.get("totp")), "totp_pending": bool(a.get("invite")),
+                        "machines": [m["name"] for m in self.peers.machines(aid, own=True)],
+                        "shares": {m["id"]: (m.get("shares") or {})[aid] for m in mine if aid in (m.get("shares") or {})}})
+        return {"accounts": out, "me": (acc.get(OWNER) or {}).get("name") or OWNER_NAME}
+
+    def _bind_link(self, a):
+        tok = secrets.token_urlsafe(24)
+        a["invite"] = hashlib.sha256(tok.encode()).hexdigest()
+        a["invite_until"] = time.time() + INVITE_DAYS * 86400
+        return {"link": self._link(tok), "days": INVITE_DAYS}
+
+    def account_save(self, aid, f):
+        """主人新建（aid 空）或修改账号。f：name、password（新建不填就生成）、expires（时间戳，0 / 空 = 一直有效）、
+        disabled、totp（False 关掉；True 且还没绑：生成绑验证器的链接）、shares {电脑: 权限}。返回 id，有新密码、绑定链接也带上。"""
+        f = f if isinstance(f, dict) else {}
+        out = {}
+        with self.lock:
+            acc = self.accounts()
+            if aid and aid not in acc:
+                raise ValueError("没有这个账号。")
+            a = acc.get(aid) or {"role": "member", "created": registry.now()}
+            if "name" in f or not aid:
+                name = " ".join(str(f.get("name") or "").split())[:20]
+                if not name:
+                    raise ValueError("写个账号名。")
+                if any(c in name for c in " /\\:"):
+                    raise ValueError("账号名里不能有空格和 / \\ :")
+                other = self._by_name(acc, name)
+                if other and other != aid:
+                    raise ValueError("已经有叫这个名字的账号了。")
+                a["name"] = name
+            pw = f.get("password")
+            if not aid and not pw:
+                pw = new_password()
+            if pw:
+                if len(pw) < 8:
+                    raise ValueError("密码至少 8 位。")
+                salt, h = hash_password(pw)
+                a["password"] = {"salt": salt, "hash": h}
+                out["password"] = pw
+            if aid != OWNER:
+                if "expires" in f:
+                    if f["expires"]:
+                        a["expires"] = float(f["expires"])
+                    else:
+                        a.pop("expires", None)
+                if "disabled" in f:
+                    a["disabled"] = bool(f["disabled"])
+                if f.get("totp") is False:
+                    for k in ("totp", "totp_last", "invite", "invite_until"):
+                        a.pop(k, None)
+                elif f.get("totp") and not a.get("totp"):
+                    out["bind"] = self._bind_link(a)
+            if not aid:
+                aid = "a" + secrets.token_hex(4)
+            acc[aid] = a
+            self._save_accounts(acc)
+        if aid != OWNER and isinstance(f.get("shares"), dict):
+            mine = {m["id"] for m in self.peers.machines(OWNER, own=True)}
+            for mid, opts in f["shares"].items():
+                if mid not in mine:
+                    raise ValueError("没有这台电脑。")
+                self.peers.share(mid, aid, clean_share(opts))
+        if pw and aid != OWNER or a.get("disabled"):
+            self._drop_sessions(aid)          # 改了密码、停用：已登录的都要重新登录
+        self.channel.events.publish({"type": "machines"})
+        return dict(out, id=aid)
+
+    def account_delete(self, aid):
+        if aid == OWNER:
+            raise ValueError("不能删除自己。")
+        with self.lock:
+            acc = self.accounts()
+            if acc.pop(aid, None) is None:
+                raise ValueError("没有这个账号。")
+            self._save_accounts(acc)
+        self._drop_sessions(aid)
+        for m in self.peers.machines(aid, own=True):
+            try:
+                self.peers.remove(m["id"])
+            except ValueError:
+                pass
+        for m in self.peers.machines(OWNER, own=True):
+            if aid in (m.get("shares") or {}):
+                self.peers.share(m["id"], aid, None)
+        return {}
 
     # ----- 接口 -----
 
-    def default_machine(self):
-        ms = self.peers.machines()
+    def allowed(self, aid):
+        """这个账号能看、能操作的电脑。"""
+        return {m["id"] for m in self.peers.machines(aid)}
+
+    def visible(self, aid, ev):
+        """推送给这个账号的网页：只要它能用的电脑上来的（电脑列表变了的通知谁都给）。
+        共享的电脑（#154）：访客只收标了自己（_a）的，和 Skill、知识库有变化这类不属于哪个对话的；主人收不到访客的。"""
+        mid = ev.get("_m")
+        if not mid:
+            return True
+        if mid not in self.allowed(aid):
+            return False
+        if self.peers.guest_of(mid, aid):
+            return ev.get("_a") == aid or (not ev.get("_a") and not ev.get("chat") and ev.get("type") in ("skills", "kb"))
+        return not ev.get("_a")
+
+    def default_machine(self, aid=OWNER):
+        ms = self.peers.machines(aid)
         on = [m for m in ms if m["online"]]
         return (on or ms or [{"id": None}])[0]["id"]
 
-    def state(self):
-        out = self.peers.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
-        out["me"] = self.default_machine()
+    def state(self, aid=OWNER):
+        out = self.peers.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []}, account=aid)
+        out["me"] = self.default_machine(aid)
         out["hub"] = {"name": self.peers.me["name"], "url": self.public_url}
+        out["account"] = dict(self.account_view(aid), multi=self.accounts_on())
         try:                                  # 服务器每次合并都自动部署 main，它的版本就是最新版（#37）
             from . import upgrade
             out["hub"]["commit"] = upgrade.info().get("commit") or None
@@ -258,25 +494,35 @@ async function post(path, body){
 __SCRIPT__
 </script></body></html>"""
 
-LOGIN_BODY = """<h1>ccim</h1><p>登录后管理你各台电脑上的 Agent。</p>
-<form id="f"><label for="pw">密码</label><input id="pw" type="password" autocomplete="current-password" autofocus>
-<label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+LOGIN_BODY = """<h1>ccim</h1><p>登录后使用你的 Agent。</p>
+<form id="f"><div id="nmbox"><label for="nm">账号</label><input id="nm" autocomplete="username" autocapitalize="off"></div>
+<label for="pw">密码</label><input id="pw" type="password" autocomplete="current-password">
+<div id="cb" hidden><label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
 <button>登录</button><div class="err" id="err"></div></form>"""
-LOGIN_SCRIPT = """document.getElementById("f").onsubmit = async e => { e.preventDefault();
-  try { await post("/auth/login", {password: pw.value, code: code.value}); location.href = "/"; }
-  catch (x) { err.textContent = x.message; code.value = ""; } };"""
+LOGIN_SCRIPT = """(nmbox.hidden ? pw : nm).focus();
+document.getElementById("f").onsubmit = async e => { e.preventDefault();
+  const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
+    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value})});
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) { location.href = "/"; return; }
+  if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
+  err.textContent = d.error || "出错了"; code.value = ""; };"""
 
-SETUP_BODY = """<h1>设置登录</h1><p>只需要设置一次。以后登录要密码和手机验证器上的动态码。</p>
+SETUP_BODY = """<h1>设置登录</h1><p id="lead">只需要设置一次。以后登录要密码和手机验证器上的动态码。</p>
 <div id="qrbox"><p>准备中…</p></div>
-<form id="f"><label for="pw">设一个密码（至少 10 位）</label><input id="pw" type="password" autocomplete="new-password">
-<label for="pw2">再输一次</label><input id="pw2" type="password" autocomplete="new-password">
+<form id="f"><div id="pwbox"><label for="pw">设一个密码（至少 10 位）</label><input id="pw" type="password" autocomplete="new-password">
+<label for="pw2">再输一次</label><input id="pw2" type="password" autocomplete="new-password"></div>
 <label for="code">验证器里显示的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
 <button>完成设置</button><div class="err" id="err"></div></form>"""
 SETUP_SCRIPT = """const token = new URLSearchParams(location.search).get("token") || "";
-post("/auth/setup/begin", {token}).then(d => { qrbox.innerHTML = `<label>用手机上的验证器（如 Google Authenticator、微软验证器、1Password）扫这个码</label>
+let bind = false;
+post("/auth/setup/begin", {token}).then(d => {
+  bind = d.bind;
+  if (bind) { document.querySelector("h1").textContent = `${d.name}，绑定验证器`; lead.textContent = "绑好后，登录时除了账号密码，还要输验证器上的动态码。"; pwbox.hidden = true; }
+  qrbox.innerHTML = `<label>用手机上的验证器（如 Google Authenticator、微软验证器、1Password）扫这个码</label>
   <div class="qr">${d.qr}</div><p>扫不了的话，手动输入：<code>${d.secret}</code></p>`; }).catch(x => { qrbox.innerHTML = ""; err.textContent = x.message; });
 document.getElementById("f").onsubmit = async e => { e.preventDefault();
-  if (pw.value !== pw2.value) { err.textContent = "两次密码不一样"; return; }
+  if (!bind && pw.value !== pw2.value) { err.textContent = "两次密码不一样"; return; }
   try { await post("/auth/setup/finish", {token, password: pw.value, code: code.value}); location.href = "/"; }
   catch (x) { err.textContent = x.message; } };"""
 
@@ -341,7 +587,14 @@ def _handler(hub):
             return self.rfile.read(n) if n else b""
 
         def _authed(self):
-            return hub.session_ok(self._cookie())
+            """登录着的账号编号，没登录返回 None。"""
+            self.acct = hub.session_account(self._cookie())
+            return self.acct
+
+        def _machine(self, q):
+            """这次请求要的电脑：不是这个账号能用的返回 None。"""
+            mid = self.headers.get("X-Machine") or q.get("machine") or hub.default_machine(self.acct)
+            return mid if mid in hub.allowed(self.acct) else None
 
         def do_GET(self):
             if not self._host_ok():
@@ -359,7 +612,8 @@ def _handler(hub):
                     if hub.setup_token():
                         return self._send(200, _page("<h1>ccim</h1><p>还没设置登录。用服务器上 <code>ccim hub setup-link</code> 给出的链接打开。</p>", ""),
                                           "text/html; charset=utf-8")
-                    return self._send(200, _page(LOGIN_BODY, LOGIN_SCRIPT), "text/html; charset=utf-8")
+                    body = LOGIN_BODY if hub.accounts_on() else LOGIN_BODY.replace('<div id="nmbox">', '<div id="nmbox" hidden>')
+                    return self._send(200, _page(body, LOGIN_SCRIPT), "text/html; charset=utf-8")
                 with open(PAGE, "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             if not u.path.startswith("/api/"):
@@ -371,14 +625,20 @@ def _handler(hub):
             if u.path != "/api/file" and self.headers.get("X-CCIM") != "1":
                 return self._send(403, {"error": "forbidden"})
             if u.path == "/api/state" and not (q.get("local") and self.headers.get("X-Machine")):   # 带 local 的是要某一台自己的（#140）
-                return self._send(200, hub.state())
+                return self._send(200, hub.state(self.acct))
+            if u.path == "/api/accounts":
+                return self._send(200, hub.account_list()) if self.acct == OWNER and hub.accounts_on() \
+                    else self._send(403, {"error": "forbidden"})
             if u.path == "/api/file":
-                mid = q.get("machine") or hub.default_machine()
+                mid = self._machine(q)
                 if not mid:
-                    return self._send(503, {"error": "还没有电脑连上来。"})
+                    return self._send(503 if not hub.allowed(self.acct) else 404, {"error": "还没有电脑连上来。"})
+                if hub.peers.guest_of(mid, self.acct) and not self._guest_ready(mid):
+                    return self._send(409, {"error": "那台电脑上的 ccim 版本较旧，请电脑的主人先升级。"})
                 from .filesend import serve_peer
                 return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
-                                                         "X-Content-Type-Options": "nosniff"})
+                                                         "X-Content-Type-Options": "nosniff"},
+                                  hub.peers.guest_headers(self.acct, mid) if hub.peers.guest_of(mid, self.acct) else None)
             return self._forward(b"", q)
 
         def do_POST(self):
@@ -394,10 +654,15 @@ def _handler(hub):
             if not self._authed():
                 return self._send(401, {"error": "登录过期了，刷新页面重新登录。"})
             try:
+                if u.path.startswith("/api/accounts"):
+                    return self._accounts(u.path, body)
                 if u.path == "/api/peers/code":
-                    return self._send(200, hub.peers.new_code())
+                    return self._send(200, hub.peers.new_code(self.acct))
                 if u.path == "/api/peers/remove":
-                    return self._send(200, hub.peers.remove(json.loads(body or b"{}").get("id")))
+                    mid = json.loads(body or b"{}").get("id")
+                    if mid not in {m["id"] for m in hub.peers.machines(self.acct, own=True)}:
+                        raise ValueError("没有这台电脑。")
+                    return self._send(200, hub.peers.remove(mid))
                 if u.path in ("/api/peers/leave", "/api/pick", "/api/reveal") or u.path == "/api/global" and not self.headers.get("X-Machine"):
                     return self._send(400, {"error": "在服务器上不能这样做。"})
             except ValueError as e:
@@ -418,7 +683,10 @@ def _handler(hub):
                 b = {}
             try:
                 if path == "/auth/login":
-                    tok = hub.login(self._ip(), b.get("password"), b.get("code"))
+                    try:
+                        tok = hub.login(self._ip(), b.get("name"), b.get("password"), b.get("code"))
+                    except NeedCode as e:
+                        return self._send(401, {"error": str(e), "need_code": True})
                     return self._send(200, {}, extra=self._set_cookie(tok))
                 if path == "/auth/logout":
                     hub.logout(self._cookie())
@@ -434,17 +702,43 @@ def _handler(hub):
                 return self._send(400, {"error": str(e)})
             return self._send(404, {"error": "not found"})
 
+        def _guest_ready(self, mid):
+            """访客要用的共享电脑认不认访客：没问过就先问一次 state。"""
+            if mid not in hub.peers.guest_ok:
+                try:
+                    st, _, data = hub.peers.forward(mid, "GET", "/api/state?local=1", b"", hub.peers.guest_headers(self.acct, mid))
+                    hub.peers.guest_ready(mid, json.loads(data) if st == 200 else {})
+                except Exception:
+                    return False
+            return hub.peers.guest_ok.get(mid, False)
+
+        def _accounts(self, path, body):
+            if self.acct != OWNER or not hub.accounts_on():
+                return self._send(403, {"error": "forbidden"})
+            b = json.loads(body or b"{}")
+            if path == "/api/accounts/save":
+                return self._send(200, hub.account_save(b.get("id"), b.get("fields") or {}))
+            if path == "/api/accounts/delete":
+                return self._send(200, hub.account_delete(b.get("id")))
+            return self._send(404, {"error": "not found"})
+
         def _forward(self, body, q):
-            mid = self.headers.get("X-Machine") or q.get("machine") or hub.default_machine()
+            mid = self._machine(q)
             if not mid:
-                return self._send(503, {"error": "还没有电脑连上来。"})
+                if not hub.allowed(self.acct):
+                    return self._send(503, {"error": "还没有电脑连上来。"})
+                return self._send(404, {"error": "没有这台电脑。"})
             name = next((m["name"] for m in hub.peers.machines() if m["id"] == mid), "那台电脑")
             hs = {k: self.headers[k] for k in ("X-Name", "Content-Type") if self.headers.get(k)}
+            if hub.peers.guest_of(mid, self.acct):     # 别人共享给它的电脑：告诉那台电脑是谁（#154）
+                if not self._guest_ready(mid):
+                    return self._send(409, {"error": f"「{name}」上的 ccim 版本较旧，请电脑的主人先升级。"})
+                hs.update(hub.peers.guest_headers(self.acct, mid))
             try:
                 status, ctype, data = hub.peers.forward(mid, self.command, self.path, body, hs)
             except Offline:
                 path = urlparse(self.path).path
-                if self.command == "POST" and path in ("/api/chat/send", "/api/chat/mention"):
+                if self.command == "POST" and path in ("/api/chat/send", "/api/chat/mention") and "X-Account" not in hs:
                     hub.peers.queue_out(mid, "POST", self.path, body)
                     return self._send(200, {"queued": True, "machine": name})
                 return self._send(503, {"error": f"「{name}」现在离线，等它连上再试。"})
@@ -455,6 +749,7 @@ def _handler(hub):
 
         def _events(self):
             q = hub.channel.events.subscribe()
+            acct = self.acct
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -466,6 +761,8 @@ def _handler(hub):
                 while hub.channel.events.alive(q):
                     try:
                         ev = q.get(timeout=15)
+                        if not hub.visible(acct, ev):
+                            continue
                         data = "data: " + json.dumps(ev, ensure_ascii=False) + "\n\n"
                     except queue.Empty:
                         data = ": ping\n\n"

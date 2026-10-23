@@ -55,6 +55,8 @@ def describe_request(name, inp):
         return f"修改文件 `{inp.get('file_path') or inp.get('notebook_path')}`"
     if name == "WebFetch":
         return f"访问网页 {inp.get('url')}"
+    if name == "ccim_promote":
+        return f"**升级 ccim**\n\n{inp.get('plan')}"
     if name.endswith("skill_delete"):
         return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"
     return f"{name}\n```\n{short(inp, 600)}\n```"

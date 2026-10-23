@@ -381,7 +381,8 @@ class Weixin(Channel):
         if card.get("body"):
             lines.append(plain(card["body"]))
         if card.get("buttons"):
-            lines.append("回复 y 允许，回复 n 拒绝")
+            b = card["buttons"]
+            lines.append(f"回复 y {b[0]['text']}，回复 n {b[-1]['text']}")
         elif card.get("note"):
             lines.append(card["note"])
         return "\n\n".join(lines)

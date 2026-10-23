@@ -296,7 +296,42 @@ def _tell(path, entry, text, notify):
 # ---------- 验收后升级 ----------
 
 def _git(*args):
-    return subprocess.run(["git", "-C", SRC, *args], capture_output=True, text=True)
+    return _run(["git", "-C", SRC, *args], timeout=60)
+
+
+TIMEOUT_RC = -999                             # _run 超时时的返回码
+INSTALL_TIMEOUT = 600
+LOOSE = [False]                               # 这次装的时候依赖没能沿用原来的版本，按最新的装了
+
+
+def _run(cmd, env=None, timeout=60):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, TIMEOUT_RC, "", "")
+
+
+def _pins():
+    """当前稳定版装的各依赖版本，写成 uv 的约束文件，返回路径；没有就 None。"""
+    py = stable_python()
+    if not py:
+        return None
+    r = _run(["uv", "pip", "freeze", "--python", py], timeout=60)
+    lines = [l for l in r.stdout.splitlines() if "==" in l and not l.lower().startswith("ccim")]
+    if r.returncode != 0 or not lines:
+        return None
+    import tempfile
+    fd, path = tempfile.mkstemp(prefix="ccim-pins-", suffix=".txt")
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+def _repo():
+    """主目录：在试某个需求时代码在它的工作目录里，从那里装也一律装主仓库里的提交。"""
+    r = _git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    d = r.stdout.strip()
+    return os.path.dirname(d) if r.returncode == 0 and d.endswith("/.git") else SRC
 
 
 def build_stable():
@@ -304,7 +339,8 @@ def build_stable():
     if not _is_dev_install():
         raise SystemExit("要在 ccim 的代码目录（开发版）里运行。")
     # 一律按最新的 main 装（#42）：主目录可能正停在别的分支上，或者有别人没提交的改动
-    _git("fetch", "-q", "origin", "main")
+    if _git("fetch", "-q", "origin", "main").returncode == TIMEOUT_RC:
+        print("取最新的 main 超时了，用本地已有的。", flush=True)
     ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
     sha = _git("rev-parse", ref).stdout.strip()
     _git("branch", "-f", "ccim-promote", sha)   # uv 从本地仓库取代码时只认分支上的提交，origin/main 不在任何本地分支上
@@ -316,13 +352,23 @@ def build_stable():
         _rm(dest)
         env = dict(os.environ)
         env.pop("PYTHONDONTWRITEBYTECODE", None)
-        for cmd in (["uv", "venv", "-q", "--python", sys.executable, dest],
-                    ["uv", "pip", "install", "-q", "--compile-bytecode", "--python", os.path.join(dest, "bin", "python"),
-                     f"git+file://{SRC}@{sha}"]):
-            r = subprocess.run(cmd, capture_output=True, text=True, env=env)
-            if r.returncode != 0:
-                _rm(dest)
-                raise SystemExit(f"装稳定版失败：{(r.stderr or r.stdout).strip()[-500:]}")
+        r = _run(["uv", "venv", "-q", "--python", sys.executable, dest], env, 120)
+        if r.returncode == 0:
+            # 依赖沿用当前稳定版装好的版本（#146）：不然每次都去拉最新的，大的依赖包在网络慢时要下很久；对不上再放开
+            pins = _pins()
+            install = ["uv", "pip", "install", "-q", "--compile-bytecode", "--python", os.path.join(dest, "bin", "python"),
+                       f"git+file://{_repo()}@{sha}"]
+            r = _run(install + (["-c", pins] if pins else []), env, INSTALL_TIMEOUT)
+            if r.returncode not in (0, TIMEOUT_RC) and pins:
+                r = _run(install, env, INSTALL_TIMEOUT)
+                LOOSE[0] = r.returncode == 0
+            if pins:
+                os.unlink(pins)
+        if r.returncode != 0:
+            _rm(dest)
+            if r.returncode == TIMEOUT_RC:
+                raise SystemExit(f"装稳定版超时（{INSTALL_TIMEOUT // 60} 分钟没装完），多半是网络慢，下载依赖包卡住了。稍后再试。")
+            raise SystemExit(f"装稳定版失败：{(r.stderr or r.stdout).strip()[-500:]}")
     r = subprocess.run([os.path.join(dest, "bin", "python"), "-P", "-c", "import ccim.cli, ccim.channels.feishu, ccim.channels.weixin, ccim.weixin_hub"],
                        capture_output=True, text=True, cwd="/")
     if r.returncode != 0:
@@ -345,11 +391,16 @@ def promote(wait=180):
         name = proc_label(path)
         if which(path, e)[1] == "开发版":
             continue
-        if e.get("stable_version"):
+        pinned = e.get("stable_version")
+        if pinned:
             registry.update(path, stable_version=None)
         r = daemon.running(path)
         if not r:
             results.append(f"{name}没在运行，下次启动就用新版本")
+            continue
+        now = registry.read_state(path).get("python")
+        if not pinned and now and _env(now) == _env(stable_python(label)):
+            results.append(f"{name}已经是新版本，没有重启")
             continue
         if r[1] == "fg":
             results.append(f"{name}在终端前台运行，要到那个终端里手动重启")
@@ -365,6 +416,106 @@ def promote(wait=180):
         results.append(f"{name}新版本起不来，已退回 {old or '原来的版本'}，日志：{daemon.log_path(path)}")
     _prune()
     return label, results
+
+
+# ---------- 在对话里升级：先确认，后台做，做完回报（#146） ----------
+
+def promote_plan():
+    """确认卡片上写的：升级的是什么、这次改了什么、会重启哪些。不用升级（已是最新、也没有要重启的）返回 None。"""
+    from . import daemon
+    _git("fetch", "-q", "origin", "main")
+    cur = (_channel().get("current") or "").rsplit("-", 1)[-1]
+    ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
+    new = _git("rev-parse", ref).stdout.strip()
+    py = stable_python()
+    stale = [proc_label(p) for p, e in sorted(registry.all_projects().items())
+             if which(p, e)[1] != "开发版" and daemon.running(p)
+             and (e.get("stable_version") or not py or _env(registry.read_state(p).get("python") or "") != _env(py))]
+    same = bool(cur) and new.startswith(cur)
+    if same and not stale:
+        return None
+    changes = []
+    if cur and not same:
+        # 提交说明冒号后面多是怎么改的，卡片上只留做了什么
+        changes = [re.sub(r"\s*\(?#\d+\)?", "", l).split("：")[0].strip() for l in _git("log", "--format=%s", f"{cur}..{new}").stdout.splitlines()]
+    names = stale if same else [proc_label(p) for p, e in sorted(registry.all_projects().items())
+                                if which(p, e)[1] != "开发版" and daemon.running(p)]
+    parts = ["把 ccim（在网页、飞书、微信里和 Agent 聊天的这套程序）升级到最新版本。"
+             if not same else "ccim 已经是最新版本，把还在跑旧版本的换上去。"]
+    if changes:
+        more = f"\n- 另外还有 {len(changes) - 8} 项" if len(changes) > 8 else ""
+        parts.append("这次的改动：\n" + "\n".join(f"- {c}" for c in changes[:8]) + more)
+    parts.append(f"升级后重启：{'、'.join(names)}（各自等手头的活做完再重启）。" if names else "现在没有要重启的。")
+    parts.append("Claude Code、Claude SDK 等依赖沿用现在的版本，不跟着升级。在后台进行，这边接着做别的，做完在这个对话里说结果。")
+    return "\n\n".join(parts)
+
+
+def start_promote():
+    """在 ccim 的对话里运行 ccim promote：交给独立进程，马上返回。装稳定版要用开发版的代码目录。"""
+    py = dev_python() or sys.executable
+    os.makedirs(_stable(), exist_ok=True)
+    log = open(os.path.join(_stable(), "promote.log"), "ab")
+    subprocess.Popen([py, "-P", "-m", "ccim.cli", "promote-run"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                     start_new_session=True, cwd="/")
+
+
+def promote_run():
+    """独立进程里：升级，把结果交回发起的对话。"""
+    import fcntl
+    proc, chat = os.environ.pop("CCIM_PROCESS", None), os.environ.pop("CCIM_CHAT", None)   # 下面的重启不算这个对话发起的
+    os.makedirs(_stable(), exist_ok=True)
+    lock = open(os.path.join(_stable(), ".promote.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        text = "已经有一次升级在进行，这次没有再升级；那一次做完会说结果。"
+    else:
+        try:
+            label, results = promote()
+            text = (f"ccim 升级好了（{label}）：\n" + "\n".join(f"- {r}" for r in results or ["没有要重启的。"]) +
+                    ("\n- 依赖没法沿用原来的版本，按新版本要求装了新的" if LOOSE[0] else ""))
+        except SystemExit as e:
+            text = f"ccim 升级没成功：{e}"
+        except Exception as e:
+            text = f"ccim 升级出错了：{e}"
+    print(registry.now(), text, flush=True)
+    if proc and chat:
+        post_note(proc, chat, text)
+
+
+def _notes(path):
+    d = os.path.join(registry.pdir(path), "notes")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def post_note(path, chat, text):
+    """让 path 这个 ccim 进程往 chat 里发一句话（它每秒取一次；没在运行就等下次启动）。"""
+    import uuid
+    f = os.path.join(_notes(path), uuid.uuid4().hex[:10] + ".json")
+    with open(f + ".tmp", "w", encoding="utf-8") as fp:
+        json.dump({"chat": chat, "text": text, "at": registry.now()}, fp, ensure_ascii=False)
+    os.replace(f + ".tmp", f)
+
+
+def take_notes(path):
+    out = []
+    d = os.path.join(registry.pdir(path), "notes")
+    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if not name.endswith(".json"):
+            continue
+        f = os.path.join(d, name)
+        try:
+            with open(f, encoding="utf-8") as fp:
+                n = json.load(fp)
+            out.append((n["chat"], n["text"]))
+        except (OSError, ValueError, KeyError):
+            pass
+        try:
+            os.unlink(f)
+        except OSError:
+            pass
+    return out
 
 
 def _wait_idle(path, limit):

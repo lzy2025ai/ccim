@@ -283,7 +283,8 @@
   （当前稳定版之后 main 上的提交）；体验 = `set_try`，合并（落后就在工作目录 rebase、强推，等检查过了 squash 合并、pull、删工作目录），
   全部升级 = pull → `start_promote`（独立进程，结果写 stable/promote.json）→ `set_try("main")`。GitHub 数据后台每 2 分钟刷新，红点数
   （state 的 ccim.dev）读缓存。每条链回提需求的对话：对话 meta 的 issues（`Chat._post_bash` 在 gh issue create / reopen、gh pr create 后记），
-  老对话从回答里贴过的 issue 链接认。
+  老对话从回答里贴过的 issue 链接认（`devpanel.refs`）。任务面板（#157）：chat_view 带 issue（最近两轮里提到的最近那个，`issue_of`，
+  标题 `Titles` 存平台 state 的 issue_titles，没有的后台用 gh 取），面板这一行标题换成「#编号 issue 标题」，做过好几个的标「还有 N 个」。
   **对话里不再升级**：`Chat._pre_bash` 拦下 `ccim promote`（原来 #146 是弹确认卡片）。合并后不用 `ccim try main`、`ccim promote`，
   告诉用户到「设置 → 开发」点「全部升级」（它会做这两步）。终端里照样能跑 promote（装依赖沿用当前稳定版的版本 `_pins`，10 分钟超时）
 - 合并进 main 后 GitHub Actions（.github/workflows/deploy.yml）先用 Python 3.11 检查，再把服务器上的总控更新到这个版本。

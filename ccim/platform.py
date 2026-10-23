@@ -351,6 +351,7 @@ class Platform:
         self.cleaner = devices.Cleaner(registry.pdir(home))
         from . import devpanel                # 开发页（#156）：只在跑开发版的电脑上有
         self.dev = devpanel.Dev(self) if devpanel.enabled() else None
+        self.titles = devpanel.Titles(self)  # 任务面板上对话在做的 issue 的标题（#157）
 
     def handlers(self):
         return {"platform": self}
@@ -439,6 +440,17 @@ class Platform:
                     except Exception:
                         pass
         threading.Thread(target=go, daemon=True).start()
+
+    def _issue(self, cid, m):
+        if not board_mod.top_level(m, cid):
+            return None
+        try:
+            from . import devpanel
+            ats = board_mod.summary(self.channel.logs, cid).get("user_ats") or [0]
+            return devpanel.issue_of(self, cid, m, since=ats[0])
+        except Exception:
+            log.debug("认 issue 出错", exc_info=True)
+            return None
 
     def _board_marks(self, cid, m):
         if not board_mod.top_level(m, cid):
@@ -816,7 +828,7 @@ class Platform:
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
-                **self._board_marks(cid, m),
+                **self._board_marks(cid, m), "issue": self._issue(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "stall": self._stall(cid),
                 "last_active": m.get("last_active"), "created": m.get("created"), **self._effective(m, m)}

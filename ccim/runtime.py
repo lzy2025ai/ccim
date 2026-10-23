@@ -436,8 +436,7 @@ def promote_plan():
         return None
     changes = []
     if cur and not same:
-        # 提交说明冒号后面多是怎么改的，卡片上只留做了什么
-        changes = [re.sub(r"\s*\(?#\d+\)?", "", l).split("：")[0].strip() for l in _git("log", "--format=%s", f"{cur}..{new}").stdout.splitlines()]
+        changes = [_change(l) for l in _git("log", "--format=%s", f"{cur}..{new}").stdout.splitlines()]
     names = stale if same else [proc_label(p) for p, e in sorted(registry.all_projects().items())
                                 if which(p, e)[1] != "开发版" and daemon.running(p)]
     parts = ["把 ccim（在网页、飞书、微信里和 Agent 聊天的这套程序）升级到最新版本。"
@@ -448,6 +447,13 @@ def promote_plan():
     parts.append(f"升级后重启：{'、'.join(names)}（各自等手头的活做完再重启）。" if names else "现在没有要重启的。")
     parts.append("Claude Code、Claude SDK 等依赖沿用现在的版本，不跟着升级。在后台进行，这边接着做别的，做完在这个对话里说结果。")
     return "\n\n".join(parts)
+
+
+def _change(line):
+    """提交说明给人看的一句：冒号后面多是怎么改的，只留前面做了什么；前面太短（「开发流程：…」）就留整句。"""
+    line = re.sub(r"\s*\(?#\d+\)?", "", line).strip()
+    head = line.split("：")[0].strip()
+    return head if len(head) >= 8 else line
 
 
 def start_promote():

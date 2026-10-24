@@ -217,7 +217,7 @@ class Mentions:
             last = next((r for r in reversed(self.pf.channel.logs.read(sub))
                          if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
             upd.update(state=state, text=answer or last.get("text") or "", steps=last.get("steps") or [],
-                       elapsed=last.get("elapsed"), agent=sub[len(f"m-{cid}-"):],
+                       said=last.get("said"), elapsed=last.get("elapsed"), agent=sub[len(f"m-{cid}-"):],
                        ctx=(self.pf.chats().get(sub) or {}).get("ctx"))
         except Exception as e:
             upd.update(state="error", text=str(e))
@@ -264,7 +264,7 @@ class Mentions:
                     raise RuntimeError("那台电脑重启过，没做完。")
                 if r.get("done"):
                     upd.update(state=r.get("state") or "done", text=r.get("text") or "", steps=r.get("steps") or [],
-                               elapsed=r.get("elapsed"), agent=aid, ctx=r.get("ctx"))
+                               said=r.get("said"), elapsed=r.get("elapsed"), agent=aid, ctx=r.get("ctx"))
                     break
         except Exception as e:
             upd.update(state="error", text=str(e))

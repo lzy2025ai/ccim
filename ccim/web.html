@@ -483,6 +483,7 @@ body{overflow:hidden}
 .steps ol{display:none;margin:0;padding:2px 12px 10px 34px;color:var(--muted)}
 .steps.open ol{display:block}
 .steps li{padding:2px 0}
+.answer.said{margin-bottom:12px}
 .steps li code{font:12px var(--mono);color:var(--ink-2)}
 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--huang);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -1741,6 +1742,26 @@ function stepsHtml(steps, open, head){
   return `<div class="steps ${open ? "open" : ""}"><button onclick="this.parentElement.classList.toggle('open')">${head || `做了 ${steps.length} 步`}${ICON.chev}</button>
     <ol>${steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>`;
 }
+// 一轮里说过的每段话留在原处，步骤按段分组夹在中间（#203）。said 是 [第几步之前, 文字]；
+// 答完的：最后那句就是回答本身，由调用的地方画；干活中的：最后一组带 head 展开，正在写的字由 liveText 接在后面
+function flowHtml(steps, said, o = {}){
+  steps = steps || []; said = (said || []).filter(x => x[1] && x[1].trim());
+  if (o.final != null && said.length && said[said.length - 1][0] >= steps.length && said[said.length - 1][1].trim() === (o.final || "").trim()) said = said.slice(0, -1);
+  let out = "", pos = 0;
+  for (const [at, text] of said){
+    const k = Math.min(Math.max(at, pos), steps.length);
+    if (k > pos) out += stepsHtml(steps.slice(pos, k));
+    pos = k;
+    out += `<div class="answer said">${md(text)}</div>`;
+  }
+  const tail = steps.slice(pos);
+  if (o.head == null) return out + stepsHtml(tail);
+  return out + (tail.length ? stepsHtml(tail, o.open, o.head) : `<div class="steps"><button>${o.head}</button></div>`);
+}
+function liveText(p){
+  const said = p.said || [], last = said[said.length - 1];
+  return p.text && !(last && last[1] === p.text) ? `<div class="answer cursor">${md(p.text)}</div>` : "";
+}
 function fromRow(){
   const a = detail.agent ? agentOf(detail.agent) : null;
   return `<div class="from-row">${iconOf(detail, a, "sm")}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
@@ -1820,7 +1841,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "secret") return secretHtml(r);
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
-    return `<div class="msg">${fromRow()}${stepsHtml(r.steps)}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
+    return `<div class="msg">${fromRow()}${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
   }
   if (r.type === "card"){
     const live = r.buttons && r.buttons.length && (!r.color || r.color === "orange");   // 处理过的卡片：记录合并后按钮还在，看颜色
@@ -1843,8 +1864,8 @@ function liveHtml(){
   const p = detail.progress; if (!p) return "";
   const last = p.steps[p.steps.length - 1];
   const head = `<span class="spin"></span>${p.retry ? `网络不稳，正在重试（第 ${p.retry} 次）` : last ? "正在" + esc(last.replace(/^(运行|读|改|搜索|查找|写)[：:]?\s*/, (m, v) => v + "：")) : "思考中"}`;
-  return `<div class="msg">${fromRow()}${p.steps.length ? stepsHtml(p.steps, true, head) : `<div class="steps"><button>${head}</button></div>`}
-    ${stallBar(p, detail.id, ctxMachine)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>`;
+  return `<div class="msg">${fromRow()}${flowHtml(p.steps, p.said, {head, open: true})}
+    ${stallBar(p, detail.id, ctxMachine)}${liveText(p)}</div>`;
 }
 // 群里 @ 别的 Agent 的消息（带 to）连同它们的回答自成一组；主 Agent 回完的内容挪回它回的那条消息下面，
 // 不夹在之后 @ 的消息和回答中间（#129）。liveAt 是主 Agent 干活进度该插的位置
@@ -2986,7 +3007,7 @@ const SKC_AV = `<span class="skc-av">${ICON.star}</span>`;
 function skcRec(r, i){
   if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${esc(r.text)}</div></div>`;
   if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>
-    ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
+    ${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
     ${r.text ? `<div class="msg-acts"><button onclick="skcCopy(this,${i})" title="复制">${ICON.copy}复制</button></div>` : ""}</div>`;
   if (r.type === "card") {
     if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
@@ -3019,8 +3040,8 @@ function drawSkChat(){
         .map(t => `<button onclick="skcSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
   const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
   el.innerHTML = head + `<div class="skc-body" id="skc-body">${empty}${SKC.log.map(skcRec).join("")}
-      ${p ? `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
-        ${stallBar(p, SKC.id, SKC.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
+      ${p ? `<div class="skc-msg"><div class="from-row">${SKC_AV}<b>Skill 助手</b></div>${flowHtml(p.steps, p.said, {head: liveHead})}
+        ${stallBar(p, SKC.id, SKC.mid)}${liveText(p)}</div>` : ""}</div>
     <div class="skc-foot">${skcLooking()}<div class="skc-box"><textarea id="skc-in" rows="1" placeholder="${SKC.busy ? "补充说明，它做完这一步就会看到" : "让它帮你装、改、管理 Skill"}" aria-label="给 Skill 助手发消息"></textarea>
       <button class="send ${SKC.busy ? "stop" : ""}" aria-label="${SKC.busy ? "停下" : "发送"}" onclick="${SKC.busy ? "skcStop()" : "skcSend()"}">${SKC.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#skc-body"); b.scrollTop = b.scrollHeight;
@@ -4650,10 +4671,9 @@ function replyBody(r, live){
   if (live){
     const last = live.steps[live.steps.length - 1];
     const head = `<span class="spin"></span>${live.retry ? `网络不稳，正在重试（第 ${live.retry} 次）` : last ? "正在" + esc(last) : "思考中"}`;
-    return (live.steps.length ? stepsHtml(live.steps, true, head) : `<div class="steps"><button>${head}</button></div>`) + stallBar(live, r.chat, r.machine || ctxMachine)
-      + (live.text ? `<div class="answer cursor">${md(live.text)}</div>` : "");
+    return flowHtml(live.steps, live.said, {head, open: true}) + stallBar(live, r.chat, r.machine || ctxMachine) + liveText(live);
   }
-  return stepsHtml(r.steps) + (r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>` : "");
+  return flowHtml(r.steps, r.said, {final: r.text}) + (r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>` : "");
 }
 function chatLink(r, label){   // 项目里某个 Agent 的对话（可能在别的电脑上）
   return `<a class="link" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(r.machine || ownerOf(proj.id) || S.me)}">${label}</a>`;

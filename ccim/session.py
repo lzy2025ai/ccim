@@ -493,6 +493,7 @@ class Chat:
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
+                               "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
@@ -917,6 +918,8 @@ class Chat:
         side = chat.b.entry.get("side")      # 旁问（#196）：只回答问题，不 @ 人、不转交
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
+            if (pf.chats().get(chat.chat_id) or {}).get("agent"):
+                tools += _search_tools(chat, pf)   # Agent 的对话：搜它参与过的所有对话（#180）
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += ([] if lent else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
@@ -1125,6 +1128,37 @@ def _ask_agent(chat, pf):
     return [platform_agents, ask_agent]
 
 
+def _search_tools(chat, pf):
+    """Agent 搜自己参与过的对话（#180）：网页私聊、群聊、定时任务、飞书、微信、终端。"""
+    from . import search, share
+
+    def who():
+        m = pf.chats().get(chat.chat_id) or {}
+        return m.get("agent"), share.owner_map(pf).get(chat.chat_id), m.get("mention_of") or chat.chat_id
+
+    @tool("search_chats", "在你（这个 Agent）和用户以前的所有对话里按关键词找：网页私聊、群聊、定时任务、飞书、微信、终端。"
+          "用户提到以前聊过、你又不记得的事时用。query 写一两个关键词，用空格分开，几个词都要出现在同一条消息里。"
+          "比自己去翻会话记录文件准（只含你参与过的，不会混进别人的）。结果里「你」是你自己说的；"
+          "给出对话编号和位置，再用 open_chat 读前后文。", {"query": str})
+    async def search_chats(args):
+        aid, acct, here = who()
+        text = await asyncio.to_thread(search.search, pf, aid, acct, args.get("query") or "", here)
+        return {"content": [{"type": "text", "text": text}]}
+
+    @tool("open_chat", "读 search_chats 找到的对话：id 是结果里的编号，at 是位置（读它前后几条），不写 at 就读最后几条。",
+          {"type": "object", "properties": {"id": {"type": "string", "description": "search_chats 给的编号"},
+                                             "at": {"type": "integer", "description": "search_chats 给的位置"},
+                                             "count": {"type": "integer", "description": "读几条，默认 10，最多 40"}},
+           "required": ["id"]})
+    async def open_chat(args):
+        aid, acct, _ = who()
+        n = max(2, min(int(args.get("count") or 10), 40))
+        text = await asyncio.to_thread(search.open_chat, pf, aid, acct, (args.get("id") or "").strip(), args.get("at"), n)
+        return {"content": [{"type": "text", "text": text}]} if text else _err("没有这个对话，编号用 search_chats 给的。")
+
+    return [search_chats, open_chat]
+
+
 def _deliver_later(pf, cid, name, f):
     if f.cancelled():
         return
@@ -1291,7 +1325,13 @@ def kb_note(kbs):
 def role_note(entry):
     """Agent 的角色说明，接在系统提示后面。"""
     role = (entry.get("role") or "").strip()
-    return f"\n\n## 你的角色\n{role}" if role else ""
+    try:                                      # 带上名字（#180）：群聊、以前的对话记录里按名字称呼它，不知道自己叫什么会当成别人
+        from . import agents
+        name = (agents.get(entry.get("agent_id") or "") or {}).get("name")
+    except Exception:
+        name = None
+    who = f"你是这个平台上的 Agent「{name}」。" if name else ""
+    return f"\n\n## 你的角色\n{who}{chr(10) if who and role else ''}{role}" if who or role else ""
 
 
 def prompt_note(text, channel):

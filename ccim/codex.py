@@ -161,7 +161,9 @@ class CodexChat(Chat):
             if guest:                         # 共享电脑上的访客（#154）：主人允许才能用，只能写自己的目录
                 if not share.codex_ok(guest):
                     raise RuntimeError("这台电脑现在只能用 Claude Code，去 Agent 设置里把底座换成 Claude Code")
-                args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"]
+                # 网络只放行外网，本机、局域网地址经 Codex 的网络代理拦下（#181）
+                args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true",
+                         "-c", "features.network_proxy.enabled=true", "-c", 'features.network_proxy.domains={"*"="allow"}']
             await _tools_ready()
             env = self.ccim_env()
             args += mcp_args(env)

@@ -221,7 +221,7 @@
   定时任务的对话跟任务）；定时任务记 account；知识库记 _lib.json（`owner_map` 缓存）。state、Agent 详情按人过滤（主人看不到访客的）；推送 `tag` 带 _a，
   总控 `visible` 只推给那个账号、fanout 不转给别的电脑。共享的 Agent：访客的对话单独一个 Bridge（key 加 #账号，entry lent），改不了设置、不能接飞书微信，
   会话里不给 list_chats / read_chat / send_to_chat；主人那边的 list_chats 也不列访客的会话。访客自己的 Agent 能接自己的飞书、微信（渠道按 `procs_of` 只管自己的）。
-  访客的会话（`session.guest_of`）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；Codex 主人勾了才给，用时强制 -s workspace-write（只拦写不拦读，界面上提示）；
+  访客的会话（`session.guest_of`）：不给 run_as_admin、不开 Chrome、不提示 ccim schedule；Codex 主人勾了才给，用时强制 -s workspace-write（只拦写不拦读，界面上提示），网络只放行外网（Codex 的网络代理拦本机和局域网地址，#181）；
   `share.fence`：命令行沙箱（不许绕过，网络不限）+ 权限规则 deny 主目录里除 `allowed_dirs`（共享文件夹、自己 Agent 的目录、这个会话的工作目录、
   ~/.ccim/skills 的 lib、views 和它自己那份、自己的知识库）以外的一切，`_deny_except` 一层层往下只拦旁边的；send_file 只发这些地方的。仍以电脑主人的系统用户运行（防越界）
   访客的 Skill：`skills.SPACE`（contextvar，平台处理访客请求时设上、访客的 Skill 助手工具里设上）让 skills 的读写落到 skills/guests/<账号>/，
@@ -351,6 +351,9 @@
   最前面（daemon 的后台启动和 LaunchAgent 都带上）；`build_stable` 按 origin/main 那次提交装。
 
 ## 约定
+
+- **安全问题的细节不进仓库**：代码注释、CLAUDE.md、提交说明、issue、PR 都是公开的，只写中性的改动说明（做了什么），
+  不写「不改的话能怎样被利用」。细节和已知风险记在仓库外的本地记录里，产品化前逐条评估
 
 - 要能在 Python 3.11 上跑（pyproject 写的 >=3.11，别的电脑可能就是 3.11）：f-string 的 {} 里不能有反斜杠、不能用和外层相同的引号。
   改完用 3.11 过一遍：`for f in ccim/*.py ccim/channels/*.py; do python3.11 -c "import ast;ast.parse(open('$f').read())"; done`

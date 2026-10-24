@@ -917,6 +917,37 @@ class Platform:
             return "waiting", target
         return {"ok": "done"}.get(state, state), answer
 
+    def dispatch_self(self, src, text, depth):
+        """对话里的助手给自己派活（ask_agent 发给自己，#179）：新开一个同样设置的对话去做，挂在发起的对话下面。
+        返回 (新对话, Task)。在主循环里调。"""
+        from .session import Task
+        sm = self.meta(src)
+        outer = sm.get("mention_of") or src   # 群聊里被 @ 的成员：来源记成那个群聊（子对话不进列表）
+        om = self.chats().get(outer) or {}
+        aid, t = sm.get("agent"), sm.get("temp")
+        cid = self.new_chat(agent=aid, temp=dict(t) if t else None, title=" ".join(text.split())[:30] or "派出的任务",
+                            account=sm.get("account"), parent=outer if om.get("agent") == aid else None)
+        chats = self.chats()
+        chats[cid]["dispatched_from"] = outer
+        if t and not t.get("dir"):            # 没选目录的临时对话：用发起的那个的临时目录，看得到它做出来的文件
+            chats[cid]["temp"]["scratch"] = t.get("scratch") or src
+        self.store.write(chats)
+        title = (self.chat_view(outer).get("title") if outer in self.chats() else None) or "另一个对话"
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
+                                                               "files": [], "from_chat": outer, "dispatch": True}))
+        task = Task(f"[你在另一个对话「{title}」里给自己派了这件事，新开这个对话来做；做完把结果写清楚，会交回那边] {text}")
+        task.depth = depth
+        self._bridge(cid).chat(cid, "p2p").submit(task)
+        return cid, task
+
+    def deliver(self, cid, text):
+        """把一段话作为新的一轮交给对话 cid（派出去的活做完了，结果交回发起的对话，#179）。不记成用户说的。"""
+        from .session import Task
+        if cid not in self.chats():
+            return False
+        self._bridge(cid).chat(cid, "p2p").submit(Task(text))
+        return True
+
     async def skip_step(self, cid):
         """结束卡住的那一步，接着做（#109）。"""
         c = self._bridge(cid).chats.get(cid)
@@ -1018,6 +1049,8 @@ class Platform:
                 "mention_of": m.get("mention_of"), "side_of": m.get("side_of"),
                 "split_from": {"id": m["split_from"], "title": (self.chats().get(m["split_from"]) or {}).get("title") or "群聊"}
                 if m.get("split_from") else None,
+                "dispatched_from": {"id": m["dispatched_from"], "title": (self.chats().get(m["dispatched_from"]) or {}).get("title") or "另一个对话"}
+                if m.get("dispatched_from") else None,
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
@@ -1481,7 +1514,7 @@ class Platform:
         r = rows[index]
         return {"text": r.get("text") or "", "files": r.get("files") or []}
 
-    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None):
+    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0):
         """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""
         from .session import Task
         if not agents.get(aid):
@@ -1501,6 +1534,7 @@ class Platform:
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": shown or prompt, "files": [],
                                                                 **({"from_chat": of} if kind == "mention" else {})}))
         task = Task(prompt)
+        task.depth = int(depth or 0)
         chat.submit(task)
         token = uuid.uuid4().hex
         self.peer_results[token] = None       # 活可能做很久：先回个编号，那边隔一会儿来问结果
@@ -1805,7 +1839,7 @@ def _handler(pf):
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
-                                                              b("project") or "", b("kind"), b("of"), b("shown"))),
+                                                              b("project") or "", b("kind"), b("of"), b("shown"), b("depth"))),
                 "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),

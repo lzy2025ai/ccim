@@ -492,7 +492,7 @@ class Chat:
                 disallowed_tools=["AskUserQuestion"] + CRON_TOOLS + (SIDE_OFF if self.b.entry.get("side") else []),
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
-                               "mcp__ccim__ask_agents",                             # 只是在群里 @ 人，用户看得到
+                               "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
@@ -915,8 +915,8 @@ class Chat:
         tools = [send_file]
         pf = getattr(chat.b.channel, "platform", None)
         side = chat.b.entry.get("side")      # 旁问（#196）：只回答问题，不 @ 人、不转交
-        if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent") and not side:
-            tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
+        if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side:
+            tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += ([] if lent else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
@@ -1001,37 +1001,154 @@ def _skill_tools(chat):
     return [t_list, t_files, t_read, t_write, t_install, t_enable, t_delete]
 
 
-ASK_WAIT = 20 * 60                            # ask_agents 最多等这么久，没回完的回答之后出现在对话里
+ASK_WAIT = 20 * 60                            # ask_agent 等回答最多等这么久，没等到的做完后交回发起的对话
+MAX_DEPTH = 2                                 # 派活最多往下两层：用户 → 第 1 层 → 第 2 层，第 2 层不能再派（#179）
+MAX_ASKS = 5                                  # 一轮里最多派这么多次
+SELF_NAMES = ("自己", "我自己", "self", "me")
 
 
-def _ask_agents(chat, pf):
-    @tool("ask_agents", "在当前群聊里 @ 一位或几位群成员，请他们回答或帮忙做事；消息会显示在群里，"
-          "等他们都回答完再把回答交给你。to 写成员的名字。他们看得到这个群聊之前的内容，但看不到你的工作目录以外的文件。",
-          {"type": "object", "properties": {"to": {"type": "array", "items": {"type": "string"}, "description": "群成员的名字"},
-                                             "text": {"type": "string", "description": "要对他们说的话"}},
+def _visible_agents(pf, acct):
+    """这个对话能找的 Agent：[(编号, 名字, 电脑, 在线, Agent)]。访客只有本机它自己建的和主人共享给它的（#154）。"""
+    from . import agents, share
+    if acct:
+        mine = set(share.shared_agents(acct))
+        return [(aid, a["name"], pf.peers.me["name"], True, a) for aid, a in agents.all_agents().items()
+                if share.of_agent(a) == acct or aid in mine]
+    rows = [(aid, a["name"], pf.peers.me["name"], True, a) for aid, a in agents.all_agents().items() if not share.of_agent(a)]
+    have = {r[0] for r in rows}
+    for m in pf.peers.machines():
+        if m["me"]:
+            continue
+        for a in (pf.peers.cache.get(m["id"]) or {}).get("agents") or []:
+            if a.get("id") and a["id"] not in have and not a.get("account"):
+                have.add(a["id"])
+                rows.append((a["id"], a.get("name") or "", m["name"], bool(m.get("online")), a))
+    return rows
+
+
+def _ask_agent(chat, pf):
+    """平台上的对话找别的 Agent 问话、派活，或者给自己新开一个对话做事（#179）。"""
+    from . import share
+    from .mentions import ASSISTANT
+
+    def where():
+        m = pf.chats().get(chat.chat_id) or {}
+        return m, share.owner_map(pf).get(chat.chat_id)
+
+    @tool("platform_agents", "列出平台上（各台电脑）有哪些 Agent：名字、在哪台电脑、底座和模型、是否在线、角色说明。"
+          "要找别的 Agent 问话、派活之前先看这里。", {})
+    async def platform_agents(args):
+        m, acct = where()
+        rows = _visible_agents(pf, acct)
+        if not rows:
+            return {"content": [{"type": "text", "text": "平台上还没有 Agent。"}]}
+        lines = []
+        for aid, name, machine, online, a in rows:
+            role = " ".join((a.get("role") or "").split())
+            base = "Codex" if a.get("base") == "codex" else "Claude"
+            lines.append(f"- {name}{'（就是你）' if aid == m.get('agent') else ''} · {machine}{'' if online else '（离线）'} · "
+                         f"{base}{' · ' + a['model'] if a.get('model') else ''}" + (f" · {role[:60]}" if role else ""))
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+    @tool("ask_agent", "找平台上的 Agent 问话或派活（名字用 platform_agents 列出的）。发给别的 Agent：在当前对话里替用户 @ 它，"
+          "用户看得到，它看得到这个对话之前的内容；发给你自己（to 写「自己」）：新开一个你自己的对话去做这件事，适合能独立做完的事。"
+          "wait 为 true（默认）时等回答完把回答交给你（最多 20 分钟）；为 false 时发出去就返回，做完后结果作为一条新消息交给你。"
+          "只在用户要你找别人、或者确实需要别的 Agent 帮忙时用；派出去的对话最多再往下派一层。",
+          {"type": "object", "properties": {"to": {"type": "array", "items": {"type": "string"}, "description": "Agent 的名字；给自己派活写「自己」"},
+                                             "text": {"type": "string", "description": "要说的话；给自己派活要写清楚来龙去脉，新对话看不到这个对话"},
+                                             "wait": {"type": "boolean", "description": "要不要等回答，默认 true"}},
            "required": ["to", "text"]})
-    async def ask_agents(args):
+    async def ask_agent(args):
         to = args.get("to") or []
-        if isinstance(to, str):
-            to = [to]
+        to = [to] if isinstance(to, str) else to
         text = (args.get("text") or "").strip()
         if not to or not text:
             return _err("to 和 text 都要写。")
-        aid = (pf.chats().get(chat.chat_id) or {}).get("agent")
+        m, acct = where()
+        cur = (getattr(chat, "current", None) or (None,))[0]
+        depth = getattr(cur, "depth", 0)
+        if depth >= MAX_DEPTH:
+            return _err("你是被派出来做事的，不能再往下派了。需要别人帮忙的话在回答里说明，由派你的一方决定。")
+        t = chat.turn
+        used = getattr(t, "asks", 0) if t else 0
+        if used + len(to) > MAX_ASKS:
+            return _err(f"这一轮已经派了 {used} 次，最多 {MAX_ASKS} 次。先把手头的结果整理给用户。")
+        if t:
+            t.asks = used + len(to)
+        me = m.get("agent")
+        rows = _visible_agents(pf, acct)
+        names = {}
+        self_too = False
+        for n in to:
+            n = (n or "").strip().lstrip("@")
+            hit = [r for r in rows if n in (r[0], r[1])]
+            if n in SELF_NAMES or (hit and hit[0][0] == me):
+                self_too = True
+            elif hit and hit[0][0] == (pf.chats().get(m.get("mention_of")) or {}).get("agent"):
+                return _err(f"{hit[0][1]}就是这个群聊的主 Agent，要对它说的直接写在回答里。")
+            elif not hit:
+                return _err(f"平台上没有「{n}」，先用 platform_agents 看看有谁。")
+            elif not hit[0][3]:
+                return _err(f"{hit[0][1]}所在的电脑（{hit[0][2]}）离线了，现在找不到它。")
+            else:
+                names[hit[0][0]] = hit[0][1]
+        wait = args.get("wait") is not False
+        if m.get("mention_of"):               # 群聊里被 @ 的成员：要把结果当场交回群聊，所以一定等
+            wait = True
+        jobs = []                             # (名字, future)，future 的结果是 (state, 回答)
         try:
-            rows = await pf.mentions.ask(chat.chat_id, aid, text, to, ASK_WAIT)
+            if names:
+                outer = m.get("mention_of") or chat.chat_id   # 被 @ 的成员找人：在外层群聊里 @
+                r = await pf.mentions.send(outer, text, list(names), by=me or ASSISTANT, depth=depth + 1)
+                for rid in r["rids"]:
+                    f = pf.mentions.waiters[rid]
+                    jobs.append((names.get(rid.split(":", 1)[1], "另一个 Agent"), _mention_result(pf, rid, f)))
+            if self_too:
+                cid, task = pf.dispatch_self(chat.chat_id, text, depth + 1)
+                jobs.append(("你新开的对话", asyncio.ensure_future(task.future)))
         except Exception as e:
             return _err(str(e))
-        parts = []
-        for name, state, answer in rows:
-            if state == "done":
-                parts.append(f"【{name}】\n{answer or '（没有回答）'}")
-            elif state == "waiting":
-                parts.append(f"【{name}】还没回答完，回答出来后会显示在群里。")
-            else:
-                parts.append(f"【{name}】没有回答成功（{ {'stopped': '被停下了', 'error': '出错了'}.get(state, state) }）：{answer}")
+        if wait:
+            await asyncio.wait([f for _, f in jobs], timeout=ASK_WAIT)
+        parts, later = [], []
+        for name, f in jobs:
+            if not f.done():
+                later.append((name, f))
+                parts.append(f"【{name}】{'还没做完' if wait else '已经发出去了'}，做完后结果会作为一条新消息交给你。")
+                continue
+            state, answer = f.result()
+            parts.append(_outcome(name, state, answer))
+        for name, f in later:
+            f.add_done_callback(lambda f, name=name: _deliver_later(pf, chat.chat_id, name, f))
         return {"content": [{"type": "text", "text": "\n\n".join(parts)}]}
-    return ask_agents
+
+    return [platform_agents, ask_agent]
+
+
+def _deliver_later(pf, cid, name, f):
+    if f.cancelled():
+        return
+    try:
+        state, answer = f.result()
+    except Exception as e:
+        state, answer = "error", str(e)
+    pf.deliver(cid, f"[你之前请{name}做的事有结果了]\n\n" + _outcome(name, state, answer))
+
+
+def _mention_result(pf, rid, f):
+    """@ 的回答（mentions 的 waiter，结果是那条记录）→ (state, 回答)。"""
+    async def go():
+        u = await f
+        pf.mentions.waiters.pop(rid, None)
+        return {"ok": "done"}.get(u.get("state"), u.get("state")), u.get("text") or ""
+    return asyncio.ensure_future(go())
+
+
+def _outcome(name, state, answer):
+    state = {"ok": "done"}.get(state, state)
+    if state == "done":
+        return f"【{name}】\n{answer or '（没有回答）'}"
+    return f"【{name}】没有做完（{ {'stopped': '被停下了', 'error': '出错了', 'lost': '平台重启过'}.get(state, state) }）：{answer}"
 
 
 def guest_of(b):

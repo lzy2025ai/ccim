@@ -37,7 +37,7 @@ def _ext_log(base, sid, cwd):
 
 
 def sources(pf, aid, acct):
-    """{编号: (标题, 在哪, 读记录的函数, 说话的人)}。编号：网页对话的编号，或 x:<会话>。"""
+    """{编号: (标题, 在哪, 读记录的函数, 说话的人, 补充说明, 最近时间)}。编号：网页对话的编号，或 x:<会话>。"""
     a = agents.get(aid) or {}
     owners = share.owner_map(pf)
     chats = pf.chats()
@@ -51,18 +51,30 @@ def sources(pf, aid, acct):
             pick.append(outer)                # 本机对话里被 @ 的子对话：内容在外层对话里都有（外层可能没选 Agent）
         elif m.get("agent") == aid or aid in members(m):
             pick.append(cid)
+    name = lambda x: pf.mentions._agent_name(x)
     for cid in dict.fromkeys(pick):
         m = chats[cid]
         outer = m.get("mention_of")
-        where = "群聊" if outer or members(m) else "定时任务" if m.get("schedule") else "网页对话"
+        ms = members(m)
+        where = "群聊" if outer or ms else "定时任务" if m.get("schedule") else "网页对话"
         title = m.get("title") or pf.chat_view(cid).get("title") or "对话"
         owner_name = ME if m.get("agent") == aid else pf.mentions._name(m, {})
-        out[cid] = (title, where, (lambda cid=cid: pf.channel.logs.read(cid)), owner_name)
+        if outer:                             # 别的电脑上的群聊，这里只有它被 @ 的那部分
+            note = "别的电脑上的群聊，你在里面被 @ 过"
+        elif ms:
+            others = [name(x) for x in ms if x != aid]
+            note = ("你是主 Agent" if m.get("agent") == aid else f"主 Agent 是{owner_name}，你是成员") + \
+                (f"，其他成员：{'、'.join(others)}" if others else "")
+        elif m.get("agent") != aid:
+            note = f"{owner_name}的对话，你在里面被 @ 过"
+        else:
+            note = ""
+        out[cid] = (title, where, (lambda cid=cid: pf.channel.logs.read(cid)), owner_name, note, m.get("last_active") or "")
     if share.of_agent(a) != acct:             # 飞书、微信、终端里的对话是电脑主人的
         return out
     cwd = agents.cwd(a)
     for r in pf.external_chats(aid):          # 飞书、微信（网页里接着聊过的已经去掉）
-        out[r["id"]] = (r["title"], r["source"], (lambda r=r: _ext_log(r["base"], r["sid"], cwd)), ME)
+        out[r["id"]] = (r["title"], r["source"], (lambda r=r: _ext_log(r["base"], r["sid"], cwd)), ME, "", r.get("last_active") or "")
     if (a.get("base") or "claude") == "claude":
         mine = {m.get("session_id") for m in chats.values()} | {k[2:] for k in out if k.startswith("x:")}
         try:
@@ -74,7 +86,8 @@ def sources(pf, aid, acct):
             if x.session_id in mine:
                 continue
             title = " ".join((x.custom_title or x.summary or x.first_prompt or "终端里的对话").split())[:30]
-            out["x:" + x.session_id] = (title, "终端或桌面端", (lambda sid=x.session_id: _ext_log("claude", sid, cwd)), ME)
+            out["x:" + x.session_id] = (title, "终端或桌面端", (lambda sid=x.session_id: _ext_log("claude", sid, cwd)), ME, "",
+                                        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x.last_modified / 1000)))
     return out
 
 
@@ -105,14 +118,45 @@ def _usable(r):
         and (r.get("text") or "").strip()
 
 
+ORDER = ("群聊", "网页对话", "定时任务")      # 列出来时的顺序，别的（飞书、微信、终端）排在后面
+SHOW = 20                                     # 每类最多列这么多个
+
+
+def _ts(v):
+    v = str(v or "")
+    return v[:16] if v[:2] == "20" else _when(v) if v else ""
+
+
+def listing(src, aid, skip=None):
+    """不写关键词：列出这个 Agent 参与的所有对话，按类分组、最近的在前。"""
+    if not src:
+        return "你还没有参与过任何对话。"
+    groups = {}
+    for cid, (title, where, _, _, note, last) in src.items():
+        groups.setdefault(where, []).append((str(last), cid, title, note))
+    kinds = sorted(groups, key=lambda w: (ORDER.index(w) if w in ORDER else len(ORDER), w))
+    lines = [f"你（{_me(aid)}）一共参与了 {len(src)} 个对话：" + "、".join(f"{w} {len(groups[w])} 个" for w in kinds) +
+             "。要看内容用 open_chat，id 照抄：", ""]
+    for w in kinds:
+        rows = sorted(groups[w], reverse=True)
+        lines.append(f"## {w}")
+        for last, cid, title, note in rows[:SHOW]:
+            lines.append(f"- 「{title}」{'（就是现在这个对话）' if cid == skip else ''}" + (f" · {note}" if note else "") +
+                         (f" · 最近 {_ts(last)}" if last else "") + f"\n  open_chat id={short(cid)}")
+        if len(rows) > SHOW:
+            lines.append(f"- 还有 {len(rows) - SHOW} 个更早的没列出来，可以用关键词搜")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def search(pf, aid, acct, query, skip=None):
     """返回给助手看的文字。skip：当前这个对话（不用搜自己正在说的）。"""
     words = [w.lower() for w in (query or "").split() if w.strip()]
-    if not words:
-        return "要写关键词。"
-    hits = []
     src = sources(pf, aid, acct)
-    for cid, (title, where, load, owner) in src.items():
+    if not words:
+        return listing(src, aid, skip)
+    hits = []
+    for cid, (title, where, load, owner, _, _) in src.items():
         if cid == skip:
             continue
         try:
@@ -139,11 +183,11 @@ def search(pf, aid, acct, query, skip=None):
     lines = [f"找到 {len(hits)} 条（最近的在前{'，只列前 %d 条' % HITS if len(hits) > HITS else ''}）。"
              f"标「你」的是你自己（{_me(aid)}）说的。要看前后文用 open_chat（不是 read_chat），id、at 照抄：", ""]
     for at, cid, i, title, where, who, snip in hits[:HITS]:
-        lines.append(f"- {where}「{title}」· {_when(at)} · {who}：{snip}\n  open_chat id={_short(cid)} at={i}")
+        lines.append(f"- {where}「{title}」· {_when(at)} · {who}：{snip}\n  open_chat id={short(cid)} at={i}")
     return "\n".join(lines)
 
 
-def _short(cid):
+def short(cid):
     return cid[:10] if cid.startswith("x:") else cid
 
 
@@ -155,7 +199,7 @@ def open_chat(pf, aid, acct, cid, around=None, n=10):
         if len(hits) != 1:
             return None
         cid = hits[0]
-    title, where, load, owner = src[cid]
+    title, where, load, owner = src[cid][:4]
     rows = [(i, r) for i, r in enumerate(load()) if _usable(r)]
     if around is None:
         part = rows[-n:]

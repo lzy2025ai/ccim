@@ -528,6 +528,12 @@ body{overflow:hidden}
 .ctx-num{font-size:13px;color:var(--ink-2)} .ctx-num b{font-size:15px;color:var(--ink)}
 .ctx-bar{height:6px;border-radius:3px;background:var(--sunk);margin-top:8px;overflow:hidden}
 .ctx-bar i{display:block;height:100%;background:var(--qing);border-radius:3px}
+.ctx-bar.warn i{background:var(--warn)} .ctx-bar.bad i{background:var(--bad)}
+.ctx-who{font-size:12px;color:var(--muted);margin-top:10px}
+.ctx-mini{display:inline-flex;align-items:center;gap:3px;margin-left:8px;color:var(--qing)}
+.ctx-mini.warn{color:var(--warn)} .ctx-mini.bad{color:var(--bad)}
+.ctx-mini svg{width:12px;height:12px} .ctx-mini circle{fill:none;stroke-width:2.6}
+.ctx-mini .bg{stroke:var(--line-strong)} .ctx-mini .fg{stroke:currentColor;stroke-linecap:round}
 .send svg{width:16px;height:16px}
 .hint{font-size:12px;color:var(--faint);text-align:center;margin-top:6px}
 
@@ -1488,8 +1494,9 @@ function connectEvents(){
         detail.busy = ev.state === "working";
         drawThread(); drawComposerState();
       } else if (ev.type === "ctx"){
-        detail.ctx = ev.ctx; drawCtxRing(detail);
+        detail.ctx = ev.ctx; drawCtxRing(detail); redrawGroup();
       } else {
+        if (ev.type === "mention" && rec.ctx && rec.agent) { detail.member_ctx = {...detail.member_ctx, [rec.agent]: rec.ctx}; redrawGroup(); }
         const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
         if (ev.type === "note" && detail.progress?.guess) { detail.busy = false; detail.progress = null; drawComposerState(); }   // 斜杠命令只回一句，不会开始干活
@@ -2003,7 +2010,7 @@ function groupPanel(c){
   const home = ctxMachine || S.me;
   const row = (aid, main) => { const x = agentOf(aid) || {name: "已删除的 Agent", base: "claude"};
     return `<div class="gmem">${seal(x, "", false)}<span class="t"><span class="title">${esc(x.name)} ${main ? `<span class="owner">主 Agent</span>` : whereTag(aid, home)}</span>
-      <span class="sub">${BASE[x.base || "claude"]}${x.busy ? "，正在干活" : ""}</span></span>
+      <span class="sub">${BASE[x.base || "claude"]}${x.busy ? "，正在干活" : ""}${memRing(main ? c.ctx : (c.member_ctx || {})[aid])}</span></span>
       ${main ? "" : `<button class="link danger-link" onclick="removeMember(${q(aid)})">移出</button>`}</div>`; };
   return `<aside class="gpanel">
     <div class="gp-top"><b>群聊</b><button class="icon-btn" aria-label="收起" title="收起" onclick="toggleGroup(false)">${ICON.x}</button></div>
@@ -2129,24 +2136,34 @@ function drawComposerState(){
 // 上下文占用（#183）：发送按钮旁一个小圈，点开看已用多少
 const kTok = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
   : n < 100000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(n / 1000) + "k";
+const ctxPct = x => Math.max(0, Math.min(100, x.pct || 0));
+const ctxLevel = x => ctxPct(x) >= 90 ? " bad" : ctxPct(x) >= 75 ? " warn" : "";
+const ringSvg = x => { const r = 7, len = 2 * Math.PI * r;
+  return `<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="${r}" class="bg"/><circle cx="9" cy="9" r="${r}" class="fg"
+    stroke-dasharray="${len * ctxPct(x) / 100} ${len}" transform="rotate(-90 9 9)"/></svg>`; };
 function drawCtxRing(c){
   const el = $("#ctx-ring"); if (!el) return;
   const x = c.ctx; el.hidden = !x || c.readonly;
   if (el.hidden) return;
-  const pct = Math.max(0, Math.min(100, x.pct || 0)), r = 7, len = 2 * Math.PI * r;
-  el.className = "ctx-ring" + (pct >= 90 ? " bad" : pct >= 75 ? " warn" : "");
-  el.title = `上下文已用 ${pct}%`;
+  el.className = "ctx-ring" + ctxLevel(x);
+  el.title = `上下文已用 ${ctxPct(x)}%`;
   el.setAttribute("aria-label", el.title);
-  el.innerHTML = `<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="${r}" class="bg"/><circle cx="9" cy="9" r="${r}" class="fg"
-    stroke-dasharray="${len * pct / 100} ${len}" transform="rotate(-90 9 9)"/></svg>`;
+  el.innerHTML = ringSvg(x);
 }
 function ctxPop(e){
-  const x = detail && detail.ctx; if (!x) return;
+  const c = detail, x = c && c.ctx; if (!x) return;
+  const ms = c.members || [], mc = c.member_ctx || {};
+  const one = y => `<div class="ctx-num"><b>${kTok(y.used)}</b> / ${kTok(y.max)} token · ${ctxPct(y)}%</div>
+    <div class="ctx-bar${ctxLevel(y)}"><i style="width:${ctxPct(y)}%"></i></div>`;
+  const who = aid => `<div class="ctx-who">${esc((agentOf(aid) || {}).name || "已删除的 Agent")}</div>`;
   pop(e, `<div class="ctx-pop"><div class="sec" style="padding:0 0 4px">上下文</div>
-    <div class="ctx-num"><b>${kTok(x.used)}</b> / ${kTok(x.max)} token · ${x.pct || 0}%</div>
-    <div class="ctx-bar"><i style="width:${Math.min(100, x.pct || 0)}%"></i></div>
-    ${x.compact ? `<div class="muted" style="font-size:12px;margin-top:6px">用到 ${kTok(x.compact)} 左右会自动压缩较早的内容</div>` : ""}</div>`);
+    ${ms.length ? who(c.agent) : ""}${one(x)}
+    ${ms.map(aid => who(aid) + (mc[aid] ? one(mc[aid]) : `<div class="muted" style="font-size:12px">还没开口</div>`)).join("")}
+    ${x.compact && !ms.length ? `<div class="muted" style="font-size:12px;margin-top:6px">用到 ${kTok(x.compact)} 左右会自动压缩较早的内容</div>` : ""}</div>`);
 }
+function redrawGroup(){ const g = document.querySelector(".gpanel"); if (g && detail) g.outerHTML = groupPanel(detail); }
+// 成员栏里每人名字后的小圈（#183）
+const memRing = x => x ? `<span class="ctx-mini${ctxLevel(x)}" title="上下文 ${kTok(x.used)} / ${kTok(x.max)} token">${ringSvg(x)}${ctxPct(x)}%</span>` : "";
 // 输入框跟着内容变高；拖上边框手动拉高（记住），双击恢复；字多了右上角可以展开、收起
 let inputH = +localStorage.getItem("ccim.inputH") || 0;
 const inputCap = () => Math.round(innerHeight * .6);

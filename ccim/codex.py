@@ -164,7 +164,9 @@ class CodexChat(Chat):
             if self.b.entry.get("side"):      # 旁问（#196）：只读
                 args += ["-s", "read-only"]
             elif guest:
-                args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"]
+                # 网络只放行外网，本机、局域网地址经 Codex 的网络代理拦下（#181）
+                args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true",
+                         "-c", "features.network_proxy.enabled=true", "-c", 'features.network_proxy.domains={"*"="allow"}']
             await _tools_ready()
             env = self.ccim_env()
             args += mcp_args(env)

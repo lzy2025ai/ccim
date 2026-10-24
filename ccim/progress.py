@@ -27,7 +27,7 @@ def describe_tool(name, inp):
         return "查资料：" + short(inp.get("url"), 60)
     if name == "WebSearch":
         return "搜索：" + short(inp.get("query"), 50)
-    if name in ("TodoWrite", "ToolSearch", "BashOutput"):
+    if name in ("TodoWrite", "ToolSearch", "BashOutput", "SendUserFile"):   # SendUserFile：ccim 里没有，调了也不算一步（#190）
         return None
     if name.startswith("mcp__ccim__run_as_admin"):
         return "用管理员权限执行：" + short(inp.get("command"), 60)

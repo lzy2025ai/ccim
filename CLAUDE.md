@@ -224,6 +224,7 @@
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json
+- 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（ccim 里没有，报 disabled，钩子接不到）：`_turn_inner` 看到这个调用就像中途补充一样补一句改用 mcp__ccim__send_file（#190）
 - 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文

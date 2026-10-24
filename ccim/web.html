@@ -150,6 +150,17 @@ body{overflow:hidden}
 .item.today .when{color:var(--qing);font-weight:500}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
+/* 任务面板角标（#187）：实心红 = 等你处理；橙色滚动虚线 = 有对话在干活（和干活的卡片同一种虚线），卡住变成一闪一闪的红圈 */
+.nbadge.work{background:var(--panel);color:var(--warn);font-weight:600}
+.nbadge .ring{position:absolute;inset:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;pointer-events:none}
+.nbadge .ring rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:10.25px;ry:10.25px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:3 2.5;animation:ring .9s linear infinite}
+.nbadge.work .ring{inset:0;width:100%;height:100%}
+.nbadge.work .ring rect{rx:7.25px;ry:7.25px}
+.nbadge.stuck .ring rect{stroke:var(--bad);stroke-dasharray:none;stroke-width:1.8;animation:breathe 1.6s ease-in-out infinite}
+.nbadge.work.stuck{color:var(--bad)}
+@keyframes ring{to{stroke-dashoffset:-5.5}}
+@keyframes breathe{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.nbadge .ring rect,.nbadge.stuck .ring rect{animation:none}}
 .ck-box{flex:none;width:18px;height:18px;margin:2px 10px 0 0;border:1.5px solid var(--line-strong);border-radius:5px;background:var(--panel,#fff);color:#fff;font-size:12px;line-height:15px;text-align:center;cursor:pointer;padding:0}
 .ck-box.on{background:var(--qing);border-color:var(--qing)}
 .ck-box:disabled{opacity:.4;cursor:default}
@@ -2673,9 +2684,19 @@ function waiting(){ return (S.chats || []).filter(c => isTop(c) && c.attention);
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");
-  if (b) { b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
+  const work = (S.chats || []).filter(c => isTop(c) && c.busy && !c.attention);   // 和任务面板「正在干活」同一口径
+  if (b) {
+    const k = n || work.length;
+    b.hidden = !k;
+    b.className = "nbadge" + (!n && work.length ? " work" : "") + (work.some(c => c.stall) ? " stuck" : "");
+    b.innerHTML = (k > 99 ? "99+" : k) + (work.length ? `<svg class="ring" aria-hidden="true"><rect/></svg>` : "");
+    b.parentElement.title = [n ? `${n} 个等你处理` : "", work.length ? `${work.length} 个在干活` : ""].filter(Boolean).join(" · ");
+  }
   const d = devCount() + oldMachines().length, sb = $("#nav-set-n");
-  if (sb) { sb.hidden = !d; sb.textContent = d; }
+  if (sb) {
+    sb.hidden = !d; sb.textContent = d;
+    sb.parentElement.href = devCount() ? "#/settings/dev" : oldMachines().length ? "#/settings/machines" : "#/settings";   // 有要处理的直接进那一页
+  }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
 async function markSeen(id, force){

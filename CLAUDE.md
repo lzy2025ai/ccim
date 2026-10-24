@@ -307,6 +307,7 @@
   平台重启后还看得到。别处合并了、这台 Mac 没用上（当前稳定版之后 main 上有提交，或进程启动时的代码不是最新）时显示「更新这台 Mac」；
   后台升级还在做（`runtime.promoting`：promote-run 拿着 .promote.lock）时不算，显示「正在更新」，缓存 5 秒就重算、网页 5 秒再取一次。
   GitHub 数据后台每 2 分钟刷新，红点数（state 的 ccim.dev）读缓存；设置图标的红点再加上比服务器旧的电脑（`oldMachines`，「电脑」页给升级按钮）。
+  「已上线」（#201）列最近合并的 PR，同一个 issue 的几轮合成一条（`Dev._shipped`），能按编号、标题筛选。
   每条链回提需求的对话：对话 meta 的 issues（`Chat._post_bash` 在 gh issue create / reopen、gh pr create 后记），
   老对话从回答里贴过的 issue 链接认（`devpanel.refs`）。任务面板（#157）：chat_view 带 issue（最近两轮里提到的最近那个，`issue_of`，
   标题 `Titles` 存平台 state 的 issue_titles，没有的后台用 gh 取），面板这一行标题换成「#编号 issue 标题」，做过好几个的标「还有 N 个」。

@@ -265,7 +265,9 @@ class Chat:
 
     def _forget(self):
         self.session_id = self.fork_from = self.fork_at = None
-        self.b.save(self.chat_id, fork_from=None, fork_at=None, **{self.SID_KEY: None})
+        self.b.save(self.chat_id, fork_from=None, fork_at=None, ctx=None, **{self.SID_KEY: None})
+        if getattr(self.b.channel, "context", None):
+            self.b.channel.context(self.chat_id, None)
 
     async def attach(self, session_id, at=None):
         """把这个聊天接到另一个对话（比如终端里开的）上。总是另开分支，那边的对话不受影响。
@@ -647,6 +649,23 @@ class Chat:
             ticker.cancel()
         self.tail = t.uuid if self.client else None
         await self._finish(t, result, error, reply_to)
+        await self._context()
+
+    async def _context(self):
+        """答完取一次上下文占用（和 /context 同一份数据，约 1 秒），记在对话状态里：网页的进度圈、/status 用（#183）。"""
+        if not self.client:
+            return
+        try:
+            u = await asyncio.wait_for(self.client.get_context_usage(), 10)
+        except Exception:
+            log.warning("[%s] 取上下文占用失败", self.chat_id[-6:], exc_info=True)
+            return
+        if u and u.get("maxTokens"):
+            ctx = {"used": u.get("totalTokens") or 0, "max": u["maxTokens"], "pct": u.get("percentage") or 0,
+                   "compact": u.get("autoCompactThreshold"), "at": registry.now()}
+            self.b.save(self.chat_id, ctx=ctx)
+            if getattr(self.b.channel, "context", None):
+                self.b.channel.context(self.chat_id, ctx)
 
     async def _finish(self, t, result, error, reply_to):
         """这一轮结束：先发回答，再收尾工作中卡片。Claude Code 和 Codex 共用。"""

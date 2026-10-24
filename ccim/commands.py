@@ -47,6 +47,17 @@ def _model_name(m):
             "claude-fable-5-1": "fable"}.get(m, m)
 
 
+def _ctx(c):
+    """上下文占用：已用 / 上限（百分比）。"""
+    return f"{_k(c['used'])} / {_k(c['max'])} token（{round(c.get('pct') or 0)}%）"
+
+
+def _k(n):
+    if n >= 1000000:
+        return f"{n / 1000000:.1f}M".replace(".0M", "M")
+    return f"{n / 1000:.1f}k".replace(".0k", "k") if n < 100000 else f"{round(n / 1000)}k"
+
+
 def _setting(chat):
     """「模型 · 思考深度」，没单独设置的标明跟随 Claude Code 设置。"""
     m, e, m_set, e_set = chat.effective()
@@ -137,6 +148,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
                  f"**状态**：{state}" + (f"，还有 {waiting} 条排队" if waiting else ""),
                  _setting(chat),
                  *([f"**额度**：{q}"] if not codex and (q := await _quota(bridge.path)) else []),
+                 *([f"**上下文**：{_ctx(c)}"] if not codex and (c := bridge.saved(chat.chat_id).get("ctx")) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
     elif cmd in ("/model", "/effort") and arg.lower() in ("默认", "default"):

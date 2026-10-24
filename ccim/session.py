@@ -471,13 +471,17 @@ class Chat:
         if guest:                             # 共享电脑上访客的 Agent：圈在它的文件夹里（#154）
             from . import share
             sandbox, rules = share.fence(guest, self.b.path)
+        if self.b.entry.get("side"):          # 旁问（#196）：命令也只能看不能写
+            from . import share
+            sandbox = share.read_only(sandbox if guest else None, self.b.path)
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
+            opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {"sandbox": sandbox} if self.b.entry.get("side") else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
                 fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
-                resume=resume, mcp_servers={"ccim": self._tools()}, disallowed_tools=["AskUserQuestion"] + CRON_TOOLS, env=self.ccim_env(),
+                resume=resume, mcp_servers={"ccim": self._tools()}, env=self.ccim_env(),
+                disallowed_tools=["AskUserQuestion"] + CRON_TOOLS + (SIDE_OFF if self.b.entry.get("side") else []),
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agents",                             # 只是在群里 @ 人，用户看得到
@@ -486,7 +490,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest else SCHEDULE) + (("" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest or self.b.entry.get("side") else SCHEDULE) + (("" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -891,18 +895,20 @@ class Chat:
 
         tools = [send_file]
         pf = getattr(chat.b.channel, "platform", None)
-        if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent"):
+        side = chat.b.entry.get("side")      # 旁问（#196）：只回答问题，不 @ 人、不转交
+        if pf and str(chat.chat_id).startswith("w-") and (pf.chats().get(chat.chat_id) or {}).get("agent") and not side:
             tools.append(_ask_agents(chat, pf))   # 网页里 Agent 的对话（群聊）：可以 @ 群里的人
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += ([] if lent else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
-            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent:
+            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent and not side:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
         return create_sdk_mcp_server("ccim", tools=tools)
 
 
+SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 旁问（#196）不能改文件
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")]
 
 

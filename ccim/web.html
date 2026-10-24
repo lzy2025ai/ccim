@@ -867,8 +867,13 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .file.doc:hover{border-color:var(--line-strong)}
 .doc-edit{text-align:right;font-size:12.5px;color:var(--muted);margin:-6px 0 14px}
 .doc-edit button{color:var(--qing)}
+.sidepane .skc-head{padding-top:max(10px,env(safe-area-inset-top))}
+.side-av{background:var(--qing)}
+.sidepane .skc-foot .quote{margin-bottom:6px}
+.sidepane .skc-msg.me .bubble .bq{font-size:13px}
 .docpane{position:fixed;top:0;right:0;bottom:0;width:var(--doc-w);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 34px rgba(29,34,43,.12);z-index:15;display:flex;flex-direction:column}
 body{--doc-w:min(52vw,780px)}
+body.side-open{--doc-w:min(36vw,460px)}
 @media (min-width:1280px){body.doc-open .app{margin-right:var(--doc-w)}body.doc-open .docpane{box-shadow:none}}
 .doc-top{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);min-height:56px}
 .doc-top .nm{flex:1;min-width:0;font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1121,6 +1126,7 @@ const ICON = {
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>',
   chev:'<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+  side:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5v.01"/></svg>',
   quote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h7M4 12h11M4 17h7"/><path d="M18 14v5"/></svg>',
   branch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 5 5 9-10"/></svg>',
@@ -1369,6 +1375,7 @@ addEventListener("keydown", e => {   // 只关最上面那层
   closePop();
   if (top && top.classList.contains("scrim")) top.remove();
   else if (!top && DOC) closeDoc();
+  else if (!top && SIDE) closeSide();
 });
 const DD = {};
 function dd(id, opts, value, onpick){
@@ -1463,6 +1470,7 @@ function connectEvents(){
       return;
     }
     if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
+    if (SIDE && ev.chat === SIDE.id) { sideEvent(ev); return; }   // 旁问（#196）
     if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
       if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }
       return;
@@ -1558,6 +1566,7 @@ function route(){
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   closePop();
+  if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
   renderList();
   if (current.view !== "projects") proj = null;
   if (current.view !== "schedules") sched = null;
@@ -2093,6 +2102,7 @@ function drawChat(){
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
+      ${c.readonly || c.mention_of ? "" : `<button class="btn ${SIDE && SIDE.of === c.id ? "on" : ""}" id="side-btn" onclick="openSide()" title="主对话接着做，在旁边问问题">${ICON.side}旁问</button>`}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
       <button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>
     </div>
@@ -3571,12 +3581,14 @@ function selTool(){
   if (i < 0) return;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
   const t = document.createElement("div"); t.className = "seltool";
-  t.innerHTML = `<button>${ICON.save}存到知识库</button><button>${ICON.quote}引用</button>`;
+  const side = !detail.readonly && !detail.mention_of;
+  t.innerHTML = `<button>${ICON.save}存到知识库</button><button>${ICON.quote}引用</button>${side ? `<button>${ICON.side}问一下</button>` : ""}`;
   t.style.left = Math.max(8, rect.left) + "px"; t.style.top = Math.max(8, rect.top - 40) + "px";
   t.addEventListener("mousedown", e => e.preventDefault());
-  const [sv, qt] = t.querySelectorAll("button");
+  const [sv, qt, ask] = t.querySelectorAll("button");
   sv.onclick = () => { t.remove(); saveToKb("log", i, text); };
   qt.onclick = () => { t.remove(); addQuote(text); };
+  if (ask) ask.onclick = () => { t.remove(); getSelection().removeAllRanges(); openSide(text); };
   document.body.append(t);
 }
 // ---- 对话里挂知识库 ----
@@ -5254,8 +5266,129 @@ function mdInline(s, assets = {}){
   return fmt(esc(s)).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]);
 }
 
+// ---- 旁问（#196）：主对话在干活、不想打断它时，在右侧另开一个对话问问题 ----
+let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, id, log, progress, busy, quote, error}
+const SIDE_AV = `<span class="skc-av side-av">${ICON.side}</span>`;
+async function openSide(quote){
+  const c = detail; if (!c) return;
+  if (DOC) { await closeDoc(); if (DOC) return; }
+  const fresh = !SIDE || SIDE.of !== c.id;
+  if (fresh) SIDE = {of: c.id, mid: ctxMachine};
+  if (quote) SIDE.quote = quote;
+  $("#side-btn")?.classList.add("on");
+  drawSide();
+  if (fresh) await sideLoad();
+  $("#side-in")?.focus();
+}
+function closeSide(){
+  SIDE = null; drawSide();
+  $("#side-btn")?.classList.remove("on");
+}
+async function sideLoad(fresh){
+  const s = SIDE; if (!s) return;
+  try {
+    const {id} = await api("/api/chat/side", {id: s.of, fresh: !!fresh}, s.mid);
+    const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, s.mid);
+    if (SIDE !== s) return;
+    Object.assign(s, {id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, error: null});
+  } catch (e) { if (SIDE === s) s.error = e.message; }
+  drawSide();
+}
+async function sideNew(){
+  if (!SIDE) return;
+  if (SIDE.busy && !await confirmBox("开一个新的旁问？", "它还在回答，会被停下。", "开新的")) return;
+  Object.assign(SIDE, {id: null, log: null, progress: null, busy: false, error: null});
+  drawSide(); await sideLoad(true); $("#side-in")?.focus();
+}
+function sideRec(r, i){
+  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${userText(r.text)}</div></div>`;
+  if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>旁问</b></div>
+    ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
+    ${r.text ? `<div class="msg-acts"><button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
+      <button onclick="sideQuote(${i})" title="引用到主对话的输入框">${ICON.quote}引用到主对话</button></div>` : ""}</div>`;
+  if (r.type === "card") {
+    if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
+    return `<div class="skc-msg"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
+      <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='sideAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
+  }
+  return "";
+}
+async function sideCopy(btn, i){
+  try { await navigator.clipboard.writeText(SIDE.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
+  catch { toast("复制不了"); }
+}
+function sideQuote(i){
+  if (!detail || detail.id !== SIDE.of) return;
+  addQuote((SIDE.log[i].text || "").trim());
+  if (narrow()) closeSide();
+}
+function drawSide(){
+  let el = $("#sidepane");
+  document.body.classList.toggle("side-open", !!SIDE);
+  if (!SIDE) { el?.remove(); if (!DOC) document.body.classList.remove("doc-open"); return; }
+  if (!el) { el = document.createElement("aside"); el.id = "sidepane"; el.className = "docpane sidepane"; el.setAttribute("aria-label", "旁问"); document.body.append(el); }
+  document.body.classList.add("doc-open");
+  const old = $("#side-in"), typed = old ? old.value : "";
+  const focus = old && document.activeElement === old ? [old.selectionStart, old.selectionEnd] : null;   // 回答在刷新时，正在打的字不丢焦点
+  const head = `<div class="skc-head">${SIDE_AV}<div class="t"><b>旁问</b><span>主对话接着做，不会被打断</span></div>
+    <button class="icon-btn" title="新的旁问" aria-label="新的旁问" onclick="sideNew()">${ICON.plus}</button>
+    <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button></div>`;
+  if (SIDE.error) { el.innerHTML = head + `<div class="skc-body"><p class="muted">${esc(SIDE.error)}</p></div>`; return; }
+  if (!SIDE.log) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
+  const p = SIDE.progress, last = p && p.steps[p.steps.length - 1];
+  const empty = !SIDE.log.length && !p ? `<div class="skc-empty">${SIDE_AV}<h3>有疑问，在这里问</h3>
+      <p>它看得到主对话聊过的内容和正在做的进度，只回答问题，不动文件。</p>
+      ${SIDE.quote ? "" : ["它现在在做什么，做到哪一步了", "刚才那条回答是什么意思", "照现在的做法，有什么要注意的"]
+        .map(t => `<button onclick="sideSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
+  const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
+  el.innerHTML = head + `<div class="skc-body" id="side-body">${empty}${SIDE.log.map(sideRec).join("")}
+      ${p ? `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>旁问</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
+        ${stallBar(p, SIDE.id, SIDE.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
+    <div class="skc-foot">${SIDE.quote ? `<div class="quote in-box"><span class="qt">${esc(SIDE.quote)}</span><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="SIDE.quote=null;drawSide()">${ICON.x}</button></div>` : ""}
+      <div class="skc-box"><textarea id="side-in" rows="1" placeholder="${SIDE.busy ? "补充说明，它做完这一步就会看到" : SIDE.quote ? "关于这段，想问什么" : "想问什么"}" aria-label="旁问"></textarea>
+      <button class="send ${SIDE.busy ? "stop" : ""}" aria-label="${SIDE.busy ? "停下" : "发送"}" onclick="${SIDE.busy ? "sideStop()" : "sideSend()"}">${SIDE.busy ? ICON.stop : ICON.up}</button></div></div>`;
+  const b = $("#side-body"); b.scrollTop = b.scrollHeight;
+  const ta = $("#side-in"); ta.value = typed; sideFit();
+  if (focus) { ta.focus(); ta.setSelectionRange(...focus); }
+  ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); sideSend(); } };
+  ta.oninput = () => {
+    sideFit();
+    const s = el.querySelector(".send");
+    if (SIDE.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => sideSend() : sideStop; }
+  };
+}
+function sideFit(){ const ta = $("#side-in"); if (!ta) return; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight + 2, 220) + "px"; }
+async function sideSend(text){
+  const ta = $("#side-in"), typed = (text || (ta ? ta.value : "")).trim();
+  if (!typed || !SIDE || !SIDE.id) return;
+  const qs = SIDE.quote ? [SIDE.quote] : [], v = withQuotes(qs, typed);
+  if (ta) ta.value = "";
+  SIDE.quote = null;
+  SIDE.log.push({type: "user", text: v, sending: true});
+  if (!SIDE.busy) SIDE.progress = {steps: [], text: ""};
+  SIDE.busy = true; drawSide();
+  try { await api("/api/chat/send", {id: SIDE.id, text: v, files: []}, SIDE.mid); }
+  catch (e) { toast(e.message); SIDE.log = SIDE.log.filter(r => !r.sending); SIDE.busy = false; SIDE.progress = null; SIDE.quote = qs[0] || null; drawSide();
+    const t = $("#side-in"); if (t && !t.value && !text) { t.value = typed; sideFit(); } }
+}
+async function sideStop(){ if (SIDE && SIDE.id) await act(() => api("/api/chat/stop", {id: SIDE.id}, SIDE.mid)); }
+async function sideAct(mid, value){ await act(() => api("/api/chat/action", {id: SIDE.id, mid, value}, SIDE.mid)); }
+function sideEvent(ev){   // 推送：进度、记录
+  if (!SIDE.log) return;
+  const rec = {...ev}; delete rec.chat;
+  if (ev.type === "progress") { SIDE.progress = ev.state === "working" ? ev : null; SIDE.busy = ev.state === "working"; }
+  else if (ev.type === "user") { const i = SIDE.log.findIndex(r => r.sending && r.text === ev.text); i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec); }
+  else if (["answer", "note", "card"].includes(ev.type)) {
+    const i = ev.type === "card" ? SIDE.log.findIndex(r => r.type === "card" && r.id === ev.id) : -1;
+    i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec);
+    if (ev.type === "answer") SIDE.progress = null;
+  } else return;
+  drawSide();
+}
+
 let DOC = null;   // 打开的文档：{chat, machine, path, d（接口给的）, mode: view / edit, draft, dirty}
 async function openDoc(path, v, chat){
+  if (SIDE) closeSide();
   chat = chat || (DOC && DOC.path === path ? DOC.chat : detail && detail.id);
   if (DOC && DOC.dirty && !(DOC.path === path && v == null) && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
   const machine = DOC && DOC.chat === chat ? DOC.machine : ctxMachine;
@@ -5290,7 +5423,7 @@ function verLabel(x, k){
 }
 function drawDoc(){
   let el = $("#docpane");
-  if (!DOC){ el?.remove(); document.body.classList.remove("doc-open"); return; }
+  if (!DOC){ el?.remove(); if (!SIDE) document.body.classList.remove("doc-open"); return; }
   if (!el){ el = document.createElement("aside"); el.id = "docpane"; el.className = "docpane"; el.setAttribute("aria-label", "文档"); document.body.append(el); }
   document.body.classList.add("doc-open");
   const d = DOC.d, vs = d ? d.versions : [];

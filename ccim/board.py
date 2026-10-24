@@ -70,7 +70,7 @@ def unread(meta, summ):
 
 
 def top_level(meta, cid):
-    return not (meta.get("mention_of") or meta.get("project") or meta.get("helper")
+    return not (meta.get("mention_of") or meta.get("project") or meta.get("helper") or meta.get("side_of")
                 or (meta.get("schedule") and not listed(cid, meta)))
 
 

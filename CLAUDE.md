@@ -169,8 +169,12 @@
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删
-  群聊里的 Agent 自己也能 @ 群成员：`ask_agents` 工具（session.py `_ask_agents`，只给网页里 Agent 的 w- 对话）→ `Mentions.ask`，
-  记录带 by（网页显示成它说的），等各人回答完（waiters，最多 20 分钟）把回答作为工具结果交回，所以 unseen 不再重复带
+  对话里的助手自己找人（#179）：`platform_agents`（`_visible_agents`：本机的 + 别的电脑缓存里的，访客只有自己建的和共享给它的）、
+  `ask_agent`（session.py `_ask_agent`，平台上的对话都有，Skill 助手除外；Codex 经 toolsock 一样有）。找别人 = `Mentions.send` 在当前对话里替它 @
+  （被 @ 的成员找人就在外层群聊里 @），记录带 by（Agent 编号，没选 Agent 的对话是 ASSISTANT），网页 threadOrder 把它和回答排在这一轮回答前面；
+  找自己 = `Platform.dispatch_self` 新开同样设置的对话（meta 的 dispatched_from，同一个 Agent 时挂在发起的对话下面）。
+  wait 时等回答（最多 20 分钟）作为工具结果交回，所以 unseen 不再重复带；不等或没等到的，做完 `Platform.deliver` 作为新一轮交回发起的对话。
+  被 @ 的成员（子对话）一定等。防失控：Task.depth（派出去的 +1，经 /api/peer/task 带到别的电脑），到 MAX_DEPTH 不能再派；一轮最多 MAX_ASKS 次
   子对话只装群里 @ 它的内容（#150）：用户在子对话里自己开口（发消息、@ 人、拉人）就 `Platform.split_sub` 另开这个 Agent 的独立对话
   （fork 子对话的会话，记录带过去，meta 的 split_from 指回外层群聊，网页跳过去）；子对话跟着外层群聊一起删，单独聊的不能挂在它下面。
   升级前在子对话里说过话、拉过人的，平台启动时 `_split_old_subs` 迁一次（成员、群聊说明、它里面 @ 过的人的本机子对话一起搬）

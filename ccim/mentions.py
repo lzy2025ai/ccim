@@ -13,7 +13,8 @@ import asyncio, os, time, uuid
 from . import agents, registry
 
 CONTEXT_LIMIT = 12000                         # 带过去的之前的内容，最多这么多字（取最近的）
-SEEN_LIMIT = 6000                             # 交给原来助手的每份回答最多这么多字
+SEEN_LIMIT = 6000
+ASSISTANT = "assistant"                       # 记录里 by 是它：没选 Agent 的对话里的助手自己 @ 的（#179）                             # 交给原来助手的每份回答最多这么多字
 
 
 def _upto(m):
@@ -34,7 +35,7 @@ class Mentions:
         self.pf = pf
         self.running = set()                  # 正在做或排着队的 mention id
         self.tasks = {}                       # mention id → (子对话, session.Task)
-        self.waiters = {}                     # mention id → future，Agent 自己 @ 别人时等回答（ask_agents 工具）
+        self.waiters = {}                     # mention id → future，对话里的助手自己 @ 别人时等回答（ask_agent 工具）
 
     @staticmethod
     def sub(cid, aid):
@@ -49,6 +50,14 @@ class Mentions:
                 if x.get("id") == aid:
                     return x.get("name")
         return "另一个 Agent"
+
+    def _who(self, cid, by):
+        """消息是谁发的：by 是 Agent 编号，ASSISTANT 是没选 Agent 的对话里的助手（ask_agent 工具，#179），没有就是用户。"""
+        if not by:
+            return "用户"
+        if by == ASSISTANT:
+            return self._name(self.pf.meta(cid), {})
+        return self._agent_name(by)
 
     def _name(self, m, rec):
         if rec.get("type") == "mention":
@@ -70,7 +79,7 @@ class Mentions:
             if aid and (r.get("by") == aid or (r.get("type") == "mention" and r.get("agent") == aid)):
                 continue
             if r.get("type") == "user":
-                lines.append(f"{self._agent_name(r['by']) if r.get('by') else '用户'}：{r['text']}")
+                lines.append(f"{self._who(cid, r.get('by'))}：{r['text']}")
             elif r.get("type") == "answer" or (r.get("type") == "mention" and r.get("state") == "done"):
                 lines.append(f"{self._name(m, r)}：{r['text']}")
         text = "\n\n".join(lines)
@@ -86,8 +95,9 @@ class Mentions:
             self.pf.store.write(chats)
         return sub
 
-    async def send(self, cid, text, to, files=(), by=None):
-        """在主循环里调。by：是对话里的 Agent 自己 @ 的（ask_agents 工具），不是用户。"""
+    async def send(self, cid, text, to, files=(), by=None, depth=0):
+        """在主循环里调。by：是对话里的助手自己 @ 的（ask_agent 工具），不是用户。
+        depth：被 @ 的人是第几层派出来的（#179），交给它的任务带上，它再往下派时按这个拦。"""
         from . import groups
         m = self.pf.meta(cid)
         to = [a for a in dict.fromkeys(to or []) if a != m.get("agent")]
@@ -129,7 +139,7 @@ class Mentions:
             prompt = groups.note_prefix(self.pf, cid, aid) + \
                 (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                  f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                f"[{self._agent_name(by) if by else '用户'}在对话里 @ 了你] {text}{att}"
+                f"[{self._who(cid, by)}在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)
             remote = home[aid] != me
@@ -137,42 +147,15 @@ class Mentions:
                                                         "chat": sub, "state": "queued", **({"by": by} if by else {}),
                                                         **({"machine": home[aid]} if remote else {})}))
             if remote:                        # 在别的电脑上：交给那台电脑开子对话
-                t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text))
+                t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text, depth))
             else:
                 self._ensure(cid, aid, view.get("dir"), title)
-                t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text))
+                t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text, depth))
             self.pf.background.add(t)
             t.add_done_callback(self.pf.background.discard)
             if by:
                 self.waiters[rid] = asyncio.get_running_loop().create_future()
         return {"id": mid, "rids": [f"{mid}:{aid}" for aid in to]}
-
-    async def ask(self, cid, by, text, names, timeout):
-        """对话里的 Agent 自己 @ 群里的人（ask_agents 工具）：等各人回答完，返回 [(名字, 状态, 回答)]；没等到的状态是 waiting。"""
-        from . import groups
-        m = self.pf.meta(cid)
-        ms = groups.members(m)
-        if not ms:
-            raise ValueError("这个对话里没有别的成员。要找谁帮忙，请用户先把那个 Agent 拉进来。")
-        pick = {}
-        for n in names:
-            n = (n or "").strip().lstrip("@")
-            hit = [a for a in ms if a == n or self._agent_name(a) == n]
-            if not hit:
-                raise ValueError(f"群里没有「{n}」。群成员：" + "、".join(self._agent_name(a) for a in ms))
-            pick[hit[0]] = True
-        r = await self.send(cid, text, list(pick), by=by)
-        futs = [self.waiters[x] for x in r["rids"]]
-        await asyncio.wait(futs, timeout=timeout)
-        out = []
-        for rid, f in zip(r["rids"], futs):
-            if f.done():
-                self.waiters.pop(rid, None)
-                u = f.result()
-                out.append((self._agent_name(rid.split(":", 1)[1]), u.get("state"), u.get("text") or ""))
-            else:
-                out.append((self._agent_name(rid.split(":", 1)[1]), "waiting", ""))
-        return out
 
     def _settle(self, cid, upd):
         if cid in self.pf.chats():
@@ -183,7 +166,7 @@ class Mentions:
         elif f:
             self.waiters.pop(upd["id"], None)
 
-    async def _run(self, cid, rid, sub, prompt, upto, text):
+    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0):
         from .session import Task
         start = time.time()
         upd = {"type": "mention", "id": rid}
@@ -197,6 +180,7 @@ class Mentions:
             # 它的对话里只显示用户说的那句，带过去的之前的内容不重复显示
             self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid}))
             task = Task(prompt)
+            task.depth = depth
             self.tasks[rid] = (sub, task)
             chat.submit(task)
             state, answer = await task.future
@@ -213,7 +197,7 @@ class Mentions:
             self.tasks.pop(rid, None)
         self._settle(cid, upd)
 
-    async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text):
+    async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text, depth=0):
         import json
         from .peers import Offline
         upd = {"type": "mention", "id": rid}
@@ -229,7 +213,7 @@ class Mentions:
             while token is None and rid in self.running:   # 那台电脑离线就等它上线
                 try:
                     status, r = await call("/api/peer/task", {"chat": sub, "agent": aid, "prompt": prompt, "title": title,
-                                                              "kind": "mention", "of": cid, "shown": text})
+                                                              "kind": "mention", "of": cid, "shown": text, "depth": depth})
                 except Offline:
                     if time.time() > deadline:
                         raise RuntimeError("那台电脑一直没上线。")

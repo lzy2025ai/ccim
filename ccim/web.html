@@ -1769,15 +1769,15 @@ function canFork(i, r, src = "log"){
   return i === last || (!!r.fork && detail.base !== "codex");
 }
 function recHtml(r, i, src = "log"){
-  if (r.type === "user" && r.by){           // 群里的 Agent 自己 @ 的人
-    const a = agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
-    return `<div class="msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b></div>
+  if (r.type === "user" && r.by){           // 对话里的助手自己 @ 的人；assistant：没选 Agent 的对话里的（#179）
+    const a = r.by === "assistant" ? null : agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
+    return `<div class="msg">${a ? `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b></div>` : fromRow()}
       <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div></div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -1823,7 +1823,9 @@ function threadOrder(log, from){
   const order = []; let at = 0;
   for (let i = from; i < log.length; i++){
     const r = log[i];
-    if (r.type === "user" && r.to && r.to.length || r.type === "mention") order.push(i);
+    // 助手自己在这一轮里 @ 的人（ask_agent）和它们的回答：排在这一轮的回答前面
+    if (r.by && (r.type === "user" || r.type === "mention")) { order.push(i); at = order.length; }
+    else if (r.type === "user" && r.to && r.to.length || r.type === "mention") order.push(i);
     else if (r.type === "user") { order.push(i); at = order.length; }
     else order.splice(at++, 0, i);
   }
@@ -1950,6 +1952,8 @@ async function checkExt(){
 setInterval(checkExt, 5000);
 addEventListener("visibilitychange", checkExt);
 function forkFrom(c){
+  const d = c.dispatched_from;             // Agent 给自己派活新开的（#179）
+  if (d) return `<a class="fork-from" href="#/chats/${encodeURIComponent(d.id)}">由「${esc(d.title)}」派出</a>`;
   const p = c.parent && S.chats.find(x => x.id === c.parent);
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
 }

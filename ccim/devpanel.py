@@ -295,7 +295,7 @@ class Dev:
         out = {}
         logs = getattr(self.pf.channel, "logs", None)
         for cid, m in self.pf.chats().items():
-            if m.get("mention_of") or m.get("helper"):
+            if m.get("mention_of") or m.get("helper") or m.get("side_of"):
                 continue
             for (r, n), at in refs(logs, cid, m, first=True).items():
                 if r == repo and (n not in out or at < out[n]["at"]):

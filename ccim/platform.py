@@ -61,6 +61,15 @@ HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "- 删除前工具会弹出确认，用户点了才会删。\n"
     "- 用户消息开头括号里是他在页面上正看着的 Skill 和文件，「这个」一般就指它。\n"
     "- 回答用中文，简短。")}}
+# 旁问（#196）：主对话干活时，在侧栏里另开一个对话问问题，不打断它
+SIDE_ROLE = ("\n\n## 旁问\n"
+             "你在「旁问」侧栏里：用户的主对话可能正在干活，用户不想打断它，来这里问问题。你是从主对话分出来的，知道之前聊过的内容；"
+             "用户消息前面括号里是平台自动附上的（不是用户贴的）：主对话在那之后的新进展、正在进行的那一轮做到哪了。\n"
+             "- 你只能看、不能动：可以读文件、搜索、跑只看不改的命令（git status、git log、查日志等）；"
+             "不删改文件、不装东西、不提交推送、不启动或停止进程，用户明确要求也不做，现在不做、以后也不做。\n"
+             "- 用户要你动手时，说明这里只能问问题，请他回主对话说，可以把要对主对话说的话写好给他。\n"
+             "- 回答简短。")
+SIDE_CTX = 6000                                                    # 每次带上的主对话新进展，最多这么多字
 MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
 
 
@@ -603,6 +612,8 @@ class Platform:
             lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
             if lent:
                 key += "#" + viewer
+            if m.get("side_of"):              # 旁问（#196）：只读，单独一个 Bridge
+                key += "|side"
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
                      "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
@@ -620,6 +631,8 @@ class Platform:
                 h = HELPERS[m["helper"]]
                 entry.update(helper=m["helper"], role=h["role"] + (GUEST_HELPER if viewer else ""))
                 name = h["title"]
+        if m.get("side_of"):
+            entry.update(side=True, role=(entry.get("role") or "") + SIDE_ROLE)
         entry.update(owner_open_id=OWNER, channel="web")
         b = self.bridges.get(key)
         if not b or b.path != path:
@@ -750,6 +763,8 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
+        if m.get("side_of") and text:          # 旁问：带上主对话的新进展
+            text = self._side_ctx(cid, m) + text
         if ctx and m.get("helper") and text:      # 助手要知道用户在页面上正看着什么（不记进对话记录）
             text = f"（{str(ctx)[:300]}）\n{text}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
@@ -775,6 +790,82 @@ class Platform:
         chats[cid]["helper"] = kind
         self.store.write(chats)
         return cid
+
+    async def side_chat(self, cid, fresh=False):
+        """旁问（#196）：这个对话的旁问对话，一个对话一个，不进对话列表；没有或 fresh 就从主对话最后一条回答处分一个新的。"""
+        m = self.meta(cid)
+        if m.get("side_of") or m.get("helper") or m.get("mention_of") or cid.startswith("x:"):
+            raise Problem("这个对话不能旁问。")
+        old = [c for c, x in self.chats().items() if x.get("side_of") == cid]
+        if old and not fresh:
+            return old[0]
+        for c in old:
+            await self._drop_side(c)
+        rows = self.channel.logs.read(cid)
+        base = self._effective(m)["base"]
+        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        done = [i for i, r in enumerate(rows) if r.get("type") == "answer"]
+        upto, fork, at = 0, None, None
+        if sid and base == "codex":
+            if not m.get("busy"):             # Codex 只能从整个对话分；正在写的那一轮不分进来
+                fork, upto = sid, len(rows)
+        elif sid and done:
+            f = rows[done[-1]].get("fork") or {}
+            if f.get("at"):
+                fork, at, upto = f.get("sid") or sid, f["at"], done[-1] + 1
+        t = m.get("temp")
+        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, title="旁问",
+                            account=share.chat_owner(self, cid))
+        chats = self.chats()
+        rec = chats[new]
+        rec.update(side_of=cid, side_upto=upto)
+        if fork:
+            rec.update(fork_from=fork, fork_at=at)
+        if t and not t.get("dir"):            # 没选目录的临时对话：用原来那个临时目录（会话记录按目录存）
+            rec["temp"]["scratch"] = t.get("scratch") or cid
+        for k in ("cwd", "kbs"):
+            if m.get(k):
+                rec[k] = m[k]
+        self.store.write(chats)
+        return new
+
+    async def _drop_side(self, c):
+        try:
+            await self.stop_chat(c)
+            self._bridge(c).save(c, busy=False)  # 刚停下，这一轮的收尾可能还没写回来
+        except Problem:                       # Agent 已经删了
+            pass
+        await self.delete_chat(c)
+
+    def _side_ctx(self, cid, m):
+        """旁问每次发消息时带上的：主对话在上次之后的新内容，和正在进行的那一轮做到哪了。"""
+        of = m["side_of"]
+        rows = self.channel.logs.read(of)
+        upto = m.get("side_upto") or 0
+        parts = []
+        for r in rows[upto:]:
+            t = " ".join((r.get("text") or "").split())
+            if r.get("type") == "user" and t:
+                parts.append(f"用户：{t[:800]}")
+            elif r.get("type") == "answer" and t:
+                parts.append(f"回答：{t[:1500]}{'…' if len(t) > 1500 else ''}")
+        p = self.channel.progress_of.get(of)
+        if p:
+            steps = p.get("steps") or []
+            now = "正在进行的这一轮：" + ("已经做了 " + "；".join(steps[-15:]) if steps else "刚开始")
+            if (p.get("text") or "").strip():
+                now += "\n正在写的回答：" + p["text"].strip()[-1500:]
+            parts.append(now)
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["side_upto"] = len(rows)
+            self.store.write(chats)
+        if not parts:
+            return ""
+        body = "\n\n".join(parts)
+        if len(body) > SIDE_CTX:
+            body = "…" + body[-SIDE_CTX:]
+        return f"（平台自动附上的主对话最新进展）\n{body}\n\n——\n\n"
 
     # ----- 对话之间转交（#121） -----
 
@@ -867,6 +958,8 @@ class Platform:
         if cid in chats and chats[cid].get("busy"):
             raise Problem("它还在干活，先停下再删。")
         await self.mentions.delete_subs(cid)
+        for c in [c for c, x in chats.items() if x.get("side_of") == cid]:   # 它的旁问一起删
+            await self._drop_side(c)
         self.store.deleted.add(cid)
         for key, b in list(self.bridges.items()):
             c = b.chats.pop(cid, None)
@@ -922,7 +1015,7 @@ class Platform:
         return {"id": cid, "title": m.get("title") or self._fork_title(cid, m) or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
-                "mention_of": m.get("mention_of"),
+                "mention_of": m.get("mention_of"), "side_of": m.get("side_of"),
                 "split_from": {"id": m["split_from"], "title": (self.chats().get(m["split_from"]) or {}).get("title") or "群聊"}
                 if m.get("split_from") else None,
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
@@ -1676,6 +1769,7 @@ def _handler(pf):
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx")),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
+                "/api/chat/side": lambda: {"id": pf.run(pf.side_chat(b("id"), bool(b("fresh"))))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/skip": lambda: {"skipped": pf.run(pf.skip_step(b("id")))},

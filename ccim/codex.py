@@ -145,6 +145,9 @@ class CodexChat(Chat):
             if guest:                         # 共享电脑上的访客（#154）：主人允许才能用，只能写自己的目录
                 if not share.codex_ok(guest):
                     raise RuntimeError("这台电脑现在只能用 Claude Code，去 Agent 设置里把底座换成 Claude Code")
+            if self.b.entry.get("side"):      # 旁问（#196）：只读
+                args += ["-s", "read-only"]
+            elif guest:
                 args += ["-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"]
             if self.model:
                 args += ["-m", self.model]

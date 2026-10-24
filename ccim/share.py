@@ -35,6 +35,7 @@ GUEST_POST = {
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
     "/api/chat/continue",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
+    "/api/chat/side",
 }
 
 
@@ -411,6 +412,15 @@ def tag(pf, ev):
 
 SANDBOX = {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedCommands": False,
            "network": {"allowedDomains": ["*"]}}
+
+
+def read_only(sandbox, cwd):
+    """旁问（#196）的命令沙箱：主目录、工作目录、外接硬盘都不许写。"""
+    sb = dict(sandbox or SANDBOX)
+    fs = dict(sb.get("filesystem") or {})
+    fs["denyWrite"] = list(fs.get("denyWrite") or []) + [os.path.realpath(os.path.expanduser("~")), os.path.realpath(cwd), "/Volumes"]
+    sb["filesystem"] = fs
+    return sb
 
 
 def allowed_dirs(acct, cwd=None):

@@ -516,6 +516,8 @@ body{overflow:hidden}
 .pop a{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;color:inherit;text-decoration:none}
 .pop a:hover{background:var(--sunk)} .pop a > svg{width:13px;height:13px;margin-left:auto;color:var(--faint);flex:none}
 .pop.slash button.on{background:var(--sunk)}
+.msg.me .refs{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;margin-bottom:4px}
+.msg.me .refs a{text-decoration:none}
 .pop.slash b{font:600 13px var(--mono);min-width:110px}
 .pop.slash b .arg{font:400 12px var(--sans);color:var(--muted)}
 .pop button:hover{background:var(--sunk)}
@@ -1694,7 +1696,7 @@ let quietOpen = null;
 async function openChat(id){
   const quiet = quietOpen === id; quietOpen = null;
   if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
-  if (!detail || detail.id !== id) chatRcpt = [];
+  if (!detail || detail.id !== id) { chatRcpt = []; chatRefs = []; }
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
@@ -1777,7 +1779,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -2079,7 +2081,7 @@ function drawChat(){
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
   const input = $("#input");
-  if (!c.readonly) { input.addEventListener("input", atTyped); input.addEventListener("input", slashTyped); }
+  if (!c.readonly) { input.addEventListener("input", atTyped); input.addEventListener("input", slashTyped); input.addEventListener("input", refTyped); }
   input.addEventListener("keydown", e => {
     if (slashKey(e)) return;
     if (sendKey(e)) { e.preventDefault(); sendChat(); }
@@ -2174,6 +2176,7 @@ async function sendChat(){
   closePop();
   const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
   quotes.list = []; drawQuotes();
+  if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt, src = detail;
     $("#input").value = ""; saveDraft(); pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
@@ -2206,15 +2209,16 @@ async function sendChat(){
     } finally { starting = false; }
     return;
   }
-  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
+  const refs = chatRefs; chatRefs = []; drawChatRcpt();
+  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), refs, sending: true, at: Date.now() / 1000};
   detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
   if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: "", guess: true}; }   // 还没开始干活，先显示思考中
   drawThread(); drawComposerState();
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
   const src = detail;
-  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files})); }
-  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); drawThread(); drawComposerState(); return; }
+  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files, refs: refs.map(x => x.id)})); }
+  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); chatRefs = refs; drawChatRcpt(); drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -2253,7 +2257,9 @@ function itemMenu(e, id, below){
     : e;
   const pinned = listRows().filter(x => x.pin != null).sort((x, y) => x.pin - y.pin), i = pinned.findIndex(x => x.id === id);
   const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
+  const ref = detail && detail.agent && !detail.readonly && c.agent === detail.agent && id !== detail.id && current.view === "agents";
   pop(at, [
+    ref ? b(`addRef(${q(id)})`, "引用到输入框") : "",
     b(`renameChat(${q(id)})`, "重命名"),
     c.pin != null ? b(`markChat(${q(id)},{pin:null})`, "取消置顶") : b(`markChat(${q(id)},{pin:true,archived:null})`, "置顶"),
     i > 0 ? b(`moveChat(${q(id)},-1)`, "上移") : "",
@@ -2374,7 +2380,36 @@ document.addEventListener("input", e => { if (e.target && e.target.id in draftKe
 let chatRcpt = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
-  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
+  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("")
+    + chatRefs.map(r => `<span class="at">#${esc(r.title)}<button aria-label="去掉" onclick="chatRefs=chatRefs.filter(x=>x.id!==${q(r.id)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
+}
+// 引用这个 Agent 以前的对话（#199）：输入框打 #，或者列表三点菜单里「引用」
+function refCands(qs){
+  if (!detail || !detail.agent || detail.readonly || current.view !== "agents") return [];
+  const k = (qs || "").toLowerCase();
+  return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !chatRefs.some(r => r.id === c.id)
+    && (!k || (c.title || "").toLowerCase().includes(k))).slice(0, 8);
+}
+function refTyped(){
+  const i = $("#input"), m = /(^|\s)[#＃]([^\s#＃]*)$/.exec(i.value.slice(0, i.selectionStart));
+  const old = document.querySelector(".pop.slash.ref");
+  const hits = m ? refCands(m[2]) : [];
+  if (!hits.length) { if (old) old.remove(); return; }
+  if (old && old.dataset.v === m[0]) return;
+  const on = old ? Math.min(+old.dataset.on || 0, hits.length - 1) : 0;
+  const p = pop({currentTarget: $("#box"), stopPropagation(){}}, `<div class="sec">引用以前的对话</div>` + hits.map((c, k) =>
+    `<button class="${k === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="refPick(${q(c.id)}, ${m[2].length + 1})"><span><div>${esc(c.title)}</div><div class="desc">${esc(c.source || "网页")}${c.last_active ? " · " + esc(String(c.last_active).slice(5, 16)) : ""}</div></span></button>`).join(""));
+  p.classList.add("slash", "ref"); p.dataset.v = m[0]; p.dataset.on = on;
+}
+function refPick(id, typed){
+  const i = $("#input"), at = i.selectionStart;
+  if (typed) { i.value = i.value.slice(0, at - typed) + i.value.slice(at); i.setSelectionRange(at - typed, at - typed); }
+  closePop(); addRef(id); i.focus(); saveDraft();
+}
+function addRef(id){
+  const c = (agentSide && agentSide.chats || []).find(x => x.id === id);
+  if (!c || chatRefs.some(r => r.id === id)) return;
+  chatRefs.push({id, title: c.title || "对话"}); drawChatRcpt(); $("#input")?.focus();
 }
 function chatAt(e){
   const own = detail && detail.agent, here = (detail ? ownerOf(detail.id) || ctxMachine : draft.machine) || S.me;
@@ -2413,7 +2448,7 @@ const SLASH = [
 ];
 function slashTyped(){
   const i = $("#input"), v = i.value.slice(0, i.selectionStart), m = /^\/(\S*)$/.exec(v);   // 光标前面是 /xxx 就提示，后面已有的文字留着
-  const old = document.querySelector(".pop.slash");
+  const old = document.querySelector(".pop.slash:not(.ref)");
   const hits = m ? SLASH.filter(([k, , , only]) => k.startsWith("/" + m[1].toLowerCase()) && (!only || (detail.base || "claude") === only)) : [];
   if (!hits.length || hits.length === 1 && hits[0][0] === v) { if (old) old.remove(); return; }
   if (old && old.dataset.v === v) return;

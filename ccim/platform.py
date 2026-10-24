@@ -44,7 +44,7 @@ def static_file(path):
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
-MARKS = ("title", "pin", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记
+MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记（star：星标，#194）
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 # 页面专用的助手（#116）
@@ -1095,7 +1095,7 @@ class Platform:
         rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
         return rows
 
-    # ----- 列表里的标记：重命名、置顶、归档、图标、颜色、从列表里去掉 -----
+    # ----- 列表里的标记：重命名、置顶、星标、归档、图标、颜色、从列表里去掉 -----
 
     def mark_chat(self, cid, changes):
         changes = {k: v for k, v in (changes or {}).items() if k in MARKS}

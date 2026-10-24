@@ -252,6 +252,9 @@
   别处的记录自己缓存（不挤 history 的 50 个）。不写关键词 = `listing`：列出它参与的所有对话（在哪些群、主 Agent 还是成员、群里有谁）。
   平台上 Agent 的对话（`_searchable`）不再给 list_chats / read_chat（两套重叠，实测会挑错），系统提示换成 LOOK_AROUND_PF；send_to_chat 也认这里的编号。结果里它自己说的写「你」：Agent 不一定记得自己叫什么，写名字会被当成别人。
   角色说明（`role_note`）也带上「你是这个平台上的 Agent「名字」」
+  引用（#199）：Agent 页的输入框打 #（`refTyped`，候选是 agentSide.chats）或列表三点菜单「引用到输入框」，chatRefs 随 /api/chat/send 的 refs 发出；
+  `Platform._refs` 只认同一个 Agent、同一个账号的，记在用户那条的 refs 里，交给助手时前面拼一句带 open_chat 编号的说明。@ 别人时不能带（那是别的 Agent 的对话）。
+  网页对话的标题在 `Platform.send` 里用用户原话定（session `_turn` 拿到的是拼了前缀的）
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；

@@ -747,14 +747,39 @@ class Platform:
                 self.split_sub(cid, force=True)
         registry.write_state(self.home, subs_split=True)
 
-    async def send(self, cid, text, files=(), ctx=None):
+    def _refs(self, cid, ids):
+        """用户在输入框里引用的这个 Agent 以前的对话（#199）：只认同一个 Agent 的，返回 [{id, title}]。"""
+        aid = self.meta(cid).get("agent")
+        owners = share.owner_map(self)
+        acct = owners.get(cid)                # 共享电脑上的访客（#154）：只认它自己账号的
+        out = []
+        for i in dict.fromkeys(ids or []):
+            if not aid or not isinstance(i, str) or i == cid:
+                continue
+            try:
+                v = self._external(i) if i.startswith("x:") else self.chat_view(i)
+            except Problem:
+                continue
+            mine = share.of_agent(agents.get(aid)) == acct if i.startswith("x:") else owners.get(i) == acct
+            if v.get("agent") == aid and mine:
+                out.append({"id": i, "title": v.get("title") or "对话"})
+        return out[:10]
+
+    async def send(self, cid, text, files=(), ctx=None, refs=None):
         b = self._bridge(cid)
         m = self.meta(cid)
+        refs = self._refs(cid, refs)
         if m.get("fork_from") and cid not in b.chats:
             b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
-        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown}))
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
+                                                               **({"refs": refs} if refs else {})}))
+        if text and not m.get("title"):       # 用用户的原话当标题：交给助手的会拼上引用说明等前缀
+            chats = self.chats()
+            if cid in chats and not chats[cid].get("title"):
+                chats[cid]["title"] = " ".join(text.split())[:30]
+                self.store.write(chats)
         from .bridge import QUEUE
         head = re.match(r"(?:>[^\n]*\n)*\s*", text or "").end()   # 网页的引用拼在最前面，跳过它再认（#117）
         q = QUEUE.match((text or "")[head:])   # 前面还要拼别的内容，所以 /queue 在这里认出来
@@ -765,6 +790,10 @@ class Platform:
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
         if m.get("side_of") and text:          # 旁问：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
+        if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
+            from .search import short
+            text = "（用户指了你以前的这些对话，和这次说的有关，用 open_chat 读，不用再搜：" + \
+                "；".join(f"「{r['title']}」id={short(r['id'])}" for r in refs) + "）\n\n" + text
         if ctx and m.get("helper") and text:      # 助手要知道用户在页面上正看着什么（不记进对话记录）
             text = f"（{str(ctx)[:300]}）\n{text}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
@@ -1801,7 +1830,7 @@ def _handler(pf):
             b = body.get
             routes = {
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
-                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx")),
+                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs")),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/chat/side": lambda: {"id": pf.run(pf.side_chat(b("id"), bool(b("fresh"))))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
@@ -1984,11 +2013,11 @@ def check_message(pf, text, files):
             raise Problem("文件没传上来，再试一次。")
 
 
-def send(pf, cid, text, files, ctx=None):
+def send(pf, cid, text, files, ctx=None, refs=None):
     check_message(pf, text, files)
     if pf.meta(cid).get("mention_of"):       # 在群成员的子对话里开口：另开独立对话（#150），网页跳过去
         cid = pf.call(pf.split_sub, cid)
-    pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx))
+    pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx, refs=refs))
     return {"ok": True, "chat": cid}
 
 

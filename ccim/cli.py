@@ -798,6 +798,41 @@ def _sched_fields(args):
     return f
 
 
+def cmd_tool(args):
+    """会话里用 ccim 的工具（#178）：给不支持 MCP 的底座。凭环境变量 CCIM_TOKEN 认出是哪个对话。"""
+    import json
+    from . import mcpstdio
+    if not os.environ.get("CCIM_TOKEN") or not os.environ.get("CCIM_TOOLS"):
+        raise SystemExit("只能在 ccim 的对话里用（网页、飞书、微信里的助手跑这个命令）。")
+    try:
+        if not args.name:
+            r = mcpstdio.call({"op": "list"}, timeout=30)
+        else:
+            try:
+                a = json.loads(args.args) if args.args else {}
+            except ValueError:
+                raise SystemExit('参数要写成 JSON，比如 ccim tool send_file \'{"path": "/tmp/a.png"}\'')
+            r = mcpstdio.call({"op": "call", "name": args.name, "args": a})
+    except OSError:
+        raise SystemExit("连不上 ccim（可能正在重启），稍后再试。")
+    if r.get("error"):
+        raise SystemExit(r["error"])
+    if not args.name:
+        for t in r.get("tools") or []:
+            props = (t.get("inputSchema") or {}).get("properties") or {}
+            print(f"{t['name']}({', '.join(props)})：{t.get('description', '')}")
+        return
+    res = r.get("result") or {}
+    print("\n".join(c.get("text", "") for c in res.get("content") or [] if c.get("type") == "text"))
+    if res.get("is_error"):
+        sys.exit(1)
+
+
+def cmd_mcp(args):
+    from . import mcpstdio
+    mcpstdio.main()
+
+
 def cmd_schedule(args):
     act = args.action
     if act == "add":
@@ -1115,6 +1150,12 @@ def parser():
     s.add_argument("--agent", help="交给哪个 Agent（名字或编号）；不写就是你自己")
     s.add_argument("--all", action="store_true", help="list：列出这台电脑上所有的定时任务")
     s.set_defaults(fn=cmd_schedule)
+    s = sub.add_parser("tool", help="在 ccim 的对话里用 ccim 的工具（给 agent 用）：不写名字列出能用的，ccim tool 名字 'JSON 参数' 调用")
+    s.add_argument("name", nargs="?", help="工具名字")
+    s.add_argument("args", nargs="?", help="参数，JSON")
+    s.set_defaults(fn=cmd_tool)
+    s = sub.add_parser("mcp", help="在 ccim 的对话里把 ccim 的工具作为 MCP 服务（stdio）提供给助手（给 agent 用）")
+    s.set_defaults(fn=cmd_mcp)
     s = sub.add_parser("logs", help="查看后台日志")
     s.add_argument("project", nargs="?")
     s.add_argument("-f", "--follow", action="store_true", help="持续输出")
@@ -1164,7 +1205,7 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run, cmd_hub):
+    if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run, cmd_hub, cmd_tool, cmd_mcp):   # tool、mcp 在会话里跑，不动登记表
         from . import agents, weixin_hub
         weixin_hub.migrate()
         agents.migrate()                      # 以前的「项目」变成 Agent

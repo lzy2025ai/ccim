@@ -452,14 +452,18 @@ class Chat:
             log.debug("记录额度失败", exc_info=True)
 
     def ccim_env(self):
-        """给助手进程的环境变量：它跑 ccim schedule 时，知道是从哪个对话、哪个 Agent 建的（#122）。"""
-        return {"CCIM_CHAT": self.chat_id, "CCIM_CHANNEL": self.b.entry.get("channel") or getattr(self.b.channel, "name", ""),
+        """给助手进程的环境变量：它跑 ccim schedule 时，知道是从哪个对话、哪个 Agent 建的（#122）；
+        CCIM_TOKEN / CCIM_TOOLS 让 MCP 服务、ccim tool 命令找到这个对话的工具（#178）。"""
+        from . import toolsock
+        return {"CCIM_TOKEN": toolsock.token(self), "CCIM_TOOLS": toolsock.path(),
+                "CCIM_CHAT": self.chat_id, "CCIM_CHANNEL": self.b.entry.get("channel") or getattr(self.b.channel, "name", ""),
                 "CCIM_AGENT": self.b.entry.get("agent_id") or "", "CCIM_PROJECT": self.b.path,
                 "PATH": ccim_bin() + os.pathsep + os.environ.get("PATH", "")}
 
     async def _connect(self):
         if self.client:
             return
+        await _tools_ready()
         tries = [(self.session_id, False)] if self.session_id else [(self.fork_from, True)] if self.fork_from else []
         snapshots = bool(getattr(self.b.channel, "live", False))   # 网页里能退回：记下文件快照，让它回显我们发的消息（带编号）
         from . import kb
@@ -871,6 +875,10 @@ class Chat:
         return {}
 
     def _tools(self):
+        return create_sdk_mcp_server("ccim", tools=self._tool_list())
+
+    def _tool_list(self):
+        """这个对话能用的 ccim 工具。Claude Code 在进程内挂上；别的底座经 toolsock 用同一份（#178）。"""
         chat = self
 
         @tool("send_file", "把本机的图片、视频或文件发到当前聊天里。path 用绝对路径，或相对项目目录的路径。",
@@ -912,11 +920,12 @@ class Chat:
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             tools += ([] if lent else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
-            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent and not side:
+            # Codex 不给：转交的目标是 Claude Code 的会话
+            if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent and not side and chat.agent == "claude":
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
-        return create_sdk_mcp_server("ccim", tools=tools)
+        return tools
 
 
 SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 旁问（#196）不能改文件
@@ -1086,6 +1095,15 @@ def _look_around(chat):
         return {"content": [{"type": "text", "text": head + text}]}
 
     return [list_chats, read_chat]
+
+
+async def _tools_ready():
+    """开好工具的 socket（#178），开不了不影响对话，只是 ccim tool、MCP 服务用不了。"""
+    from . import toolsock
+    try:
+        await toolsock.start()
+    except Exception:
+        log.warning("开工具 socket 出错", exc_info=True)
 
 
 def ccim_bin():

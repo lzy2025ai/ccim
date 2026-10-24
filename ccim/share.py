@@ -22,7 +22,7 @@ GUEST_GET = {
     "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/dirs", "/api/file", "/api/file/part",
-    "/api/job", "/api/logs", "/api/skills/market",
+    "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls",
 }
 GUEST_POST = {
     "/api/upload", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
@@ -36,6 +36,7 @@ GUEST_POST = {
     "/api/chat/continue",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
     "/api/chat/side",
+    "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
 }
 
 
@@ -247,7 +248,7 @@ def check(pf, acct, method, path, q, body):
     if method == "GET":
         if path in ("/api/chat", "/api/chat/sig"):
             _mine_chat(pf, acct, q.get("id"))
-        elif path in ("/api/doc", "/api/file", "/api/file/part"):
+        elif path in ("/api/doc", "/api/file", "/api/file/part", "/api/ws/ls"):
             _mine_chat(pf, acct, q.get("chat"))
         elif path in ("/api/agent", "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file"):
             _usable_agent(acct, q.get("id"))
@@ -299,7 +300,7 @@ def check(pf, acct, method, path, q, body):
     elif path == "/api/chat/kbs":
         for lib in b.get("kbs") or []:
             _mine_lib(acct, lib)
-    elif path == "/api/doc/save":
+    elif path == "/api/doc/save" or path.startswith("/api/ws/"):
         _mine_chat(pf, acct, b.get("chat"))
     elif path in ("/api/kb/lib/save", "/api/kb/lib/delete"):
         if b.get("id"):

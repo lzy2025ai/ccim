@@ -8,7 +8,13 @@ import base64, html as htmllib, mimetypes, os, re, shutil, time, uuid, zipfile
 import xml.etree.ElementTree as ET
 
 KINDS = {".md": "md", ".markdown": "md", ".html": "html", ".htm": "html", ".docx": "docx"}
-EDITABLE = ("md", "html")
+# 工作区（#206）里能直接看、直接改的纯文本和代码
+TEXT_EXT = {".txt", ".text", ".log", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
+            ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte", ".css", ".scss", ".less", ".sh", ".zsh", ".bash",
+            ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h", ".cc", ".cpp", ".hpp", ".m", ".rb", ".php", ".lua", ".sql",
+            ".xml", ".svg", ".gitignore", ".dockerfile", ".r", ".tex", ".bib", ".srt", ".vtt"}
+TEXT_NAMES = {"Makefile", "Dockerfile", "LICENSE", "README", ".gitignore", ".env"}
+EDITABLE = ("md", "html", "text")
 ASSET_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif", ".css", ".js", ".mp4", ".webm"}
 MAX_DOC = 20 << 20          # 文档本身
 MAX_ASSET = 15 << 20        # 单个附带文件
@@ -20,7 +26,12 @@ class Problem(Exception):
 
 
 def kind(name):
-    return KINDS.get(os.path.splitext(name or "")[1].lower())
+    ext = os.path.splitext(name or "")[1].lower()
+    if ext in KINDS:
+        return KINDS[ext]
+    if ext in TEXT_EXT or os.path.basename(name or "") in TEXT_NAMES:
+        return "text"
+    return None
 
 
 def snap_dir(folder, chat):
@@ -148,6 +159,8 @@ def view(path, base=None):
         return out
     text = data.decode("utf-8", errors="replace")
     out["text"] = text
+    if k == "text":
+        return out
     if k == "md":
         out["assets"] = _md_assets(text, base)
     else:

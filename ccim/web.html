@@ -885,7 +885,8 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .docfile small{display:block;font-size:12px;color:var(--muted)}
 .file.doc{cursor:pointer}
 .file.doc:hover{border-color:var(--line-strong)}
-.doc-edit{text-align:right;font-size:12.5px;color:var(--muted);margin:-6px 0 14px}
+.doc-edit{text-align:right;font-size:12.5px;color:var(--muted);max-width:760px;margin:-6px auto 14px;padding:0 22px}
+#main.ws .doc-edit{padding:0 14px}
 .doc-edit button{color:var(--qing)}
 .sidepane .skc-head{padding-top:max(10px,env(safe-area-inset-top))}
 .side-av{background:var(--qing)}
@@ -1098,6 +1099,182 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 @media (max-width:1100px){.app{grid-template-columns:64px var(--list-w,240px) 1fr;--rail-w:64px}.resizer{left:calc(var(--rail-w) + var(--list-w,240px) - 4px)}.app.list-off{grid-template-columns:64px 1fr}.rail a{width:52px}}
 .retry{color:var(--bad);font-size:13px}
 
+/* ---------- 工作区（#206）：对话 / 工作区两种看法 ---------- */
+.ws-sw{position:relative;display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;flex:none}
+.ws-sw button{position:relative;z-index:1;width:76px;display:flex;align-items:center;justify-content:center;gap:5px;padding:3px 0;border-radius:7px;font-size:13px;color:var(--muted);transition:color .3s}
+.ws-sw button svg{width:15px;height:15px}
+.ws-sw .pill{position:absolute;top:3px;bottom:3px;left:3px;width:76px;border-radius:7px;background:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.12);transition:transform .5s cubic-bezier(.3,1.35,.5,1)}
+.ws-sw[data-on=ws] .pill{transform:translateX(76px)}
+.ws-sw[data-on=chat] button:first-of-type,.ws-sw[data-on=ws] button:last-of-type{color:var(--ink)}
+.ws-chatbtn.on{color:var(--qing);background:var(--qing-soft)}
+.ws-chatbtn[hidden]{display:none}
+.ws-filesbtn{display:none;position:relative}
+.ws-filesbtn .badge{position:absolute;top:0;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--qing);color:#fff;font-size:10px;line-height:15px;text-align:center}
+.app.ws-mode{grid-template-columns:var(--rail-w,76px) 1fr}
+.app.ws-mode .list,.app.ws-mode .resizer{display:none!important}
+.chat-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);position:relative}
+.ws-convo{display:flex;flex-direction:column;min-height:0;min-width:0}
+.ws-tree,.ws-ed{display:none;min-width:0;min-height:0;flex-direction:column;overflow:hidden}
+#main.ws .chat-body{grid-template-columns:250px minmax(0,1fr) minmax(320px,30%)}
+#main.ws.ws-nochat .chat-body{grid-template-columns:250px minmax(0,1fr)}
+#main.ws .ws-tree,#main.ws .ws-ed{display:flex}
+#main.ws .ws-tree{grid-column:1}
+#main.ws .ws-ed{grid-column:2}
+#main.ws .ws-convo{grid-column:3;border-left:1px solid var(--line);background:#FBFBFA}
+#main.ws.ws-nochat .ws-convo{display:none}
+#main.ws .toc,#main.ws #toc-btn{display:none!important}
+#main.ws .msg,#main.ws .chap{padding:0 14px}
+#main.ws .composer{padding:0 12px;margin-bottom:12px}
+#main.ws .composer .hint{display:none}
+#main.ws .bubble{max-width:92%}
+#main.ws .thread{padding-top:16px}
+
+.ws-tree{background:#FAFAF8;border-right:1px solid var(--line)}
+.ws-thead{display:flex;align-items:center;gap:2px;padding:10px 6px 6px 14px;flex:none}
+.ws-thead .root{flex:1;min-width:0;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-thead .icon-btn{width:26px;height:26px}
+.ws-thead .icon-btn svg{width:15px;height:15px}
+.ws-tree .m-only{display:none}
+.ws-tscroll{flex:1;overflow:auto;padding:0 6px 24px}
+.ws-sec{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);padding:10px 8px 3px}
+.ws-sec button{margin-left:auto;font-size:11.5px;color:var(--faint)}
+.ws-sec button:hover{color:var(--ink)}
+.ws-row{display:flex;align-items:center;gap:5px;width:100%;height:28px;padding:0 4px 0 calc(6px + var(--d,0) * 14px);border-radius:6px;font-size:13px;color:var(--ink-2);text-align:left;user-select:none}
+.ws-row:hover{background:var(--sunk)}
+.ws-row.on{background:var(--qing-soft);color:var(--qing)}
+.ws-row.drop{box-shadow:inset 0 0 0 1.5px var(--qing);background:var(--qing-soft)}
+.ws-row.muted{color:var(--faint)}
+.ws-row.muted:hover{background:none}
+.ws-row .chev,.ws-row .ic{display:flex;align-items:center;justify-content:center;flex:none}
+.ws-row .chev{width:12px;height:12px;color:var(--faint);transition:transform .15s}
+.ws-row .chev svg,.ws-row .ic svg{width:100%;height:100%}
+.ws-row .chev.open{transform:rotate(90deg)}
+.ws-row .chev.none{visibility:hidden}
+.ws-row .ic{width:15px;height:15px;color:var(--faint)}
+.ws-row .ic.dir{color:#A89268}
+.ws-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-row .nm small{color:var(--faint);font-size:11.5px}
+.ws-row .more{opacity:0;width:22px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--muted);flex:none}
+.ws-row .more svg{width:14px;height:14px}
+.ws-row:hover .more{opacity:1}
+.ws-row .more:hover{background:var(--line)}
+.ws-ren{flex:1;min-width:0;height:22px;border:1px solid var(--qing);border-radius:4px;padding:0 5px;outline:none;font-size:13px;background:#fff}
+.ws-flag{font-size:10.5px;line-height:16px;padding:0 5px;border-radius:4px;flex:none;white-space:nowrap}
+.ws-flag.new{background:#E3F1E7;color:#2E6E45}
+.ws-flag.mod{background:#F6ECDD;color:var(--zhe)}
+.ws-writing{width:7px;height:7px;border-radius:50%;background:var(--huang);flex:none;margin-right:6px;animation:ws-pulse 1s ease-in-out infinite}
+@keyframes ws-pulse{50%{opacity:.25;transform:scale(.7)}}
+.ws-drop{margin:10px 8px 0;padding:12px;border:1.5px dashed var(--line-strong);border-radius:8px;text-align:center;font-size:12px;color:var(--faint)}
+.ws-tree.dragover .ws-drop{border-color:var(--qing);color:var(--qing);background:var(--qing-soft)}
+.ws-err{margin:10px 8px;font-size:12.5px;color:var(--bad)}
+
+.ws-ed{background:var(--panel)}
+.ws-tabs{display:flex;align-items:flex-end;gap:1px;padding:6px 8px 0;border-bottom:1px solid var(--line);background:#F6F6F3;overflow-x:auto;flex:none;min-height:39px;scrollbar-width:none}
+.ws-tab{display:flex;align-items:center;gap:6px;height:32px;padding:0 5px 0 12px;border-radius:7px 7px 0 0;font-size:13px;color:var(--muted);white-space:nowrap;border:1px solid transparent;border-bottom:0;margin-bottom:-1px}
+.ws-tab.on{background:var(--panel);color:var(--ink);border-color:var(--line)}
+.ws-tab .x{width:18px;height:18px;border-radius:4px;display:grid;place-items:center;color:var(--faint)}
+.ws-tab .x:hover{background:var(--sunk);color:var(--ink)}
+.ws-tab .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-2)}
+.ws-ed .doc-top{min-height:46px;padding:6px 12px 6px 16px}
+.ws-ed .doc-top .nm{font-weight:500;font-size:13px;color:var(--muted)}
+.ws-ed .doc-top .nm b{color:var(--ink);font-weight:600}
+.ws-ed .doc-top .saved{font-size:12px;color:var(--faint);white-space:nowrap}
+.ws-ed .doc-top .ws-back{display:none}
+.ws-empty{margin:auto;text-align:center;color:var(--muted);padding:40px}
+.ws-empty h2{font:600 20px/1.3 var(--song);color:var(--ink);margin:0 0 6px}
+.ws-empty p{margin:0}
+.ws-img{display:grid;place-items:center;min-height:100%;padding:24px;background:var(--paper)}
+.ws-img img,.ws-img video{max-width:100%;max-height:calc(100vh - 200px);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.ws-other{margin:auto;text-align:center;padding:60px 20px;color:var(--muted)}
+.ws-other b{display:block;color:var(--ink);font-size:15px;margin-bottom:12px}
+
+.ws-changes{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 4px;background:var(--panel);max-width:560px}
+.ws-changes .h{display:flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line);background:#FAFAF8}
+.ws-changes .h svg{width:14px;height:14px}
+.ws-changes .h .grow{flex:1}
+.ws-changes .h button{color:var(--qing);font-size:12.5px}
+.ws-changes .chg{display:flex;align-items:center;gap:8px;width:100%;padding:7px 12px;font-size:13px;text-align:left;border-top:1px solid #EFF0EC}
+.ws-changes .chg:first-of-type{border-top:0}
+.ws-changes .chg:hover{background:var(--qing-soft)}
+.ws-changes .chg svg{width:14px;height:14px;color:var(--faint);flex:none}
+.ws-changes .chg .p{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-changes .chg .p i{font-style:normal;color:var(--faint);font-size:12px}
+.ws-changes .more{padding:6px 12px;font-size:12px;color:var(--faint);border-top:1px solid #EFF0EC}
+#ws-ctx:empty{display:none}
+#ws-ctx{padding:8px 10px 0}
+.ws-ctxchip{display:inline-flex;align-items:center;gap:5px;max-width:100%;font-size:12px;padding:2px 4px 2px 8px;border-radius:6px;background:var(--qing-soft);color:var(--qing)}
+.ws-ctxchip svg{width:12px;height:12px;flex:none}
+.ws-ctxchip .t{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-ctxchip button{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;color:inherit;opacity:.6;flex:none}
+.ws-ctxchip button:hover{opacity:1;background:rgba(0,0,0,.06)}
+.toast.ws-t{display:flex;align-items:center;gap:10px}
+.toast.ws-t button{color:#9CC3EA;padding:2px 8px;border-radius:6px}
+
+/* 切换动效：对话滑到右边，文件树像门一样从左边转进来，编辑区像书页翻开；手机上一层层推进去 */
+html[data-vt] .chat-head{view-transition-name:ws-head}
+html[data-vt] .app .list{view-transition-name:ws-list}
+html[data-vt] .ws-tree{view-transition-name:ws-tree}
+html[data-vt] .ws-ed{view-transition-name:ws-ed}
+html[data-vt] .ws-convo{view-transition-name:ws-convo}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+::view-transition-group(*){animation-duration:.62s;animation-timing-function:cubic-bezier(.22,.9,.24,1)}
+::view-transition-old(ws-head){display:none}
+::view-transition-new(ws-head){animation:none}
+::view-transition-group(ws-tree),::view-transition-group(ws-ed){overflow:clip}
+html[data-vt=to-ws]::view-transition-old(ws-list){animation:ws-list-out .22s cubic-bezier(.5,0,.75,0) both}
+html[data-vt=to-chat]::view-transition-new(ws-list){animation:ws-list-out .5s .12s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes ws-list-out{to{transform:translateX(-24px) scale(.97);opacity:0;filter:blur(3px)}}
+html[data-vt=to-ws]::view-transition-new(ws-tree){animation:ws-door .62s .06s cubic-bezier(.22,.9,.24,1) both;transform-origin:left center}
+html[data-vt=to-ws]::view-transition-new(ws-ed){animation:ws-page .72s .14s cubic-bezier(.22,.9,.24,1) both;transform-origin:right center}
+html[data-vt=to-chat]::view-transition-old(ws-tree){animation:ws-door .4s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:left center}
+html[data-vt=to-chat]::view-transition-old(ws-ed){animation:ws-page .42s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:right center}
+@keyframes ws-door{from{transform:perspective(1100px) rotateY(-88deg);opacity:0}}
+@keyframes ws-page{from{transform:perspective(1800px) rotateY(58deg) translateX(60px);opacity:0}}
+html[data-vt=to-ws]::view-transition-group(ws-convo),html[data-vt=to-chat]::view-transition-group(ws-convo){animation:none;z-index:5}
+html[data-vt=to-ws]::view-transition-old(ws-convo),html[data-vt=to-chat]::view-transition-old(ws-convo){display:none}
+html[data-vt=to-ws]::view-transition-new(ws-convo){animation:ws-convo-r .62s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=to-chat]::view-transition-new(ws-convo){animation:ws-convo-c .62s cubic-bezier(.22,.9,.24,1) both}
+@keyframes ws-convo-r{from{transform:translateX(-95%) scale(.98);opacity:.2}}
+@keyframes ws-convo-c{from{transform:translateX(32%) scale(.98);opacity:.2}}
+html[data-vt=side]::view-transition-old(ws-convo){animation:ws-side-out .35s cubic-bezier(.5,0,.75,0) both}
+html[data-vt=side]::view-transition-new(ws-convo){animation:ws-side-out .45s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes ws-side-out{to{transform:translateX(100%);opacity:0}}
+html[data-vt=push] .chat-body,html[data-vt=pop] .chat-body{view-transition-name:ws-body}
+html[data-vt=push] .ws-tree,html[data-vt=push] .ws-ed,html[data-vt=push] .ws-convo,
+html[data-vt=pop] .ws-tree,html[data-vt=pop] .ws-ed,html[data-vt=pop] .ws-convo{view-transition-name:none}
+html[data-vt=push]::view-transition-old(ws-body){animation:ws-push-back .38s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=push]::view-transition-new(ws-body){animation:ws-push-in .38s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=pop]::view-transition-old(ws-body){animation:ws-push-in .34s cubic-bezier(.22,.9,.24,1) reverse both;z-index:2}
+html[data-vt=pop]::view-transition-new(ws-body){animation:ws-push-back .34s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes ws-push-in{from{transform:translateX(100%)}}
+@keyframes ws-push-back{to{transform:translateX(-28%);opacity:.6}}
+html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transition-old(ws-head){display:block;animation:ws-fade .2s both}
+@keyframes ws-fade{to{opacity:0}}
+
+@media (max-width:760px){
+  .ws-sw,.ws-chatbtn{display:none!important}
+  .ws-filesbtn{display:grid}
+  #main.ws-files .chat-head,#main.ws-file .chat-head,#main.ws-files #ext-notice,#main.ws-file #ext-notice{display:none}
+  #main.ws-files .ws-convo,#main.ws-file .ws-convo{display:none}
+  #main.ws-files .ws-tree,#main.ws-file .ws-ed{display:flex;grid-column:1}
+  .app.phone-main:has(#main.ws-files) .pback,.app.phone-main:has(#main.ws-file) .pback{display:none}
+  .ws-tree{border-right:0;background:var(--panel)}
+  .ws-thead{padding:8px 8px 6px 6px;min-height:52px}
+  .ws-thead .root{font-size:16px;font-family:var(--song)}
+  .ws-thead .icon-btn{width:34px;height:34px}
+  .ws-thead .icon-btn svg{width:18px;height:18px}
+  .ws-tree .m-only{display:grid}
+  .ws-row{height:40px;font-size:15px}
+  .ws-row .more{opacity:1}
+  .ws-tabs,.ws-drop{display:none}
+  .ws-ed .doc-top{padding:8px 8px 8px 6px;min-height:52px}
+  .ws-ed .doc-top .ws-back{display:grid}
+  .ws-ed .doc-top .nm .pre{display:none}
+  .ws-ask{position:absolute;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:6px;background:var(--qing);color:#fff;border-radius:22px;padding:9px 16px;font-size:14px;box-shadow:0 6px 18px rgba(43,76,111,.35)}
+  .ws-ask svg{width:16px;height:16px}
+}
+.ws-ask{display:none}
+@media (max-width:760px){#main.ws-file .ws-ask{display:flex}}
 </style>
 
 </head>
@@ -1168,6 +1345,13 @@ const ICON = {
   clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>`,
   dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  cols:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>',
+  panel:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
+  newfile:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg>',
+  newdir:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 10v6M9 13h6"/></svg>',
+  upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
 };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1522,18 +1706,19 @@ function connectEvents(){
       if (ev.type === "progress"){
         detail.progress = ev.state === "working" ? ev : null;
         detail.busy = ev.state === "working";
-        drawThread(); drawComposerState();
+        drawThread(); drawComposerState(); wsProgress(ev);
       } else if (ev.type === "ctx"){
         detail.ctx = ev.ctx; drawCtxRing(detail); redrawGroup();
       } else {
         if (ev.type === "mention" && rec.ctx && rec.agent) { detail.member_ctx = {...detail.member_ctx, [rec.agent]: rec.ctx}; redrawGroup(); }
-        const i = ["card", "mention", "secret"].includes(ev.type) ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
+        const i = ["card", "mention", "secret", "edit"].includes(ev.type) && ev.id ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
         if (ev.type === "note" && detail.progress?.guess) { detail.busy = false; detail.progress = null; drawComposerState(); }   // 斜杠命令只回一句，不会开始干活
         if (own >= 0) detail.log[own] = rec;
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
+        if (ev.type === "answer") wsAnswer(rec);
       }
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
@@ -1586,6 +1771,7 @@ function route(){
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
+  if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) document.querySelector(".app").classList.remove("ws-mode");
   closePop();
   if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
   renderList();
@@ -1871,7 +2057,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "secret") return secretHtml(r);
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
-    return `<div class="msg">${fromRow()}${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${msgActs(src, i, r)}` : stopped ? `<div class="muted">已停下。</div>` : ""}</div>`;
+    return `<div class="msg">${fromRow()}${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${changesHtml(r)}${msgActs(src, i, r)}` : (stopped ? `<div class="muted">已停下。</div>` : "") + changesHtml(r)}</div>`;
   }
   if (r.type === "card"){
     const live = r.buttons && r.buttons.length && (!r.color || r.color === "orange");   // 处理过的卡片：记录合并后按钮还在，看颜色
@@ -2125,6 +2311,7 @@ function drawChat(){
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
+      ${wsHead(c)}
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
@@ -2132,9 +2319,14 @@ function drawChat(){
     </div>
     ${extNotice(c)}
     ${groupPanel(c)}
+    <div class="chat-body">
+    <aside class="ws-tree" id="ws-tree" aria-label="文件"></aside>
+    <section class="ws-ed" id="ws-ed" aria-label="编辑区"></section>
+    <div class="ws-convo">
     <div class="chat-mid"><div class="thread" id="thread" onscroll="tocSpy()"></div><aside class="toc" id="toc" hidden></aside></div>
     <div class="composer">
       <div class="box" id="box">
+        <div id="ws-ctx"></div>
         <div class="rcpt" id="rcpt-chat"></div>
         <div class="kbrow" id="kbrow"></div>
         <div class="pending" id="pending"></div>
@@ -2154,7 +2346,8 @@ function drawChat(){
         </div>
       </div>
       <div class="hint">${sendHint()}；可以把图片、文件拖进来${c.readonly ? "" : "；输入 @ 让其他 Agent 一起回答"}</div>
-    </div>`;
+    </div></div></div>`;
+  wsMount(c);
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow(); drawQuotes(); gripInput();
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
@@ -2329,7 +2522,8 @@ async function sendChat(){
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
   const src = detail;
-  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files, refs: refs.map(x => x.id)})); }
+  const wsFile = wsCtxFile();
+  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files, refs: refs.map(x => x.id), ...(wsFile ? {ctx: {ws_file: wsFile}} : {})})); }
   catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); chatRefs = refs; drawChatRcpt(); drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
@@ -3657,6 +3851,7 @@ function selTool(){
   document.querySelector(".seltool")?.remove();
   const sel = getSelection();
   if (!sel || sel.isCollapsed || !detail) return;
+  if (wsSelTool(sel)) return;
   const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
   const ans = node && node.closest("#thread .answer");
   if (!ans || !ans.contains(sel.focusNode)) return;
@@ -5415,7 +5610,7 @@ let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, id, log, pro
 const SIDE_AV = `<span class="skc-av side-av">${ICON.side}</span>`;
 async function openSide(quote){
   const c = detail; if (!c) return;
-  if (DOC) { await closeDoc(); if (DOC) return; }
+  if (DOC && !DOC.ws) { await closeDoc(); if (DOC) return; }
   const fresh = !SIDE || SIDE.of !== c.id;
   if (fresh) SIDE = {of: c.id, mid: ctxMachine};
   if (quote) SIDE.quote = quote;
@@ -5529,29 +5724,39 @@ function sideEvent(ev){   // 推送：进度、记录
 }
 
 let DOC = null;   // 打开的文档：{chat, machine, path, d（接口给的）, mode: view / edit, draft, dirty}
-async function openDoc(path, v, chat){
-  if (SIDE) closeSide();
+async function openDoc(path, v, chat, inWs){
   chat = chat || (DOC && DOC.path === path ? DOC.chat : detail && detail.id);
+  if (!inWs && v == null && WS && WS.chat === chat && wsInside(path) && wsEdShown()) return wsOpen(path);   // 工作区开着：在编辑区打开
+  if (!inWs && SIDE) closeSide();
   if (DOC && DOC.dirty && !(DOC.path === path && v == null) && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
   const machine = DOC && DOC.chat === chat ? DOC.machine : ctxMachine;
-  if (!DOC || DOC.path !== path) { DOC = {chat, machine, path, d: null, mode: "view", draft: "", dirty: false}; drawDoc(); }
+  if (!DOC || DOC.path !== path) { DOC = {chat, machine: inWs ? WS.machine : machine, path, d: null, mode: "view", draft: "", dirty: false, ws: !!inWs}; drawDoc(); }
   let d;
   try { d = await api(`/api/doc?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}${v != null ? "&v=" + v : ""}`, undefined, machine); }
-  catch (e) { toast(e.message); if (DOC && !DOC.d) closeDoc(true); return; }
+  catch (e) {
+    if (inWs && DOC && DOC.path === path) { DOC.d = {kind: "other", name: path.split("/").pop(), versions: [], latest: true, v: 0, error: e.message}; WS.docs[path] = DOC; drawDoc(); return; }
+    toast(e.message); if (DOC && !DOC.d) closeDoc(true); return;
+  }
   if (!DOC || DOC.path !== path) return;
   const lastView = (() => { try { return localStorage.getItem("ccim.mdView"); } catch { return null; } })();
   const mode = DOC.mode === "edit" && d.latest && d.editable ? "edit" : d.kind !== "md" ? "view" : DOC.d ? (DOC.mode === "edit" ? "view" : DOC.mode) : lastView === "wx" ? "wx" : "view";
-  DOC = {...DOC, d, draft: d.text || "", dirty: false, mode};
+  DOC = {...DOC, d, draft: d.text || "", dirty: false, mode: d.kind === "text" ? "edit" : mode};
+  if (DOC.ws && WS) WS.docs[path] = DOC;
   drawDoc();
 }
 async function closeDoc(force){
   if (!DOC) return;
+  if (DOC.ws) { if (force || !WS) { DOC = null; return; } return narrow() ? wsGo("files") : wsCloseTab(DOC.path); }
   if (!force && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，关掉就丢掉了。", "丢掉")) return;
   DOC = null; drawDoc();
 }
 function docBody(){
   const d = DOC.d;
   if (!d) return `<div class="doc-loading">…</div>`;
+  if (d.kind === "img") return `<div class="ws-img"><img src="${esc(docFileUrl())}" alt="${esc(d.name)}"></div>`;
+  if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
+  if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
+  if (d.kind === "text") return `<textarea id="doc-ta" class="code" spellcheck="false" ${d.latest ? "" : "readonly"} oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
   if (DOC.mode === "edit") return `<textarea id="doc-ta" class="${d.kind === "html" ? "code" : ""}" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
   if (d.kind === "md" && DOC.mode === "wx") return wxView();
   if (d.kind === "md") return `<article class="doc-md ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${docMd(DOC.draft, d.assets)}</article>`;
@@ -5563,9 +5768,30 @@ function verLabel(x, k){
   const t = x.at ? new Date(x.at * 1000) : null, p = n => String(n).padStart(2, "0");
   return `第 ${k + 1} 版 · ${x.by === "me" ? "你改的" : "Agent 发的"}${t ? ` · ${t.getMonth() + 1}月${t.getDate()}日 ${p(t.getHours())}:${p(t.getMinutes())}` : ""}`;
 }
+const docRoot = () => DOC && DOC.ws ? $("#ws-ed") : $("#docpane");
+function drawWsDoc(){                    // 工作区：文档画在中间的编辑区，上面是标签
+  const el = $("#ws-ed"); if (!el) return;
+  const d = DOC.d, name = d ? d.name : DOC.path.split("/").pop(), rel = wsInside(DOC.path) ? wsRel(DOC.path) : name;
+  const modes = d && d.kind === "md" ? [["view", "预览"], ["edit", "源码"], ["wx", "公众号"]] : d && d.kind === "html" && d.latest ? [["view", "预览"], ["edit", "源码"]] : [];
+  const keep = el.querySelector(".doc-body")?.scrollTop || 0, same = el.dataset.path === DOC.path;
+  el.dataset.path = DOC.path;
+  el.innerHTML = `${wsTabs()}<div class="doc-top">
+      <button class="icon-btn ws-back" aria-label="返回" onclick="wsGo('files')">${ICON.left}</button>
+      <div class="nm" title="${esc(rel)}"><span class="pre">${esc(rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "")}</span><b>${esc(name)}</b>${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
+      ${DOC.savedAt ? `<span class="saved">已保存</span>` : ""}
+      ${modes.length ? `<span class="seg mini">${modes.map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
+      ${d && !["img", "video", "other"].includes(d.kind) ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
+    </div>
+    <div class="doc-body">${docBody()}</div>
+    <button class="ws-ask" onclick="WS.ctx=true;WS.phoneCtx=true;wsGo('chat')">${ICON.chat}问 AI</button>`;
+  if (same) el.querySelector(".doc-body").scrollTop = keep;
+  if (DOC.mode === "wx") wxImgTools();
+  drawWsCtx();
+}
 function drawDoc(){
   let el = $("#docpane");
-  if (!DOC){ el?.remove(); if (!SIDE) document.body.classList.remove("doc-open"); return; }
+  if (DOC && DOC.ws) { el?.remove(); if (!SIDE) document.body.classList.remove("doc-open"); if (WS && $("#ws-ed")) drawWsDoc(); return; }
+  if (!DOC){ el?.remove(); if (!SIDE) document.body.classList.remove("doc-open"); if (WS && wsEdShown() && $("#ws-ed")) drawWsEditor(); return; }
   if (!el){ el = document.createElement("aside"); el.id = "docpane"; el.className = "docpane"; el.setAttribute("aria-label", "文档"); document.body.append(el); }
   document.body.classList.add("doc-open");
   const d = DOC.d, vs = d ? d.versions : [];
@@ -5600,22 +5826,32 @@ function docMode(m){
 }
 function docInput(ta){
   DOC.draft = ta.value;
-  if (!DOC.dirty){ DOC.dirty = true; $("#doc-save")?.removeAttribute("hidden"); $("#docpane .nm")?.insertAdjacentHTML("beforeend", `<span class="dot" title="没保存"></span>`); }
+  if (!DOC.dirty){ DOC.dirty = true; $("#doc-save")?.removeAttribute("hidden"); docRoot()?.querySelector(".doc-top .nm")?.insertAdjacentHTML("beforeend", `<span class="dot" title="没保存"></span>`); }
+  if (DOC.ws) wsAutosave();
 }
 function docKey(e){
   if ((e.metaKey || e.ctrlKey) && e.key === "s"){ e.preventDefault(); docSave(); }
   if (e.key === "Escape") e.stopPropagation();
 }
-async function docSave(){
+async function docSave(quiet){
   if (!DOC || !DOC.dirty || DOC.saving) return;
-  DOC.saving = true;
-  const {chat, path, draft, machine} = DOC;
+  const doc = DOC;
+  doc.saving = true;
+  const {chat, path, draft, machine} = doc;
   try {
-    const d = await api("/api/doc/save", {chat, path, text: draft, mtime: DOC.d.mtime}, machine);
-    if (DOC && DOC.path === path){ DOC.d = d; DOC.dirty = DOC.draft !== d.text; if (DOC.mode !== "edit") { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); drawDocBody(); } else { $("#doc-save")?.toggleAttribute("hidden", !DOC.dirty); $("#docpane .nm .dot")?.remove(); } }
-    toast("已保存");
+    const d = await api("/api/doc/save", {chat, path, text: draft, mtime: doc.d.mtime}, machine);
+    doc.d = {...d, name: doc.d.name}; doc.dirty = doc.draft !== d.text;
+    if (DOC === doc){
+      const root = docRoot();
+      root?.querySelector("#doc-save")?.toggleAttribute("hidden", !doc.dirty);
+      if (!doc.dirty) root?.querySelector(".doc-top .nm .dot")?.remove();
+      if (doc.ws) { doc.savedAt = Date.now(); const top = root?.querySelector(".doc-top"); if (top && !top.querySelector(".saved")) top.querySelector(".nm").insertAdjacentHTML("afterend", `<span class="saved">已保存</span>`); }
+      else if (doc.mode !== "edit") drawDocBody();
+    }
+    if (!quiet) toast("已保存");
+    if (doc.ws && WS) { const t = $("#ws-ed .ws-tab.on .dot"); if (t && !doc.dirty) t.remove(); }
   } catch (e) { toast(e.message); }
-  finally { if (DOC) DOC.saving = false; }
+  finally { doc.saving = false; }
 }
 async function docRestore(){   // 看旧版本时：把它的内容拿到最新版里编辑，保存了才算
   const text = DOC.d.text;
@@ -5854,10 +6090,468 @@ function wrap(x, m){   // **加粗** 的空格要放到外面，不然不认
   return core ? a + m + core + m + b : x;
 }
 function drawDocBody(){
-  const b = $("#docpane .doc-body"); if (!b || !DOC) return;
+  const b = docRoot()?.querySelector(".doc-body"); if (!b || !DOC) return;
   const top = b.scrollTop;
   b.innerHTML = docBody(); b.scrollTop = top;
   if (DOC.mode === "wx") wxImgTools();
+}
+
+// ================= 工作区（#206） =================
+// 同一个对话两种看法：对话 / 工作区（左边是对话工作目录的文件树，中间编辑区，右边还是这个对话）。
+// 编辑区就是文档面板（DOC）画在中间：每个标签一个 DOC，切标签时换。手机上没有三栏：对话头部「文件」→ 全屏文件树 → 全屏编辑。
+let WS = null;
+const WS_TEXT = /\.(txt|text|log|csv|tsv|json|jsonl|ya?ml|toml|ini|cfg|conf|env|py|m?js|cjs|ts|tsx|jsx|vue|svelte|css|scss|less|sh|zsh|bash|go|rs|java|kt|swift|c|h|cc|cpp|hpp|m|rb|php|lua|sql|xml|r|tex|bib|srt|vtt|gitignore)$/i;
+const WS_TEXT_NAMES = new Set(["Makefile", "Dockerfile", "LICENSE", "README", ".gitignore", ".env"]);
+function wsKind(name){
+  if (isImg(name)) return "img";
+  if (isVideo(name)) return "video";
+  return docKind(name) || (WS_TEXT.test(name || "") || WS_TEXT_NAMES.has(name) ? "text" : "other");
+}
+const wsName = p => (p || "").split("/").pop();
+const wsDir = p => (p || "").slice(0, Math.max(0, (p || "").lastIndexOf("/")));
+const wsInside = p => !!(WS && p && (p === WS.root || p.startsWith(WS.root + "/")));
+const wsRel = p => p === WS.root ? "" : p.slice(WS.root.length + 1);
+function wsCan(c){ return !!(c && c.ws_root && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:")); }
+function wsSaved(id){ try { return JSON.parse(localStorage.getItem("ccim.ws." + id) || "{}"); } catch { return {}; } }
+function wsStore(){
+  if (!WS) return;
+  try { localStorage.setItem("ccim.ws." + WS.chat, JSON.stringify({on: WS.on, nochat: WS.nochat, tabs: WS.tabs, cur: WS.cur, open: [...WS.open], seen: WS.seen})); } catch {}
+}
+const wsShown = () => !!(WS && (narrow() ? WS.scr === "file" || WS.scr === "files" : WS.on));
+const wsEdShown = () => !!(WS && (narrow() ? WS.scr === "file" : WS.on));
+
+function wsMount(c){
+  if (!wsCan(c)) { if (WS && DOC && DOC.ws) DOC = null; WS = null; wsApply(); return; }
+  if (!WS || WS.chat !== c.id) {
+    if (WS && DOC && DOC.ws) DOC = null;
+    const s = wsSaved(c.id);
+    WS = {chat: c.id, machine: ctxMachine, root: c.ws_root, on: !!s.on, nochat: !!s.nochat, scr: null, dirs: {}, open: new Set(s.open || []),
+          tabs: (s.tabs || []).filter(p => p.startsWith(c.ws_root + "/")), docs: {}, cur: s.cur || null, flags: {}, writing: new Set(),
+          seen: s.seen || {}, ctx: true, renaming: null, busyDirs: new Set()};
+    WS.open.add(WS.root);
+    if (!WS.tabs.includes(WS.cur)) WS.cur = WS.tabs[0] || null;
+  }
+  WS.root = c.ws_root; WS.machine = ctxMachine;
+  wsFlagsFromLog(c);
+  wsApply();
+  if (wsShown()) wsShow();
+}
+// 最近一次改了文件的回答：没打开看过的标出来（「AI 刚改的」）
+function wsFlagsFromLog(c){
+  const r = [...(c.log || [])].reverse().find(x => x.type === "answer" && (x.changed || []).length);
+  WS.flags = {};
+  if (!r) return;
+  for (const f of r.changed) if (wsInside(f.path) && !((WS.seen[f.path] || 0) >= (r.at || 0))) WS.flags[f.path] = f.new ? "new" : "mod";
+}
+function wsApply(){
+  const m = $("#main"), app = document.querySelector(".app");
+  const on = !!(WS && WS.on && !narrow());
+  m?.classList.toggle("ws", on);
+  m?.classList.toggle("ws-nochat", on && WS.nochat);
+  m?.classList.toggle("ws-files", !!(WS && narrow() && WS.scr === "files"));
+  m?.classList.toggle("ws-file", !!(WS && narrow() && WS.scr === "file"));
+  app.classList.toggle("ws-mode", on);
+  const sw = $("#ws-sw"); if (sw) sw.dataset.on = on ? "ws" : "chat";
+  const cb = $("#ws-chatbtn"); if (cb) { cb.hidden = !on; cb.classList.toggle("on", !!(WS && !WS.nochat)); cb.title = WS && WS.nochat ? "显示对话" : "收起对话"; }
+  const fb = $("#ws-filesbtn"); if (fb) { const n = WS ? Object.keys(WS.flags).length : 0; fb.innerHTML = ICON.folder + (n ? `<span class="badge">${n}</span>` : ""); }
+  drawWsCtx();
+}
+function wsHead(c){
+  if (!wsCan(c)) return "";
+  return `<span class="ws-sw" id="ws-sw" data-on="chat" role="tablist" aria-label="看法"><i class="pill"></i>
+      <button role="tab" onclick="wsSetMode(false)">${ICON.chat}对话</button><button role="tab" onclick="wsSetMode(true)">${ICON.cols}工作区</button></span>
+    <button class="icon-btn ws-chatbtn" id="ws-chatbtn" hidden aria-label="收起对话" onclick="wsToggleChat()">${ICON.panel}</button>
+    <button class="icon-btn ws-filesbtn" id="ws-filesbtn" aria-label="文件" title="文件" onclick="wsGo('files')">${ICON.folder}</button>`;
+}
+// 切换动效：浏览器支持 View Transitions 就用（对话滑到右边，文件树和编辑区展开），不支持或减弱动态效果时直接切
+function wsVt(kind, fn){
+  const h = document.documentElement;
+  if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) { fn(); return; }
+  closePop(); document.querySelector(".seltool")?.remove();
+  h.dataset.vt = kind;
+  const t = document.startViewTransition(fn);
+  t.finished.finally(() => { if (h.dataset.vt === kind) delete h.dataset.vt; });
+}
+function wsSetMode(on){
+  if (!WS || WS.on === on) return;
+  wsVt(on ? "to-ws" : "to-chat", () => {
+    if (!on && DOC && DOC.ws) { WS.docs[DOC.path] = DOC; DOC = null; }
+    WS.on = on; wsStore(); wsApply();
+    if (on) wsShow();
+  });
+}
+function wsToggleChat(){ if (!WS) return; wsVt("side", () => { WS.nochat = !WS.nochat; wsStore(); wsApply(); }); }
+const WS_DEPTH = {chat: 0, files: 1, file: 2};
+function wsGo(scr){           // 手机：对话 → 文件树 → 文件
+  if (!WS) return;
+  const from = WS.scr || "chat"; if (scr === "chat") scr = null;
+  if ((scr || "chat") === from) return;
+  wsVt(WS_DEPTH[scr || "chat"] > WS_DEPTH[from] ? "push" : "pop", () => {
+    if (!scr && DOC && DOC.ws) { WS.docs[DOC.path] = DOC; DOC = null; }
+    WS.scr = scr; wsApply();
+    if (scr) wsShow();
+    if (!scr) { const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight; }
+  });
+}
+async function wsShow(){
+  if (!WS) return;
+  drawWsTree();
+  if (!WS.dirs[WS.root]) await wsLoadOpen();
+  if (wsEdShown()) {
+    if (DOC && DOC.ws && DOC.path === WS.cur) drawDoc();
+    else if (WS.cur) wsActivate(WS.cur);
+    else drawWsEditor();
+  }
+}
+async function wsLoad(dir){
+  if (!WS) return;
+  const ws = WS;
+  try {
+    const r = await api(`/api/ws/ls?chat=${encodeURIComponent(ws.chat)}&path=${encodeURIComponent(dir)}`, undefined, ws.machine);
+    ws.dirs[dir] = r.entries;
+  } catch (e) { if (dir === ws.root) ws.err = e.message; delete ws.dirs[dir]; ws.open.delete(dir); }
+}
+async function wsLoadOpen(){
+  if (!WS) return;
+  const ws = WS;
+  await Promise.all([...ws.open].filter(d => d === ws.root || d.startsWith(ws.root + "/")).map(wsLoad));
+  if (WS === ws) drawWsTree();
+}
+// 文件夹里的东西变了：重新取（只取已经展开的）
+let wsReloadT = null;
+function wsReload(dirs){
+  if (!WS) return;
+  for (const d of dirs) WS.busyDirs.add(d);
+  clearTimeout(wsReloadT);
+  wsReloadT = setTimeout(async () => {
+    if (!WS) return;
+    const ws = WS, ds = [...ws.busyDirs].filter(d => ws.dirs[d] || ws.open.has(d)); ws.busyDirs.clear();
+    await Promise.all(ds.map(wsLoad));
+    if (WS === ws) drawWsTree();
+  }, 250);
+}
+function wsExpandTo(p){
+  let d = wsDir(p); const add = [];
+  while (d && wsInside(d)) { if (!WS.open.has(d)) { WS.open.add(d); add.push(d); } if (d === WS.root) break; d = wsDir(d); }
+  return add;
+}
+
+// ---- 文件树 ----
+function wsIcon(e){ return e.dir ? ICON.folder : ICON.file; }
+function wsRow(e, depth){
+  const p = e.path, on = !e.dir && p === WS.cur;
+  if (WS.renaming === p) return `<div class="ws-row" style="--d:${depth}"><span class="chev none">${ICON.chev}</span><span class="ic ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
+    <input class="ws-ren" id="ws-ren" value="${esc(e.name)}" onkeydown="wsRenKey(event)" onblur="wsRenDone(this.value)"></div>`;
+  const fl = WS.writing.has(p) ? `<span class="ws-writing" title="正在写"></span>` : WS.flags[p] ? `<span class="ws-flag ${WS.flags[p]}">${WS.flags[p] === "new" ? "新" : "改"}</span>` : "";
+  return `<button class="ws-row ${on ? "on" : ""}" style="--d:${depth}" data-p="${esc(p)}" data-dir="${e.dir ? 1 : ""}" draggable="true"
+      onclick="wsClick(${q(p)},${e.dir ? 1 : 0})" oncontextmenu="wsMenu(event,${q(p)},${e.dir ? 1 : 0})">
+    <span class="chev ${e.dir ? (WS.open.has(p) ? "open" : "") : "none"}">${ICON.chev}</span><span class="ic ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
+    <span class="nm">${esc(e.name)}</span>${fl}<span class="more" onclick="wsMenu(event,${q(p)},${e.dir ? 1 : 0})">${ICON.more}</span></button>`;
+}
+function wsWalk(dir, depth){
+  const es = WS.dirs[dir]; if (!es) return WS.open.has(dir) ? `<div class="ws-row muted" style="--d:${depth}"><span class="chev none"></span>…</div>` : "";
+  let h = "";
+  for (const e of es) { h += wsRow(e, depth); if (e.dir && WS.open.has(e.path)) h += wsWalk(e.path, depth + 1); }
+  if (!es.length && depth) h += `<div class="ws-row muted empty" style="--d:${depth}"><span class="chev none"></span>空文件夹</div>`;
+  return h;
+}
+function drawWsTree(){
+  const el = $("#ws-tree"); if (!el || !WS) return;
+  const keep = $("#ws-tscroll")?.scrollTop || 0;
+  const changed = Object.keys(WS.flags);
+  const recent = changed.length ? `<div class="ws-sec">AI 刚改的 ${changed.length} 个<button onclick="wsClearFlags()">都看过了</button></div>`
+    + changed.map(p => `<button class="ws-row ${p === WS.cur ? "on" : ""}" style="--d:0" onclick="wsOpen(${q(p)})"><span class="chev none"></span>
+        <span class="ic">${ICON.file}</span><span class="nm">${esc(wsName(p))} <small>${esc(wsDir(wsRel(p)))}</small></span>
+        ${WS.writing.has(p) ? `<span class="ws-writing"></span>` : `<span class="ws-flag ${WS.flags[p]}">${WS.flags[p] === "new" ? "新" : "改"}</span>`}</button>`).join("")
+    + `<div class="ws-sec">全部文件</div>` : "";
+  const writingNew = [...WS.writing].filter(p => !WS.flags[p] && wsInside(p));
+  el.innerHTML = `<div class="ws-thead">
+      <button class="icon-btn m-only" aria-label="返回" onclick="WS.phoneCtx=false;wsGo('chat')">${ICON.left}</button>
+      <span class="root" title="${esc(tilde(WS.root, WS.machine))}">${esc(wsName(WS.root) || WS.root)}</span>
+      <button class="icon-btn" aria-label="新建文件" title="新建文件" onclick="wsNew(false)">${ICON.newfile}</button>
+      <button class="icon-btn" aria-label="新建文件夹" title="新建文件夹" onclick="wsNew(true)">${ICON.newdir}</button>
+      <button class="icon-btn" aria-label="上传" title="上传" onclick="$('#ws-upload').click()">${ICON.upload}</button>
+      <input type="file" id="ws-upload" multiple hidden onchange="wsUpload(this.files, wsTargetDir());this.value=''"></div>
+    <div class="ws-tscroll" id="ws-tscroll">${WS.err && !WS.dirs[WS.root] ? `<div class="ws-err">${esc(WS.err)}</div>` : ""}${recent}
+      ${writingNew.length ? writingNew.map(p => `<div class="ws-row"><span class="chev none"></span><span class="ic">${ICON.file}</span><span class="nm">${esc(wsName(p))}</span><span class="ws-writing"></span></div>`).join("") : ""}
+      ${wsWalk(WS.root, 0)}<div class="ws-drop d-only">把文件拖到这里上传</div></div>`;
+  $("#ws-tscroll").scrollTop = keep;
+  const r = $("#ws-ren"); if (r) { r.focus(); const k = r.value.lastIndexOf("."); r.setSelectionRange(0, k > 0 ? k : r.value.length); }
+  wsTreeDnd(el);
+}
+async function wsClick(p, isDir){
+  if (!isDir) return wsOpen(p);
+  if (WS.open.has(p)) WS.open.delete(p);
+  else { WS.open.add(p); if (!WS.dirs[p]) { drawWsTree(); await wsLoad(p); } }
+  wsStore(); drawWsTree();
+}
+function wsClearFlags(){
+  const now = Date.now() / 1000;
+  for (const p of Object.keys(WS.flags)) WS.seen[p] = now;
+  WS.flags = {}; wsStore(); drawWsTree(); wsApply();
+}
+const wsTargetDir = () => WS.cur && wsInside(WS.cur) ? wsDir(WS.cur) : WS.root;
+
+// ---- 打开、标签 ----
+async function wsOpen(p){
+  if (!WS || !wsInside(p)) return openDoc(p);
+  if (WS.flags[p]) { WS.seen[p] = Date.now() / 1000; delete WS.flags[p]; wsApply(); }
+  const add = wsExpandTo(p);
+  if (!WS.tabs.includes(p)) WS.tabs.push(p);
+  WS.cur = p; wsStore();
+  if (narrow()) { if (WS.scr !== "file") { wsGo("file"); return; } }
+  else if (!WS.on) { wsSetMode(true); return; }
+  drawWsTree();
+  if (add.length) wsReload(add);
+  wsActivate(p);
+}
+async function wsOpenAll(paths){
+  paths = paths.filter(wsInside);
+  if (!paths.length) return;
+  for (const p of paths) if (!WS.tabs.includes(p)) WS.tabs.push(p);
+  wsOpen(paths.find(p => wsKind(p) === "md") || paths[0]);
+}
+function wsActivate(p){
+  if (DOC && DOC.ws && DOC.path !== p) WS.docs[DOC.path] = DOC;
+  WS.cur = p; wsStore();
+  const k = wsKind(wsName(p));
+  if (WS.docs[p]) { DOC = WS.docs[p]; drawDoc(); return; }
+  if (k === "img" || k === "video" || k === "other") {
+    DOC = {chat: WS.chat, machine: WS.machine, path: p, ws: true, mode: "view", draft: "", dirty: false,
+           d: {kind: k, name: wsName(p), versions: [], latest: true, v: 0}};
+    WS.docs[p] = DOC; drawDoc(); return;
+  }
+  DOC = null;
+  openDoc(p, null, WS.chat, true);
+}
+async function wsCloseTab(p, e){
+  e && e.stopPropagation();
+  const d = WS.docs[p] || (DOC && DOC.path === p ? DOC : null);
+  if (d && d.dirty) { if (DOC !== d) DOC = d; await docSave(); }
+  const i = WS.tabs.indexOf(p);
+  WS.tabs = WS.tabs.filter(x => x !== p); delete WS.docs[p];
+  if (WS.cur === p) {
+    WS.cur = WS.tabs[Math.min(i, WS.tabs.length - 1)] || null;
+    if (DOC && DOC.path === p) DOC = null;
+    if (WS.cur) wsActivate(WS.cur); else drawWsEditor();
+  } else drawDoc();
+  wsStore(); drawWsTree(); drawWsCtx();
+}
+function wsTabs(){
+  return `<div class="ws-tabs d-only">${WS.tabs.map(t => `<button class="ws-tab ${t === WS.cur ? "on" : ""}" onclick="wsActivate(${q(t)});drawWsTree()" title="${esc(wsRel(t))}">
+    ${esc(wsName(t))}${(WS.docs[t] || {}).dirty || (DOC && DOC.path === t && DOC.dirty) ? `<span class="dot"></span>` : ""}<span class="x" onclick="wsCloseTab(${q(t)},event)">${ICON.x}</span></button>`).join("")}</div>`;
+}
+function drawWsEditor(){
+  const el = $("#ws-ed"); if (!el || !WS) return;
+  el.innerHTML = `${wsTabs()}<div class="ws-empty"><h2>从左边选个文件</h2><p>或者在右边让 AI 写一个</p></div>`;
+  drawWsCtx();
+}
+// 编辑区里的文件：自己改的停一下就保存
+function wsAutosave(){
+  clearTimeout(window._wsSave);
+  const d = DOC;
+  window._wsSave = setTimeout(() => { if (DOC === d && d.dirty) docSave(true); }, 1200);
+}
+
+// ---- 新建、改名、移动、删除、上传 ----
+async function wsNew(folder, dir){
+  if (!WS) return;
+  dir = dir || wsTargetDir();
+  try {
+    const r = await act(() => api("/api/ws/new", {chat: WS.chat, path: dir, name: folder ? "新建文件夹" : "未命名.md", dir: folder}, WS.machine));
+    WS.open.add(dir); await wsLoad(dir);
+    WS.renaming = r.path; WS.newPath = folder ? null : r.path;
+    if (narrow() && WS.scr !== "files") wsGo("files"); else drawWsTree();
+  } catch {}
+}
+function wsRenKey(e){
+  if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+  if (e.key === "Escape") { e.preventDefault(); WS.renaming = null; WS.newPath = null; drawWsTree(); }
+}
+async function wsRenDone(name){
+  const p = WS && WS.renaming; if (!p) return;
+  WS.renaming = null;
+  const open = WS.newPath === p; WS.newPath = null;
+  let np = p;
+  if (name.trim() && name.trim() !== wsName(p)) {
+    try { np = (await act(() => api("/api/ws/rename", {chat: WS.chat, path: p, name: name.trim()}, WS.machine))).path; wsMoved(p, np); }
+    catch {}
+  }
+  await wsLoad(wsDir(np)); drawWsTree();
+  if (open) wsOpen(np);
+}
+// 改名、移动以后：标签、打开着的文件跟着换路径
+function wsMoved(from, to){
+  const mv = x => x === from ? to : x.startsWith(from + "/") ? to + x.slice(from.length) : x;
+  WS.tabs = WS.tabs.map(mv); WS.cur = WS.cur && mv(WS.cur);
+  const docs = {}; for (const [k, v] of Object.entries(WS.docs)) { v.path = mv(v.path); docs[mv(k)] = v; } WS.docs = docs;
+  if (DOC && DOC.ws) { DOC.path = mv(DOC.path); if (DOC.d) DOC.d.name = wsName(DOC.path); }
+  WS.open = new Set([...WS.open].map(mv));
+  const fl = {}; for (const [k, v] of Object.entries(WS.flags)) fl[mv(k)] = v; WS.flags = fl;
+  wsStore(); if (DOC && DOC.ws) drawDoc();
+}
+async function wsMove(p, to){
+  if (!to || to === wsDir(p) || to === p || to.startsWith(p + "/")) return;
+  try {
+    const r = await act(() => api("/api/ws/move", {chat: WS.chat, path: p, to}, WS.machine));
+    wsMoved(p, r.path); WS.open.add(to);
+    await Promise.all([wsLoad(wsDir(p)), wsLoad(to)]); drawWsTree();
+    wsToast(`已移到「${wsName(to) || wsName(WS.root)}」`);
+  } catch {}
+}
+async function wsTrash(p){
+  const ws = WS;
+  try {
+    const r = await act(() => api("/api/ws/trash", {chat: ws.chat, path: p}, ws.machine));
+    for (const t of ws.tabs.filter(t => t === p || t.startsWith(p + "/"))) { ws.tabs = ws.tabs.filter(x => x !== t); delete ws.docs[t]; if (DOC && DOC.path === t) DOC = null; }
+    if (ws.cur && (ws.cur === p || ws.cur.startsWith(p + "/"))) { ws.cur = ws.tabs[0] || null; ws.cur ? wsActivate(ws.cur) : drawWsEditor(); }
+    delete ws.flags[p]; wsStore();
+    await wsLoad(wsDir(p)); drawWsTree();
+    wsToast(`已把「${wsName(p)}」移到废纸篓`, async () => {
+      try { await act(() => api("/api/ws/restore", {chat: ws.chat, token: r.token, path: r.path}, ws.machine)); if (WS === ws) { await wsLoad(wsDir(p)); drawWsTree(); } } catch {}
+    });
+  } catch {}
+}
+async function wsUpload(list, dir){
+  if (!WS || !list || !list.length) return;
+  const ws = WS; let n = 0;
+  for (const file of list) {
+    try {
+      const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(file.name), ...remoteHeader(ws.machine)}, body: file});
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
+      await api("/api/ws/put", {chat: ws.chat, key: d.key, path: dir, name: file.name}, ws.machine); n++;
+    } catch (e) { toast(`${file.name} 没传上：${e.message}`); }
+  }
+  if (n && WS === ws) { ws.open.add(dir); await wsLoad(dir); drawWsTree(); toast(`已上传 ${n} 个文件`); }
+}
+function wsMention(p){
+  const input = $("#input"); if (!input) return;
+  input.value += (input.value && !/\s$/.test(input.value) ? " " : "") + `「${wsRel(p)}」`;
+  if (narrow()) wsGo("chat"); else if (WS.nochat) wsToggleChat();
+  drawComposerState(); input.focus();
+}
+function wsMenu(e, p, isDir){
+  e.preventDefault(); e.stopPropagation();
+  const at = e.type === "contextmenu"
+    ? {stopPropagation(){}, currentTarget: {getBoundingClientRect: () => ({left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0})}}
+    : e;
+  const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${esc(js)}">${label}</button>`;
+  pop(at, [
+    isDir ? b(`wsNew(false,${JSON.stringify(p)})`, "新建文件") + b(`wsNew(true,${JSON.stringify(p)})`, "新建文件夹") : "",
+    b(`WS.renaming=${JSON.stringify(p)};drawWsTree()`, "重命名"),
+    b(`wsMention(${JSON.stringify(p)})`, "在对话里提到它"),
+    isDir ? "" : b(`wsDownload(${JSON.stringify(p)})`, "下载"),
+    b(`wsTrash(${JSON.stringify(p)})`, "移到废纸篓", "danger"),
+  ].join(""), true);
+}
+function wsDownload(p){
+  const a = document.createElement("a");
+  a.href = fileUrl(WS.chat, p) + (isRemote(WS.machine) ? `&machine=${encodeURIComponent(WS.machine)}` : ""); a.download = wsName(p);
+  document.body.append(a); a.click(); a.remove();
+}
+function wsTreeDnd(el){
+  let dragP = null;
+  el.ondragstart = e => { const r = e.target.closest?.(".ws-row[data-p]"); if (r) { dragP = r.dataset.p; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", wsRel(dragP)); } };
+  el.ondragover = e => {
+    e.preventDefault();
+    el.querySelectorAll(".ws-row.drop").forEach(x => x.classList.remove("drop"));
+    const r = e.target.closest?.('.ws-row[data-dir="1"]');
+    if (dragP) { if (r && r.dataset.p !== dragP && !r.dataset.p.startsWith(dragP + "/")) r.classList.add("drop"); }
+    else { el.classList.add("dragover"); if (r) r.classList.add("drop"); }
+  };
+  el.ondragleave = e => { if (!el.contains(e.relatedTarget)) { el.classList.remove("dragover"); el.querySelectorAll(".ws-row.drop").forEach(x => x.classList.remove("drop")); } };
+  el.ondrop = e => {
+    e.preventDefault(); el.classList.remove("dragover");
+    const r = e.target.closest?.('.ws-row[data-dir="1"]'), to = r ? r.dataset.p : WS.root;
+    el.querySelectorAll(".ws-row.drop").forEach(x => x.classList.remove("drop"));
+    if (dragP) { const p = dragP; dragP = null; wsMove(p, to); return; }
+    if (e.dataTransfer.files.length) wsUpload(e.dataTransfer.files, to);
+  };
+  el.ondragend = () => { dragP = null; };
+}
+function wsToast(text, undo){
+  document.querySelector(".toast.ws-t")?.remove();
+  const t = document.createElement("div"); t.className = "toast ws-t";
+  t.innerHTML = `<span>${esc(text)}</span>${undo ? `<button>撤销</button>` : ""}`;
+  document.body.append(t);
+  if (undo) t.querySelector("button").onclick = () => { t.remove(); undo(); };
+  setTimeout(() => t.remove(), 5000);
+}
+
+// ---- 输入框：带上正在看的文件 ----
+function drawWsCtx(){
+  const el = $("#ws-ctx"); if (!el) return;
+  const p = wsCtxFile();
+  el.innerHTML = p ? `<span class="ws-ctxchip">${ICON.file}<span class="t">正在看 ${esc(wsName(p))}</span><button aria-label="不带上这个文件" onclick="WS.ctx=false;drawWsCtx()">${ICON.x}</button></span>` : "";
+}
+// 手机上从文件页点「问 AI」回到对话时也带上（phoneCtx）
+const wsCtxFile = () => WS && (wsShown() || narrow() && WS.phoneCtx) && WS.ctx && WS.cur && wsInside(WS.cur) ? WS.cur : null;
+
+// ---- AI 干活时：正在写的文件实时出现，改完标出来 ----
+function wsProgress(ev){
+  if (!WS || ev.chat !== WS.chat) return;
+  const was = WS.writing;
+  WS.writing = new Set(ev.state === "working" ? (ev.writing || []).filter(wsInside) : []);
+  const dirs = new Set();
+  for (const p of ev.changed || []) if (wsInside(p) && !WS.flags[p]) { WS.flags[p] = "mod"; dirs.add(wsDir(p)); for (const d of wsExpandTo(p)) dirs.add(d); }
+  for (const p of WS.writing) dirs.add(wsDir(p));
+  const done = [...was].filter(p => !WS.writing.has(p));
+  for (const p of done) dirs.add(wsDir(p));
+  if (dirs.size) wsReload([...dirs]);
+  else if (was.size !== WS.writing.size) drawWsTree();
+  for (const p of done) wsRefreshDoc(p);
+  wsApply();
+}
+function wsAnswer(rec){
+  if (!WS || !(rec.changed || []).length) return;
+  const dirs = new Set();
+  for (const f of rec.changed) if (wsInside(f.path)) {
+    WS.flags[f.path] = f.new ? "new" : "mod";
+    dirs.add(wsDir(f.path)); for (const d of wsExpandTo(f.path)) dirs.add(d);
+    wsRefreshDoc(f.path);
+  }
+  WS.writing = new Set();
+  if (WS.cur && WS.flags[WS.cur] && wsEdShown()) { WS.seen[WS.cur] = Date.now() / 1000; delete WS.flags[WS.cur]; }
+  wsStore(); wsReload([...dirs]); wsApply();
+}
+// AI 改了打开着的文件：没改过的直接换成新的；自己正在改的先不动，提示一下
+function wsRefreshDoc(p){
+  const d = DOC && DOC.path === p ? DOC : WS.docs[p];
+  if (!d || !d.d || ["img", "video", "other"].includes(d.d.kind)) return;
+  if (d.dirty) { if (DOC === d) toast("AI 也改了这个文件，你的改动保存时会提示"); return; }
+  if (DOC === d && wsEdShown()) { DOC = null; delete WS.docs[p]; openDoc(p, null, WS.chat, true); }
+  else delete WS.docs[p];
+}
+// 回答下面：这一轮改了哪些文件，点一下在工作区打开
+function changesHtml(r){
+  if (!WS || !(r.changed || []).length) return "";
+  const fs = r.changed.filter(f => wsInside(f.path)); if (!fs.length) return "";
+  return `<div class="ws-changes"><div class="h">${ICON.edit}<span class="grow">改了 ${fs.length} 个文件</span><button onclick='wsOpenAll(${esc(JSON.stringify(fs.map(f => f.path)))})'>${narrow() ? "查看" : "在工作区查看"}</button></div>
+    ${fs.slice(0, 8).map(f => `<button class="chg" onclick="wsOpen(${q(f.path)})">${ICON.file}<span class="p">${esc(wsName(f.path))} <i>${esc(wsDir(wsRel(f.path)))}</i></span><span class="ws-flag ${f.new ? "new" : "mod"}">${f.new ? "新建" : "改了"}</span>${ICON.chev}</button>`).join("")}
+    ${fs.length > 8 ? `<div class="more">还有 ${fs.length - 8} 个</div>` : ""}</div>`;
+}
+// 编辑区里选中一段：让 AI 改 / 问一下（带上是哪个文件的哪段）
+function wsSelTool(sel){
+  const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
+  const body = node && node.closest("#ws-ed .doc-body");
+  if (!body || !body.contains(sel.focusNode) || !DOC || !DOC.ws) return false;
+  const text = sel.toString().trim();
+  if (text.length < 2) return true;
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  const t = document.createElement("div"); t.className = "seltool";
+  t.innerHTML = `<button>${ICON.edit}让 AI 改</button><button>${ICON.quote}问一下</button>`;
+  t.style.left = Math.max(8, rect.left) + "px"; t.style.top = Math.max(8, rect.top - 40) + "px";
+  t.addEventListener("mousedown", e => e.preventDefault());
+  const [ed, ask] = t.querySelectorAll("button");
+  const go = how => {
+    t.remove(); getSelection().removeAllRanges();
+    const p = DOC.path;
+    if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (WS.nochat) wsToggleChat();
+    setTimeout(() => { addQuote(`${wsRel(p)}：\n${text}`); const i = $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
+  };
+  ed.onclick = () => go("edit"); ask.onclick = () => go("ask");
+  document.body.append(t);
+  return true;
 }
 
 // ================= 对话框 =================
@@ -5925,6 +6619,7 @@ addEventListener("resize", () => {             // 跨过手机宽度：变窄按
   let off = false;
   if (!wasNarrow) { try { off = !!localStorage.getItem("ccim.listOff"); } catch {} }
   app.classList.toggle("list-off", off);
+  if (WS && $("#ws-tree")) { if (!wasNarrow) WS.scr = null; wsApply(); if (wsShown()) wsShow(); }
 });
 
 // ================= 启动 =================

@@ -41,6 +41,7 @@ class AskPreviewTests(unittest.TestCase):
             logs.append(cid, {"type": "answer", "state": "done", "at": 2})
             pf = object.__new__(Platform)
             pf.channel = SimpleNamespace(logs=logs)
+            pf.mentions = SimpleNamespace(crew=lambda cid: [])
             path = Path(logs._f(cid))
             before = path.read_bytes()
             try:

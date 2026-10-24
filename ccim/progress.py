@@ -31,8 +31,11 @@ def describe_tool(name, inp):
         return None
     if name.startswith("mcp__ccim__run_as_admin"):
         return "用管理员权限执行：" + short(inp.get("command"), 60)
-    if name.startswith("mcp__ccim__ask_agents"):
-        return "请 " + "、".join("@" + str(x) for x in (inp.get("to") or [])) + " 帮忙：" + short(inp.get("text"), 40)
+    if name.startswith("mcp__ccim__ask_agent"):
+        to = inp.get("to") or []
+        return "请 " + "、".join("@" + str(x) for x in ([to] if isinstance(to, str) else to)) + " 帮忙：" + short(inp.get("text"), 40)
+    if name.startswith("mcp__ccim__platform_agents"):
+        return "查看平台上的 Agent"
     if name.startswith("mcp__ccim__skill_"):     # Skill 助手（#116）
         what = {"skill_list": "看 Skill 列表", "skill_files": "看 Skill 里的文件", "skill_read": "读", "skill_write": "改",
                 "skill_install": "安装 Skill", "skill_enable": "启用 / 停用 Skill", "skill_delete": "删除 Skill"}.get(name.split("__")[-1], "处理 Skill")

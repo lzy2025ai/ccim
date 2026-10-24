@@ -38,7 +38,7 @@ CLI = shutil.which("claude") or next((p for p in map(os.path.expanduser, ["~/.lo
 APPEND = """\
 你正在通过{label}和用户对话（ccim 把这个项目目录接到了{label}）。用户多半在手机上看回复：
 - 回答简洁，{style}
-- 需要把图片、视频、文件交给用户时，调用 mcp__ccim__send_file 工具发到聊天里。
+- 需要把图片、视频、文件交给用户时，调用 mcp__ccim__send_file 工具发到聊天里。之前的记录里用过的 SendUserFile 在这里用不了。
 - 用户发来的图片和文件已保存到本地，路径写在消息里，需要时用 Read 查看。
 - 没有交互式提问框，有问题直接在回复里问。"""
 ADMIN = """
@@ -51,6 +51,9 @@ SCHEDULE = """
 GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
 GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
 PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--help)")   # 升级稳定版：先让用户确认（#146）
+# 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（这里没有，报「disabled」），钩子接不到，看到就补一句（#190）
+WRONG_SEND = "SendUserFile"
+WRONG_SEND_HINT = "（ccim）这里没有 SendUserFile，刚才的文件没发出去。发文件改用 mcp__ccim__send_file，参数一样是 path，现在重新发一次。"
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND = """
 - 这个项目在别处（飞书、微信、终端或桌面端）还有别的对话，各聊各的。用户想知道别处聊过什么时，
@@ -117,6 +120,7 @@ class Turn:
         self.flight = {}                      # 还没出结果的工具调用：编号 → (说明, 开始时刻)
         self.last = time.monotonic()          # 最近一次收到 Claude 的任何消息
         self.warned = None                    # 没有卡片的渠道：已经提醒过卡住的是哪一步
+        self.hinted = False                   # 这一轮已经提醒过发文件用错了工具（#190）
 
     def say(self, text):
         self.text, self.live = text, ""
@@ -232,7 +236,7 @@ class Chat:
         mins = max(1, int((time.monotonic() - since) // 60))
         text = (f"刚才「{desc}」这一步 {mins} 分钟没有结果，被用户结束了。不要原样重试：要等的操作加上超时，"
                 "或者换个办法，接着把事情做完。")
-        extra = [str(p) for p, _ in t.unseen]
+        extra = [str(p) for p, _ in t.unseen if p != WRONG_SEND_HINT]
         if extra:
             text += "\n\n这期间用户补充了：\n" + "\n".join("- " + x for x in extra)
         prompt, reply_to = cur
@@ -622,6 +626,13 @@ class Chat:
                             t.uuid = m.uuid       # 以后要从这一轮的回答分叉，接到这条为止
                         for blk in m.content:
                             if isinstance(blk, ToolUseBlock):
+                                if blk.name == WRONG_SEND and not t.hinted and not self.stopping:
+                                    t.hinted = True
+                                    try:
+                                        await self.client.query(WRONG_SEND_HINT)
+                                        t.unseen.append((WRONG_SEND_HINT, reply_to))
+                                    except Exception:
+                                        log.warning("提醒改用 send_file 没交给 Claude", exc_info=True)
                                 d = describe_tool(blk.name, blk.input)
                                 if d:
                                     t.steps.append(d)

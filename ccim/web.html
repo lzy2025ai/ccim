@@ -4160,6 +4160,7 @@ function drawDev(){
     + `<button class="btn primary" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devShip([${r.pr}])">上线</button>`,
     `<button class="ck-box ${shipPick.has(r.pr) ? "on" : ""}" role="checkbox" aria-checked="${shipPick.has(r.pr)}" aria-label="选中" ${busy || r.checks === "fail" ? "disabled" : ""} onclick="devToggle(${r.pr})">${shipPick.has(r.pr) ? "✓" : ""}</button>`)).join("");
   const behind = (d.merged || []).length || d.stale;
+  const typing = document.activeElement && document.activeElement.closest(".dev-q");   // 重画时别把正在输的搜索框丢了
   const tried = review.find(r => r.trying);
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>开发</h2>
     <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在这台 Mac 的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
@@ -4168,7 +4169,25 @@ function drawDev(){
       ${behind && !busy && !updating ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
       <div class="sect"><h3>等你验收 ${review.length || ""}</h3>${rows || `<p class="muted">没有等验收的需求。</p>`}
         ${shipPick.size > 1 ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devShip([...shipPick])">一起上线 ${shipPick.size} 个</button>` : ""}</div>
+      ${(d.shipped || []).length ? `<div class="sect"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">已上线</h3>
+        <label class="search dev-q" style="flex:1;min-width:160px;max-width:280px">${ICON.search}<input placeholder="编号或标题" aria-label="搜索已上线的需求" value="${esc(shippedQ)}" oninput="shippedQ=this.value;shippedN=20;drawShipped()"></label></div>
+        <div id="dev-shipped"></div></div>` : ""}
     </div></div>`;
+  drawShipped();
+  if (typing) { const i = $(".dev-q input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+let shippedQ = "", shippedN = 20;       // 已上线的需求（#201）：筛选、显示几条
+function drawShipped(){
+  const box = $("#dev-shipped");
+  if (!box) return;
+  const q = shippedQ.trim().replace(/^#/, "").toLowerCase();
+  const all = (DEVP.shipped || []).filter(r => !q || String(r.issue || "") === q || String(r.pr) === q || r.title.toLowerCase().includes(q));
+  const at = r => r.merged ? whenTs(Date.parse(r.merged) / 1000) + " 上线" : "";
+  box.innerHTML = all.slice(0, shippedN).map(r => devItem({...r,
+      state: [at(r), r.rounds > 1 ? `改过 ${r.rounds} 轮` : ""].filter(Boolean).join(" · ")},
+      `<a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="text-decoration:none">#${r.pr}</a>`)).join("")
+    + (!all.length ? `<p class="muted">没有找到。</p>` : "")
+    + (all.length > shippedN ? `<button class="btn" onclick="shippedN+=20;drawShipped()">再显示 ${Math.min(20, all.length - shippedN)} 个</button>` : "");
 }
 function devToggle(pr){ shipPick.has(pr) ? shipPick.delete(pr) : shipPick.add(pr); drawDev(); }
 async function devTry(what){

@@ -1,4 +1,5 @@
 """开发页（#156）：等验收的、正在体验的、已合并还没升级的需求；体验、合并、全部升级。只在跑开发版的电脑上有。
+已上线的需求（#201）也列出来，按 issue 合并几轮 PR，能点回提需求的对话。
 
 需求按 issue 列：等验收 = 开着的 PR（本机有它的工作目录才能体验）；已合并没升级 = 当前稳定版之后 main 上的提交。
 每条能点回提需求的对话：对话 meta 的 issues（session._post_bash 在 Agent 建、重开 issue，开 PR 时记下）。
@@ -233,6 +234,7 @@ class Dev:
             issues = [i["number"] for i in p.get("closingIssuesReferences") or []] or [n for n in [_num(p["title"])] if n]
             if issues:
                 PR_ISSUE[(repo, p["number"])] = issues[0]
+        shipped = self._shipped(repo)
         cur = (runtime._channel().get("current") or "").rsplit("-", 1)[-1]
         log_out = runtime._git("log", "--format=%H%x09%s%x09%ct", f"{cur}..origin/main").stdout if cur else ""
         for line in log_out.splitlines():     # 合并进来的提交：「… #issue (#PR)」
@@ -256,16 +258,37 @@ class Dev:
                 n = _num(subj)
                 merged.append({"commit": sha[:7], "issue": n, "title": runtime._change(subj), "at": int(ct or 0),
                                "chat": links.get(n)})
+        for x in shipped:
+            x["chat"] = links.get(x["issue"])
         main = runtime._git("rev-parse", "origin/main").stdout.strip()
         phase = _phase()                      # 更新做到一半时按旧版本算会说「有改动没用上」，这时不算
         updating = bool(phase)
         return {"repo": repo, "review": review, "merged": [] if updating else merged, "updating": updating, "phase": phase,
+                "shipped": shipped,
                 "stable": runtime._channel().get("current"),
                 "last": runtime.last_promote(),
                 "local_url": f"http://127.0.0.1:{registry.read_state(self.pf.home).get('port') or 8977}/",
                 "trying": trying and {"label": trying.get("label"), "branch": trying.get("branch")},
                 "stale": bool(main and self.started and not main.startswith(self.started[:7]) and not trying and not updating),
                 "at": time.time()}
+
+    def _shipped(self, repo):
+        """已上线的需求（#201）：最近合并的 PR 按 issue 合起来，一个 issue 改过几轮只列一条（最后那次的标题和时间）。"""
+        r = _gh(repo, ["pr", "list", "--state", "merged", "--limit", "200", "--json",
+                       "number,title,url,mergedAt,closingIssuesReferences"])
+        if r.returncode != 0:
+            return []
+        out = {}
+        for p in sorted(json.loads(r.stdout or "[]"), key=lambda p: p.get("mergedAt") or ""):
+            issues = [i["number"] for i in p.get("closingIssuesReferences") or []] or [n for n in [_num(p["title"])] if n]
+            n = issues[0] if issues else None
+            if n:
+                PR_ISSUE[(repo, p["number"])] = n
+            k = n or f"pr{p['number']}"
+            rounds = out[k]["rounds"] + 1 if k in out else 1
+            out[k] = {"issue": n, "pr": p["number"], "url": p["url"], "title": re.sub(r"\s*\(?#\d+\)?", "", p["title"]).strip(),
+                      "merged": p.get("mergedAt"), "rounds": rounds}
+        return sorted(out.values(), key=lambda x: x["merged"] or "", reverse=True)
 
     def _links(self, repo):
         """issue 编号 → 提这个需求的对话（网页对话）：最早提到它的那个。"""

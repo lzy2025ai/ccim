@@ -231,6 +231,11 @@
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json
 - 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
+- `ccim/search.py`：Agent 搜自己参与过的对话（#180）。`search_chats` / `open_chat`（session.py `_search_tools`，平台上 Agent 的对话都有，含群聊里被 @ 的子对话）。
+  范围 `sources`：网页里它的对话、它是成员的群聊、@ 过它的外层对话（本机子对话的内容都在外层里，不重复），别的电脑上群聊的子对话，
+  飞书、微信（external_chats），工作目录下最近 100 个终端会话；访客只有自己账号的网页对话。关键词都要出现在同一条消息里，不建索引；
+  别处的记录自己缓存（不挤 history 的 50 个）。结果里它自己说的写「你」：Agent 不一定记得自己叫什么，写名字会被当成别人。
+  角色说明（`role_note`）也带上「你是这个平台上的 Agent「名字」」
 - `ccim/history.py`：把 Claude Code / Codex 的对话记录读成 user / answer 记录；`title` 取第一句话给老对话当标题
 - `ccim/progress.py`：工具调用转成一行中文
 - `ccim/registry.py`：`~/.ccim/registry.json` 登记表、钥匙串、每个项目的 state.json（各对话的 session_id、模型、思考深度等）；

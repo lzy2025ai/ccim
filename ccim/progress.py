@@ -34,6 +34,10 @@ def describe_tool(name, inp):
     if name.startswith("mcp__ccim__ask_agent"):
         to = inp.get("to") or []
         return "请 " + "、".join("@" + str(x) for x in ([to] if isinstance(to, str) else to)) + " 帮忙：" + short(inp.get("text"), 40)
+    if name.startswith("mcp__ccim__search_chats"):
+        return "翻以前的对话：" + short(inp.get("query"), 40)
+    if name.startswith("mcp__ccim__open_chat"):
+        return "读以前的对话"
     if name.startswith("mcp__ccim__platform_agents"):
         return "查看平台上的 Agent"
     if name.startswith("mcp__ccim__skill_"):     # Skill 助手（#116）

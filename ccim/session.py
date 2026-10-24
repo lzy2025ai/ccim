@@ -484,7 +484,7 @@ class Chat:
         if guest:                             # 共享电脑上访客的 Agent：圈在它的文件夹里（#154）
             from . import share
             sandbox, rules = share.fence(guest, self.b.path)
-        if self.b.entry.get("side"):          # 旁问（#196）：命令也只能看不能写
+        if self.b.entry.get("side"):          # 侧边对话（#196）：命令也只能看不能写
             from . import share
             sandbox = share.read_only(sandbox if guest else None, self.b.path)
         for resume, fork in tries + [(None, False)]:
@@ -920,7 +920,7 @@ class Chat:
 
         tools = [send_file]
         pf = getattr(chat.b.channel, "platform", None)
-        side = chat.b.entry.get("side")      # 旁问（#196）：只回答问题，不 @ 人、不转交
+        side = chat.b.entry.get("side")      # 侧边对话（#196）：只回答问题，不 @ 人、不转交
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
@@ -937,7 +937,7 @@ class Chat:
         return tools
 
 
-SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 旁问（#196）不能改文件
+SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")]
 
 

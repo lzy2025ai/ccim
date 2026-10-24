@@ -162,6 +162,7 @@
 - `ccim/mentions.py`：网页对话里 @ 其他 Agent（#11）。每个被 @ 的 Agent 一个子对话 m-<对话>-<Agent>（meta 里 mention_of，不进列表），
   再被 @ 时接着它的会话，只补上它上次（ctx_upto）之后对话里的新内容；结果记在主对话里（type=mention，按 id 合并）。
   之后不带 @ 发消息时，主对话的助手没看过的回答（done_at > mention_seen）拼在消息前面交给它。删主对话连子对话一起删
+  列表、任务面板里群聊按「谁在干活」显示（#192）：`Mentions.where` 记 mention → (群聊, 成员, 子对话)，`crew` 给 chat_view；成员在干活时不算等你处理，最后回答的是成员时 last_by 是它（面板头像），一句话进度也按它的回答写；网页 `working(c)` = 主 Agent 或成员在干活（c.busy 只管主 Agent，输入框用）
   群聊里的 Agent 自己也能 @ 群成员：`ask_agents` 工具（session.py `_ask_agents`，只给网页里 Agent 的 w- 对话）→ `Mentions.ask`，
   记录带 by（网页显示成它说的），等各人回答完（waiters，最多 20 分钟）把回答作为工具结果交回，所以 unseen 不再重复带
   子对话只装群里 @ 它的内容（#150）：用户在子对话里自己开口（发消息、@ 人、拉人）就 `Platform.split_sub` 另开这个 Agent 的独立对话

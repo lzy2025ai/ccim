@@ -33,6 +33,7 @@ class Mentions:
     def __init__(self, pf):
         self.pf = pf
         self.running = set()                  # 正在做或排着队的 mention id
+        self.where = {}                       # mention id → (群聊, 成员, 子对话)：列表、任务面板里显示群里谁在干活（#192）
         self.tasks = {}                       # mention id → (子对话, session.Task)
         self.waiters = {}                     # mention id → future，Agent 自己 @ 别人时等回答（ask_agents 工具）
 
@@ -132,6 +133,7 @@ class Mentions:
                 f"[{self._agent_name(by) if by else '用户'}在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)
+            self.where[rid] = (cid, aid, sub)
             remote = home[aid] != me
             self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid, "msg": mid, "agent": aid,
                                                         "chat": sub, "state": "queued", **({"by": by} if by else {}),
@@ -183,6 +185,18 @@ class Mentions:
                for aid in m.get("members") or [] if aid != m.get("agent")}
         return {k: v for k, v in out.items() if v}
 
+    def crew(self, cid):
+        """这个群聊里被 @ 了、正在干活（或排着队）的成员：[{agent, doing}]，按开始的先后。"""
+        for rid in [r for r in self.where if r not in self.running]:
+            self.where.pop(rid, None)
+        out, seen = [], set()
+        for rid, (c, aid, sub) in self.where.items():
+            if c == cid and aid not in seen:
+                seen.add(aid)
+                steps = (self.pf.channel.progress_of.get(sub) or {}).get("steps") or [None]
+                out.append({"agent": aid, "doing": steps[-1]})
+        return out
+
     def _settle(self, cid, upd):
         chats = self.pf.chats()
         if upd.get("ctx") and upd.get("agent") and cid in chats:
@@ -190,6 +204,8 @@ class Mentions:
             self.pf.store.write(chats)
         if cid in self.pf.chats():
             self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, upd))
+            if upd.get("state") == "done" and upd.get("text") and getattr(self.pf.channel, "on_answer", None):
+                self.pf.channel.on_answer(cid)    # 成员答完：一句话进度按它的回答写（#192）
         f = self.waiters.get(upd["id"])
         if f and not f.done():
             f.set_result(upd)

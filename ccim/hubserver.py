@@ -429,6 +429,8 @@ class Hub:
     def visible(self, aid, ev):
         """推送给这个账号的网页：只要它能用的电脑上来的（电脑列表变了的通知谁都给）。
         共享的电脑（#154）：访客只收标了自己（_a）的，和 Skill、知识库有变化这类不属于哪个对话的；主人收不到访客的。"""
+        if ev.get("type") == "pairing":           # 新电脑接入的进度（#175）：只给生成配对码的那个账号
+            return (ev.get("_acct") or OWNER) == aid
         mid = ev.get("_m")
         if not mid:
             return True
@@ -605,6 +607,10 @@ def _handler(hub):
             st = static_file(u.path)
             if st:
                 return self._send(200, st[0], st[1])
+            if u.path == "/join.sh":                 # 新电脑一条命令接入（#175），不用登录；安装包在 /peer/dl/
+                from . import onboard
+                return self._send(200, onboard.script(hub.public_url or "https://" + (self.headers.get("Host") or "")),
+                                  "text/x-shellscript; charset=utf-8")
             if u.path == "/setup":
                 return self._send(200, _page(SETUP_BODY, SETUP_SCRIPT), "text/html; charset=utf-8")
             if u.path in ("/", "/index.html"):

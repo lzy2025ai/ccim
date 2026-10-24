@@ -272,6 +272,7 @@ body{overflow:hidden}
 @media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
+.pair-st{display:flex;align-items:center;gap:8px;margin:10px 0 4px} .pair-st.ok{color:var(--ok);font-weight:600} .pair-st.err{color:var(--bad)}
 .mem .btn{margin-right:12px}
 .kbmark{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#fff;flex:none}
 .kbmark svg{width:16px;height:16px}
@@ -1467,7 +1468,8 @@ function connectEvents(){
   let lost = false;
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
-    if (ev.type === "idle") { refreshSoon(); return; }   // 一轮结束的状态记下了（#98）
+    if (ev.type === "idle") { refreshSoon(); return; }
+    if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
     if (ev.type === "group") {            // 群成员、群聊说明改了（#15）
       if (detail && detail.id === ev.chat) { clearTimeout(window._grt); window._grt = setTimeout(async () => {
         if (!detail || detail.id !== ev.chat) return;
@@ -4127,8 +4129,7 @@ function renderMachines(){
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
       ${joined ? `<div class="sect"><h3>已加入「${esc(hub.name || "")}」</h3><p class="muted">要添加别的电脑，到「${esc(hub.name || "")}」上操作。</p>
         <button class="btn danger" onclick="leaveHub()">断开</button></div>`
-      : `<div class="sect"><h3>添加电脑</h3><p class="muted">${S.hub ? "先在要加入的电脑上装好 ccim，再生成配对码。" : "两台电脑要在同一个网络里。先在另一台电脑上装好 ccim，再生成配对码。"}</p>
-        <div id="pair-box"><button class="btn primary" onclick="newPairCode()">生成配对码</button></div></div>`}
+      : `<div class="sect"><h3>添加电脑</h3><div id="pair-box">${pairBox()}</div></div>`}
     </div></div>`;
 }
 // ---- 开发页（#156）：等验收、体验中、已合并没升级的需求 ----
@@ -4288,20 +4289,60 @@ function watchUpgrade(){              // 有电脑在升级：每 4 秒刷新一
     if (!any) { clearInterval(window._upw); window._upw = null; }
   }, 4000);
 }
+// 添加电脑（#175）：新电脑一条命令装好 ccim 并加入；已经装好的用 ccim join。那台电脑走到哪一步实时显示
+let PAIR = {kind: "new", r: null};
+const PAIR_STEP = {started: "那台电脑开始接入了…", installing: "正在那台电脑上安装 ccim，第一次要几分钟…", joining: "正在加入…"};
+function pairCmds(){
+  const r = PAIR.r, hosts = r.hosts.length ? r.hosts : ["这台电脑的地址"];
+  return PAIR.kind === "new"
+    ? hosts.map(h => `curl -fsSL ${r.port ? `http://${h}:${r.port}` : h}/join.sh | sh -s ${r.code}`)
+    : hosts.map(h => `ccim join ${h}${r.port && r.port !== 8978 ? ":" + r.port : ""} ${r.code}`);
+}
+function pairBox(){
+  const tabs = `<div class="seg" style="margin-bottom:12px">${[["new", "新电脑"], ["have", "已经装好 ccim"]].map(([k, t]) =>
+    `<button class="${PAIR.kind === k ? "on" : ""}" onclick="PAIR.kind='${k}';drawPair()">${t}</button>`).join("")}</div>`;
+  const lan = S.hub ? "" : "两台电脑要在同一个网络里。";
+  const live = PAIR.r && (PAIR.step === "done" || Date.now() < PAIR.until);
+  if (!live) return `${tabs}<p class="muted">${lan}${PAIR.kind === "new" ? "在那台电脑上运行一条命令，自动装好 ccim 并加入。支持 macOS 和 Linux。" : "那台电脑上已经有 ccim 了，用 ccim join 加入。"}</p>
+    ${PAIR.r ? `<p class="muted">配对码过期了，重新生成一个。</p>` : ""}<button class="btn primary" onclick="newPairCode()">生成配对码</button>`;
+  if (PAIR.step === "done") return `<p class="pair-st ok">✓ 「${esc(PAIR.name || "新电脑")}」已加入</p><button class="btn" onclick="PAIR.r=null;drawPair()">再添加一台</button>`;
+  const cmds = pairCmds();
+  const st = PAIR.step === "failed" ? `<p class="pair-st err">✗ ${esc(PAIR.error || "那台电脑上出错了")}</p><p class="muted" style="font-size:13px">按那台电脑终端里的提示处理后，再运行一次上面的命令。</p>`
+    : `<p class="pair-st"><span class="spin"></span>${PAIR_STEP[PAIR.step] || "等那台电脑运行命令…"}</p>`;
+  return `${tabs}<p>${PAIR.kind === "new" ? "在那台电脑的「终端」里运行：" : "在那台电脑的终端里运行："}</p>
+    ${cmds.map(c => `<div class="row" style="margin:6px 0"><pre style="flex:1;margin:0;padding:8px 10px;background:var(--sunk);border-radius:8px;white-space:pre-wrap;word-break:break-all">${esc(c)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(c)});toast('已复制')">复制</button></div>`).join("")}
+    ${st}
+    <p class="muted" style="font-size:13px">配对码 ${PAIR.r.minutes} 分钟内有效，只能用一次。${S.hub ? "" : "第一次连接时，这台 Mac 可能会问是否允许 ccim 接收连接，选「允许」。"}</p>
+    <button class="btn" onclick="newPairCode()">重新生成</button>`;
+}
+function drawPair(){ const el = $("#pair-box"); if (el) el.innerHTML = pairBox(); }
+function pairEvent(ev){
+  if (!PAIR.r || ev.pid !== PAIR.r.pid || PAIR.step === "done") return;
+  Object.assign(PAIR, {step: ev.step, name: ev.name || PAIR.name, error: ev.error || ""});
+  if (ev.step === "done") {                // 刚配对上时那边的 ccim 还在重启：刷新到它在线为止（最多一分钟）
+    clearInterval(window._pairWatch); toast(`「${ev.name || "新电脑"}」已加入`);
+    let n = 0;
+    window._pairWatch = setInterval(async () => {
+      await loadState().catch(() => {});
+      if (current.view === "settings" && current.id === "machines" && !current.sub) renderMachines();
+      if (++n >= 20 || (S.machines || []).some(m => m.name === ev.name && m.online)) clearInterval(window._pairWatch);
+    }, 3000);
+    loadState().then(() => { if (current.view === "settings") renderMachines(); });
+  }
+  else drawPair();
+}
 async function newPairCode(){
   const r = await act(() => api("/api/peers/code", {}));
-  const cmds = (r.hosts.length ? r.hosts : ["这台电脑的地址"]).map(h => `ccim join ${h}${r.port && r.port !== 8978 ? ":" + r.port : ""} ${r.code}`);
-  $("#pair-box").innerHTML = `<p>在另一台电脑的终端里运行：</p>
-    ${cmds.map(c => `<div class="row" style="margin:6px 0"><pre style="flex:1;margin:0;padding:8px 10px;background:var(--sunk);border-radius:8px">${esc(c)}</pre><button class="btn" onclick="navigator.clipboard.writeText(${q(c)});toast('已复制')">复制</button></div>`).join("")}
-    <p class="muted" style="font-size:13px">配对码 ${r.minutes} 分钟内有效，只能用一次。${S.hub ? "" : "第一次连接时，这台 Mac 可能会问是否允许 ccim 接收连接，选「允许」。"}</p>
-    <button class="btn" onclick="newPairCode()">重新生成</button>`;
+  PAIR = {kind: PAIR.kind, r, until: Date.now() + r.minutes * 60000};
+  drawPair();
   clearInterval(window._pairWatch);
-  const n = (S.machines || []).length;
-  window._pairWatch = setInterval(async () => {       // 那边加入了就刷新
+  const had = new Set((S.machines || []).map(m => m.id));
+  window._pairWatch = setInterval(async () => {       // 收不到推送时的兜底：电脑多了一台就算加入了
+    if (Date.now() > PAIR.until) { clearInterval(window._pairWatch); return drawPair(); }
     await loadState();
-    if ((S.machines || []).length > n) { clearInterval(window._pairWatch); toast("已加入"); if (current.view === "settings") renderMachines(); }
-  }, 3000);
-  setTimeout(() => clearInterval(window._pairWatch), r.minutes * 60000);
+    const m = (S.machines || []).find(m => !had.has(m.id));
+    if (m && PAIR.r === r) pairEvent({pid: r.pid, step: "done", name: m.name});
+  }, 5000);
 }
 async function removeMachine(id, name){
   if (!await confirmBox(`移除「${name}」？`, "移除后它的 Agent、对话不再显示在这里；那台电脑上的东西不受影响。要再加回来，重新配对就行。", "移除")) return;

@@ -2,6 +2,7 @@
 
 每台电脑报自己的版本：开发版（ccim 代码目录）显示当前提交；稳定版（~/.ccim/stable/<版本>）看目录名；
 用 `uv tool install git+…` 装的发布版读安装记录里的提交，和发布地址（GitHub）上的最新提交比，落后了就能升级。
+用总控给的接入脚本装的（#175）版本号里带着提交（0.19.0+g8c1de9e），来源是总控：和总控的版本比，升级也从总控下载。
 
 升级在独立进程里做（`python -m ccim.upgrade run`，脱离网页平台，重启平台也不影响它）：`uv tool upgrade ccim`，
 装好后逐个安全重启在跑的项目（网页平台放最后）；平台没起来就装回原来那次提交再重启。结果写 ~/.ccim/upgrade.json。
@@ -12,6 +13,7 @@ import json, os, re, shutil, subprocess, sys, time
 from . import daemon, registry, runtime   # noqa: F401  先加载好，升级时磁盘上的代码会被换掉
 
 LATEST_TTL = 3600
+HUB = "hub"                                   # 发布地址是总控（从总控装的）
 _latest = {}                                  # 发布地址 → (取到的时间, {commit, date})
 
 
@@ -58,6 +60,9 @@ def info():
     if real.startswith(stable):
         name = os.path.relpath(real, stable.rstrip(os.sep)).split(os.sep)[0]
         return dict(out, kind="stable", commit=name.rsplit("-", 1)[-1] if "-" in name else "")
+    m = re.search(r"\+g([0-9a-f]{7,40})$", version)
+    if m:                                     # 从总控装的（#175）
+        return dict(out, version=version.split("+")[0], kind="release", commit=m.group(1)[:7], url=HUB)
     try:
         d = json.loads(md.distribution("ccim").read_text("direct_url.json") or "{}")
     except Exception:
@@ -72,10 +77,28 @@ def info():
     return out
 
 
+def _hub_version():
+    """总控上的版本：{commit, version, wheel, sha256}。"""
+    from . import peers
+    hub = peers._load("hub.json", None)
+    if not hub:
+        return None
+    c = peers._conn(hub["url"], 15)
+    try:
+        c.request("GET", "/peer/version")
+        r = c.getresponse()
+        data = r.read()
+    finally:
+        c.close()
+    if r.status != 200:
+        raise RuntimeError(f"总控没有给出版本（{r.status}）")
+    return json.loads(data)
+
+
 def latest(url, block=False):
-    """发布地址上最新的提交（GitHub），一小时问一次。取不到返回 None。"""
+    """发布地址上最新的提交（GitHub 或总控），一小时问一次。取不到返回 None。"""
     m = re.match(r"(?:git\+)?https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", url or "")
-    if not m:
+    if not m and url != HUB:
         return None
     hit = _latest.get(url)
     if hit and time.time() - hit[0] < LATEST_TTL:
@@ -85,6 +108,14 @@ def latest(url, block=False):
         import threading
         threading.Thread(target=latest, args=(url, True), daemon=True).start()
         return hit[1] if hit else None
+    if url == HUB:
+        try:
+            d = _hub_version()
+            v = {"commit": d["commit"]} if d and d.get("commit") else None
+        except Exception:
+            v = hit[1] if hit else None
+        _latest[url] = (time.time(), v)
+        return v
     try:
         import httpx
         r = httpx.get(f"https://api.github.com/repos/{m.group(1)}/{m.group(2)}/commits/HEAD", timeout=8,
@@ -150,8 +181,9 @@ def start():
 
 def _new_commit():
     """装好以后的提交：用新装的 python 现问（这个进程里加载的还是旧代码）。"""
-    r = subprocess.run([sys.executable, "-P", "-c", "import json,importlib.metadata as m;"
-                        "print(json.loads(m.distribution('ccim').read_text('direct_url.json'))['vcs_info']['commit_id'][:7])"],
+    r = subprocess.run([sys.executable, "-P", "-c", "import json,importlib.metadata as m;v=m.version('ccim');"
+                        "print(v.split('+g')[1][:7] if '+g' in v else "
+                        "json.loads(m.distribution('ccim').read_text('direct_url.json'))['vcs_info']['commit_id'][:7])"],
                        capture_output=True, text=True, timeout=60)
     return r.stdout.strip()
 
@@ -169,11 +201,67 @@ def _restart_all():
     return ok
 
 
+MIRRORS = ("https://mirrors.aliyun.com/pypi/simple", "https://mirrors.cloud.tencent.com/pypi/simple",
+           "https://pypi.tuna.tsinghua.edu.cn/simple")
+PYPI_PROBE = ("https://files.pythonhosted.org/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/"
+              "pip-24.0-py3-none-any.whl")
+
+
+def _index_env():
+    """PyPI 连不上时走国内镜像（和 join.sh 一样）。"""
+    import httpx
+    try:                                      # 下得动才算：6 秒内下完一个 2 MB 的包
+        t = time.time()
+        httpx.get(PYPI_PROBE, timeout=6).raise_for_status()
+        if time.time() - t < 6:
+            return {}
+    except Exception:
+        pass
+    for u in MIRRORS:
+        try:
+            httpx.get(u + "/six/", timeout=4).raise_for_status()
+        except Exception:
+            continue
+        return {"UV_DEFAULT_INDEX": u, "UV_INDEX_URL": u}
+    return {}
+
+
+def _from_hub(uv, wheel=None):
+    """从总控下载它那个版本的安装包装上（#175）；wheel 给了就装这个（装回原来的版本）。"""
+    import hashlib
+    from . import peers
+    if not wheel:
+        d = _hub_version()
+        dist = os.path.join(registry.HOME, "dist")
+        os.makedirs(dist, exist_ok=True)
+        wheel = os.path.join(dist, os.path.basename(d["wheel"]))
+        hub = peers._load("hub.json", None)
+        c = peers._conn(hub["url"], 300)
+        try:
+            c.request("GET", "/peer/dl/" + os.path.basename(d["wheel"]))
+            r = c.getresponse()
+            data = r.read()
+        finally:
+            c.close()
+        if r.status != 200 or hashlib.sha256(data).hexdigest() != d["sha256"]:
+            raise RuntimeError("从总控下载 ccim 失败")
+        with open(wheel, "wb") as f:
+            f.write(data)
+    cmd = [uv, "tool", "install", "--force", "--compile-bytecode", "--python", os.path.realpath(sys.executable), wheel]
+    env = dict(os.environ, **_index_env())
+    r = subprocess.run(cmd[:4] + ["--no-build"] + cmd[4:], capture_output=True, text=True, timeout=900, env=env)   # 和 join.sh 一样先只用编译好的包
+    return r if r.returncode == 0 else subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=env)
+
+
 def run():
     i = info()
     old, url, uv = i["commit"], i["url"], _uv()
     try:
-        r = subprocess.run([uv, "tool", "upgrade", "ccim"], capture_output=True, text=True, timeout=900)
+        if url == HUB:
+            _save_job(step="从总控下载")
+            r = _from_hub(uv)
+        else:
+            r = subprocess.run([uv, "tool", "upgrade", "ccim"], capture_output=True, text=True, timeout=900)
         print(r.stdout, r.stderr, flush=True)
         if r.returncode != 0:
             raise RuntimeError((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout).strip() else "升级失败")
@@ -186,8 +274,13 @@ def run():
             _save_job(state="done", step=None, at=time.time())
             return
         _save_job(step="新版本没起来，装回原来的版本")             # 装回原来那次提交再重启
-        src = url if url.startswith("git+") else "git+" + url
-        subprocess.run([uv, "tool", "install", "--force", f"{src}@{old}"], capture_output=True, text=True, timeout=900)
+        if url == HUB:
+            prev = os.path.join(registry.HOME, "dist", f"ccim-{i['version']}+g{old}-py3-none-any.whl")
+            if os.path.exists(prev):
+                _from_hub(uv, prev)
+        else:
+            src = url if url.startswith("git+") else "git+" + url
+            subprocess.run([uv, "tool", "install", "--force", f"{src}@{old}"], capture_output=True, text=True, timeout=900)
         _restart_all()
         _save_job(state="rolled_back", step=None, at=time.time(), error="新版本没起来，已装回原来的版本")
     except Exception as e:

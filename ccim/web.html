@@ -2693,7 +2693,10 @@ function drawAttention(){
     b.parentElement.title = [n ? `${n} 个等你处理` : "", work.length ? `${work.length} 个在干活` : ""].filter(Boolean).join(" · ");
   }
   const d = devCount() + oldMachines().length, sb = $("#nav-set-n");
-  if (sb) { sb.hidden = !d; sb.textContent = d; }
+  if (sb) {
+    sb.hidden = !d; sb.textContent = d;
+    sb.parentElement.href = devCount() ? "#/settings/dev" : oldMachines().length ? "#/settings/machines" : "#/settings";   // 有要处理的直接进那一页
+  }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
 async function markSeen(id, force){

@@ -108,6 +108,7 @@ class Turn:
         self.steps = []
         self.text = ""                        # 最近一段写完的文字
         self.live = ""                        # 正在写的文字（流式）
+        self.said = []                        # 这一轮说过的每段话 [第几步之前, 文字]，网页按顺序夹在步骤中间（#203）
         self.card_id = None
         self.shown = None
         self.retry = None                     # 连不上 Claude 时第几次重试（api_retry），连上了就清掉
@@ -116,6 +117,10 @@ class Turn:
         self.flight = {}                      # 还没出结果的工具调用：编号 → (说明, 开始时刻)
         self.last = time.monotonic()          # 最近一次收到 Claude 的任何消息
         self.warned = None                    # 没有卡片的渠道：已经提醒过卡住的是哪一步
+
+    def say(self, text):
+        self.text, self.live = text, ""
+        self.said.append([len(self.steps), text])
 
     def stalled(self):
         """卡住的那一步：(说明, 已经多少秒)。有工具调用没结果、而且 STALL 秒里没有任何新动静才算。"""
@@ -619,7 +624,10 @@ class Chat:
                                 if not m.parent_tool_use_id:
                                     t.flight[blk.id] = (d or blk.name, time.monotonic())
                             elif isinstance(blk, TextBlock) and blk.text.strip():
-                                t.text, t.live = blk.text, ""
+                                if m.parent_tool_use_id:
+                                    t.text, t.live = blk.text, ""
+                                else:
+                                    t.say(blk.text)
                     elif isinstance(m, ResultMessage):
                         if m.session_id and m.session_id != self.session_id:
                             self.session_id = m.session_id
@@ -633,6 +641,7 @@ class Chat:
                                 and said in ("", "No response requested.")):
                             # 接上对话时 Claude Code 可能先补一轮（被杀掉的后台任务的通知），回答为空；用户这一轮还在后面
                             result, t.text, stray = None, "", True
+                            t.said = []
                             continue
                         if self.stopping and t.unseen and t.drain is None:
                             # /stop 时还有 Claude 没看到的补充：Claude Code 会自动开一轮处理它，要把那一轮也打断、读完扔掉，
@@ -711,7 +720,8 @@ class Chat:
                 self.b.save(self.chat_id, steps=steps)
 
     def _snap(self, t, state="working"):
-        snap = {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "retry": t.retry,
+        snap = {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "said": [list(x) for x in t.said],
+                "retry": t.retry,
                 "elapsed": round(time.monotonic() - t.start, 1)}
         st = t.stalled() if state == "working" else None
         if st:

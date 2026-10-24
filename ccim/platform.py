@@ -244,6 +244,8 @@ class WebChannel(Channel):
         if done:
             rec = {"type": "answer", "text": markdown or "", "steps": done["steps"], "state": done["state"],
                    "elapsed": done["elapsed"]}
+            if len(done.get("said") or []) > 1 or done.get("said") and done["said"][0][0] < len(done["steps"]):
+                rec["said"] = done["said"]       # 中间说过的话（#203）；只有最后那句回答就不用记
             if done.get("fork"):
                 rec["fork"] = done["fork"]
             if done.get("prompt"):
@@ -1419,8 +1421,8 @@ class Platform:
             last = next((r for r in reversed(self.channel.logs.read(cid))
                          if r.get("type") == "answer" and r.get("at", 0) >= start), {}) if state == "done" else {}
             self.peer_results[token] = {"done": True, "state": state, "text": answer or last.get("text") or "",
-                                        "steps": last.get("steps") or [], "elapsed": last.get("elapsed"),
-                                        "ctx": (self.chats().get(cid) or {}).get("ctx")}
+                                        "steps": last.get("steps") or [], "said": last.get("said"),
+                                        "elapsed": last.get("elapsed"), "ctx": (self.chats().get(cid) or {}).get("ctx")}
         t = asyncio.ensure_future(wait())
         self.background.add(t)
         t.add_done_callback(self.background.discard)

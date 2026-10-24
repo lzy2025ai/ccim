@@ -182,7 +182,7 @@ class CodexChat(Chat):
                         t.steps.append(d)
                 elif kind == "item.completed":
                     if item.get("type") == "agent_message" and (item.get("text") or "").strip():
-                        t.text = item["text"]
+                        t.say(item["text"])
                     elif item.get("type") == "file_change":   # 改文件只在完成时报
                         d = describe(item)
                         if d:

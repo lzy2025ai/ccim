@@ -150,16 +150,17 @@ body{overflow:hidden}
 .item.today .when{color:var(--qing);font-weight:500}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
-/* 任务面板角标（#187）：实心红 = 等你处理；橙色滚动虚线 = 有对话在干活（和干活的卡片同一种虚线），卡住变红不滚 */
+/* 任务面板角标（#187）：实心红 = 等你处理；橙色滚动虚线 = 有对话在干活（和干活的卡片同一种虚线），卡住变成一闪一闪的红圈 */
 .nbadge.work{background:var(--panel);color:var(--warn);font-weight:600}
 .nbadge .ring{position:absolute;inset:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;pointer-events:none}
 .nbadge .ring rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:10.25px;ry:10.25px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:3 2.5;animation:ring .9s linear infinite}
 .nbadge.work .ring{inset:0;width:100%;height:100%}
 .nbadge.work .ring rect{rx:7.25px;ry:7.25px}
-.nbadge.stuck .ring rect{stroke:var(--bad);animation:none;stroke-dasharray:none}
+.nbadge.stuck .ring rect{stroke:var(--bad);stroke-dasharray:none;stroke-width:1.8;animation:breathe 1.6s ease-in-out infinite}
 .nbadge.work.stuck{color:var(--bad)}
 @keyframes ring{to{stroke-dashoffset:-5.5}}
-@media (prefers-reduced-motion:reduce){.nbadge .ring rect{animation:none}}
+@keyframes breathe{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.nbadge .ring rect,.nbadge.stuck .ring rect{animation:none}}
 .ck-box{flex:none;width:18px;height:18px;margin:2px 10px 0 0;border:1.5px solid var(--line-strong);border-radius:5px;background:var(--panel,#fff);color:#fff;font-size:12px;line-height:15px;text-align:center;cursor:pointer;padding:0}
 .ck-box.on{background:var(--qing);border-color:var(--qing)}
 .ck-box:disabled{opacity:.4;cursor:default}

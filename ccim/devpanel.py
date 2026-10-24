@@ -345,40 +345,119 @@ class Dev:
         self.refresh()
         return {"label": label, "results": results}
 
+    def check(self, prs):
+        """上线前先看一遍（#207）：哪些能合、哪些合不了（为什么），叠在一起的按什么顺序合。不改任何东西。"""
+        repo, main = _repo(), runtime._repo()
+        if not repo:
+            raise ValueError("这个代码目录没有连到 GitHub。")
+        info = {}
+        for n in dict.fromkeys(int(x) for x in prs or []):
+            r = _gh(repo, ["pr", "view", str(n), "--json", "number,title,state,isDraft,mergeStateStatus,statusCheckRollup,"
+                                                           "headRefName,headRefOid,closingIssuesReferences"])
+            if r.returncode != 0:
+                raise RuntimeError(f"读不到 PR #{n}：" + (r.stderr or r.stdout).strip()[-200:])
+            info[n] = json.loads(r.stdout or "{}")
+        heads = [x["headRefName"] for x in info.values() if x.get("state") == "OPEN"]
+        _run(["git", "-C", main, "fetch", "-q", "origin", "main", *heads], timeout=120)
+
+        def has(a, b):                        # b 的分支里包含 a 的最新提交：b 叠在 a 后面
+            return _run(["git", "-C", main, "merge-base", "--is-ancestor", info[a]["headRefOid"], info[b]["headRefOid"]],
+                        timeout=30).returncode == 0
+        live = [n for n, x in info.items() if x.get("state") == "OPEN"]
+        below = {n: [m for m in live if m != n and has(m, n)] for n in live}
+        order = sorted(live, key=lambda n: (len(below[n]), n))   # 叠得越少越先合
+        items = []
+        for n in order:
+            x = info[n]
+            issues = [i["number"] for i in x.get("closingIssuesReferences") or []] or [k for k in [_num(x["title"])] if k]
+            it = {"pr": n, "issue": issues[0] if issues else None, "title": runtime._change(x["title"]),
+                  "branch": x["headRefName"], "head": x["headRefOid"],
+                  "after": [m for m in below[n] if not any(m in below[k] for k in below[n])],   # 直接叠在谁后面
+                  "problem": None}
+            if x.get("isDraft"):
+                it["problem"] = "还是草稿"
+            elif _checks(x.get("statusCheckRollup")) == "fail":
+                it["problem"] = "检查没通过"
+            elif _run(["git", "-C", main, "merge-tree", "--write-tree", "origin/main", x["headRefOid"]],
+                      timeout=60).returncode != 0:
+                it["problem"] = "和已经上线的改动有冲突"
+            items.append(it)
+        bad = {it["pr"] for it in items if it["problem"]}
+        for it in items:                      # 叠在合不了的后面的，也合不了
+            if not it["problem"] and any(m in bad for m in below[it["pr"]]):
+                it["problem"] = "叠在合不了的 " + "、".join(f"#{m}" for m in below[it["pr"]] if m in bad) + " 后面"
+                bad.add(it["pr"])
+        return {"items": items, "merged": [n for n, x in info.items() if x.get("state") == "MERGED"]}
+
     def ship(self, prs):
-        """上线（#156 第二轮）：选中的需求逐个合并，最后本机一起更新（只重启一次）。"""
-        review = (self.cache or {}).get("review") or []
-        items = [next((x for x in review if x["pr"] == int(n)), None) for n in prs or []]
-        if not items or None in items:
-            raise ValueError("找不到要上线的需求，刷新一下再试。")
-        return self._start("ship", lambda: self._ship(items), prs=[x["pr"] for x in items],
-                           names=[f"#{x['issue'] or x['pr']}" for x in items])
+        """上线（#156 第二轮、#207）：先检查，有合不了的就不开始；逐个合并，中途失败就停、不更新；全部合好最后更新一次。"""
+        names = {x["pr"]: f"#{x['issue'] or x['pr']}" for x in (self.cache or {}).get("review") or []}
+        prs = [int(n) for n in prs or []]
+        if not prs:
+            raise ValueError("先选要上线的需求。")
+        return self._start("ship", lambda: self._ship(prs), prs=prs, names=[names.get(n, f"#{n}") for n in prs])
 
     def update(self):
         """已经合并了（比如 Agent 在对话里合的）、这台 Mac 还没用上：只做更新。"""
         return self._start("update", lambda: (self._update(), "")[1])
 
-    def _ship(self, items):
-        done, skipped, n = [], [], len(items)
-        for i, p in enumerate(items):
-            tag = f"#{p['issue'] or p['pr']}"
+    def _ship(self, prs):
+        self._step("检查能不能合并")
+        c = self.check(prs)
+        bad = [it for it in c["items"] if it["problem"]]
+        if bad:                               # 网页上线前已经问过；这里是兜底，一个都不动
+            raise RuntimeError("没有开始上线：" + "；".join(f"#{it['issue'] or it['pr']} {it['problem']}" for it in bad))
+        done, heads, n = [], {}, len(c["items"])
+        for i, it in enumerate(c["items"]):
+            tag = f"#{it['issue'] or it['pr']}"
             try:
-                self._merge(p, f"{tag}{f'（{i + 1}/{n}）' if n > 1 else ''}")
-                done.append(tag)
+                self._merge(it, f"{tag}{f'（{i + 1}/{n}）' if n > 1 else ''}", heads)
             except Exception as e:
-                skipped.append(f"{tag}：{e}")
-        note = ("、".join(done) + " 已上线") if done else ""    # 这台 Mac 更新到哪一步由网页按 phase 显示
-        if skipped:
-            note += ("；" if note else "") + "没上线的：" + "；".join(skipped)
-        self._save_job(dict(self.job, note=note))
-        if not done:
-            raise RuntimeError(note)
+                rest = [f"#{x['issue'] or x['pr']}" for x in c["items"][i + 1:]]
+                note = ("、".join(done) + " 已上线；" if done else "") + f"{tag} 没合上：{e}" + \
+                    (f"；{'、'.join(rest)} 没动" if rest else "") + "。这台 Mac 没有更新"
+                raise RuntimeError(note)
+            done.append(tag)
+            heads[it["pr"]] = it["head"]
         self._update()
-        return note
+        return "、".join(done) + " 已上线"
 
-    def _merge(self, p, tag):
-        repo, wt = _repo(), dict((b, x) for x, b in runtime.worktrees()[1:]).get(p["branch"])
+    def _sync(self, it, onto_from=None):
+        """把分支对齐到最新的 main 并强推。onto_from：它叠在后面、刚合进去的那个分支原来的最后一次提交，只搬自己的提交（#207）。"""
+        main = runtime._repo()
+        wt = dict((b, x) for x, b in runtime.worktrees()[1:]).get(it["branch"])
+        tmp = None
+        if not wt:                            # 本机没有它的工作目录：临时开一个
+            tmp = os.path.join(registry.HOME, "worktrees", f"ship-{it['pr']}")
+            _run(["git", "-C", main, "worktree", "remove", "--force", tmp], timeout=60)
+            r = _run(["git", "-C", main, "worktree", "add", "-q", "--detach", tmp, f"origin/{it['branch']}"], timeout=120)
+            if r.returncode != 0:
+                raise RuntimeError("没法取出这个分支：" + (r.stderr or "").strip()[-200:])
+            wt = tmp
+        try:
+            _run(["git", "-C", wt, "fetch", "-q", "origin"], timeout=60)
+            cmd = ["rebase", "-q", "--onto", "origin/main", onto_from] if onto_from else ["rebase", "-q", "origin/main"]
+            r = _run(["git", "-C", wt, *cmd], timeout=120)
+            if r.returncode != 0:
+                _run(["git", "-C", wt, "rebase", "--abort"], timeout=30)
+                raise RuntimeError("和别的改动有冲突，回到提这个需求的对话让 Agent 处理")
+            r = _run(["git", "-C", wt, "push", "-q", "-f", "origin", f"HEAD:{it['branch']}"], timeout=120)
+            if r.returncode != 0:
+                raise RuntimeError("推送失败：" + (r.stderr or "").strip()[-200:])
+        finally:
+            if tmp:
+                _run(["git", "-C", main, "worktree", "remove", "--force", tmp], timeout=60)
+
+    def _merge(self, p, tag, heads=None):
+        repo = _repo()
+        wt = dict((b, x) for x, b in runtime.worktrees()[1:]).get(p["branch"])
         synced, deadline = 0, time.time() + 900
+        base = next((heads[m] for m in p.get("after") or [] if m in (heads or {})), None)
+        if base:                              # 叠在刚合进去的那个后面：只把自己的提交搬到最新的 main 上
+            self._step(f"{tag} 对齐到最新代码")
+            self._sync(p, onto_from=base)
+            synced = 1
+            time.sleep(15)
         self._step(f"{tag} 等检查通过")
         while True:                           # 前一个合进去后，后面的会落后：每次现问
             r = _gh(repo, ["pr", "view", str(p["pr"]), "--json", "state,statusCheckRollup,mergeStateStatus"])
@@ -386,18 +465,12 @@ class Dev:
             if info.get("state") == "MERGED":
                 break
             ms, st = info.get("mergeStateStatus"), _checks(info.get("statusCheckRollup"))
-            if ms == "BEHIND" or (st == "fail" and not synced):
-                if synced >= 2 or not wt:
-                    raise RuntimeError("落后于最新代码，没法自动同步")
+            if ms in ("BEHIND", "DIRTY") or (st == "fail" and not synced):
+                if synced >= 2:
+                    raise RuntimeError("和别的改动有冲突，回到提这个需求的对话让 Agent 处理" if ms == "DIRTY"
+                                       else "落后于最新代码，没法自动同步")
                 self._step(f"{tag} 同步最新代码")
-                _run(["git", "-C", wt, "fetch", "-q", "origin"], timeout=60)
-                r = _run(["git", "-C", wt, "rebase", "-q", "origin/main"], timeout=120)
-                if r.returncode != 0:
-                    _run(["git", "-C", wt, "rebase", "--abort"], timeout=30)
-                    raise RuntimeError("和别的改动有冲突，回到提这个需求的对话让 Agent 处理")
-                r = _run(["git", "-C", wt, "push", "-q", "-f"], timeout=120)
-                if r.returncode != 0:
-                    raise RuntimeError("推送失败：" + (r.stderr or "").strip()[-200:])
+                self._sync(p)
                 synced += 1
                 self._step(f"{tag} 等检查通过")
                 time.sleep(15)
@@ -409,7 +482,8 @@ class Dev:
                 r = _gh(repo, ["pr", "merge", str(p["pr"]), "--squash", "--delete-branch"], timeout=120)
                 if r.returncode == 0 or "already merged" in (r.stderr or ""):
                     break
-                if "not up to date" not in (r.stderr or "") and "behind" not in (r.stderr or "").lower():
+                if "not up to date" not in (r.stderr or "") and "behind" not in (r.stderr or "").lower() \
+                        and "not mergeable" not in (r.stderr or ""):
                     raise RuntimeError("合并失败：" + (r.stderr or r.stdout).strip()[-200:])
             if time.time() > deadline:
                 raise RuntimeError("检查 15 分钟还没跑完")

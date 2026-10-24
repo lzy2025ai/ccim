@@ -582,6 +582,7 @@ body{overflow:hidden}
 .select:hover{border-color:var(--ink-2)}
 .select[aria-expanded="true"]{border-color:var(--qing);box-shadow:0 0 0 3px var(--qing-soft)}
 .select svg{width:14px;height:14px;color:var(--muted);flex:none}
+.select.ro,.select.ro:hover{background:var(--sunk);border-color:var(--line);color:var(--ink-2);cursor:default}   /* 只能看的设置：和下拉框一样的格子 */
 
 /* ---------- 项目 ---------- */
 .pmark{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 16px var(--song);
@@ -648,6 +649,7 @@ body{overflow:hidden}
 .seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;gap:2px}
 .seg button{padding:5px 14px;border-radius:7px;font-size:13px;color:var(--muted)}
 .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.seg button:disabled{cursor:default}
 .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:12px}
 .pick{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid var(--line);text-align:left}
 .pick:hover{border-color:var(--ink-2)}
@@ -1742,7 +1744,7 @@ function srcTag(src){
   return `<span class="tag ${cls}">${esc(src)}</span>`;
 }
 function renderChatEmpty(){
-  $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>选好 Claude Code 或 Codex 就能开始；想找某个 Agent，去 Agent 页。</p>
+  $("#main").innerHTML = `<div class="empty"><h2>和 Agent 一起干活</h2><p>${(S.machines || [{id: S.me}]).every(m => noCodex(m.id)) ? "开个新对话就能开始" : "选好 Claude Code 或 Codex 就能开始"}；想找某个 Agent，去 Agent 页。</p>
     <a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>`;
 }
 
@@ -3065,7 +3067,7 @@ function drawSkChat(){
   if (SKC.error) { el.innerHTML = head + `<div class="skc-body"><p class="muted">${esc(SKC.error)}</p></div>`; return; }
   const p = SKC.progress, last = p && p.steps[p.steps.length - 1];
   const empty = !SKC.log.length && !p ? `<div class="skc-empty">${SKC_AV}<h3>说一句，它来动手</h3>
-      <p>装 Skill、改说明、写一个新的、停用或删除都行。装好、改好会同步到所有电脑。</p>
+      <p>装 Skill、改说明、写一个新的、停用或删除都行。${sharedM(S.me) ? "装的 Skill 只有你自己的 Agent 能用。" : "装好、改好会同步到所有电脑。"}</p>
       ${["帮我找个处理 Excel 的 Skill 装上", "现在装了哪些 Skill，各是干什么的", "新建一个写周报的 Skill", "把这个 Skill 的说明改成中文"]
         .map(t => `<button onclick="skcSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
   const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
@@ -3137,7 +3139,7 @@ async function renderSkills(){
       <div class="role">${esc(s.desc || "")}</div>
       <div class="foot"><span class="grow" title="${esc(skillSrc(s))}">${esc(skillSrc(s))}</span><span>${when(stamp(s.updated))}</span></div></a>`).join("")}
       <button class="ccard add" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`
-    : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。</p>
+    : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>${sharedM(S.me) ? "装在这里的 Skill，你自己的 Agent 在 ccim 里对话时都能用。" : "装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。"}</p>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`;
   skContent().innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
       <button class="btn" onclick="marketsMenu(event)">逛 Skill 市场${ICON.down}</button>
@@ -3654,7 +3656,8 @@ function machineTabs(items){
     ${S.machines.map(m => `<button class="mtab ${machineTab === m.id ? "on" : ""}" onclick="setMachineTab(${q(m.id)})"><i class="mdot ${m.online ? "" : "off"}"></i>${esc(m.name)}${m.me ? `<span class="me">这台</span>` : ""} <span class="n">${n(m.id)}</span></button>`).join("")}</div>`;
 }
 function machineSections(items, card, addLabel, addHref){
-  const ms = multi() ? (machineTab === "all" ? S.machines : S.machines.filter(m => m.id === machineTab)) : [{id: S.me, online: true}];
+  const ms = multi() ? (machineTab === "all" ? S.machines : S.machines.filter(m => m.id === machineTab))
+    : [S.hub && machineOf(S.me) || {id: S.me, online: true}];   // 服务器上打开时只有一台：用它的名字，不说「这台电脑」
   return ms.map(m => {
     const rows = items.filter(x => (x.machine || S.me) === m.id);
     if (machineTab === "all" && multi() && !rows.length) return "";
@@ -3689,8 +3692,8 @@ function renderAgentCards(listOnly){
     .sort((x, y) => (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || ((y.last_active || "") > (x.last_active || "") ? 1 : -1));
   const addable = (S.machines || [{id: S.me, online: true}]).filter(m => m.online && canCreate(m.id) && (machineTab === "all" || !multi() || m.id === machineTab));
   const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
-    : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p></div>`
-      + (addable.length ? `<div class="cgrid" style="max-width:720px;margin:20px auto 0">${addable.map(m => `<button class="ccard add" onclick="${newOnAgents(m.id)}">${ICON.plus}在「${esc(m.name || "这台电脑")}」上新建 Agent</button>`).join("")}</div>` : "");
+    : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p>
+      ${addable.length ? `<div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">${addable.map(m => `<button class="btn primary" onclick="${newOnAgents(m.id)}">${ICON.plus}${multi() ? `在「${esc(m.name || "这台电脑")}」上新建 Agent` : "新建 Agent"}</button>`).join("")}</div>` : ""}</div>`;
   $("#main").innerHTML = overviewHtml("Agent", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
 }
 function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
@@ -3889,7 +3892,10 @@ function freeAvatar(){   // 新建 Agent 默认用图片头像：挑一个还没
   const pool = free.length ? free : AVATARS;
   return pool[Math.floor(Math.random() * pool.length)][0];
 }
-function autoDir(){ return (guestOf(fd.machine).root || "").replace(/\/$/, "") + "/" + (fd.name.trim().replace(/[\/:]/g, "_") || "新 Agent"); }
+function autoDir(){   // 共享文件夹/Agent 名字；名字还没填就先是共享文件夹本身
+  const root = (guestOf(fd.machine).root || "").replace(/\/$/, ""), name = fd.name.trim().replace(/[\/:]/g, "_");
+  return name ? root + "/" + name : root;
+}
 function formHtml(a){
   fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", avatar: freeAvatar(), ...(agentDraftFrom || {})};
   agentDraftFrom = null;
@@ -4626,12 +4632,15 @@ function devCleanAgent(){
 }
 const gs = {};
 function renderChatSettings(){
-  const cur = (S.global || {}).archive_days || "30";
+  const own = (S.machines || [{id: S.me}]).filter(m => !m.shared);
+  const ro = !own.length;                      // 只有别人共享给我的电脑：主人设的，只能看（#154）
+  const shared = ro ? ((S.machine_info || {})[S.me] || {}).global || {} : {};
+  const cur = (ro ? shared : S.global || {}).archive_days || "30";
   const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不删除"]];
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
     <div class="pane"><div class="sect"><h3>归档的对话</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">归档后多久没有新消息就删除<div class="muted" style="font-size:12.5px">存进知识库的内容会保留</div></div>
-        <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" onclick="setArchiveDays('${v}')">${l}</button>`).join("")}</div></div>
+        <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setArchiveDays('${v}')"`}>${l}</button>`).join("")}</div></div>
     </div></div></div>`;
 }
 async function setArchiveDays(v){
@@ -4657,10 +4666,10 @@ async function renderSettings(){
   Object.assign(gs, {model: G.model || "", effort: G.effort || "", codex_model: G.codex_model || "", codex_effort: G.codex_effort || ""});
   const [cm, ce] = D.claude || [], [xm, xe] = D.codex || [];
   const ro = sharedM(gsMachine);            // 共享给我的电脑：主人设的，只能看（#154）
-  const show = (v, dflt) => `<div style="padding:9px 0">${esc(v || dflt)}</div>`;
+  const show = (v, dflt) => `<div class="select ro">${esc(v || dflt)}</div>`;
   const pick = multi() ? `<div class="sect"><h3>哪台电脑</h3><div class="seg">${ms.map(m => `<button class="${m.id === gsMachine ? "on" : ""}" aria-pressed="${m.id === gsMachine}" onclick="gsMachine=${q(m.id)};renderSettings()">${esc(m.name)}${m.me && !S.hub ? "（这台）" : ""}</button>`).join("")}</div></div>` : "";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>默认模型和思考深度</h2>
-    <div class="role">Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。</div></div></div>
+    <div class="role">${ro ? "Agent 和对话里没单独设置时用这里的。" : "Agent 和对话里没单独设置时用这里的。这里也不设，就跟随 Claude Code、Codex 自己的设置，和你在终端里用的一致。"}</div></div></div>
     <div class="pane">${pick}${ro ? `<div class="sect"><h3>Claude Code</h3><div class="form">
       <label>模型</label>${show(gs.model && modelName(gs.model), `跟随 Claude Code 设置（${modelName(cm)}）`)}
       <label>思考深度</label>${show(gs.effort, `跟随 Claude Code 设置（${ce || "默认"}）`)}</div></div>

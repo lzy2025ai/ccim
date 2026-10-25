@@ -5367,18 +5367,15 @@ async function setWorkspace(on){
   toast(fail ? "有电脑没连上，那台下次再改" : on ? "已打开，对话的三点菜单里能打开工作区" : "已关闭");
   await loadState(); renderChatSettings();
 }
-let gsMachine = null, gsOf = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
+let gsMachine = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
 async function renderSettings(){
   const ms = (S.machines || []).filter(m => m.online !== false);
   if (!gsMachine || !ms.some(m => m.id === gsMachine)) gsMachine = (ms.find(m => m.me) || ms[0] || {}).id || S.me;
   let st = S;
-  if (S.hub || gsMachine !== S.me) {              // 别的电脑：读它自己的设置和 Claude Code、Codex 的默认值
-    $("#main").innerHTML = `<div class="loading">…</div>`;
-    try { st = await api("/api/state?local=1", undefined, gsMachine); }
-    catch (e) { $("#main").innerHTML = `<div class="empty"><h2>读不到这台电脑的设置</h2><p>${esc(e.message)}</p></div>`; return; }
-    if (current.view !== "settings") return;
+  if (S.hub || gsMachine !== S.me) {              // 别的电脑：它的设置和 Claude Code、Codex 的默认值已在 machine_info 里（#254）
+    st = (S.machine_info || {})[gsMachine];
+    if (!st) { $("#main").innerHTML = `<div class="empty"><h2>读不到这台电脑的设置</h2></div>`; return; }
   }
-  gsOf = st;
   const G = st.global || {}, D = st.defaults || {};
   Object.assign(gs, {model: G.model || "", effort: G.effort || "", codex_model: G.codex_model || "", codex_effort: G.codex_effort || ""});
   const [cm, ce] = D.claude || [], [xm, xe] = D.codex || [];

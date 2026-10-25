@@ -1935,9 +1935,9 @@ function saveFile(ev, a){
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
 const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
-function connectEvents(){
+function connectEvents(again){
   const es = new EventSource("/api/events");
-  let lost = false;
+  let lost = !!again;
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
     if (ev.type === "idle") { refreshSoon(); return; }
@@ -2012,7 +2012,10 @@ function connectEvents(){
     if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c ? !c.busy : unlisted(ev.chat)) refreshSoon(); }
     else if (!LOCAL_EVENTS.has(ev.type)) refreshSoon();
   };
-  es.onerror = () => { lost = true; };   // 浏览器会自己重连
+  es.onerror = () => {                   // 一般浏览器会自己重连；重启、部署时收到错误响应就彻底关了，要自己再连（#249）
+    lost = true;
+    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), 5000); }
+  };
   es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
     if (!lost) return;
     lost = false;
@@ -7366,6 +7369,7 @@ addEventListener("resize", () => listTip());
   try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
   connectEvents();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
   if (!location.hash) history.replaceState(null, "", "#/chats/new");
   route();
 })();

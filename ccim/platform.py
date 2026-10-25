@@ -844,6 +844,7 @@ class Platform:
         refs = self._refs(cid, refs)
         if m.get("fork_from") and cid not in b.chats:
             b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
+        self._back_from_away(cid, m)
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
@@ -1210,6 +1211,23 @@ class Platform:
                     v["sig"] = history.sig(v["base"], m["origin"], cwd)
             else:
                 v["earlier"] = rows
+        elif m.get("away"):                   # 转到微信、飞书接着聊过（#212）：那边说的从同一个会话的记录里读
+            from . import history
+            a = agents.get(m["agent"]) if m.get("agent") else None
+            cwd = agents.cwd(a) if a else None
+            sid = m.get("codex_session_id" if v["base"] == "codex" else "session_id")
+            away = m["away"]
+            rows = history.read(v["base"], sid, cwd) if sid else []
+            if v["base"] == "codex":          # Codex 的记录没有消息编号，认不出哪些是网页说的：只取在那边的那几段时间
+                rows = [r for r in rows if any(x["at"] <= (r.get("at") or 0) < (x.get("back") or float("inf")) for x in away)]
+            ew = self._elsewhere([r for r in rows if (r.get("at") or 0) >= away[0]["at"]], v["log"])
+            if m.get("busy"):
+                asked = max([r.get("at") or 0 for r in v["log"] if r.get("type") == "user"] or [0])
+                ew = [r for r in ew if (r.get("at") or 0) < asked - 1]
+            for r in ew:                      # 每条是在哪边说的：它之前最近的那次转过去
+                r["via"] = next((x["to"] for x in reversed(away) if (r.get("at") or 0) >= x["at"]), away[0]["to"])
+            v["elsewhere"], v["away"] = ew, True
+            v["sig"] = history.sig(v["base"], sid, cwd) if sid else None
         return v
 
     @staticmethod
@@ -1273,7 +1291,7 @@ class Platform:
 
     def set_chapter(self, cid, key, name):
         """章节（#25）：key 是消息的「类型:时间」，name 为空就取消。"""
-        if not isinstance(key, str) or not re.fullmatch(r"(user|answer):[\d.]+", key):
+        if not isinstance(key, str) or not re.fullmatch(r"(user|answer|note):[\d.]+", key):
             raise Problem("找不到这条消息。")
         name = " ".join((name or "").split())[:40]
         if cid.startswith("x:"):
@@ -1494,6 +1512,11 @@ class Platform:
             sid, base = r["sid"], r["base"]
         else:
             m = self.meta(cid)
+            if m.get("away") and not m.get("origin"):     # 转到微信、飞书接着聊过（#212）
+                a = agents.get(m["agent"]) if m.get("agent") else None
+                base = self._effective(m)["base"]
+                sid = m.get("codex_session_id" if base == "codex" else "session_id")
+                return {"sig": history.sig(base, sid, agents.cwd(a) if a else None) if sid else None, "open_elsewhere": None}
             if not self._linked(m):
                 return {"sig": None}
             a = agents.get(m["agent"]) if m.get("agent") else None
@@ -1562,24 +1585,38 @@ class Platform:
         proc, path = hit[0]
         base = self._effective(m)["base"]
         rows = self.channel.logs.read(cid)
-        sid, at = m.get("codex_session_id" if base == "codex" else "session_id"), None
-        if base == "codex":                   # Codex 只能接整个对话
-            if m.get("busy"):
-                raise Problem("等它这一轮做完再转。")
-            last = next((r for r in reversed(rows) if r.get("type") == "answer"), None)
-        else:                                 # 接到最后一条答完的回答为止，正在回答的这一轮不带
-            last = next((r for r in reversed(rows) if r.get("type") == "answer" and r.get("fork")), None)
-            if last:
-                sid, at = last["fork"].get("sid") or sid, last["fork"].get("at")
+        if m.get("busy"):                     # 不分支、接着同一个会话聊，所以要等这一轮做完
+            raise Problem("等它这一轮做完再转。")
+        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        last = next((r for r in reversed(rows) if r.get("type") == "answer"), None)
         if not sid or not last:
             raise Problem("还没有回答，没什么可接着聊的。")
-        reply = last.get("text") or ""
-        req = {"session_id": sid, "at": at, "title": m.get("title") or "网页里的对话", "last_reply": reply,
+        req = {"session_id": sid, "link": True, "title": m.get("title") or "网页里的对话", "last_reply": last.get("text") or "",
                "model": m.get("model"), "effort": m.get("effort"), "project": path}
         return {"proc": proc, "req": req}
 
-    def handoff_note(self, cid, text):
-        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "text": text}))
+    def handoff_note(self, cid, label):
+        """转过去以后：网页对话里加一条分隔、标成章节；之后那边说的从会话记录里读出来穿插显示（chat_detail 的 elsewhere）。"""
+        rec = self.channel.logs.append(cid, {"type": "note", "divider": True, "text": f"以下是在{label}里接着聊的"})
+        chats = self.chats()
+        if cid in chats:
+            m = chats[cid]
+            m["away"] = (m.get("away") or [])[-9:] + [{"to": label, "at": rec.get("at") or time.time()}]
+            if rec.get("at"):
+                m["chapters"] = dict(m.get("chapters") or {}, **{f"note:{rec['at']}": f"转到{label}"})
+            self.store.write(chats)
+        self.channel._emit(cid, rec)
+
+    def _back_from_away(self, cid, m):
+        """转到微信、飞书以后，第一次回网页里说话：加一条分隔。"""
+        away = m.get("away") or []
+        if not away or away[-1].get("back"):
+            return
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["away"][-1]["back"] = time.time()
+            self.store.write(chats)
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "divider": True, "text": "以下是回到网页接着聊的"}))
 
     def _fork_history(self, cid, index):
         d = self.chat_detail(cid)
@@ -2356,7 +2393,7 @@ def handoff_chat(pf, cid, kind, fresh=False):
     if not res.get("ok"):
         raise Problem(f"没转过去：{res.get('error') or '没有响应'}")
     where = "微信" if kind == "weixin" else f"飞书「{(registry.get(proc) or {}).get('bot_name') or '机器人'}」"
-    pf.call(pf.handoff_note, cid, f"已转到{where}接着聊。")
+    pf.call(pf.handoff_note, cid, label)
     return {"ok": True, "where": where, "label": label}
 
 

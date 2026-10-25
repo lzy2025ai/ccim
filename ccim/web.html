@@ -2043,7 +2043,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -2074,6 +2074,7 @@ function recHtml(r, i, src = "log"){
       : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
+  if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
 }
 function liveHtml(){
@@ -2137,7 +2138,7 @@ function showEarlier(keep = true){
 function ensureShown(i){ if (!detail.showAll && i < detail.log.length - SHOW_RECENT) showEarlier(false); }
 // ---- 章节（#25）：给重要的消息起个名字，右边的目录点一下跳过去 ----
 let showToc = (() => { try { return localStorage.getItem("ccim.toc") !== "0"; } catch { return true; } })();
-const chapKey = r => (r.type === "user" || r.type === "answer") && r.at ? `${r.type}:${r.at}` : null;
+const chapKey = r => (r.type === "user" || r.type === "answer" || r.type === "note" && r.divider) && r.at ? `${r.type}:${r.at}` : null;
 function chapters(){
   const ch = detail.chapters || {};
   return detail.log.map((r, i) => [i, ch[chapKey(r)]]).filter(([, n]) => n);
@@ -2202,7 +2203,7 @@ function extNotice(c){
 let extSigBusy = false;
 async function checkExt(){
   const d = detail;
-  if (!d || extSigBusy || starting || d.busy || document.visibilityState !== "visible" || !(d.linked || (d.readonly && d.linkable))) return;
+  if (!d || extSigBusy || starting || d.busy || document.visibilityState !== "visible" || !(d.linked || d.away || (d.readonly && d.linkable))) return;
   extSigBusy = true;
   try {
     const r = await api(`/api/chat/sig?id=${encodeURIComponent(d.id)}`);

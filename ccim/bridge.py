@@ -223,7 +223,7 @@ class Bridge:
             chat_id = await self.channel.send_to_user(owner, text)
             text = None
         chat = self.chat(chat_id, "p2p")
-        await chat.attach(req["session_id"], req.get("at"))
+        await chat.attach(req["session_id"], req.get("at"), bool(req.get("link")))
         changes = {k: req[k] for k in ("model", "effort") if req.get(k)}
         if changes:
             chat.set(**changes)

@@ -1935,6 +1935,7 @@ function saveFile(ev, a){
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
 const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
+let esFails = 0;                  // 推送连续连不上几次了：重连间隔 5、10、20…秒，最长 1 分钟
 function connectEvents(again){
   const es = new EventSource("/api/events");
   let lost = !!again;
@@ -2014,9 +2015,10 @@ function connectEvents(again){
   };
   es.onerror = () => {                   // 一般浏览器会自己重连；重启、部署时收到错误响应就彻底关了，要自己再连（#249）
     lost = true;
-    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), 5000); }
+    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), Math.min(60000, 5000 * 2 ** esFails++)); }
   };
   es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
+    esFails = 0;
     if (!lost) return;
     lost = false;
     refreshSoon();

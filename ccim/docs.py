@@ -112,6 +112,7 @@ class _Assets:
 MD_IMG = re.compile(r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 HTML_REF = re.compile(r"""(\s(?:src|href|poster)\s*=\s*)(["'])([^"']+)\2""", re.I)
 CSS_URL = re.compile(r"""url\(\s*(["']?)([^)"']+)\1\s*\)""", re.I)
+SCRIPT = re.compile(r"(<script\b[^>]*>)(.*?)(</script\s*>|$)", re.I | re.S)
 
 
 def _md_assets(text, base):
@@ -141,9 +142,20 @@ def _inline_html(text, base):
                 pass
         return f"{m.group(1)}{m.group(2)}{uri or m.group(3)}{m.group(2)}" if uri else m.group(0)
 
-    out = HTML_REF.sub(ref, text)
-    out = CSS_URL.sub(lambda u: f'url("{a.get(u.group(2)) or u.group(2)}")', out)
-    return out
+    def css(u):
+        uri = a.get(u.group(2))
+        return f'url("{uri}")' if uri else u.group(0)
+
+    def part(t):
+        return CSS_URL.sub(css, HTML_REF.sub(ref, t))
+
+    # <script> 里是代码，不能按 HTML / CSS 去换（getDataURL(t) 会被当成 url(t) 改坏）；只换开头标签里的 src
+    out, pos = [], 0
+    for m in SCRIPT.finditer(text):
+        out += [part(text[pos:m.start()]), HTML_REF.sub(ref, m.group(1)), m.group(2), m.group(3)]
+        pos = m.end()
+    out.append(part(text[pos:]))
+    return "".join(out)
 
 
 def view(path, base=None):

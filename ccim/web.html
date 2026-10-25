@@ -1759,7 +1759,6 @@ async function openChat(id){
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
-  pendingFiles = [];
   if (detail.agent && current.view === "chats") {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
     current = {view: "agents", id: detail.agent, sub: id};
@@ -2169,6 +2168,7 @@ function drawChat(){
   input.addEventListener("paste", e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
   dropZone($("#box"));
   if (prefill && !c.readonly) { input.value = prefill; prefill = ""; drawComposerState(); }
+  useFiles("c:" + c.id);
   if (loadDraft("c:" + c.id)) drawComposerState();
   input.focus();
 }
@@ -2291,7 +2291,7 @@ async function sendChat(){
   if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt, src = detail;
-    $("#input").value = ""; saveDraft(); pendingFiles = []; chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
+    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
     try {
       const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -2302,7 +2302,7 @@ async function sendChat(){
     return;
   }
   if (detail.readonly && starting) return;
-  $("#input").value = ""; saveDraft(); pendingFiles = []; drawPending();
+  $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
     starting = true;
     const src = detail, mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
@@ -2645,26 +2645,52 @@ let pendingFiles = [];
 function drawPending(){
   const el = $("#pending"); if (!el) return;
   const rm = i => `<button aria-label="移除" onclick="dropPending(${i})">${ICON.x}</button>`;
-  el.innerHTML = pendingFiles.map((f, i) => f.url
-    ? `<span class="thumb ${f.key ? "" : "up"}" title="${esc(f.name)}"><img src="${f.url}" alt="${esc(f.name)}">${rm(i)}</span>`
+  el.innerHTML = pendingFiles.map((f, i) => f.url || f.thumb
+    ? `<span class="thumb ${f.key ? "" : "up"}" title="${esc(f.name)}"><img src="${esc(f.url || f.thumb)}" alt="${esc(f.name)}">${rm(i)}</span>`
     : `<span class="file">${ICON.file}${esc(f.name)}${f.key ? "" : "（上传中）"}${rm(i)}</span>`).join("");
   el.style.display = pendingFiles.length ? "flex" : "none";
 }
 function dropPending(i){
   const [f] = pendingFiles.splice(i, 1); if (f && f.url) URL.revokeObjectURL(f.url);
-  drawPending(); drawComposerState();
+  saveFiles(); drawPending(); drawComposerState();
+}
+// 加上了、还没发出去的图片和文件也跟着输入框记住（#148）：每个输入框一份，图片另存一张小缩略图，刷新后也能显示
+const filesKey = k => DRAFT + "files:" + k;
+function storedFiles(k){ try { return JSON.parse(localStorage.getItem(filesKey(k)) || "[]"); } catch { return []; } }
+function putFiles(k, list){
+  const keep = list.filter(f => f.key).map(({name, key, size, thumb}) => ({name, key, size, thumb}));
+  try { keep.length ? localStorage.setItem(filesKey(k), JSON.stringify(keep)) : localStorage.removeItem(filesKey(k)); } catch {}
+}
+function saveFiles(){ if (draftKeys.input) putFiles(draftKeys.input, pendingFiles); }
+function useFiles(k){   // 换到 k 这个输入框：拿出它记着的；还是同一个就不动
+  if (draftKeys.input !== k) pendingFiles = storedFiles(k);
+  draftKeys.input = k;
+  drawPending();
+}
+async function thumbOf(file){
+  try {
+    const img = await createImageBitmap(file), r = Math.min(1, 240 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", .8);
+  } catch { return null; }
 }
 const isImg = name => /\.(png|jpe?g|gif|webp|svg)$/i.test(name || "");
 const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
 async function addFiles(list){
   for (const file of list){
-    const f = {name: file.name || "粘贴的图片.png"};
-    if ((file.type || "").startsWith("image/") || isImg(f.name)) f.url = URL.createObjectURL(file);
+    const f = {name: file.name || "粘贴的图片.png"}, k = draftKeys.input;
+    const image = (file.type || "").startsWith("image/") || isImg(f.name);
+    if (image) f.url = URL.createObjectURL(file);
     pendingFiles.push(f); drawPending();
     try {
       const r = await fetch("/api/upload", {method: "POST", headers: {"X-CCIM": "1", "X-Name": encodeURIComponent(f.name), ...remoteHeader(ctxMachine)}, body: file});
       const d = await r.json(); if (!r.ok) throw new Error(d.error || "上传失败");
       Object.assign(f, d);
+      if (image) f.thumb = await thumbOf(file);
+      if (!pendingFiles.includes(f) && k === draftKeys.input) pendingFiles.push(f);   // 传的时候离开过又回来了
+      if (pendingFiles.includes(f)) saveFiles();
+      else if (k) putFiles(k, [...storedFiles(k), f]);   // 传完时在别的对话里：记到原来那个对话名下
     } catch (e) { pendingFiles = pendingFiles.filter(x => x !== f); toast(`${f.name} 没传上：${e.message}`); }
     drawPending(); drawComposerState();
   }
@@ -2713,7 +2739,7 @@ function renderNewChat(){
       </div>
       <div class="or">想和某个 Agent 聊？<button class="link" onclick="pickAgent(event)">选一个 Agent</button></div>
     </div>`;
-  drawPending(); drawChatRcpt();
+  useFiles("new"); drawChatRcpt();
   const i = $("#input"); i.value = draftText; draftText = draftText || loadDraft("new"); draftKeys.input = "new"; i.focus();
   i.addEventListener("input", e => { draftText = i.value; atTyped(e); });
   i.addEventListener("keydown", ev => {
@@ -2797,7 +2823,7 @@ async function startTemp0(v, files){
   if (draft.base === "claude" && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
   const to = chatRcpt; closePop();
   await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}, m) : api("/api/chat/send", {id, text: v, files}, m));
-  pendingFiles = []; chatRcpt = []; draftText = ""; localStorage.removeItem(DRAFT + "new");
+  pendingFiles = []; saveFiles(); chatRcpt = []; draftText = ""; localStorage.removeItem(DRAFT + "new");
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 async function startAgent(aid){

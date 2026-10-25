@@ -249,6 +249,23 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .bcard h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 10px}
 .bcard h2 .sp,.dghead .sp{flex:1}
 .bcard h2 small{font-weight:400;color:var(--faint);font-size:12px}
+/* 复盘（#241） */
+.review{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.rv-head{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);background:#FAFAF7}
+.rv-head h2{margin:0;font-size:13px;font-weight:600;color:var(--ink-2)}
+.rv-head .sp,.rv-foot .sp,.rv-ask .sp{flex:1}
+.rv-who{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);padding:3px 6px 3px 4px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.rv-who:hover{border-color:var(--line-strong)} .rv-who .seal{width:20px;height:20px} .rv-who svg{width:12px;height:12px;color:var(--faint)}
+.rv-body{padding:12px 16px 4px;font-size:13.5px;line-height:1.7;max-height:460px;overflow:auto}
+.rv-body h2,.rv-body h3{font-size:13.5px;margin:10px 0 4px} .rv-body > :first-child{margin-top:0}
+.rv-body ul,.rv-body ol{padding-left:18px;margin:0 0 6px}
+.rv-empty{padding:20px 16px 16px;text-align:center} .rv-empty p{margin:0 0 12px;color:var(--muted);font-size:13px}
+.rv-busy{display:flex;align-items:center;gap:6px;padding:18px 16px;color:#8A6A12;font-size:13px}
+.rv-pad{padding:14px 16px}
+.rv-foot{display:flex;align-items:center;gap:6px;padding:8px 16px 10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.lnk{color:var(--qing);font-size:12.5px} .lnk:hover{text-decoration:underline}
+.rv-ask{display:flex;align-items:center;gap:8px;margin:0 12px 12px;border:1px solid var(--line-strong);border-radius:12px;padding:9px 12px;color:var(--faint);font-size:13px;text-decoration:none}
+.rv-ask:hover{border-color:var(--qing);color:var(--muted)} .rv-ask svg{width:14px;height:14px}
 /* 当天详情 */
 .dhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .crumb{color:var(--muted);text-decoration:none;font-size:14px} .crumb:hover{color:var(--ink)}
@@ -2056,7 +2073,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
@@ -2066,7 +2083,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
@@ -3472,8 +3489,78 @@ function renderBoardDay(quick){
   $("#main").innerHTML = `<div class="board"><div class="bhead dhead"><a class="crumb" href="#/board">任务面板</a><span class="crumb-sl">/</span><h1>${dayLabel(d)}</h1>
       <span class="dnav"><button class="iconbtn" title="前一天" onclick="location.hash='#/board/day/${dayAdd(d, -1)}'">${ICON.left}</button><button class="iconbtn" title="后一天" ${d >= today ? "disabled" : ""} onclick="location.hash='#/board/day/${dayAdd(d, 1)}'">${ICON.chev}</button></span></div>
     <div class="bgrid"><div class="bleft">${kpis}${list}</div>
-    <div class="bright"><div class="bcard"><h2>这一天的节奏<span class="sp"></span><small>按小时</small></h2>${hours}</div></div></div></div>`;
+    <div class="bright"><div class="bcard"><h2>这一天的节奏<span class="sp"></span><small>按小时</small></h2>${hours}</div>${reviewHtml(d)}</div></div></div>`;
   if (keep && quick) $(".board").scrollTop = keep;
+}
+// ----- 复盘这一天（#241）：交给一个 Agent，复盘是它的普通对话，接着聊就在那个对话里 -----
+let reviewAgent = null;                 // 这次选的 Agent（没选用上次的）
+const reviewText = {};                  // 对话编号 → {key, text, at}
+function reviewAid(d){
+  if (reviewAgent && agentOf(reviewAgent)) return reviewAgent;
+  const last = localStorage.getItem("ccim.reviewAgent");
+  if (last && agentOf(last)) return last;
+  const c = (S.chats || []).find(c => c.review === d);
+  return c ? c.agent : (S.agents[0] || {}).id;
+}
+const reviewChat = (d, aid) => (S.chats || []).find(c => c.review === d && c.agent === aid && !c.archived);
+function loadReview(c){
+  const key = `${c.last_active}|${working(c)}`, hit = reviewText[c.id];
+  if (hit && hit.key === key) return;
+  reviewText[c.id] = {...(hit || {}), key};
+  api(`/api/chat?id=${encodeURIComponent(c.id)}`, undefined, machineOfChat(c)).then(det => {
+    const log = det.log || [];
+    const i = log.map(r => r.type === "user" && !!r.review).lastIndexOf(true);
+    const ans = i < 0 ? null : log.slice(i + 1).reverse().find(r => r.type === "answer" && r.text);
+    reviewText[c.id] = {key, text: ans ? ans.text : "", at: ans ? ans.done_at || ans.at : null};
+    if (current.view === "board" && current.id === "day") renderBoardDay(true);
+  }).catch(() => {});
+}
+function reviewHtml(d){
+  const aid = reviewAid(d), a = agentOf(aid);
+  if (!a) return "";
+  const c = reviewChat(d, aid), r = c && reviewText[c.id];
+  if (c) loadReview(c);
+  const who = `<button class="rv-who" onclick="pickReviewAgent(event, '${d}')">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${ICON.down}</button>`;
+  const head = `<div class="rv-head"><h2>复盘</h2><span class="sp"></span>${who}</div>`;
+  const tools = `<button class="lnk" onclick="editReviewPrompt()">复盘提示词</button>`;
+  if (!c) return `<div class="review">${head}<div class="rv-empty"><p>把这一天做了什么、卡在哪、下一步先做什么理一遍</p>
+      <button class="btn primary" onclick="startReview('${d}')">复盘这一天</button></div><div class="rv-foot"><span class="sp"></span>${tools}</div></div>`;
+  const busy = working(c);
+  const body = busy ? `<div class="rv-busy"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "正在复盘…")}</div>`
+    : r && r.text ? `<div class="rv-body md">${md(r.text)}</div>` : r ? `<p class="bempty rv-pad">还没有复盘结果。</p>` : `<p class="bempty rv-pad">…</p>`;
+  return `<div class="review">${head}${body}
+    <div class="rv-foot">${!busy && r && r.at ? `${hm(r.at)} 生成` : ""}<span class="sp"></span>${busy ? "" : `<button class="lnk" onclick="startReview('${d}')">重新复盘</button><span>·</span>`}${tools}</div>
+    <a class="rv-ask" href="${boardHref(c)}"><span>接着聊，或 @ 其他 Agent 安排后面的事</span><span class="sp"></span>${ICON.chev}</a></div>`;
+}
+function pickReviewAgent(ev, d){
+  const cur = reviewAid(d);
+  pop(ev, `<div class="sec">由谁复盘</div>` + S.agents.map(a => `<button class="${a.id === cur ? "on" : ""}" onclick="reviewAgent=${q(a.id)};closePop();renderBoardDay(true)">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${a.id === cur ? ICON.check : ""}</button>`).join(""), true);
+}
+async function startReview(d){
+  const aid = reviewAid(d);
+  const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
+  try {
+    const parts = await Promise.all(ms.map(m => api(`/api/board/day?d=${d}&material=1`, undefined, m.id).catch(() => null)));
+    const material = parts.filter(p => p && p.material).map(p => p.material).join("\n\n");
+    await api("/api/board/review", {date: d, agent: aid, material}, ownerOf(aid));
+  } catch (e) { return toast(e.message); }
+  try { localStorage.setItem("ccim.reviewAgent", aid); } catch {}
+  toast("开始复盘了"); refreshSoon();
+}
+async function editReviewPrompt(){
+  const where = ownerOf(reviewAid(current.sub)) || S.me;
+  let r;
+  try { r = await api("/api/board/review_prompt", undefined, where); } catch (e) { return toast(e.message); }
+  dialog("复盘提示词", `<textarea id="rv-prompt" class="textarea" style="min-height:240px">${esc(r.prompt)}</textarea>
+    <p class="hint">写 {date} 的地方会换成那一天的日期。这一天各对话的材料会接在后面。</p>`,
+    `<button class="btn" id="rv-def" style="margin-right:auto">恢复默认</button><button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="rv-save">保存</button>`);
+  $("#rv-def").onclick = () => { $("#rv-prompt").value = r.default; };
+  $("#rv-save").onclick = async () => {
+    const v = $("#rv-prompt").value.trim(), prompt = v === r.default.trim() ? "" : v;
+    const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
+    try { await Promise.all(ms.map(m => api("/api/board/review_prompt", {prompt}, m.id))); } catch (e) { return toast(e.message); }
+    closeDialog(); toast("已保存");
+  };
 }
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);

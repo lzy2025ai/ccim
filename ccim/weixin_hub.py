@@ -307,6 +307,19 @@ class Hub:
         b = self.bridge(path, projects[path])
         return b.ask(req, (self.entry.get("owner_open_id"), "p2p"))
 
+    async def handoff(self, req):
+        """网页里的对话转到微信接着聊（#212）：切到那个项目，主人的私聊接上那个对话。
+        fresh：刚扫码登录，用户开口之前主动发的消息会被丢掉，提示留到用户发下一条消息时再发。"""
+        projects = dict(self.projects())
+        path = req.get("project")
+        if path not in projects:
+            return {"ok": False, "error": "这个 Agent 不在这个微信里"}
+        self._set_current(path)
+        res = await self.bridge(path, projects[path]).handoff(dict(req, silent=bool(req.get("fresh"))))
+        if res.get("text"):
+            registry.write_state(self.home, notice=res.pop("text"))
+        return res
+
     async def shutdown(self):
         for b in list(self.bridges.values()):
             await b.shutdown()

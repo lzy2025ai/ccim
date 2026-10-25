@@ -217,17 +217,21 @@ class Bridge:
                      key=lambda k: chats[k].get("last_active", ""), reverse=True)
         if p2p:
             chat_id = p2p[0]
+        elif req.get("silent"):               # 微信刚扫码：私聊就是和主人的，消息留到用户开口后再发
+            chat_id = owner
         else:                                 # 还没私聊过：先主动发一条，顺便拿到私聊的 chat_id
             chat_id = await self.channel.send_to_user(owner, text)
             text = None
         chat = self.chat(chat_id, "p2p")
-        await chat.attach(req["session_id"], req.get("at"))
+        await chat.attach(req["session_id"], req.get("at"), bool(req.get("link")))
         changes = {k: req[k] for k in ("model", "effort") if req.get(k)}
         if changes:
             chat.set(**changes)
         # 记下从哪个对话、什么时候转过来的，ccim handback 接回去时用
         self.save(chat_id, type="p2p", last_active=registry.now(), handoff_from=req["session_id"],
                   handoff_time=time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()))
+        if req.get("silent"):
+            return {"ok": True, "text": text}
         if text:
             await self.channel.send_text(chat_id, text)
         log.info("已把对话 %s 转到%s私聊", req["session_id"][:8], self.channel.label)

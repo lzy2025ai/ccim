@@ -2043,7 +2043,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "user"){
     const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -2074,6 +2074,7 @@ function recHtml(r, i, src = "log"){
       : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
+  if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
 }
 function liveHtml(){
@@ -2137,7 +2138,7 @@ function showEarlier(keep = true){
 function ensureShown(i){ if (!detail.showAll && i < detail.log.length - SHOW_RECENT) showEarlier(false); }
 // ---- 章节（#25）：给重要的消息起个名字，右边的目录点一下跳过去 ----
 let showToc = (() => { try { return localStorage.getItem("ccim.toc") !== "0"; } catch { return true; } })();
-const chapKey = r => (r.type === "user" || r.type === "answer") && r.at ? `${r.type}:${r.at}` : null;
+const chapKey = r => (r.type === "user" || r.type === "answer" || r.type === "note" && r.divider) && r.at ? `${r.type}:${r.at}` : null;
 function chapters(){
   const ch = detail.chapters || {};
   return detail.log.map((r, i) => [i, ch[chapKey(r)]]).filter(([, n]) => n);
@@ -2202,7 +2203,7 @@ function extNotice(c){
 let extSigBusy = false;
 async function checkExt(){
   const d = detail;
-  if (!d || extSigBusy || starting || d.busy || document.visibilityState !== "visible" || !(d.linked || (d.readonly && d.linkable))) return;
+  if (!d || extSigBusy || starting || d.busy || document.visibilityState !== "visible" || !(d.linked || d.away || (d.readonly && d.linkable))) return;
   extSigBusy = true;
   try {
     const r = await api(`/api/chat/sig?id=${encodeURIComponent(d.id)}`);
@@ -2564,9 +2565,12 @@ function itemMenu(e, id, below){
   const pinned = listRows().filter(x => x.pin != null).sort((x, y) => x.pin - y.pin), i = pinned.findIndex(x => x.id === id);
   const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
   const ref = detail && detail.agent && !detail.readonly && c.agent === detail.agent && id !== detail.id && current.view === "agents";
+  const ag = c.agent && agentOf(c.agent);
+  const away = current.view === "agents" && ag && !ag.shared && !String(id).startsWith("x:");   // 网页里和 Agent 的对话：能转到微信、飞书接着聊（#212）
   pop(at, [
     ref ? b(`addRef(${q(id)})`, "引用到输入框") : "",
     b(`renameChat(${q(id)})`, "重命名"),
+    away ? b(`handoffChat(${q(id)},'weixin')`, "到微信接着聊") + b(`handoffChat(${q(id)},'feishu')`, "到飞书接着聊") : "",
     c.pin != null ? b(`markChat(${q(id)},{pin:null})`, "取消置顶") : b(`markChat(${q(id)},{pin:true,archived:null})`, "置顶"),
     i > 0 ? b(`moveChat(${q(id)},-1)`, "上移") : "",
     i >= 0 && i < pinned.length - 1 ? b(`moveChat(${q(id)},1)`, "下移") : "",
@@ -2579,6 +2583,18 @@ function itemMenu(e, id, below){
     c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消归档") : b(`markChat(${q(id)},{archived:true,pin:null})`, "归档"),
     b(`deleteChat(${q(id)})`, "删除", "danger"),
   ].join(""), below);
+}
+async function handoffChat(id, kind){
+  const c = rowOf(id);
+  if (!c) return;
+  const go = async fresh => {
+    const r = await act(() => api("/api/chat/handoff", {id, channel: kind, fresh}, machineOfChat(c)));
+    if (r.need_connect) return connectAgent(c.agent, kind, () => go(true));
+    const tip = kind === "feishu" ? `${esc(r.where)}给你发了一条消息，点开就能接着聊。`
+      : fresh ? "在微信里打开「微信ClawBot」，发一句话就能接着聊。" : "微信「微信ClawBot」给你发了一条消息，接着说就行。";
+    dialog(`已转到${r.label}`, `<p>${tip}</p>`, `<button class="btn" onclick="closeDialog()">好</button>`);
+  };
+  await go(false);
 }
 async function markChat(id, changes){
   const c = rowOf(id);
@@ -4128,7 +4144,7 @@ async function showLogs(proc, name){
   dialog(`${name} 的日志`, `<div class="logs" id="logbox">${esc(text || "还没有日志。")}</div>`, `<button class="btn" onclick="closeDialog()">关闭</button>`);
   const b = $("#logbox"); b.scrollTop = b.scrollHeight;
 }
-async function connectAgent(aid, channel){
+async function connectAgent(aid, channel, then){   // then：接好后接着做的事（比如把对话转过去）
   const label = channel === "feishu" ? "飞书" : "微信";
   let job = await act(() => api("/api/agent/connect", {id: aid, channel}));
   dialog(`接到${label}`, `<div id="jobbox" style="text-align:center;min-height:280px"><p class="muted">准备二维码…</p></div>`, `<button class="btn" onclick="closeDialog()">关闭</button>`);
@@ -4137,6 +4153,7 @@ async function connectAgent(aid, channel){
     if (job.state === "scan") box.innerHTML = `<p>用手机${label}扫码${channel === "feishu" ? "，确认后会在你的飞书账号下建好一个机器人" : "登录"}</p><div class="qr">${job.qr}</div>
       <p class="muted" style="font-size:12px">扫不了的话，在手机${label}里打开：<a href="${esc(job.link)}" target="_blank">这个链接</a></p>`;
     else if (job.state === "starting") box.innerHTML = `<p class="muted">扫好了，正在启动…</p>`;
+    else if (job.state === "done" && then) { closeDialog(); await loadState(); return then(); }
     else if (job.state === "done") { box.innerHTML = `<h3 style="font:600 18px var(--song)">接好了</h3><p>${channel === "feishu" ? `在飞书里找「${esc(job.bot)}」发消息就行。` : `在微信里打开「微信ClawBot」发消息就行。`}</p>`; await loadState(); renderAgent(aid); return; }
     else if (job.state === "error") { box.innerHTML = `<p class="state-err">${esc(job.error)}</p>`; return; }
     await new Promise(r => setTimeout(r, 1200));

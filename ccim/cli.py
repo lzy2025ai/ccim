@@ -13,7 +13,7 @@ import argparse, asyncio, logging, os, re, signal, sys, time
 from . import asks, daemon, handoff, registry, runtime
 from .channels import NAMES, load, send_once
 
-CAPS = ["handoff", "safe-restart", "ask"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
+CAPS = ["handoff", "safe-restart", "ask", "weixin-handoff"]   # 这个版本的 ccim 进程支持的功能；handoff 据此判断正在运行的是不是旧版本
 EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")   # minimal 只有 Codex 有
 GLOBAL_KEYS = ("model", "effort", "codex_model", "codex_effort")
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": EFFORTS, "codex_model": None, "codex_effort": EFFORTS,

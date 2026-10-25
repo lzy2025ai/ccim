@@ -299,14 +299,15 @@ class Chat:
         if getattr(self.b.channel, "context", None):
             self.b.channel.context(self.chat_id, None)
 
-    async def attach(self, session_id, at=None):
-        """把这个聊天接到另一个对话（比如终端里开的）上。总是另开分支，那边的对话不受影响。
-        at：只接到那个对话里的这条消息为止（桌面端转过来时，去掉还没跑完的那一轮）。"""
+    async def attach(self, session_id, at=None, link=False):
+        """把这个聊天接到另一个对话（比如终端里开的）上。另开分支，那边的对话不受影响。
+        at：只接到那个对话里的这条消息为止（桌面端转过来时，去掉还没跑完的那一轮）。
+        link：不分支，就接着那个会话聊（网页对话转到微信、飞书，#212；两边都靠 _stale 读到对方后来说的）。"""
         await self.stop()
         if self.worker and not self.worker.done():
-            self.queue.put_nowait((ATTACH, (session_id, at), None))
+            self.queue.put_nowait((ATTACH, (session_id, at, link), None))
         else:
-            self._attach(session_id, at)
+            self._attach(session_id, at, link)
 
     async def rewind(self, files_at, session_id, at, dry=False):
         """退回（#24）：文件恢复到 files_at 那条消息之前（None 不动文件），对话接到 session_id 的 at 为止（另开分支；
@@ -320,8 +321,12 @@ class Chat:
             self.worker = asyncio.create_task(self._work())
         return await fut
 
-    def _attach(self, session_id, at=None):
+    def _attach(self, session_id, at=None, link=False):
         self._forget()
+        if link:
+            self.session_id = session_id
+            self.b.save(self.chat_id, **{self.SID_KEY: session_id})
+            return
         self.fork_from, self.fork_at = session_id, at
         self.b.save(self.chat_id, fork_from=session_id, fork_at=at)
 

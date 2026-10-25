@@ -1242,31 +1242,21 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .toast.ws-t button{color:#9CC3EA;padding:2px 8px;border-radius:6px}
 
 /* 切换动效：对话滑到右边，文件树像门一样从左边转进来，编辑区像书页翻开；手机上一层层推进去 */
-html[data-vt] .chat-head{view-transition-name:ws-head}
-html[data-vt] .app .list{view-transition-name:ws-list}
-html[data-vt] .ws-tree{view-transition-name:ws-tree}
-html[data-vt] .ws-ed{view-transition-name:ws-ed}
-html[data-vt] .ws-convo{view-transition-name:ws-convo}
-::view-transition-old(root),::view-transition-new(root){animation:none}
-::view-transition-group(*){animation-duration:.62s;animation-timing-function:cubic-bezier(.22,.9,.24,1)}
-::view-transition-old(ws-head){display:none}
-::view-transition-new(ws-head){animation:none}
-::view-transition-group(ws-tree),::view-transition-group(ws-ed){overflow:clip}
-html[data-vt=to-ws]::view-transition-old(ws-list){animation:ws-list-out .22s cubic-bezier(.5,0,.75,0) both}
-html[data-vt=to-chat]::view-transition-new(ws-list){animation:ws-list-out .5s .12s cubic-bezier(.22,.9,.24,1) reverse both}
-@keyframes ws-list-out{to{transform:translateX(-24px) scale(.97);opacity:0;filter:blur(3px)}}
-html[data-vt=to-ws]::view-transition-new(ws-tree){animation:ws-door .62s .06s cubic-bezier(.22,.9,.24,1) both;transform-origin:left center}
-html[data-vt=to-ws]::view-transition-new(ws-ed){animation:ws-page .72s .14s cubic-bezier(.22,.9,.24,1) both;transform-origin:right center}
-html[data-vt=to-chat]::view-transition-old(ws-tree){animation:ws-door .4s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:left center}
-html[data-vt=to-chat]::view-transition-old(ws-ed){animation:ws-page .42s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:right center}
-@keyframes ws-door{from{transform:perspective(1100px) rotateY(-88deg);opacity:0}}
-@keyframes ws-page{from{transform:perspective(1800px) rotateY(58deg) translateX(60px);opacity:0}}
-html[data-vt=to-ws]::view-transition-group(ws-convo),html[data-vt=to-chat]::view-transition-group(ws-convo){animation:none;z-index:5}
-html[data-vt=to-ws]::view-transition-old(ws-convo),html[data-vt=to-chat]::view-transition-old(ws-convo){display:none}
-html[data-vt=to-ws]::view-transition-new(ws-convo){animation:ws-convo-r .62s cubic-bezier(.22,.9,.24,1) both}
-html[data-vt=to-chat]::view-transition-new(ws-convo){animation:ws-convo-c .62s cubic-bezier(.22,.9,.24,1) both}
-@keyframes ws-convo-r{from{transform:translateX(-95%) scale(.98);opacity:.2}}
-@keyframes ws-convo-c{from{transform:translateX(32%) scale(.98);opacity:.2}}
+/* 对话 ⇄ 工作区（#237）：整页像卡片一样翻过去（视觉稿里的「翻转」），浅色那面翻到深色那面 */
+html[data-vt=side] .ws-convo{view-transition-name:ws-convo}
+html[data-vt=push] .chat-head,html[data-vt=pop] .chat-head{view-transition-name:ws-head}
+html[data-vt=side]::view-transition-old(root),html[data-vt=side]::view-transition-new(root),
+html[data-vt=push]::view-transition-old(root),html[data-vt=push]::view-transition-new(root),
+html[data-vt=pop]::view-transition-old(root),html[data-vt=pop]::view-transition-new(root){animation:none}
+html[data-vt=push]::view-transition-new(ws-head),html[data-vt=pop]::view-transition-new(ws-head){animation:none}
+html[data-vt=to-ws],html[data-vt=to-chat]{background:#0E1013}
+::view-transition-group(root){animation-duration:.85s}
+html[data-vt=to-ws]::view-transition-old(root){animation:ws-flip-a .4s cubic-bezier(.4,0,1,.6) both}
+html[data-vt=to-ws]::view-transition-new(root){animation:ws-flip-b .45s .38s cubic-bezier(.2,.8,.35,1.08) both}
+html[data-vt=to-chat]::view-transition-old(root){animation:ws-flip-b .4s cubic-bezier(.4,0,1,.6) reverse both}
+html[data-vt=to-chat]::view-transition-new(root){animation:ws-flip-a .45s .38s cubic-bezier(.2,.8,.35,1.08) reverse both}
+@keyframes ws-flip-a{to{transform:perspective(2400px) rotateY(-90deg) scale(.94);filter:brightness(.85)}}
+@keyframes ws-flip-b{from{transform:perspective(2400px) rotateY(90deg) scale(.94);filter:brightness(.85)}}
 html[data-vt=side]::view-transition-old(ws-convo){animation:ws-side-out .35s cubic-bezier(.5,0,.75,0) both}
 html[data-vt=side]::view-transition-new(ws-convo){animation:ws-side-out .45s cubic-bezier(.22,.9,.24,1) reverse both}
 @keyframes ws-side-out{to{transform:translateX(100%);opacity:0}}
@@ -1304,24 +1294,26 @@ html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transit
   .ws-ask{position:absolute;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:6px;background:var(--qing);color:#fff;border-radius:22px;padding:9px 16px;font-size:14px;box-shadow:0 6px 18px rgba(43,76,111,.35)}
   .ws-ask svg{width:16px;height:16px}
 }
-/* 工作区深色（#237）：文件树、编辑区换一套颜色，和对话模式一眼分开；右边的对话栏照旧 */
-#main.ws .ws-tree,#main.ws .ws-ed,#main.ws-files .ws-tree,#main.ws-file .ws-ed{
+/* 工作区深色（#237）：换到工作区后整个界面换一套颜色（html.ws-dark，wsApply 里切），和对话模式一眼分开 */
+html.ws-dark{
   --paper:#16191E; --panel:#1C2026; --sunk:#272C34; --line:#2C3139; --line-strong:#3A4049;
   --ink:#E4E7EB; --ink-2:#C3C8CF; --muted:#9097A0; --faint:#6A717A;
-  --qing:#8DB2DA; --qing-soft:#24364A; --zhe:#E0A375; --huang:#E2BE5C; --bad:#F0806E;
-  color:var(--ink);color-scheme:dark}
-#main.ws .ws-tree{background:#181B20}
-#main.ws .ws-tabs{background:#16191E}
-#main.ws .ws-tab.on{background:var(--panel)}
-#main.ws .ws-ren{background:#0F1215;color:var(--ink)}
-#main.ws .ws-flag.new{background:#1F3A2A;color:#8FD3A8}
-#main.ws .ws-flag.mod{background:#3D2E1D;color:#E8B98C}
-#main.ws .ws-row .ic.dir{color:#C9A86A}
-#main.ws .doc-old{background:#2E2814;border-color:#4A4020;color:#E6CF86}
-#main.ws .doc-md pre{background:#12151A}
-#main.ws .wx-page,#main.ws .doc-body iframe{color-scheme:light}
-#main.ws .wx-page{--ink:#1D222B;--ink-2:#3A404A;--muted:#6C7169;--line:#DCDFD8;--paper:#F1F2EE;--sunk:#E8EAE5;--qing:#2B4C6F;color:var(--ink)}
-#main.ws .ws-ed ::selection{background:#2F4A68}
+  --qing:#5A87BB; --qing-soft:#24364A; --zhe:#E0A375; --huang:#E2BE5C; --bad:#F0806E;
+  color:var(--ink);color-scheme:dark;background:var(--paper)}
+html.ws-dark body{background:var(--paper);color:var(--ink)}
+html.ws-dark .ws-tree{background:#181B20}
+html.ws-dark #main.ws .ws-convo{background:#1A1D22}
+html.ws-dark .ws-tabs{background:#16191E}
+html.ws-dark .ws-tab.on{background:var(--panel)}
+html.ws-dark .ws-ren{background:#0F1215;color:var(--ink)}
+html.ws-dark .ws-flag.new{background:#1F3A2A;color:#8FD3A8}
+html.ws-dark .ws-flag.mod{background:#3D2E1D;color:#E8B98C}
+html.ws-dark .ws-row .ic.dir{color:#C9A86A}
+html.ws-dark .doc-old{background:#2E2814;border-color:#4A4020;color:#E6CF86}
+html.ws-dark .doc-md pre{background:#12151A}
+html.ws-dark .wx-page,html.ws-dark .doc-body iframe{color-scheme:light}
+html.ws-dark .wx-page{--ink:#1D222B;--ink-2:#3A404A;--muted:#6C7169;--line:#DCDFD8;--paper:#F1F2EE;--sunk:#E8EAE5;--qing:#2B4C6F;color:var(--ink)}
+html.ws-dark .ws-ed ::selection{background:#2F4A68}
 /* 文件类型图标 */
 .ws-row .ic.ft svg{width:15px;height:15px}
 /* 代码编辑：高亮层垫在透明文字的输入框下面，行号跟着滚 */
@@ -1334,12 +1326,12 @@ html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transit
 .code-main pre.code-hl code{display:block;font:inherit;min-width:max-content}
 .code-main textarea{width:100%;height:100%;overflow:auto;resize:none;outline:0;background:transparent;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--ink)}
 .code-ed .hl-c{color:#6E7781} .code-ed .hl-s{color:#0A3069} .code-ed .hl-n{color:#0550AE} .code-ed .hl-w{color:#CF222E} .code-ed .hl-k{color:#8250DF} .code-ed .hl-t{color:#116329}
-#main.ws .code-ed .hl-c,#main.ws-file .code-ed .hl-c{color:#6B7682;font-style:italic}
-#main.ws .code-ed .hl-s,#main.ws-file .code-ed .hl-s{color:#A5D6A0}
-#main.ws .code-ed .hl-n,#main.ws-file .code-ed .hl-n{color:#E7B77C}
-#main.ws .code-ed .hl-w,#main.ws-file .code-ed .hl-w{color:#E28FBF}
-#main.ws .code-ed .hl-k,#main.ws-file .code-ed .hl-k{color:#8DC3F2}
-#main.ws .code-ed .hl-t,#main.ws-file .code-ed .hl-t{color:#F08A7E}
+html.ws-dark .code-ed .hl-c{color:#6B7682;font-style:italic}
+html.ws-dark .code-ed .hl-s{color:#A5D6A0}
+html.ws-dark .code-ed .hl-n{color:#E7B77C}
+html.ws-dark .code-ed .hl-w{color:#E28FBF}
+html.ws-dark .code-ed .hl-k{color:#8DC3F2}
+html.ws-dark .code-ed .hl-t{color:#F08A7E}
 @media (max-width:760px){.code-ed{--cf:16px;--cl:1.6}.code-main pre.code-hl,.code-main textarea{padding:14px 14px 70px}}
 /* 右边对话栏窄：消息下面的按钮只留图标，不折行 */
 .msg-acts{flex-wrap:wrap}
@@ -1880,7 +1872,7 @@ function route(){
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
-  if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) document.querySelector(".app").classList.remove("ws-mode");
+  if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) { document.querySelector(".app").classList.remove("ws-mode"); document.documentElement.classList.remove("ws-dark"); }
   closePop();
   if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
   renderList();
@@ -6388,6 +6380,7 @@ function wsApply(){
   m?.classList.toggle("ws-files", !!(WS && narrow() && WS.scr === "files"));
   m?.classList.toggle("ws-file", !!(WS && narrow() && WS.scr === "file"));
   app.classList.toggle("ws-mode", on);
+  document.documentElement.classList.toggle("ws-dark", on || !!(WS && narrow() && (WS.scr === "files" || WS.scr === "file")));
   const sw = $("#ws-sw"); if (sw) sw.dataset.on = on ? "ws" : "chat";
   const cb = $("#ws-chatbtn"); if (cb) { cb.hidden = !on; cb.classList.toggle("on", !!WS && !wsNoChat()); cb.title = wsNoChat() ? "显示对话" : "收起对话"; }
   const fb = $("#ws-filesbtn"); if (fb) { const n = WS ? Object.keys(WS.flags).length : 0; fb.innerHTML = ICON.folder + (n ? `<span class="badge">${n}</span>` : ""); }

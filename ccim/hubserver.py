@@ -601,6 +601,8 @@ def _handler(hub):
         def do_GET(self):
             if not self._host_ok():
                 return self._send(403, b"forbidden", "text/plain")
+            from .filesend import unname
+            unname(self)
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             from .platform import static_file

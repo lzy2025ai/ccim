@@ -91,11 +91,28 @@ def _common(handler, m, extra):
         handler.send_header(k, v)
 
 
+NAMED = "/api/file/-/"
+
+
+def unname(handler):
+    """网页的文件地址是 /api/file/-/<文件名>?…：只认地址最后一段当名字的浏览器（小米等）也能存成原名。这里还原成 /api/file?…"""
+    if handler.path.startswith(NAMED):
+        _, sep, query = handler.path[len(NAMED):].partition("?")
+        handler.path = "/api/file" + sep + query
+
+
+def disposition(name):
+    """filename* 给认 RFC 5987 的浏览器；只认 filename= 的（安卓、应用内浏览器）不认就拿地址最后一段当名字，
+    所以也带一份百分号编码的 filename=，它们会解码。"""
+    q = quote(name)
+    return f"inline; filename=\"{q}\"; filename*=UTF-8''{q}"
+
+
 def _head(handler, m, code, start, end, extra):
     handler.send_response(code)
     handler.send_header("Content-Type", m["ctype"])
     handler.send_header("Content-Length", str(end - start + 1))
-    handler.send_header("Content-Disposition", f"inline; filename*=UTF-8''{quote(m['name'])}")
+    handler.send_header("Content-Disposition", disposition(m["name"]))
     if code == 206:
         handler.send_header("Content-Range", f"bytes {start}-{end}/{m['size']}")
     _common(handler, m, extra)

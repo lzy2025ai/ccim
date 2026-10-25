@@ -5250,7 +5250,7 @@ function membersPanel(p){
   return `<aside class="members"><div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font:600 15px var(--song)">成员</b><button class="icon-btn" aria-label="收起" onclick="showMembers=false;drawProject()">${ICON.x}</button></div>
     ${p.members.map(m => { const a = agentOf(m); if (!a) return ""; const far = whereTag(m, pm);
       return `<div class="mem">${seal(a)}<span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)} ${far}</span><span class="sub">${a.busy ? esc(a.doing || "干活中") : BASE[a.base || "claude"]}</span>${far ? `<span class="sub" style="color:var(--faint)">在自己的电脑上干活，看不到这个项目的文件</span>` : ""}</span>
-      <button class="link danger-link" onclick="removeMember(${q(m)})">移出</button></div>`; }).join("") || `<p class="muted">还没有成员。</p>`}
+      <button class="link danger-link" onclick="removeProjMember(${q(m)})">移出</button></div>`; }).join("") || `<p class="muted">还没有成员。</p>`}
     <div class="row" style="margin-top:12px">
       ${others.length ? `<button class="btn" onclick="addMemberMenu(event)">${ICON.plus}拉人</button>` : ""}
       <button class="btn" onclick="quickAgent()">${ICON.plus}新建 Agent</button></div></aside>`;
@@ -5301,7 +5301,7 @@ async function choose(tid, aid){
   await act(() => api("/api/project/choose", {id: proj.id, task: tid, agent: aid}), "已合并进项目目录");
   openProject(proj.id);
 }
-async function removeMember(m){ await act(() => api("/api/project/member", {id: proj.id, remove: m}), "已移出"); rcpt = rcpt.filter(x => x !== m); await loadState(); openProject(proj.id); }
+async function removeProjMember(m){ await act(() => api("/api/project/member", {id: proj.id, remove: m}), "已移出"); rcpt = rcpt.filter(x => x !== m); await loadState(); openProject(proj.id); }
 function addMemberMenu(e){
   const pm = ownerOf(proj.id) || S.me;
   const pp = pop(e, `<div class="sec">拉进项目</div>` + S.agents.filter(a => !proj.members.includes(a.id)).sort((x, y) => ((y.machine || S.me) === pm ? 1 : 0) - ((x.machine || S.me) === pm ? 1 : 0)).map(a =>

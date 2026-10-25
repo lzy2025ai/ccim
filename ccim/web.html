@@ -2564,9 +2564,12 @@ function itemMenu(e, id, below){
   const pinned = listRows().filter(x => x.pin != null).sort((x, y) => x.pin - y.pin), i = pinned.findIndex(x => x.id === id);
   const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
   const ref = detail && detail.agent && !detail.readonly && c.agent === detail.agent && id !== detail.id && current.view === "agents";
+  const ag = c.agent && agentOf(c.agent);
+  const away = current.view === "agents" && ag && !ag.shared && !String(id).startsWith("x:");   // 网页里和 Agent 的对话：能转到微信、飞书接着聊（#212）
   pop(at, [
     ref ? b(`addRef(${q(id)})`, "引用到输入框") : "",
     b(`renameChat(${q(id)})`, "重命名"),
+    away ? b(`handoffChat(${q(id)},'weixin')`, "到微信接着聊") + b(`handoffChat(${q(id)},'feishu')`, "到飞书接着聊") : "",
     c.pin != null ? b(`markChat(${q(id)},{pin:null})`, "取消置顶") : b(`markChat(${q(id)},{pin:true,archived:null})`, "置顶"),
     i > 0 ? b(`moveChat(${q(id)},-1)`, "上移") : "",
     i >= 0 && i < pinned.length - 1 ? b(`moveChat(${q(id)},1)`, "下移") : "",
@@ -2579,6 +2582,18 @@ function itemMenu(e, id, below){
     c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消归档") : b(`markChat(${q(id)},{archived:true,pin:null})`, "归档"),
     b(`deleteChat(${q(id)})`, "删除", "danger"),
   ].join(""), below);
+}
+async function handoffChat(id, kind){
+  const c = rowOf(id);
+  if (!c) return;
+  const go = async fresh => {
+    const r = await act(() => api("/api/chat/handoff", {id, channel: kind, fresh}, machineOfChat(c)));
+    if (r.need_connect) return connectAgent(c.agent, kind, () => go(true));
+    const tip = kind === "feishu" ? `${esc(r.where)}给你发了一条消息，点开就能接着聊。`
+      : fresh ? "在微信里打开「微信ClawBot」，发一句话就能接着聊。" : "微信「微信ClawBot」给你发了一条消息，接着说就行。";
+    dialog(`已转到${r.label}`, `<p>${tip}</p>`, `<button class="btn" onclick="closeDialog()">好</button>`);
+  };
+  await go(false);
 }
 async function markChat(id, changes){
   const c = rowOf(id);
@@ -4128,7 +4143,7 @@ async function showLogs(proc, name){
   dialog(`${name} 的日志`, `<div class="logs" id="logbox">${esc(text || "还没有日志。")}</div>`, `<button class="btn" onclick="closeDialog()">关闭</button>`);
   const b = $("#logbox"); b.scrollTop = b.scrollHeight;
 }
-async function connectAgent(aid, channel){
+async function connectAgent(aid, channel, then){   // then：接好后接着做的事（比如把对话转过去）
   const label = channel === "feishu" ? "飞书" : "微信";
   let job = await act(() => api("/api/agent/connect", {id: aid, channel}));
   dialog(`接到${label}`, `<div id="jobbox" style="text-align:center;min-height:280px"><p class="muted">准备二维码…</p></div>`, `<button class="btn" onclick="closeDialog()">关闭</button>`);
@@ -4137,6 +4152,7 @@ async function connectAgent(aid, channel){
     if (job.state === "scan") box.innerHTML = `<p>用手机${label}扫码${channel === "feishu" ? "，确认后会在你的飞书账号下建好一个机器人" : "登录"}</p><div class="qr">${job.qr}</div>
       <p class="muted" style="font-size:12px">扫不了的话，在手机${label}里打开：<a href="${esc(job.link)}" target="_blank">这个链接</a></p>`;
     else if (job.state === "starting") box.innerHTML = `<p class="muted">扫好了，正在启动…</p>`;
+    else if (job.state === "done" && then) { closeDialog(); await loadState(); return then(); }
     else if (job.state === "done") { box.innerHTML = `<h3 style="font:600 18px var(--song)">接好了</h3><p>${channel === "feishu" ? `在飞书里找「${esc(job.bot)}」发消息就行。` : `在微信里打开「微信ClawBot」发消息就行。`}</p>`; await loadState(); renderAgent(aid); return; }
     else if (job.state === "error") { box.innerHTML = `<p class="state-err">${esc(job.error)}</p>`; return; }
     await new Promise(r => setTimeout(r, 1200));

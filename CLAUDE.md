@@ -46,6 +46,9 @@
   飞书那边是独立分支，带不带回来由用户决定：`ccim/hook.py`（插件 hooks/hooks.json 的 UserPromptSubmit 钩子，命令 ccim-hook）
   只检测、让 Claude 先问，不自动带。两个进度：synced_to_desktop（handback 才推进）、notified_to_desktop（同一批只问一次）。
   飞书那边正在回复的一轮（聊天状态里 busy）先不带。钩子每条消息都跑，不能 import 飞书 SDK
+- 网页对话转到微信 / 飞书（#212）：Agent 对话列表三点菜单「到微信接着聊」「到飞书接着聊」→ /api/chat/handoff（`handoff_chat`）。
+  没接这个渠道先扫码（`connectAgent` 的 then）；接上的是最后一条带 fork 的回答（另开分支），走和 `ccim handoff` 一样的 handoff.json。
+  微信由 `Hub.handoff` 切到这个项目；刚扫码时主动发的会被丢掉，所以带 fresh，提示放进 notice 等用户开口再发（进程 caps 要有 weixin-handoff）
 - `skills/ccim-setup/`：教 agent 帮用户接入飞书 / 微信（AGENTS.md 指向它）。改了接入流程、命令或报错文字要同步改它，并升 plugin.json 的 version。
   agent 跑命令时不在终端里：二维码走 `qrpage.show`（不在终端就在浏览器里打开），需要确认的地方要有 `--yes`，不能卡在 input 上；
   `ccim` 本身保持前台运行（用户要的），agent 用 `ccim start --always`（没配对会先配对）或 `ccim --weixin`

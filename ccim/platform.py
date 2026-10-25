@@ -1548,6 +1548,39 @@ class Platform:
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
+    def handoff_prep(self, cid, kind):
+        """转到微信 / 飞书接着聊（#212）之前：找到 Agent 接的那个渠道，算出要接上的会话和位置。"""
+        m = self.meta(cid)
+        a = agents.get(m.get("agent")) if m.get("agent") else None
+        if not a or m.get("mention_of") or m.get("side_of") or share.chat_owner(self, cid):
+            raise Problem("这个对话转不过去。")
+        if m.get("cwd") and m["cwd"] != agents.cwd(a):
+            raise Problem("这个对话转不过去。")
+        hit = [(p, path) for k, p, path in agents.linked_paths(a["id"]) if k == kind]
+        if not hit:
+            return {"need_connect": True}
+        proc, path = hit[0]
+        base = self._effective(m)["base"]
+        rows = self.channel.logs.read(cid)
+        sid, at = m.get("codex_session_id" if base == "codex" else "session_id"), None
+        if base == "codex":                   # Codex 只能接整个对话
+            if m.get("busy"):
+                raise Problem("等它这一轮做完再转。")
+            last = next((r for r in reversed(rows) if r.get("type") == "answer"), None)
+        else:                                 # 接到最后一条答完的回答为止，正在回答的这一轮不带
+            last = next((r for r in reversed(rows) if r.get("type") == "answer" and r.get("fork")), None)
+            if last:
+                sid, at = last["fork"].get("sid") or sid, last["fork"].get("at")
+        if not sid or not last:
+            raise Problem("还没有回答，没什么可接着聊的。")
+        reply = last.get("text") or ""
+        req = {"session_id": sid, "at": at, "title": m.get("title") or "网页里的对话", "last_reply": reply,
+               "model": m.get("model"), "effort": m.get("effort"), "project": path}
+        return {"proc": proc, "req": req}
+
+    def handoff_note(self, cid, text):
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "text": text}))
+
     def _fork_history(self, cid, index):
         d = self.chat_detail(cid)
         rows = d["log"] if cid.startswith("x:") else d.get("earlier") or []
@@ -1994,6 +2027,7 @@ def _handler(pf):
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
+                "/api/chat/handoff": lambda: handoff_chat(pf, b("id"), b("channel"), b("fresh")),
                 "/api/channel/start": lambda: console.start(b("proc")),
                 "/api/channel/stop": lambda: console.stop(b("proc")),
                 "/api/channel/restart": lambda: console.restart(b("proc")),
@@ -2303,6 +2337,27 @@ def connect_agent(aid, channel):
     if job.get("id") in console.JOBS:
         console.JOBS[job["id"]].agent_id = aid
     return job
+
+
+def handoff_chat(pf, cid, kind, fresh=False):
+    """网页对话转到这个 Agent 的微信 / 飞书私聊接着聊（#212）。渠道没在跑就先启动。"""
+    from . import daemon, handoff
+    from . import web as console
+    prep = pf.call(pf.handoff_prep, cid, kind)
+    if prep.get("need_connect"):
+        return prep
+    proc, label = prep["proc"], "微信" if kind == "weixin" else "飞书"
+    started = not daemon.running(proc)
+    if started:
+        console.start(proc)
+    elif kind == "weixin" and "weixin-handoff" not in (registry.read_state(proc).get("caps") or []):
+        raise Problem("微信那边要先重启一下：在 Agent 设置里点微信的「重启」，再转。")
+    res = handoff.request(proc, dict(prep["req"], fresh=bool(fresh)), timeout=90 if started else 30)
+    if not res.get("ok"):
+        raise Problem(f"没转过去：{res.get('error') or '没有响应'}")
+    where = "微信" if kind == "weixin" else f"飞书「{(registry.get(proc) or {}).get('bot_name') or '机器人'}」"
+    pf.call(pf.handoff_note, cid, f"已转到{where}接着聊。")
+    return {"ok": True, "where": where, "label": label}
 
 
 def start_upgrade(force):

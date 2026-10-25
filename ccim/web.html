@@ -2077,7 +2077,7 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
-      : `<a class="sentfile" href="${src}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
+      : `<a class="sentfile" href="${src}" download="${esc(r.name)}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;

@@ -1,4 +1,4 @@
-"""开发页批量上线（#207）：先检查、叠在一起的按顺序、中途失败不更新。不连 GitHub，用本仓库 main 上的两个提交假装是两个 PR。"""
+"""开发页批量上线（#207）：先检查、叠在一起的按顺序、中途合不上的跳过、其余照常上线（第二轮）。不连 GitHub，用本仓库 main 上的两个提交假装是两个 PR。"""
 import json, os, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,12 +42,18 @@ def merge(it, tag, heads):
 
 
 dev._merge, dev._update = merge, lambda: calls.append("UPDATE")
+assert dev._ship([901, 900]) == "#901 已上线", calls          # 901 合不上：跳过它，已合的 900 照常更新
+assert calls == [(900, {}), (901, {900: A}), "UPDATE"], calls
+assert [m["tag"] for m in dev.job["missed"]] == ["#902"] and "检查没通过" in dev.job["missed"][0]["why"], dev.job
+
+calls.clear()
+dev._merge = lambda it, tag, heads: (calls.append(it["pr"]), (_ for _ in ()).throw(RuntimeError("冲突")))
 try:
-    dev._ship([901, 900])
+    dev._ship([901, 900])                                     # 900 合不上，叠在它后面的 901 也跳过，一个都没合上就不更新
     raise AssertionError("应该失败")
 except RuntimeError as e:
-    assert "没有更新" in str(e), e
-assert "UPDATE" not in calls and calls[1] == (901, {900: A}), calls
+    assert "一个都没合上" in str(e), e
+assert calls == [900] and "叠在没合上的 #901 后面" in dev.job["missed"][1]["why"], (calls, dev.job)
 
 calls.clear()
 dev._merge = lambda it, tag, heads: calls.append(it["pr"])

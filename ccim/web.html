@@ -33,6 +33,9 @@ button{cursor:pointer;border:0;background:none;padding:0}
 
 /* ---------- 骨架 ---------- */
 .app{display:grid;grid-template-columns:76px var(--list-w,300px) 1fr;height:100vh;overflow:hidden;position:relative;--rail-w:76px}
+/* iPad 等触屏：100vh 比实际看得到的区域高，底部被遮住一截（#242）；按可见高度算，底部给系统手势条留位置 */
+@supports (height:100dvh){.app{height:100dvh}}
+@media (min-width:761px){.app{padding-bottom:env(safe-area-inset-bottom)}}
 .resizer{position:absolute;top:0;bottom:0;left:calc(var(--rail-w) + var(--list-w,300px) - 4px);width:8px;cursor:col-resize;z-index:15;touch-action:none}
 .resizer::after{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent;transition:background .15s}
 .resizer:hover::after,.resizer.drag::after{background:var(--qing)}

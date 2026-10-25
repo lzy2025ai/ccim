@@ -2790,8 +2790,11 @@ function drawChatRcpt(){
 function refCands(qs){
   if (!detail || !detail.agent || detail.readonly || current.view !== "agents") return [];
   const k = (qs || "").toLowerCase();
+  const pinned = c => c.pin != null;   // 和左边列表一样：置顶的在前，其余按最近活跃
   return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !c.side_of && !chatRefs.some(r => r.id === c.id)
-    && (!k || (c.title || "").toLowerCase().includes(k))).slice(0, 8);
+    && (!k || (c.title || "").toLowerCase().includes(k)))
+    .sort((a, b) => pinned(b) - pinned(a) || (pinned(a) ? a.pin - b.pin : 0) || String(b.last_active || "").localeCompare(String(a.last_active || "")))
+    .slice(0, 50);
 }
 function refTyped(){
   const i = $("#input"), m = /(^|\s)[#＃]([^\s#＃]*)$/.exec(i.value.slice(0, i.selectionStart));

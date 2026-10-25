@@ -2,7 +2,8 @@
 
 - Claude Code：~/.claude/projects 下每个会话一个 .jsonl（子 agent 在 <会话>/subagents/ 下，算到那个会话），
   回答那行的 message.usage。同一条消息会出现好几次（按内容块分成几行、分叉时原样复制到新会话），按 message.id 只算一次；
-  同一个文件里取最后一行（前面几行的 output_tokens 不全）。分叉复制过去的消息算到最早出现它的那个会话。
+  同一个文件里取最后一行（前面几行的 output_tokens 不全）。分叉复制过去的消息算到原来那个会话：
+  复制时连时间戳一起复制，所以按文件建立的时间认谁在先。
 - Codex：~/.codex/sessions 下的 rollout-*.jsonl，每次请求一个 token_count 事件，取 last_token_usage。
 - 「新产生的」= 输入 + 写入缓存 + 输出；读缓存另算（数量大、几乎不花额度）。
 - 只读最近 KEEP_DAYS 天改过的文件；文件只往后追加，按读到的位置接着读。第一次全读一遍要十几秒，所以在后台线程里做。
@@ -11,7 +12,7 @@ import datetime, glob, json, logging, os, threading, time
 
 log = logging.getLogger("ccim.tokens")
 KEEP_DAYS = 35
-_FILES = {}           # 路径 → {"size", "off", "birth", "sid", "msgs": {消息编号: (日期, 新产生, 读缓存)}}
+_FILES = {}           # 路径 → {"size", "off", "born", "sid", "msgs": {消息编号: (日期, 新产生, 读缓存)}}
 _lock = threading.Lock()
 _view = {"days": {}, "sessions": {}, "at": 0}   # 汇总好的：日期 → [新, 读]；会话 → {日期: [新, 读]}
 _started = False
@@ -56,8 +57,6 @@ def _read(path, kind, rec):
         day = _day(d.get("timestamp"))
         if not day:
             continue
-        if rec["birth"] is None:
-            rec["birth"] = d.get("timestamp")
         if kind == "claude":
             m = d.get("message") or {}
             u = m.get("usage")
@@ -89,17 +88,17 @@ def _files():
             except OSError:
                 continue
             if st.st_mtime >= cut:
-                yield kind, p, st.st_size
+                yield kind, p, st.st_size, getattr(st, "st_birthtime", st.st_ctime)
 
 
 def refresh():
     """读新增的部分，重新汇总。"""
     seen = set()
-    for kind, p, size in _files():
+    for kind, p, size, born in _files():
         seen.add(p)
         rec = _FILES.get(p)
         if rec is None or size < rec["size"]:     # 新文件，或被改短了（重写过）：从头读
-            rec = _FILES[p] = {"size": 0, "off": 0, "birth": None, "msgs": {},
+            rec = _FILES[p] = {"size": 0, "off": 0, "born": born, "msgs": {},
                                "sid": _claude_sid(p) if kind == "claude" else _codex_sid(p)}
         if size == rec["size"]:
             continue
@@ -110,9 +109,9 @@ def refresh():
         rec["size"] = size
     for p in [p for p in _FILES if p not in seen]:
         del _FILES[p]
-    owner = {}                                     # 消息编号 → (最早出现的文件, 那个文件)
+    owner = {}                                     # 消息编号 → (最早建立的文件的建立时间, 那个文件)
     for p, rec in _FILES.items():
-        b = rec["birth"] or ""
+        b = rec["born"]
         for k in rec["msgs"]:
             o = owner.get(k)
             if o is None or b < o[0]:

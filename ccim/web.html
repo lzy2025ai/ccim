@@ -1061,6 +1061,22 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   text-decoration:none;color:inherit;margin:2px 0 10px}
 .sentfile:hover{border-color:var(--ink-2)}
 .sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
+/* 聊天记录（#218）：像微信里转发的聊天记录 */
+.chatlog{display:block;width:min(320px,100%);text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px 0;margin:2px 0 10px;color:inherit}
+.chatlog:hover{border-color:var(--ink-2)}
+.chatlog .t{font-weight:600;font-size:14px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatlog .ln{font-size:12.5px;color:var(--muted);line-height:1.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatlog .ft{margin-top:8px;padding:6px 0 7px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
+.cl-list{display:flex;flex-direction:column;gap:14px}
+.cl-it{display:flex;gap:10px}
+.cl-av{flex:none;width:34px;height:34px;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:14px;font-weight:500}
+.cl-main{flex:1;min-width:0}
+.cl-hd{display:flex;gap:8px;align-items:baseline;font-size:12.5px;color:var(--muted);margin-bottom:3px}
+.cl-hd b{font-weight:500;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-hd span{margin-left:auto;flex:none;color:var(--faint)}
+.cl-tx{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:14px}
+.cl-main img{display:block;max-width:min(240px,100%);max-height:240px;border-radius:6px;border:1px solid var(--line);margin-top:4px;cursor:zoom-in}
 .pending{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 0}
 .pending .file button{color:var(--muted);margin-left:2px}
 .pending .thumb{position:relative;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
@@ -2079,9 +2095,28 @@ function recHtml(r, i, src = "log"){
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
       : `<a class="sentfile" href="${src}" download="${esc(r.name)}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
   }
+  if (r.type === "chatlog"){
+    const items = r.items || [];
+    return `<div class="msg"><button class="chatlog" onclick="openChatlog(${i})"><div class="t">${esc(r.title)}</div>
+      ${items.slice(0, 4).map(x => `<div class="ln">${esc(x.sender)}：${esc(clLine(x))}</div>`).join("")}
+      <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button></div>`;
+  }
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
+}
+const clLine = x => (x.text || "").replace(/\s+/g, " ").trim() || (x.image ? "[图片]" : "");
+const CL_COLORS = ["#5B8C5A", "#4A7FB0", "#B0754A", "#8A6BB0", "#B05A6E", "#4A9A9A", "#8C8A4A"];
+function clAvatar(name){
+  let h = 0; for (const c of name || "") h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return `<span class="cl-av" style="background:${CL_COLORS[h % CL_COLORS.length]}">${esc([...(name || "?").trim()][0] || "?")}</span>`;
+}
+function openChatlog(i){
+  const r = detail.log[i]; if (!r) return;
+  dialog(r.title, `<div class="cl-list">${(r.items || []).map(x => `<div class="cl-it">${clAvatar(x.sender)}<div class="cl-main">
+    <div class="cl-hd"><b>${esc(x.sender)}</b><span>${esc(x.time || "")}</span></div>
+    ${x.text ? `<div class="cl-tx">${esc(x.text)}</div>` : ""}
+    ${x.image ? `<img src="${fileUrl(detail.id, x.image)}" alt="图片" onclick="showImage(this.src)">` : ""}</div></div>`).join("")}</div>`);
 }
 function liveHtml(){
   const p = detail.progress; if (!p) return "";

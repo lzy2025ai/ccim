@@ -10,6 +10,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
 from . import registry, usage
+from .channels.base import chatlog_as_text
 from .progress import clock, describe_tool, short
 
 log = logging.getLogger("ccim.session")
@@ -40,6 +41,7 @@ APPEND = """\
 你正在通过{label}和用户对话（ccim 把这个项目目录接到了{label}）。用户多半在手机上看回复：
 - 回答简洁，{style}
 - 需要把图片、视频、文件交给用户时，调用 mcp__ccim__send_file 工具发到聊天里。之前的记录里用过的 SendUserFile 在这里用不了。
+- 要给用户看多条聊天消息的原文（比如微信、飞书里某人或某个群说的话）时，调用 mcp__ccim__send_chatlog 发成一份聊天记录，你的总结写在回答里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里，需要时用 Read 查看。
 - 没有交互式提问框，有问题直接在回复里问。"""
 ADMIN = """
@@ -55,6 +57,7 @@ PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--
 # 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（这里没有，报「disabled」），钩子接不到，看到就补一句（#190）
 WRONG_SEND = "SendUserFile"
 WRONG_SEND_HINT = "（ccim）这里没有 SendUserFile，刚才的文件没发出去。发文件改用 mcp__ccim__send_file，参数一样是 path，现在重新发一次。"
+CHATLOG_MAX = 300         # 一份聊天记录最多几条
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
 LOOK_AROUND_PF = """
 - 你和用户以前的对话（网页私聊、群聊、定时任务、飞书、微信、终端或桌面端）用 mcp__ccim__search_chats 找：写关键词按内容找，
@@ -910,24 +913,78 @@ class Chat:
         """这个对话能用的 ccim 工具。Claude Code 在进程内挂上；别的底座经 toolsock 用同一份（#178）。"""
         chat = self
 
-        @tool("send_file", "把本机的图片、视频或文件发到当前聊天里。path 用绝对路径，或相对项目目录的路径。",
-              {"path": str})
-        async def send_file(args):
-            path = os.path.realpath(os.path.join(chat.b.path, os.path.expanduser(args.get("path", ""))))
+        def sendable(raw):
+            """要发给用户的本机文件：返回 (绝对路径, 不能发的原因)。"""
+            path = os.path.realpath(os.path.join(chat.b.path, os.path.expanduser(raw or "")))
             if chat.chat_type != "p2p" and not path.startswith(os.path.realpath(chat.b.path) + os.sep):
-                return _err("群聊里只能发送项目目录里的文件。")
+                return path, "群聊里只能发送项目目录里的文件。"
             g = guest_of(chat.b)
             if g:
                 from . import share
                 if not share.may_send(g, path, chat.b.path):
-                    return _err("只能发送你的文件夹里的文件。")
+                    return path, "只能发送你的文件夹里的文件。"
             if not os.path.isfile(path):
-                return _err(f"文件不存在：{path}")
+                return path, f"文件不存在：{path}"
+            return path, None
+
+        @tool("send_file", "把本机的图片、视频或文件发到当前聊天里。path 用绝对路径，或相对项目目录的路径。",
+              {"path": str})
+        async def send_file(args):
+            path, bad = sendable(args.get("path", ""))
+            if bad:
+                return _err(bad)
             try:
                 await chat.b.channel.send_file(chat.chat_id, path)
             except Exception as e:
                 return _err(f"发送失败：{e}")
             return {"content": [{"type": "text", "text": f"已发送 {os.path.basename(path)}"}]}
+
+        @tool("send_chatlog", "把多条聊天消息的原文发到当前聊天里，显示成一份聊天记录（像微信里转发的聊天记录）。"
+              "用在给用户看微信、飞书等地方某人或某个群说过的话。text 照抄原文，不改写、不总结；你的总结写在回答里。"
+              "图片消息把图片存到本机，image 写路径；语音、视频、文件等写成「[语音]」这样的占位文字。",
+              {"type": "object", "properties": {
+                  "title": {"type": "string", "description": "这份聊天记录的标题，比如「破局行动家群的聊天记录」「和老妈的聊天记录」"},
+                  "messages": {"type": "array", "description": "按时间先后排列", "items": {"type": "object", "properties": {
+                      "sender": {"type": "string", "description": "发言人，用聊天里显示的名字"},
+                      "time": {"type": "string", "description": "发送时间，比如 10-23 23:05"},
+                      "text": {"type": "string", "description": "原文；图片消息可以不写"},
+                      "image": {"type": "string", "description": "图片消息：本机图片路径"}},
+                      "required": ["sender"]}}},
+               "required": ["title", "messages"]})
+        async def send_chatlog(args):
+            msgs = args.get("messages") or []
+            if isinstance(msgs, str):
+                try:
+                    msgs = json.loads(msgs)
+                except ValueError:
+                    return _err("messages 要是消息列表。")
+            if not isinstance(msgs, list) or not msgs:
+                return _err("messages 是空的。")
+            if len(msgs) > CHATLOG_MAX:
+                return _err(f"一次最多 {CHATLOG_MAX} 条，分成几份发。")
+            items = []
+            for m in msgs:
+                if not isinstance(m, dict):
+                    return _err("messages 里每一条要写 sender、time、text。")
+                it = {k: str(m.get(k) or "").strip() for k in ("sender", "time", "text")}
+                if m.get("image"):
+                    path, bad = sendable(str(m["image"]))
+                    if bad:
+                        return _err(bad)
+                    it["image"] = path
+                if not it["text"] and not it.get("image"):
+                    return _err(f"{it['sender'] or '有一条'}的消息没有内容。")
+                items.append(it)
+            log = {"title": str(args.get("title") or "").strip() or "聊天记录", "items": items}
+            ch = chat.b.channel
+            try:
+                if hasattr(type(ch), "send_chatlog"):
+                    await ch.send_chatlog(chat.chat_id, log)
+                else:                         # 包了一层的渠道（微信里某个项目）：按文字发，走它自己的 send_text
+                    await chatlog_as_text(ch, chat.chat_id, log)
+            except Exception as e:
+                return _err(f"发送失败：{e}")
+            return {"content": [{"type": "text", "text": f"已发送聊天记录（{len(items)} 条）"}]}
 
         @tool("run_as_admin", "用管理员权限（sudo）执行一条 shell 命令。用户会看到命令和原因，确认后才执行。"
               "command 是完整命令（不要带 sudo），reason 用一句话说明为什么需要。", {"command": str, "reason": str})
@@ -941,7 +998,7 @@ class Chat:
             ok, text = await admin.run(chat, command, (args.get("reason") or "").strip() or "需要管理员权限")
             return {"content": [{"type": "text", "text": text}], **({} if ok else {"is_error": True})}
 
-        tools = [send_file]
+        tools = [send_file, send_chatlog]
         pf = getattr(chat.b.channel, "platform", None)
         side = chat.b.entry.get("side")      # 侧边对话（#196）：只回答问题，不 @ 人、不转交
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side:

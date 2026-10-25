@@ -24,7 +24,7 @@ from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
 from .schedules import is_quiet as schedules_quiet, listed
-from .channels.base import CardAction, Channel, Incoming, inbox_path
+from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_path
 
 log = logging.getLogger("ccim.platform")
 
@@ -327,6 +327,24 @@ class WebChannel(Channel):
                 rec.update(path=dest, orig=rec["path"])
             except OSError:
                 pass
+        self._emit(chat_id, self.logs.append(chat_id, rec))
+
+    async def send_chatlog(self, chat_id, log):
+        """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
+        items = []
+        for it in log["items"]:
+            it = dict(it)
+            if it.get("image"):
+                try:
+                    d = docs.snap_dir(self.logs.folder, chat_id)
+                    os.makedirs(d, exist_ok=True)
+                    dest = os.path.join(d, f"{uuid.uuid4().hex[:10]}-{os.path.basename(it['image'])}")
+                    shutil.copy(it["image"], dest)
+                    it["image"] = dest
+                except OSError:
+                    pass
+            items.append(it)
+        rec = {"type": "chatlog", "title": log["title"], "items": items, "text": chatlog_text(log)}
         self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def download(self, message_id, kind, key, name, folder):
@@ -798,7 +816,7 @@ class Platform:
         for c, to in moved.items():
             logs.rename(c, to)
         for r in rows:
-            if r.get("type") in ("user", "answer", "file", "note", "mention"):
+            if r.get("type") in ("user", "answer", "file", "chatlog", "note", "mention"):
                 logs.append(new, dict(r, chat=moved[r["chat"]]) if r.get("chat") in moved else r)
         if any(r.get("type") == "mention" for r in rows):
             logs._rewrite(cid, [r for r in rows if r.get("type") != "mention"])
@@ -1567,7 +1585,7 @@ class Platform:
             chats[new]["temp"]["scratch"] = t.get("scratch") or cid
             self.store.write(chats)
         for r in rows[:index + 1]:
-            if r.get("type") in ("user", "answer", "file", "note", "mention"):
+            if r.get("type") in ("user", "answer", "file", "chatlog", "note", "mention"):
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
@@ -2120,6 +2138,7 @@ def _handler(pf):
             return os.path.isfile(path) and any(
                 r.get("type") in ("file", "edit") and path in (r.get("path"), r.get("snap"))   # snap：旧版本的留底，下载用
                 or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
+                or r.get("type") == "chatlog" and any(x.get("image") == path for x in r.get("items") or [])
                 for r in pf.channel.logs.read(chat))
 
         def _fs_ok(self):

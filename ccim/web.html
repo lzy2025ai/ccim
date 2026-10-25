@@ -1047,6 +1047,15 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .rail .unfold svg{width:20px;height:20px}
 .rail .unfold:hover{background:var(--sunk);color:var(--ink)}
 .app.list-off .rail .unfold{display:flex}
+/* 列表收起时的气泡（#220）：竖屏、手机上指着能找回列表的按钮，关掉就不再出现 */
+.list-tip{position:fixed;z-index:13;display:flex;align-items:center;gap:6px;padding:7px 6px 7px 12px;border-radius:10px;
+  background:var(--ink);color:#fff;font-size:13px;white-space:nowrap;box-shadow:0 6px 20px rgba(29,34,43,.22)}
+.list-tip::before{content:"";position:absolute;width:10px;height:10px;background:inherit;transform:rotate(45deg)}
+.list-tip.left::before{left:-4px;top:calc(50% - 5px)}
+.list-tip.up::before{top:-4px;left:14px}
+.list-tip button{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:rgba(255,255,255,.75)}
+.list-tip button:hover{background:rgba(255,255,255,.14);color:#fff}
+.list-tip svg{width:13px;height:13px}
 .answer h1,.answer h2,.answer h3{font:600 16px/1.4 var(--song);margin:14px 0 6px}
 .answer ul,.answer ol{margin:0 0 10px;padding-left:22px}
 .answer li{margin:2px 0}
@@ -1768,7 +1777,31 @@ function phoneMain(){
   if (current.view === "kb") return !!current.sub;                                 // 进了知识库先看条目列表
   return true;
 }
+// 列表收起时的气泡（#220）：竖屏、手机上指着找回列表的按钮；关掉或点过那个按钮就不再出现
+function listTip(){
+  requestAnimationFrame(() => {
+    let tip = document.querySelector(".list-tip");
+    let done = false; try { done = !!localStorage.getItem("ccim.listTip"); } catch {}
+    const btn = [document.querySelector(".rail .unfold"), $("#pback")].find(b => b && b.getClientRects().length);
+    if (done || !(narrow() || portrait()) || !btn) { tip?.remove(); return; }
+    const phone = btn.id === "pback";
+    if (!tip){
+      tip = document.createElement("div"); tip.className = "list-tip"; tip.setAttribute("role", "status");
+      document.body.append(tip);
+    }
+    tip.className = "list-tip " + (phone ? "up" : "left");
+    tip.innerHTML = `<span>${phone ? "点这里回到列表" : "列表收起了，点这里展开"}</span><button aria-label="不再提示" title="不再提示" onclick="closeListTip()">${ICON.x}</button>`;
+    const r = btn.getBoundingClientRect();
+    if (phone) { tip.style.left = r.left + "px"; tip.style.top = r.bottom + 8 + "px"; }
+    else { tip.style.left = r.right + 10 + "px"; tip.style.top = r.top + r.height / 2 - tip.offsetHeight / 2 + "px"; }
+  });
+}
+function closeListTip(){
+  try { localStorage.setItem("ccim.listTip", "1"); } catch {}
+  document.querySelector(".list-tip")?.remove();
+}
 function phoneBack(){
+  if (document.querySelector(".list-tip")) closeListTip();
   const v = current.view, id = current.id;
   const to = v === "agents" ? (current.sub && id !== "new" ? `#/agents/${encodeURIComponent(id)}` : "#/agents")
     : v === "kb" && current.sub ? `#/kb/${encodeURIComponent(id)}`
@@ -1790,6 +1823,7 @@ function route(){
     || current.view === "skills");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
+  listTip();
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
   if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) document.querySelector(".app").classList.remove("ws-mode");
   closePop();
@@ -6636,6 +6670,8 @@ function confirmBox(title, text, okLabel){
 
 function toggleList(on){
   document.querySelector(".app").classList.toggle("list-off", !on);
+  if (on && document.querySelector(".list-tip")) closeListTip();   // 找到了，不用再提示
+  else listTip();
   if (narrow()) return;                  // 窄屏的抽屉开关不记，宽屏时还按原来的习惯
   try { localStorage.setItem("ccim.listOff", on ? "" : "1"); } catch {}
 }
@@ -6691,6 +6727,7 @@ addEventListener("resize", () => {             // 跨过手机宽度：变窄按
   app.classList.toggle("list-off", off);
   if (WS && $("#ws-tree")) { if (!wasNarrow) WS.scr = null; wsApply(); if (wsShown()) wsShow(); }
 });
+addEventListener("resize", () => listTip());
 
 // ================= 启动 =================
 (async () => {

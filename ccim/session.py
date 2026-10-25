@@ -54,6 +54,7 @@ SCHEDULE = """
   不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
 GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
 GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
+PR_MERGE = __import__("re").compile(r"\bgh\s+pr\s+merge\b")   # 合并 ccim 的 PR 改用 ccim ship（#230）
 PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--help)")   # 升级稳定版：先让用户确认（#146）
 # 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（这里没有，报「disabled」），钩子接不到，看到就补一句（#190）
 WRONG_SEND = "SendUserFile"
@@ -925,11 +926,37 @@ class Chat:
     async def _pre_bash(self, data, tool_use_id, ctx):
         """对话里不升级 ccim（ccim promote）：由用户在网页「设置 → 开发」里点（#156，原来是在对话里弹确认卡片，#146）。"""
         cmd = ((data or {}).get("tool_input") or {}).get("command") or ""
+        if PR_MERGE.search(cmd) and self._ccim_merge(cmd, (data or {}).get("cwd") or self.b.path):
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": "ccim 的 PR 用 `ccim ship PR编号` 上线（和网页开发页的「上线」一样，"
+                                                                       "合并后会更新这台电脑上的 ccim；要几分钟，放后台跑或把超时设长）。"
+                                                                       "它说有冲突的，在那个需求的工作目录里 rebase 到最新的 main、推上去，再运行。"}}
         if not PROMOTE.search(cmd):
             return {}
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                        "permissionDecisionReason": "升级 ccim 由用户在网页「设置 → 开发」里点，对话里不要运行。"
                                                                    "告诉用户改动已经合并、到「设置 → 开发」里升级。"}}
+
+    def _ccim_merge(self, cmd, cwd):
+        """这条 gh pr merge 合的是不是 ccim 自己的仓库（只在跑开发版、有开发页的电脑上管）。"""
+        import re
+        from . import devpanel, runtime
+        if not runtime._is_dev_install():
+            return False
+        repo = devpanel._repo()
+        if not repo:
+            return False
+        m = re.search(r"(?:--repo|-R)[=\s]+(\S+)", cmd)
+        if m:
+            return m.group(1).strip("'\"").removeprefix("https://github.com/").rstrip("/").lower() == repo.lower()
+        if repo.lower() in cmd.lower() or "ccim-issue-" in cmd or runtime.SRC in cmd:
+            return True
+        try:                                  # 在哪个仓库里跑的：看它的 origin
+            url = subprocess.run(["git", "-C", cwd or ".", "remote", "get-url", "origin"], capture_output=True,
+                                 text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return bool(re.search(r"github\.com[:/]" + re.escape(repo) + r"(?:\.git)?/?$", url, re.I))
 
     async def _post_bash(self, data, tool_use_id, ctx):
         """建了、重开了 issue 或开了 PR：记下这个对话在做哪个 issue（开发页、任务面板用，#156 #157）。"""

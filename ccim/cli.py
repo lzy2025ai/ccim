@@ -592,6 +592,44 @@ def cmd_promote(args):
         print("没有跑稳定版的项目。")
 
 
+def cmd_ship(args):
+    """上线 ccim 的需求（#230）：和网页开发页的「上线」一样，先检查，能合的按顺序合并，最后更新开发机。"""
+    import time
+    prs = [int(x.lstrip("#")) for x in args.prs]
+    c = _platform_api("/api/dev/check", {"prs": prs})
+    items = c.get("items") or []
+    for n in c.get("merged") or []:
+        print(f"#{n} 已经合并过了")
+    bad = [it for it in items if it.get("problem")]
+    for it in bad:
+        print(f"#{it.get('issue') or it['pr']} {it['title']}：{it['problem']}")
+    if bad:
+        raise SystemExit("有合不了的，一个都没动。处理好再运行（冲突：在它的工作目录里 rebase 到最新的 main、推上去）。")
+    if not items:
+        raise SystemExit("没有要上线的。")
+    _platform_api("/api/dev/ship", {"prs": [it["pr"] for it in items]})
+    print("开始上线：" + "、".join(f"#{it.get('issue') or it['pr']}" for it in items), flush=True)
+    last, started = None, time.time()
+    while True:
+        time.sleep(5)
+        try:
+            j = _platform_api("/api/dev").get("job") or {}
+        except SystemExit:                    # 网页平台在重启：上线已经做完了，重启好了再看结果
+            if time.time() - started > 3600:
+                raise
+            continue
+        if j.get("kind") != "ship" or (j.get("at") or 0) < started - 5:
+            continue
+        if j.get("step") and j["step"] != last:
+            last = j["step"]
+            print(last, flush=True)
+        if j.get("state") == "done":
+            print(j.get("note") or "已上线")
+            return
+        if j.get("state") == "failed":
+            raise SystemExit(j.get("error") or "上线没成功")
+
+
 def cmd_promote_run(args):
     runtime.promote_run()
 
@@ -1188,6 +1226,9 @@ def parser():
     s = sub.add_parser("promote", help="验收通过后：把最新的 main 装成稳定版，逐个升级跑稳定版的项目")
     s.add_argument("--wait", action="store_true", help="在 ccim 的对话里也等它做完再返回")
     s.set_defaults(fn=cmd_promote)
+    s = sub.add_parser("ship", help="开发 ccim 时用：上线需求（ccim ship PR编号…），和网页开发页的「上线」一样，合并后更新开发机")
+    s.add_argument("prs", nargs="+", help="PR 编号，可以写几个")
+    s.set_defaults(fn=cmd_ship)
     s = sub.add_parser("promote-run", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_promote_run)
     s = sub.add_parser("safe-restart-run")    # 内部用：安全重启的独立进程

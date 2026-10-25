@@ -273,6 +273,7 @@ body{overflow:hidden}
 @media (max-width:1100px){.bgrid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.upg-miss ul{margin:4px 0 0;padding-left:20px;font-size:12.5px;color:var(--muted)} .upg-miss b{color:var(--ink);font-weight:600}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
 .pair-st{display:flex;align-items:center;gap:8px;margin:10px 0 4px} .pair-st.ok{color:var(--ok);font-weight:600} .pair-st.err{color:var(--bad)}
 .mem .btn{margin-right:12px}
@@ -4517,6 +4518,8 @@ function renderMachines(){
 }
 // ---- 开发页（#156）：等验收、体验中、已合并没升级的需求 ----
 const clip = (t, n) => (t = String(t).replace(/\s+/g, " ").trim()).length > n ? t.slice(0, n) + "…" : t;
+function devMac(){ const m = (S.machines || []).find(m => m.id === devMachine()); return m ? `「${m.name}」` : "开发机"; }   // 别的电脑、手机上看开发页也知道说的是哪台
+function onMac(t){ return String(t || "").replace(/这台 Mac/g, devMac()); }
 function devMachine(){ const m = (S.machines || []).find(m => m.online !== false && "dev" in (verOf(m) || {})); return m ? m.id : null; }
 function oldMachines(){   // 比服务器（最新）旧的电脑（开发版的那台归开发页管）
   const lt = latestOf();
@@ -4550,12 +4553,18 @@ function drawDev(){
   // 这次上线 / 更新带出来的那次后台升级的结果；上线的说明里不再写这台 Mac 的情况（旧版本写的「，这台 Mac 正在更新」去掉）
   const done = j.state === "done" && fresh, shipped = done ? (j.note || "").replace("，这台 Mac 正在更新", "") : "";
   const after = done && d.last && d.last.at > j.at - 60 ? d.last : null;
-  const jobLine = busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : "正在更新这台 Mac"}${j.step ? `：${esc(j.step)}` : ""}</p>`
-    : j.state === "failed" && fresh ? `<p class="upg err">${esc(j.error || "没成功")}</p>`
-    : updating ? `<p class="upg busy"><span class="spin"></span>${shipped ? `${esc(shipped)}。` : ""}正在更新这台 Mac：${esc(d.phase || "")}</p>`
-    : after && !after.ok ? `<p class="upg err">${shipped ? `${esc(shipped)}。` : ""}${esc(after.text)}</p>`
-    : after && !d.stale ? `<p class="upg ok">${shipped ? `${esc(shipped)}，` : ""}这台 Mac 已更新好</p>`
-    : shipped ? `<p class="upg ok">${esc(shipped)}</p>` : "";
+  const mac = devMac();
+  // 一起上线时有的没合上（#207 第二轮）：已上线的照常更新，没合上的逐个列出原因
+  const missed = (j.missed || []).length && fresh && !busy
+    ? `<div class="upg-miss"><p class="upg err">${j.missed.length} 个没上线：</p><ul>${j.missed.map(m => `<li><b>${esc(m.tag)}</b> ${esc(m.why)}</li>`).join("")}</ul></div>` : "";
+  const failed = j.state === "failed" && fresh, doneTags = (j.done || []).join("、");
+  const jobLine = (busy ? `<p class="upg busy"><span class="spin"></span>${j.kind === "ship" ? `正在上线 ${esc((j.names || []).join("、"))}` : `正在更新${mac}`}${j.step ? `：${esc(onMac(j.step))}` : ""}</p>`
+    : failed && j.missed ? (doneTags ? `<p class="upg ok">${esc(doneTags)} 已上线</p>` : "")
+    : failed ? `<p class="upg err">${esc(onMac(j.error || "没成功"))}</p>`
+    : updating ? `<p class="upg busy"><span class="spin"></span>${shipped ? `${esc(shipped)}。` : ""}正在更新${mac}：${esc(d.phase || "")}</p>`
+    : after && !after.ok ? `<p class="upg err">${shipped ? `${esc(shipped)}。` : ""}${esc(onMac(after.text))}</p>`
+    : after && !d.stale ? `<p class="upg ok">${shipped ? `${esc(shipped)}，` : ""}${mac}已更新好</p>`
+    : shipped ? `<p class="upg ok">${esc(shipped)}</p>` : "") + missed;
   clearTimeout(window._devPoll);
   if (updating) devPoll();
   const review = d.review || [];
@@ -4570,10 +4579,10 @@ function drawDev(){
   const typing = document.activeElement && document.activeElement.closest(".dev-q");   // 重画时别把正在输的搜索框丢了
   const tried = review.find(r => r.trying);
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>开发</h2>
-    <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在这台 Mac 的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
+    <div class="role">${d.trying ? `正在试用 ${esc(tried ? `#${tried.issue || tried.pr} ${tried.title}` : d.trying.label)}。在${mac}的浏览器里打开 <a href="${esc(d.local_url)}" target="_blank" rel="noopener" style="color:var(--qing)">${esc(d.local_url)}</a> 就是这个版本` : "需求做好了在这里试用、上线。"}</div></div>
     <button class="btn" onclick="renderDev('fresh')">刷新</button></div>
     <div class="pane">${d.error ? `<p class="upg err">${esc(d.error)}</p>` : ""}${jobLine}
-      ${behind && !busy && !updating ? `<div class="sect"><p>${(d.merged || []).length ? `有 ${d.merged.length} 个改动` : "有改动"}已经上线，这台 Mac 还没用上。</p><button class="btn primary" onclick="devUpdate()">更新这台 Mac</button></div>` : ""}
+      ${behind && !busy && !updating ? `<div class="sect"><p>${(d.merged || []).length ? `已上线的 ${d.merged.length} 个改动` : "已上线的改动"}还没装到${mac}上。</p><button class="btn primary" onclick="devUpdate()">更新${mac}</button></div>` : ""}
       <div class="sect"><h3>等你验收 ${review.length || ""}</h3>${rows || `<p class="muted">没有等验收的需求。</p>`}
         ${shipPick.size > 1 ? `<button class="btn primary" ${busy ? "disabled" : ""} onclick="devShip([...shipPick])">一起上线 ${shipPick.size} 个</button>` : ""}</div>
       ${(d.shipped || []).length ? `<div class="sect"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">已上线</h3>
@@ -4600,7 +4609,7 @@ function devToggle(pr){ shipPick.has(pr) ? shipPick.delete(pr) : shipPick.add(pr
 async function devTry(what){
   const r = what === "main" ? null : (DEVP.review || []).find(x => x.pr === what);
   const ok = await confirmBox(what === "main" ? "换回正式版本" : `试用 #${r.issue || r.pr}`,
-    "这台 Mac 上的网页和测试机器人会重启，网页断开十几秒；正在干活的对话会等手头这一步做完。", what === "main" ? "换回来" : "试用");
+    `${devMac()}上的网页和测试机器人会重启，网页断开十几秒；正在干活的对话会等手头这一步做完。`, what === "main" ? "换回来" : "试用");
   if (!ok) return;
   await act(() => api("/api/dev/try", {what}, devMachine()), "正在切换，好了刷新网页");
 }
@@ -4612,7 +4621,7 @@ async function devShip(prs){
   const tag = n => { const r = items.find(x => x.pr === n); return r ? `#${r.issue || r.pr}` : `#${n}`; };
   const li = r => `<li>${name(r)}${r.problem ? ` <span class="state-err">· ${esc(r.problem)}</span>`
     : r.after.length ? ` <span class="muted">· 接在 ${r.after.map(tag).join("、")} 后面合</span>` : ""}</li>`;
-  const how = `<p class="muted">${ok.length > 1 ? "按顺序逐个合进正式版本（每个要等一分钟左右的检查），全部合好后" : "合进正式版本后，"}服务器上的网页和这台 Mac 一起更新。中途有一个合不上就停下，这台 Mac 不更新。${c.pending || ok.some(r => r.restart !== false) ? "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。" : "这次不用重启。"}</p>`;
+  const how = `<p class="muted">${ok.length > 1 ? "按顺序逐个合进正式版本（每个要等一分钟左右的检查），全部合好后" : "合进正式版本后，"}服务器上的网页和${devMac()}一起更新。${ok.length > 1 ? "中途有合不上的就跳过它，其余照常上线。" : ""}${c.pending || ok.some(r => r.restart !== false) ? `${devMac()}上的机器人会重启一次（等手头的活做完），网页断开十几秒。` : "这次不用重启。"}</p>`;
   const body = bad.length
     ? `<p>${bad.length === items.length ? "选中的都合不了：" : `有 ${bad.length} 个合不了：`}</p><ul>${bad.map(li).join("")}</ul>`
       + (ok.length ? `<p>可以只上线其余 ${ok.length} 个：</p><ul>${ok.map(li).join("")}</ul>${how}` : `<p class="muted">回到提这些需求的对话让 Agent 处理好再来。</p>`)
@@ -4624,7 +4633,7 @@ async function devShip(prs){
   $("#dev-ship-ok").onclick = async () => { closeDialog(); await act(() => api("/api/dev/ship", {prs: ok.map(r => r.pr)}, devMachine())); shipPick = new Set(); renderDev(true); };
 }
 async function devUpdate(){
-  if (DEVP && DEVP.restart !== false && !await confirmBox("更新这台 Mac", "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。", "更新")) return;
+  if (DEVP && DEVP.restart !== false && !await confirmBox(`更新${devMac()}`, `${devMac()}上的机器人会重启一次（等手头的活做完），网页断开十几秒。`, "更新")) return;
   await act(() => api("/api/dev/update", {}, devMachine()));
   renderDev(true);
 }

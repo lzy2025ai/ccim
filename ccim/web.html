@@ -1956,24 +1956,31 @@ function moreBtn(c){
 }
 // 正在干活：边框是一圈流动的虚线（#54）
 const ANTS = `<svg class="ants" aria-hidden="true"><rect/></svg>`;
+// 群聊里被 @ 的成员在干活也算这个对话在干活（#192）；c.busy 只管主 Agent（输入框的停下按钮用它）
+const working = c => !!(c.busy || (c.crew || []).length);
+const crewIds = c => [...new Set([...(c.busy && c.agent ? [c.agent] : []), ...(c.crew || []).map(x => x.agent)])];
+function crewText(c){             // 「ccim 在干活」「ccim 等 2 人在干活」
+  const ids = crewIds(c), name = (agentOf(ids[0]) || {}).name || "成员";
+  return `${name}${ids.length > 1 ? ` 等 ${ids.length} 人` : /[\x21-\x7e]$/.test(name) ? " " : ""}在干活`;
+}
 const isToday = ts => { if (!ts) return false; const d = new Date(ts.replace(" ", "T")), n = new Date(); return d.toDateString() === n.toDateString(); };
 function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层，再往下的排在同一层
   const a = c.agent ? agentOf(c.agent) : null;
   const today = isToday(c.last_active) ? "today" : "";     // 今天聊过的：标题实一些，时间用主色（#52）
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
-    const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !c.busy ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${c.busy ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+    const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
-    : c.busy ? `<span class="working"><span class="spin"></span>干活中</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
+    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.busy ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
-    : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${c.busy ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !c.busy ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${c.busy ? ANTS : ""}
+        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
+    : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !c.busy ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
@@ -3156,7 +3163,7 @@ function waiting(){ return (S.chats || []).filter(c => isTop(c) && c.attention);
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");
-  const work = (S.chats || []).filter(c => isTop(c) && c.busy && !c.attention);   // 和任务面板「正在干活」同一口径
+  const work = (S.chats || []).filter(c => isTop(c) && working(c) && !c.attention);   // 和任务面板「正在干活」同一口径
   if (b) {
     const k = n || work.length;
     b.hidden = !k;
@@ -3195,12 +3202,17 @@ const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], er
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
 function boardRow(c, kind){
   // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
-  const a = c.agent ? agentOf(c.agent) : null;
+  // 群聊：头像和名字用在干活的、或最后回答的那个成员（#192）
+  const crew = c.crew || [], byCrew = kind === "work" && !c.busy && crew.length;
+  const a = byCrew ? agentOf(crew[0].agent) || agentOf(c.agent)
+    : kind !== "work" && c.last_by ? agentOf(c.last_by) || agentOf(c.agent) : c.agent ? agentOf(c.agent) : null;
+  const doing = byCrew ? crew[0].doing : c.doing;
+  const many = kind === "work" ? crewIds(c).length : 0;
   const who = [(c.members || []).length ? `群聊 ${(c.members || []).length + 1} 人` : "", multi() ? (machineOf(c.machine) || {}).name : ""].filter(Boolean).join(" · ");
   const said = c.issue ? `#${c.issue.n} ${c.issue.title || c.title}`      // 在做某个需求（#157）：用 issue 编号和标题
     : c.ask && !c.ask.startsWith("/") ? c.ask : c.title;                   // 最后一句是斜杠命令时用标题
   const prog = kind === "work" && c.stall ? `<span class="working stuck">${stallText(c.stall, true)}</span>`
-    : kind === "work" ? `<span class="working"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "干活中")}</span>`
+    : kind === "work" ? `<span class="working"><span class="spin"></span>${esc(many > 1 ? `等 ${many} 人在干活` : doing ? "正在" + doing : "干活中")}</span>`
     : esc(c.brief || (said !== c.title ? c.title : ""));
   const r = REASON[c.attention];
   const replying = boardReply && boardReply.id === c.id;
@@ -3271,10 +3283,10 @@ async function renderBoard(quick){
   if (current.view !== "board") return;
   const tops = (S.chats || []).filter(c => isTop(c) && !c.archived);
   const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
-  const work = tops.filter(c => c.busy && !c.attention).sort((a, b) => !!b.star - !!a.star);
+  const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => !!b.star - !!a.star);
   const weekAgo = new Date(Date.now() - 7 * 86400000);
   // 星标的（#194）排最前，超过 7 天没聊也留着
-  const recent = tops.filter(c => !c.attention && !c.busy && (c.star || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
+  const recent = tops.filter(c => !c.attention && !working(c) && (c.star || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
     .sort((a, b) => !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v.turns).sort((a, b) => b[1].turns - a[1].turns).slice(0, 6);

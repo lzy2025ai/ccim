@@ -43,6 +43,7 @@ def summary(logs, cid):
             s["user_ats"] = (s.get("user_ats") or [])[-1:] + [r.get("at") or 0]   # 最近两次提问的时间（#157）
         elif t == "answer" or (t == "mention" and r.get("state") in ("done", "error")):
             s["answer_at"], s["answer_state"] = r.get("done_at") or r.get("at") or 0, r.get("state")
+            s["last_by"] = r.get("agent") if t == "mention" else None   # 最后回答的是群里哪个成员（#192）
         if t == "card":
             s["pending"] = bool(r.get("buttons"))
         elif t == "secret":
@@ -174,7 +175,8 @@ async def refresh_brief(pf, cid):
     if not m or not top_level(m, cid):
         return
     rows = pf.channel.logs.read(cid)
-    ans = next((r for r in reversed(rows) if r.get("type") == "answer" and r.get("text")), None)
+    ans = next((r for r in reversed(rows) if r.get("text") and (r.get("type") == "answer"   # 群成员的回答也算（#192）
+                or r.get("type") == "mention" and r.get("state") == "done")), None)
     if not ans:
         return
     user = next((r.get("text") or "" for r in reversed(rows) if r.get("type") == "user" and r.get("at", 0) <= ans.get("at", 0)), "")

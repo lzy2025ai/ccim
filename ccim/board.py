@@ -7,6 +7,7 @@
 """
 import asyncio, datetime, logging, os, time
 
+from . import tokens, usage
 from .schedules import listed
 
 log = logging.getLogger("ccim.board")
@@ -33,12 +34,22 @@ def summary(logs, cid):
     hit = _SUM.get(cid)
     if hit and hit[0] == (st.st_size, st.st_mtime):
         return hit[1]
-    s = {"answer_at": 0, "answer_state": None, "pending": False, "days": {}, "last_user": ""}
+    s = {"answer_at": 0, "answer_state": None, "pending": False, "days": {}, "last_user": "",
+         "spans": {}, "hours": {}, "sids": []}
     for r in logs.read(cid):
         t = r.get("type")
+        at = r.get("at") or r.get("done_at")
+        if at and t in ("user", "answer", "mention"):        # 每天从几点聊到几点（#240）
+            sp = s["spans"].setdefault(time.strftime("%Y-%m-%d", time.localtime(at)), [at, at])
+            sp[0], sp[1] = min(sp[0], at), max(sp[1], r.get("done_at") or at)
+        sid = (r.get("fork") or {}).get("sid")
+        if sid and sid not in s["sids"]:
+            s["sids"].append(sid)
         if t == "user" and not r.get("by"):
-            day = time.strftime("%Y-%m-%d", time.localtime(r.get("at") or 0))
+            lt = time.localtime(r.get("at") or 0)
+            day = time.strftime("%Y-%m-%d", lt)
             s["days"][day] = s["days"].get(day, 0) + 1
+            s["hours"].setdefault(day, [0] * 24)[lt.tm_hour] += 1
             s["last_user"] = r.get("text") or ""
             s["user_ats"] = (s.get("user_ats") or [])[-1:] + [r.get("at") or 0]   # 最近两次提问的时间（#157）
         elif t == "answer" or (t == "mention" and r.get("state") in ("done", "error")):
@@ -75,15 +86,44 @@ def top_level(meta, cid):
                 or (meta.get("schedule") and not listed(cid, meta)))
 
 
-def stats(pf, keep=None):
-    """概览：近 26 周每天发了几条、本周对话轮数、本周完成（归档）几件、各 Agent 本周轮数和最近活跃。"""
+def _sid_owners(pf, chats):
+    """会话 → 算在哪个对话上（#240）。每轮回答记着当时的会话编号，但分叉会把之前的记录原样复制过去：
+    正在用这个会话的对话优先，其次是最早建的那个。"""
+    own = {}
+    for cid, m in sorted(chats.items(), key=lambda x: x[1].get("created") or ""):
+        for k in ("session_id", "codex_session_id"):
+            if m.get(k):
+                own[m[k]] = cid
+    for cid, m in sorted(chats.items(), key=lambda x: x[1].get("created") or ""):
+        for sid in summary(pf.channel.logs, cid).get("sids") or []:
+            own.setdefault(sid, cid)
+    return own
+
+
+def _sids(cid, m, s, own):
+    return [x for x in set(s.get("sids") or []) | {m.get("session_id"), m.get("codex_session_id")} if x and own.get(x) == cid]
+
+
+def _counted(cid, m, keep):
+    return not (m.get("project") or (m.get("schedule") and not listed(cid, m)) or keep and not keep(cid))
+
+
+def stats(pf, keep=None, everything=True):
+    """概览：近 26 周每天发了几条、本周对话轮数、本周完成（归档）几件、各 Agent 本周轮数 / Token 和最近活跃；
+    今天聊了几个对话、几个 Agent；最近两周每天的 Token（主人看整台电脑的，访客只算自己的对话）；额度。"""
     now = datetime.date.today()
+    today = now.isoformat()
     week0 = (now - datetime.timedelta(days=now.weekday())).isoformat()
     since = (now - datetime.timedelta(days=26 * 7)).isoformat()
+    tsince = (now - datetime.timedelta(days=now.weekday() + 7)).isoformat()      # 上周一起
     heat, agents = {}, {}
     turns_week = done_week = 0
-    for cid, m in pf.chats().items():
-        if m.get("project") or (m.get("schedule") and not listed(cid, m)) or keep and not keep(cid):
+    day_chats, day_agents, day_msgs = 0, set(), 0
+    mine = {}
+    chats = pf.chats()
+    own = _sid_owners(pf, chats)
+    for cid, m in chats.items():
+        if not _counted(cid, m, keep):
             continue
         s = summary(pf.channel.logs, cid)
         aid = m.get("agent")
@@ -95,14 +135,62 @@ def stats(pf, keep=None):
                 if not m.get("mention_of"):
                     turns_week += n
                 if aid:
-                    agents.setdefault(aid, {"turns": 0, "last": ""})["turns"] += n
+                    agents.setdefault(aid, {"turns": 0, "last": "", "tokens": 0})["turns"] += n
+        if today in (s.get("days") or {}) and not m.get("mention_of"):
+            day_chats += 1
+            day_msgs += s["days"][today]
+        if today in (s.get("spans") or {}) and aid:
+            day_agents.add(aid)
         if aid and m.get("last_active"):
-            a = agents.setdefault(aid, {"turns": 0, "last": ""})
+            a = agents.setdefault(aid, {"turns": 0, "last": "", "tokens": 0})
             a["last"] = max(a["last"], m["last_active"])
         at = m.get("archived_at")
         if m.get("archived") and at and datetime.date.fromtimestamp(at).isoformat() >= week0:
             done_week += 1
-    return {"heat": heat, "turns_week": turns_week, "done_week": done_week, "agents": agents, "today": now.isoformat()}
+        sids = _sids(cid, m, s, own)
+        if sids:
+            used = tokens.of_sessions(sids)
+            if aid:
+                agents.setdefault(aid, {"turns": 0, "last": "", "tokens": 0})["tokens"] += \
+                    sum(n for d, (n, _) in used.items() if d >= week0)
+            if not everything:
+                for d, (n, r) in used.items():
+                    t = mine.setdefault(d, [0, 0])
+                    t[0] += n
+                    t[1] += r
+    tk = tokens.days() if everything else mine
+    out = {"heat": heat, "turns_week": turns_week, "done_week": done_week, "agents": agents, "today": today,
+           "day": {"chats": day_chats, "agents": sorted(day_agents), "msgs": day_msgs},
+           "tokens": {d: v for d, v in tk.items() if d >= tsince} if tokens.ready() else None}
+    if everything:
+        out["quota"] = usage.cached()
+    return out
+
+
+def day(pf, d, keep=None, everything=True):
+    """某一天（#240）：那天聊过的对话（几点到几点、发了几条、Token）、按小时的分布、这台电脑那天的 Token。"""
+    rows, hours = [], [0] * 24
+    chats = pf.chats()
+    own = _sid_owners(pf, chats)
+    for cid, m in chats.items():
+        if not _counted(cid, m, keep) or m.get("mention_of"):
+            continue
+        s = summary(pf.channel.logs, cid)
+        sp = (s.get("spans") or {}).get(d)
+        if not sp:
+            continue
+        for i, n in enumerate((s.get("hours") or {}).get(d) or []):
+            hours[i] += n
+        used = tokens.of_sessions(_sids(cid, m, s, own)).get(d) or [0, 0]
+        rows.append({"id": cid, "title": m.get("title") or "新对话", "agent": m.get("agent"), "brief": m.get("brief"),
+                     "first": sp[0], "last": sp[1], "msgs": (s.get("days") or {}).get(d, 0), "tokens": used,
+                     "created": (m.get("created") or "")[:10] == d, "archived": bool(m.get("archived"))})
+    rows.sort(key=lambda r: -r["last"])
+    tk = None
+    if tokens.ready():
+        tk = tokens.days().get(d) or [0, 0] if everything else \
+            [sum(r["tokens"][0] for r in rows), sum(r["tokens"][1] for r in rows)]
+    return {"date": d, "chats": rows, "hours": hours, "tokens": tk}
 
 
 # ----- 一句话进度 -----

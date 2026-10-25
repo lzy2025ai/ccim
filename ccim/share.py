@@ -21,7 +21,7 @@ from . import agents, registry
 GUEST_GET = {
     "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
-    "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/dirs", "/api/file", "/api/file/part",
+    "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/board/day", "/api/dirs", "/api/file", "/api/file/part",
     "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls",
 }
 GUEST_POST = {

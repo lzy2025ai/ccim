@@ -228,11 +228,53 @@ body{overflow:hidden}
 .board{overflow:auto;height:100%;background:var(--panel)}
 .bhead{padding:24px 36px 4px}
 .bhead h1{font:600 24px/1.2 var(--song);margin:0}
-.bstats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 36px 4px;max-width:1240px}
-.stat{border:1px solid var(--line);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column}
-.stat b{font:600 24px/1.2 var(--song)}
-.stat span{font-size:12.5px;color:var(--muted)}
-.bgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;padding:6px 36px 48px;max-width:1240px}
+/* 数字卡（#240）：今天、今天 Token、本周 Token、额度；今天的两张点进当天详情 */
+.kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:12px}
+.kpi{border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:flex;flex-direction:column;gap:2px;min-width:0;color:inherit;text-decoration:none}
+a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
+.kpi .lab{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.kpi .go{margin-left:auto;display:inline-flex;align-items:center;gap:2px;color:var(--faint)} .kpi .go svg{width:13px;height:13px}
+.kpi .big{font:600 26px/1.25 var(--song);display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.kpi .big small{font:400 13px var(--sans);color:var(--muted)}
+.kpi .sub{font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .up{color:var(--bad)} .kpi .down{color:var(--ok)}
+.meter{display:flex;flex-direction:column;gap:6px;margin:5px 0 3px}
+.meter div{display:grid;grid-template-columns:44px 1fr 34px;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.meter b{font-weight:500;color:var(--ink-2);text-align:right}
+.qbar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.qbar i{display:block;height:100%;background:var(--qing);border-radius:3px} .qbar i.warm{background:var(--warn)} .qbar i.hot{background:var(--bad)}
+.bgrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:32px;padding:14px 36px 48px;max-width:1720px}
+.bright{display:flex;flex-direction:column;gap:20px;min-width:0}
+.bcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.bcard h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 10px}
+.bcard h2 .sp,.dghead .sp{flex:1}
+.bcard h2 small{font-weight:400;color:var(--faint);font-size:12px}
+/* 当天详情 */
+.dhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crumb{color:var(--muted);text-decoration:none;font-size:14px} .crumb:hover{color:var(--ink)}
+.crumb-sl{color:var(--faint)}
+.dnav{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:4px}
+.dnav button{display:grid;place-items:center;width:30px;height:28px;color:var(--muted)} .dnav button+button{border-left:1px solid var(--line)}
+.dnav button:hover:not([disabled]){background:var(--paper);color:var(--ink)} .dnav button[disabled]{color:var(--line-strong);cursor:default}
+.dnav svg{width:15px;height:15px}
+.dgrp{margin-top:22px}
+.dghead{display:flex;align-items:center;gap:10px;padding:0 4px 8px;border-bottom:1px solid var(--line)}
+.dgn{font-weight:600} .dgm{color:var(--faint);font-size:12.5px} .dgt{font-size:12.5px;color:var(--muted)}
+.drow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:14px;align-items:start;padding:10px 4px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.drow:hover{background:var(--paper);border-radius:10px}
+.dtm{font-size:12.5px;color:var(--faint);line-height:22px;white-space:nowrap}
+.dmid{min-width:0;display:flex;flex-direction:column}
+.dt{display:flex;align-items:center;gap:6px;min-width:0;line-height:22px}
+.dtt{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtag{font-size:11.5px;padding:0 6px;border-radius:5px;flex:none;line-height:18px}
+.dtag.run{background:#F6ECD3;color:#8A6A12} .dtag.wait{background:#F6DEDA;color:var(--bad)}
+.dside{display:flex;flex-direction:column;align-items:flex-end;font-size:12px;color:var(--muted);white-space:nowrap;line-height:22px}
+.dm{color:var(--faint)}
+.hours{display:flex;align-items:flex-end;gap:3px;height:64px}
+.hours i{flex:1;background:var(--qing);border-radius:2px 2px 0 0;opacity:.85}
+.hours i.z{background:var(--sunk);opacity:1}
+.haxis{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:4px}
 .bsec{margin-top:18px}
 .bsec h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 8px}
 .bsec h2 i{width:7px;height:7px;border-radius:50%}
@@ -263,6 +305,7 @@ body{overflow:hidden}
 .hgrid{display:flex;gap:2px}
 .hcol{display:flex;flex-direction:column;gap:2px}
 .heat i{width:10px;height:10px;border-radius:2px;display:block}
+.hgrid i{cursor:pointer} .hgrid i:hover{outline:1.5px solid var(--ink)} .hgrid i.today{outline:1.5px solid var(--zhu)}
 .heat .l0{background:var(--sunk)} .heat .l1{background:#C7D5E4} .heat .l2{background:#8EA9C6} .heat .l3{background:#56789E} .heat .l4{background:var(--qing)}
 .hfoot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-top:8px;gap:8px;flex-wrap:wrap}
 .hlegend{display:inline-flex;align-items:center;gap:3px}
@@ -273,8 +316,8 @@ body{overflow:hidden}
 .abar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
 .abar i{display:block;height:100%;background:var(--qing);border-radius:3px}
 .acnt{font-size:12px;color:var(--muted);white-space:nowrap}
-@media (max-width:1100px){.bgrid{grid-template-columns:1fr}.bstats{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:760px){.bhead,.bstats,.bgrid{padding-left:14px;padding-right:14px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
+@media (max-width:1100px){.bgrid{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.bhead,.bgrid{padding-left:14px;padding-right:14px}.drow{grid-template-columns:minmax(0,1fr) auto}.dtm{grid-column:1 / -1;line-height:16px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .upg-miss ul{margin:4px 0 0;padding-left:20px;font-size:12.5px;color:var(--muted)} .upg-miss b{color:var(--ink);font-weight:600}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
@@ -1866,8 +1909,8 @@ function route(){
   if (current.view === "chats" && current.id === "new" && draft.machine) ctxMachine = draft.machine;
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
-  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb" || current.view === "board") && (!current.id || current.id === "new")
-    || current.view === "skills");
+  document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
+    || current.view === "skills" || current.view === "board");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -3235,11 +3278,17 @@ function setRecentTab(t){ recentTab = t; showAllRecent = false; try { localStora
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
   const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
-  const out = {heat: {}, turns_week: 0, done_week: 0, agents: {}, today: null};
+  const out = {heat: {}, turns_week: 0, done_week: 0, agents: {}, today: null, day: {chats: 0, agents: new Set(), msgs: 0}, tokens: null, quota: null};
   for (const p of parts.filter(Boolean)) {
     for (const [d, n] of Object.entries(p.heat || {})) out.heat[d] = (out.heat[d] || 0) + n;
     out.turns_week += p.turns_week || 0; out.done_week += p.done_week || 0; out.today = out.today || p.today;
     Object.assign(out.agents, p.agents || {});
+    if (p.day) { out.day.chats += p.day.chats; out.day.msgs += p.day.msgs; p.day.agents.forEach(a => out.day.agents.add(a)); }
+    if (p.tokens) {                  // 各台电脑的 Token 加起来（#240）
+      out.tokens = out.tokens || {};
+      for (const [d, [n, r]] of Object.entries(p.tokens)) { const t = out.tokens[d] = out.tokens[d] || [0, 0]; t[0] += n; t[1] += r; }
+    }
+    if (p.quota && p.quota.windows && (!out.quota || p.quota.at > out.quota.at)) out.quota = p.quota;   // 额度：用最新的那份
   }
   boardStats = out; boardStatsAt = Date.now();
 }
@@ -3315,15 +3364,119 @@ function heatHtml(heat, today){
     for (let i = 0; i < 7 && d <= end; i++, d.setDate(d.getDate() + 1)) {
       const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       if (d.getDate() <= 7 && i === 0) months.push([w, `${d.getMonth() + 1}月`]);
-      col.push(`<i class="l${lv(heat[k] || 0)}" title="${k}：${heat[k] || 0} 条"></i>`);
+      col.push(`<i class="l${lv(heat[k] || 0)}${k === today ? " today" : ""}" data-d="${k}" title="${k.slice(5).replace("-", "月")}日：${heat[k] || 0} 条"></i>`);
     }
     cols.push(`<span class="hcol">${col.join("")}</span>`);
   }
   const total = Object.values(heat).reduce((a, b) => a + b, 0);
-  return `<div class="heat"><div class="hmonths">${months.map(([w, m]) => `<span style="left:${w * 12}px">${m}</span>`).join("")}</div><div class="hgrid">${cols.join("")}</div>
+  return `<div class="heat"><div class="hmonths">${months.map(([w, m]) => `<span style="left:${w * 12}px">${m}</span>`).join("")}</div><div class="hgrid" onclick="const d=event.target.dataset.d;if(d)location.hash='#/board/day/'+d">${cols.join("")}</div>
     <div class="hfoot"><span>近半年发了 ${total} 条消息</span><span class="hlegend">少<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>多</span></div></div>`;
 }
+// ----- 任务面板的数字卡和当天详情（#240） -----
+let agTab = localStorage.getItem("ccim.agTab") === "tokens" ? "tokens" : "turns";
+function setAgTab(t){ agTab = t; try { localStorage.setItem("ccim.agTab", t); } catch {} renderBoard(true); }
+function tokParts(n){
+  n = n || 0;
+  if (n >= 1e9) return [(n / 1e9).toFixed(n >= 1e10 ? 1 : 2), "B"];
+  if (n >= 1e6) return [(n / 1e6).toFixed(n >= 1e7 ? 1 : 2), "M"];
+  if (n >= 1e3) return [(n / 1e3).toFixed(n >= 1e4 ? 0 : 1), "K"];
+  return [String(n), ""];
+}
+const fmtTok = n => tokParts(n).join("");
+const tokBig = n => { const [v, u] = tokParts(n); return `${v}${u ? `<small>${u}</small>` : ""}`; };
+function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function dayAdd(k, n){ const d = new Date(k + "T00:00:00"); d.setDate(d.getDate() + n); return ymd(d); }
+const WEEKDAY = "日一二三四五六";
+function dayLabel(k){ const d = new Date(k + "T00:00:00"); return `${d.getMonth() + 1}月${d.getDate()}日 周${WEEKDAY[d.getDay()]}`; }
+function tokSum(days, from, to){ let n = 0, r = 0; for (let k = from; k <= to; k = dayAdd(k, 1)) { const t = days[k]; if (t) { n += t[0]; r += t[1]; } } return [n, r]; }
+function kpiHtml(st){
+  const today = st.today || ymd(new Date()), go = `#/board/day/${today}`, tk = st.tokens, dd = st.day || {chats: 0, agents: new Set(), msgs: 0};
+  const loading = !boardStats ? "…" : null;
+  const cards = [`<a class="kpi" href="${go}"><span class="lab">今天<span class="go">查看${ICON.chev}</span></span>
+      <span class="big">${loading || dd.chats}<small>个会话</small></span>
+      <span class="sub">${loading ? "&nbsp;" : `${dd.agents.size ? `和 ${dd.agents.size} 个 Agent 聊过 · ` : ""}发了 ${dd.msgs} 条`}</span></a>`];
+  if (tk || loading) {
+    const t = tk ? tk[today] || [0, 0] : [0, 0];
+    cards.push(`<a class="kpi" href="${go}"><span class="lab">今天 Token<span class="go">${ICON.chev}</span></span>
+      <span class="big">${loading || tokBig(t[0])}</span><span class="sub">${tk && t[1] ? `另有缓存读取 ${fmtTok(t[1])}` : "&nbsp;"}</span></a>`);
+    const wd = (new Date(today + "T00:00:00").getDay() + 6) % 7, w0 = dayAdd(today, -wd), lw0 = dayAdd(w0, -7);
+    const cur = tk ? tokSum(tk, w0, today) : [0, 0];
+    // 和上周比只比过完了的几天（今天还没过完）；周一没得比
+    const done = wd && tk ? tokSum(tk, w0, dayAdd(today, -1)) : [0, 0], last = wd && tk ? tokSum(tk, lw0, dayAdd(today, -8)) : [0, 0];
+    const pct = last[0] ? Math.round((done[0] - last[0]) / last[0] * 100) : null;
+    cards.push(`<div class="kpi"><span class="lab">本周 Token</span><span class="big">${loading || tokBig(cur[0])}</span>
+      <span class="sub">${pct === null ? "&nbsp;" : `<span class="${pct > 0 ? "up" : "down"}">${pct > 0 ? "↑" : "↓"} ${Math.abs(pct)}%</span> 比上周同期`}</span></div>`);
+  }
+  const qt = st.quota && st.quota.windows;
+  if (qt && (qt.five_hour || qt.seven_day)) {
+    const now = Date.now() / 1000;
+    const row = (k, name) => { const w = qt[k]; if (!w) return ""; const u = (w.resetsAt || 0) < now ? 0 : Math.round((w.utilization || 0) * 100);
+      return `<div><span>${name}</span><span class="qbar"><i class="${u >= 80 ? "hot" : u >= 60 ? "warm" : ""}" style="width:${u}%"></i></span><b>${u}%</b></div>`; };
+    const wk = qt.seven_day && qt.seven_day.resetsAt > now ? new Date(qt.seven_day.resetsAt * 1000) : null;
+    cards.push(`<div class="kpi"><span class="lab">额度</span><div class="meter">${row("five_hour", "5 小时")}${row("seven_day", "本周")}</div>
+      <span class="sub">${wk ? `本周额度 ${wk.getMonth() + 1}月${wk.getDate()}日 周${WEEKDAY[wk.getDay()]} ${wk.getHours()}:${String(wk.getMinutes()).padStart(2, "0")} 重置` : "&nbsp;"}</span></div>`);
+  }
+  return `<div class="kpis" style="--n:${cards.length}">${cards.join("")}</div>`;
+}
+let dayData = {};                     // 日期 → {at, rows, hours, tokens}
+async function loadBoardDay(d){
+  const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
+  const parts = await Promise.all(ms.map(m => api(`/api/board/day?d=${d}`, undefined, m.id).then(p => ({...p, machine: m.id})).catch(() => null)));
+  const out = {at: Date.now(), rows: [], hours: Array(24).fill(0), tokens: null};
+  for (const p of parts.filter(Boolean)) {
+    out.rows.push(...(p.chats || []).map(r => ({...r, machine: p.machine})));
+    (p.hours || []).forEach((n, i) => out.hours[i] += n);
+    if (p.tokens) { out.tokens = out.tokens || [0, 0]; out.tokens[0] += p.tokens[0]; out.tokens[1] += p.tokens[1]; }
+  }
+  dayData[d] = out;
+}
+function hm(ts){ const d = new Date(ts * 1000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+function renderBoardDay(quick){
+  const today = (boardStats && boardStats.today) || ymd(new Date());
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(current.sub || "") ? current.sub : today;
+  const data = dayData[d];
+  if (!quick || !data || Date.now() - data.at > 60000) loadBoardDay(d).then(() => current.view === "board" && current.id === "day" && current.sub === d && renderBoardDay(true)).catch(e => toast(e.message));
+  const rows = data ? data.rows.map(r => ({...r, c: (S.chats || []).find(x => x.id === r.id)})) : [];
+  const groups = {};
+  for (const r of rows) (groups[r.agent || ""] = groups[r.agent || ""] || []).push(r);
+  const order = Object.entries(groups).map(([aid, rs]) => ({aid, rs, msgs: rs.reduce((n, r) => n + r.msgs, 0), tok: rs.reduce((n, r) => n + r.tokens[0], 0)}))
+    .sort((a, b) => b.tok - a.tok || b.msgs - a.msgs);
+  const named = order.filter(g => g.aid && agentOf(g.aid));
+  const waits = rows.filter(r => r.c && r.c.attention).length, fresh = rows.filter(r => r.created).length;
+  const top = named.slice().sort((a, b) => b.msgs - a.msgs)[0];
+  const msgs = rows.reduce((n, r) => n + r.msgs, 0);
+  const L = data ? null : "…";
+  const kpis = `<div class="kpis" style="--n:4">
+    <div class="kpi"><span class="lab">会话</span><span class="big">${L || rows.length}</span><span class="sub">${fresh ? `新开 ${fresh} 个` : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lab">Agent</span><span class="big">${L || named.length}</span><span class="sub">${top && named.length > 1 ? `${esc(agentOf(top.aid).name)} 聊得最多` : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lab">你发的消息</span><span class="big">${L || msgs}</span><span class="sub">${waits ? `等你 ${waits} 件` : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lab">Token</span><span class="big">${L || (data.tokens ? tokBig(data.tokens[0]) : "—")}</span><span class="sub">${data && data.tokens && data.tokens[1] ? `另有缓存读取 ${fmtTok(data.tokens[1])}` : "&nbsp;"}</span></div></div>`;
+  const row = r => {
+    const c = r.c || {id: r.id, agent: r.agent, title: r.title};
+    const title = c.issue ? `#${c.issue.n} ${c.issue.title || c.title}` : c.title || r.title;
+    const st = r.c && working(r.c) ? `<span class="dtag run">进行中</span>` : r.c && r.c.attention ? `<span class="dtag wait">等你</span>` : "";
+    const span = hm(r.first) === hm(r.last) ? hm(r.first) : `${hm(r.first)} – ${hm(r.last)}`;
+    return `<a class="drow" href="${boardHref(c)}"><span class="dtm">${span}</span>
+      <span class="dmid"><span class="dt"><span class="dtt">${esc(title)}</span>${st}</span><span class="ds">${esc((r.c && r.c.brief) || r.brief || "")}</span></span>
+      <span class="dside"><span>${r.tokens[0] ? fmtTok(r.tokens[0]) : ""}</span>${multi() ? `<span class="dm">${esc((machineOf(r.machine) || {}).name || "")}</span>` : ""}</span></a>`;
+  };
+  const list = !data ? `<p class="bempty">…</p>` : !rows.length ? `<p class="bempty">这一天没有对话。</p>` : order.map(g => {
+    const a = g.aid ? agentOf(g.aid) : null;
+    return `<div class="dgrp"><div class="dghead">${a ? seal(a, "sm", false) : chatIcon(g.rs[0].c || {}, "sm")}<span class="dgn">${esc(a ? a.name : "临时对话")}</span><span class="dgm">${g.rs.length} 个会话</span><span class="sp"></span>${g.tok ? `<span class="dgt">${fmtTok(g.tok)} Token</span>` : ""}</div>
+      ${g.rs.sort((x, y) => y.last - x.last).map(row).join("")}</div>`;
+  }).join("");
+  const hrs = data ? data.hours : Array(24).fill(0), mx = Math.max(1, ...hrs);
+  const hours = `<div class="hours">${hrs.map((n, i) => `<i class="${n ? "" : "z"}" style="height:${n ? Math.max(8, n / mx * 100) : 6}%" title="${i} 点：${n} 条"></i>`).join("")}</div>
+    <div class="haxis"><span>0 点</span><span>6</span><span>12</span><span>18</span><span>24</span></div>`;
+  const keep = $(".board") ? $(".board").scrollTop : 0;
+  $("#main").innerHTML = `<div class="board"><div class="bhead dhead"><a class="crumb" href="#/board">任务面板</a><span class="crumb-sl">/</span><h1>${dayLabel(d)}</h1>
+      <span class="dnav"><button class="iconbtn" title="前一天" onclick="location.hash='#/board/day/${dayAdd(d, -1)}'">${ICON.left}</button><button class="iconbtn" title="后一天" ${d >= today ? "disabled" : ""} onclick="location.hash='#/board/day/${dayAdd(d, 1)}'">${ICON.chev}</button></span></div>
+    <div class="bgrid"><div class="bleft">${kpis}${list}</div>
+    <div class="bright"><div class="bcard"><h2>这一天的节奏<span class="sp"></span><small>按小时</small></h2>${hours}</div></div></div></div>`;
+  if (keep && quick) $(".board").scrollTop = keep;
+}
 async function renderBoard(quick){
+  if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
   const tops = (S.chats || []).filter(c => isTop(c) && !c.archived);
@@ -3334,20 +3487,15 @@ async function renderBoard(quick){
   const recent = tops.filter(c => !c.attention && !working(c) && (c.star || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
     .sort((a, b) => !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
   const st = boardStats || {heat: {}, agents: {}};
-  const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v.turns).sort((a, b) => b[1].turns - a[1].turns).slice(0, 6);
-  const maxT = Math.max(1, ...ags.map(([, v]) => v.turns));
+  const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v[agTab]).sort((a, b) => b[1][agTab] - a[1][agTab]).slice(0, 6);
+  const maxT = Math.max(1, ...ags.map(([, v]) => v[agTab]));
   const sec = (title, color, n, body, cls = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
   if (boardReply && !wait.some(c => c.id === boardReply.id)) boardReply = null;     // 那件事已经不在等你了
   const ta = $("#br-text"), focused = ta && document.activeElement === ta, sel = ta && [ta.selectionStart, ta.selectionEnd];
   const top = $(".board") ? $(".board").scrollTop : 0;
   $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
-    <div class="bstats">
-      <div class="stat"><b>${wait.length}</b><span>等你处理</span></div>
-      <div class="stat"><b>${work.length}</b><span>正在干活</span></div>
-      <div class="stat"><b>${boardStats ? st.turns_week : "…"}</b><span>本周发了几条</span></div>
-      <div class="stat"><b>${boardStats ? st.done_week : "…"}</b><span>本周完成</span></div>
-    </div>
     <div class="bgrid"><div class="bleft">
+      ${kpiHtml(st)}
       ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting")}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
       ${(() => {
@@ -3362,8 +3510,9 @@ async function renderBoard(quick){
         return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
       })()}
     </div><div class="bright">
-      <div class="bsec"><h2>活跃度</h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
-      <div class="bsec"><h2>本周各 Agent</h2>${ags.length ? ags.map(([id, v]) => { const a = agentOf(id); return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(v.turns / maxT * 100)}%"></i></span><span class="acnt">${v.turns} 条</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
+      <div class="bcard"><h2>活跃度<span class="sp"></span><small>点一天查看</small></h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
+      <div class="bcard"><h2>本周各 Agent<span class="sp"></span><span class="rtabs" role="tablist">${[["turns", "条数"], ["tokens", "Token"]].map(([k, t]) => `<button role="tab" aria-selected="${agTab === k}" class="${agTab === k ? "on" : ""}" onclick="setAgTab('${k}')">${t}</button>`).join("")}</span></h2>
+        ${ags.length ? ags.map(([id, v]) => { const a = agentOf(id), n = v[agTab] || 0; return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(n / maxT * 100)}%"></i></span><span class="acnt">${agTab === "tokens" ? fmtTok(n) : n + " 条"}</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
     </div></div></div>`;
   if (top) $(".board").scrollTop = top;
   const nt = $("#br-text");

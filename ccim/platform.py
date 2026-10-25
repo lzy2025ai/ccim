@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
-from . import devices, docs, filesend, share, workspace
+from . import devices, docs, filesend, share, tokens, workspace
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
@@ -483,6 +483,7 @@ class Platform:
             registry.write_state(self.home, board_seen_init=True)
         self.kb_wake = threading.Event()
         threading.Thread(target=self._kb_sync_loop, daemon=True).start()
+        tokens.start()                        # 任务面板的 Token 用量（#240），第一次要读一会儿，放后台
         channel.events.tag = lambda ev: share.tag(self, ev)
 
     # ----- 知识库（#27） -----
@@ -1970,7 +1971,8 @@ def _handler(pf):
                 "/api/agent/skill": lambda: skills_mod.agent_detail(_agent(q.get("id")), q.get("group", ""), q.get("name", "")),
                 "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
-                "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct),
+                "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
+                "/api/board/day": lambda: pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),

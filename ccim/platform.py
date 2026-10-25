@@ -61,9 +61,9 @@ HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "- 删除前工具会弹出确认，用户点了才会删。\n"
     "- 用户消息开头括号里是他在页面上正看着的 Skill 和文件，「这个」一般就指它。\n"
     "- 回答用中文，简短。")}}
-# 旁问（#196）：主对话干活时，在侧栏里另开一个对话问问题，不打断它
-SIDE_ROLE = ("\n\n## 旁问\n"
-             "你在「旁问」侧栏里：用户的主对话可能正在干活，用户不想打断它，来这里问问题。你是从主对话分出来的，知道之前聊过的内容；"
+# 侧边对话（#196）：主对话干活时，在侧栏里另开一个对话问问题，不打断它
+SIDE_ROLE = ("\n\n## 侧边对话\n"
+             "你在「侧边对话」里：用户的主对话可能正在干活，用户不想打断它，来这里问问题。你是从主对话分出来的，知道之前聊过的内容；"
              "用户消息前面括号里是平台自动附上的（不是用户贴的）：主对话在那之后的新进展、正在进行的那一轮做到哪了。\n"
              "- 你只能看、不能动：可以读文件、搜索、跑只看不改的命令（git status、git log、查日志等）；"
              "不删改文件、不装东西、不提交推送、不启动或停止进程，用户明确要求也不做，现在不做、以后也不做。\n"
@@ -612,7 +612,7 @@ class Platform:
             lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
             if lent:
                 key += "#" + viewer
-            if m.get("side_of"):              # 旁问（#196）：只读，单独一个 Bridge
+            if m.get("side_of"):              # 侧边对话（#196）：只读，单独一个 Bridge
                 key += "|side"
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
@@ -788,7 +788,7 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
-        if m.get("side_of") and text:          # 旁问：带上主对话的新进展
+        if m.get("side_of") and text:          # 侧边对话：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
         if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
             from .search import short
@@ -821,10 +821,10 @@ class Platform:
         return cid
 
     async def side_chat(self, cid, fresh=False):
-        """旁问（#196）：这个对话的旁问对话，一个对话一个，不进对话列表；没有或 fresh 就从主对话最后一条回答处分一个新的。"""
+        """侧边对话（#196）：这个对话的侧边对话，一个对话一个，不进对话列表；没有或 fresh 就从主对话最后一条回答处分一个新的。"""
         m = self.meta(cid)
         if m.get("side_of") or m.get("helper") or m.get("mention_of") or cid.startswith("x:"):
-            raise Problem("这个对话不能旁问。")
+            raise Problem("这个对话不能开侧边对话。")
         old = [c for c, x in self.chats().items() if x.get("side_of") == cid]
         if old and not fresh:
             return old[0]
@@ -843,7 +843,7 @@ class Platform:
             if f.get("at"):
                 fork, at, upto = f.get("sid") or sid, f["at"], done[-1] + 1
         t = m.get("temp")
-        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, title="旁问",
+        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, title="侧边对话",
                             account=share.chat_owner(self, cid))
         chats = self.chats()
         rec = chats[new]
@@ -867,7 +867,7 @@ class Platform:
         await self.delete_chat(c)
 
     def _side_ctx(self, cid, m):
-        """旁问每次发消息时带上的：主对话在上次之后的新内容，和正在进行的那一轮做到哪了。"""
+        """侧边对话每次发消息时带上的：主对话在上次之后的新内容，和正在进行的那一轮做到哪了。"""
         of = m["side_of"]
         rows = self.channel.logs.read(of)
         upto = m.get("side_upto") or 0
@@ -1018,7 +1018,7 @@ class Platform:
         if cid in chats and chats[cid].get("busy"):
             raise Problem("它还在干活，先停下再删。")
         await self.mentions.delete_subs(cid)
-        for c in [c for c, x in chats.items() if x.get("side_of") == cid]:   # 它的旁问一起删
+        for c in [c for c, x in chats.items() if x.get("side_of") == cid]:   # 它的侧边对话一起删
             await self._drop_side(c)
         self.store.deleted.add(cid)
         for key, b in list(self.bridges.items()):

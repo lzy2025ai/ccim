@@ -415,7 +415,7 @@ SANDBOX = {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedC
 
 
 def read_only(sandbox, cwd):
-    """旁问（#196）的命令沙箱：主目录、工作目录、外接硬盘都不许写。"""
+    """侧边对话（#196）的命令沙箱：主目录、工作目录、外接硬盘都不许写。"""
     sb = dict(sandbox or SANDBOX)
     fs = dict(sb.get("filesystem") or {})
     fs["denyWrite"] = list(fs.get("denyWrite") or []) + [os.path.realpath(os.path.expanduser("~")), os.path.realpath(cwd), "/Volumes"]

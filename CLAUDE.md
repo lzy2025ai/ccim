@@ -97,7 +97,7 @@
   CCIM_PROJECT（`Chat.ccim_env`），PATH 前面加 ~/.ccim/bin（只放 ccim 一个软链，`ccim_bin`）。网页对话里建的是 kind=chat：到点在原对话里跑（`_run_chat`），
   记录里那条任务带 sched；飞书、微信里建的交给 Agent、deliver 回那个渠道。quiet：提示里让它没事只回 QUIET，WebChannel 不记这种回答，
   `Logs.drop` 去掉那条任务、推送 drop。频率 every（每隔几分钟）。Claude 的 CronCreate / CronList / CronDelete 在 ccim 会话里禁用
-- 旁问（#196）：主对话干活时不想打断它，在右侧另开对话问问题（对话页头部「旁问」、选中回答浮条「问一下」）。`Platform.side_chat`：一个对话一个，
+- 侧边对话（#196）：主对话干活时不想打断它，在右侧另开对话问问题（入口只有选中回答时浮条上的「侧边对话」）。`Platform.side_chat`：一个对话一个，
   meta 里 side_of 指回主对话（不进列表、跟着主对话删），从主对话最后一条回答的 fork 分出来（Codex 只在主对话空闲时分整个对话）；
   每次发消息 `_side_ctx` 把主对话 side_upto 之后的新内容和正在进行那一轮的进度（progress_of）拼在前面。只读：单独一个 Bridge（entry.side），
   去掉写文件工具、命令走沙箱且主目录和工作目录 denyWrite（`share.read_only`；用户设置里 allow Bash 时权限模式拦不住，只能靠沙箱），Codex 用 -s read-only；

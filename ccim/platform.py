@@ -2047,6 +2047,7 @@ def _handler(pf):
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
+                "/api/workspace": lambda: set_workspace(bool(b("on"))),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),
                 "/api/ws/rename": lambda: pf.ws_call(b("chat"), workspace.rename, b("path") or "", b("name")),
@@ -2464,6 +2465,12 @@ def delete_at(m, days):
         except ValueError:
             pass
     return max(m.get("archived_at") or time.time(), last) + days * 86400
+
+
+def set_workspace(on):
+    """工作区（#245）：在设置里打开后才能用，每台电脑各存一份。"""
+    registry.set_global(workspace="on" if on else None)
+    return {"workspace": on}
 
 
 def set_archive_days(v):

@@ -95,10 +95,23 @@ def _env(python):
     return os.path.realpath(os.path.dirname(python))
 
 
+DESCRIBE_TTL = 10
+_described = {}                               # python → (算的时刻, 结果)：开发版要问 git，网页每次刷新都要列一遍
+
+
 def describe(python):
     """正在运行的那个 python 是哪个版本，给 ccim show、list 用。"""
     if not python:
         return ""
+    hit = _described.get(python)
+    if hit and time.time() - hit[0] < DESCRIBE_TTL:
+        return hit[1]
+    v = _describe(python)
+    _described[python] = (time.time(), v)
+    return v
+
+
+def _describe(python):
     real = _env(python)
     if _in_stable(python):
         return "稳定版 " + os.path.relpath(real, os.path.realpath(_stable())).split(os.sep)[0]

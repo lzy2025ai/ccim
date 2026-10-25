@@ -43,6 +43,11 @@ class Offline(Exception):
     pass
 
 
+class Server(ThreadingHTTPServer):
+    """监听队列默认只有 5：网页一下发出很多请求、进程又正忙的时候，多出来的连接会被直接重置。"""
+    request_queue_size = 128
+
+
 def _file(name):
     return os.path.join(registry.HOME, name)
 
@@ -202,7 +207,7 @@ class Peers:
                 return
             try:
                 # 服务器上的总控在 nginx 后面，只听本机；局域网的总控要让别的电脑连进来
-                self.server = ThreadingHTTPServer(("127.0.0.1" if self.server_hub else "0.0.0.0", PEER_PORT), _handler(self))
+                self.server = Server(("127.0.0.1" if self.server_hub else "0.0.0.0", PEER_PORT), _handler(self))
             except OSError as e:
                 raise RuntimeError(f"端口 {PEER_PORT} 被占用了，别的电脑连不进来：{e}")
             self.server.daemon_threads = True
@@ -664,9 +669,11 @@ class Peers:
                 time.sleep(min(3 * fails, 15))
 
     def _serve_req(self, m):
+        # 这几个总控只等 STATE_TIMEOUT 秒，过了就当没回应；这边也别再干等，不然网页一直重试、请求越积越多
+        timeout = STATE_TIMEOUT if urlparse(m["path"]).path in QUICK else CALL_TIMEOUT
         try:
             status, ctype, data = local_request(self.pf, m["method"], m["path"], base64.b64decode(m["body"]),
-                                                m.get("headers"))
+                                                m.get("headers"), timeout)
         except Exception as e:
             status, ctype, data = 500, "application/json", json.dumps({"error": f"出错了：{e}"}).encode()
         try:

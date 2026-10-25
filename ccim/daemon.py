@@ -11,6 +11,10 @@ import os, plistlib, signal, subprocess, time
 from . import registry
 
 
+PS_TTL = 10                                   # 同一个 pid 是不是 ccim 进程，这么久内不再问 ps
+_ps_seen = {}                                 # pid → (问的时刻, 是不是)
+
+
 def _is_ccim(pid):
     try:
         os.kill(pid, 0)
@@ -18,7 +22,11 @@ def _is_ccim(pid):
         return False
     except PermissionError:
         pass
+    hit = _ps_seen.get(pid)                   # 活没活着每次都看（上面那步不开子进程），只有命令行缓存
+    if hit and time.time() - hit[0] < PS_TTL:
+        return hit[1]
     args = subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True).stdout
+    _ps_seen[pid] = (time.time(), "ccim" in args)
     return "ccim" in args
 
 

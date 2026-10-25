@@ -15,10 +15,11 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 安全：只监听 127.0.0.1；Host 必须是本机地址（挡 DNS rebinding）；接口要带 X-CCIM 头（别的网站跨域发不过来）。
 """
 import asyncio, glob, json, logging, os, queue, re, shutil, threading, time, uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
+from .peers import Server
 from . import devices, docs, filesend, share, tokens, workspace
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -1832,7 +1833,7 @@ class Platform:
         server = None
         for p in range(port, port + 20):
             try:
-                server = ThreadingHTTPServer(("127.0.0.1", p), _handler(self))
+                server = Server(("127.0.0.1", p), _handler(self))
                 break
             except OSError:
                 continue
@@ -1852,6 +1853,11 @@ def _defaults(base, path):
         return defaults(path)
     m, e, _ = registry.claude_defaults(path)
     return m, e
+
+
+def _snapshot(fn):
+    with registry.snapshot():
+        return fn()
 
 
 # ---------- HTTP 接口 ----------
@@ -2021,6 +2027,9 @@ def _handler(pf):
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
             }
+            if u.path in ("/api/state", "/api/agent"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
+                fn = routes[u.path]
+                return self._api(lambda: _snapshot(fn))
             if u.path in routes:
                 return self._api(routes[u.path])
             self._send(404, {"error": "not found"})

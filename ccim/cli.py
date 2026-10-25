@@ -1244,8 +1244,22 @@ def parser():
     return p
 
 
+def _more_files():
+    """一直跑着的进程同时开着很多连接、子进程；macOS 默认一个进程只能开 256 个文件，用满了连总控都连不上。"""
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    want = 4096 if hard == resource.RLIM_INFINITY else min(4096, hard)
+    if soft < want:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (want, hard))
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
+    if getattr(args, "fn", None) in (cmd_run, cmd_safe_restart_run, cmd_hub):
+        _more_files()
     if getattr(args, "fn", None) not in (cmd_run, cmd_safe_restart_run, cmd_hub, cmd_tool, cmd_mcp):   # tool、mcp 在会话里跑，不动登记表
         from . import agents, weixin_hub
         weixin_hub.migrate()

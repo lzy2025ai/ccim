@@ -6,10 +6,11 @@
 扫码接入在后台线程里跑（feishu.pair / cli.add_weixin 本身是阻塞的），二维码通过 show 回调交给网页，网页轮询任务状态。
 """
 import glob, json, os, secrets, subprocess, threading, webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
 from . import daemon, registry, runtime, weixin_hub
+from .peers import Server
 
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -452,7 +453,7 @@ def serve(port=8977, open_browser=True):
     server = None
     for p in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", p), Handler)
+            server = Server(("127.0.0.1", p), Handler)
             break
         except OSError:
             continue

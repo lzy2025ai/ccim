@@ -31,6 +31,7 @@ MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片
 STRAY_WAIT = 30           # 收到一个什么都没说的「一轮结束」（比如接上对话时补的后台任务通知那一轮）后，再等多久用户这一轮的结果
 FILE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}   # 改文件的工具（工作区标出 AI 改了哪些，#206）
 STALL = 300               # 某一步这么久没结果、也没有任何新动静，就提醒用户（#109）
+WATCH = 20                # 有命令在跑时，每隔多少秒看一次它的进程在不在干活（#222）
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
 # 优先用本机装的 claude，和终端里的版本、登录一致；找不到再用 SDK 自带的
@@ -110,6 +111,34 @@ class Task(str):
             self.future.set_result((state, answer or ""))
 
 
+def _secs(text):
+    """ps 的时间（[[天-]时:]分:秒[.百分秒]）换成秒。"""
+    days, _, rest = text.strip().rpartition("-")
+    total = 0.0
+    for part in rest.split(":"):
+        total = total * 60 + float(part)
+    return total + (int(days) * 86400 if days else 0)
+
+
+def tool_procs(root, within):
+    """root 下面最近 within 秒里起的进程（正在跑的命令和它起的子进程；常驻的 MCP 服务起得早，不算）：进程号 → 用了多少秒 CPU。"""
+    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,etime=,time="], capture_output=True, text=True, timeout=10).stdout
+    rows, kids = {}, {}
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) == 4:
+            rows[f[0]] = f
+            kids.setdefault(f[1], []).append(f[0])
+    found, todo = {}, list(kids.get(str(root), []))
+    while todo:
+        p = todo.pop()
+        f = rows[p]
+        if _secs(f[2]) <= within:
+            found[p] = _secs(f[3])
+        todo += kids.get(p, [])
+    return found
+
+
 class Turn:
     def __init__(self):
         self.start = time.monotonic()
@@ -128,6 +157,7 @@ class Turn:
         self.prompt = None                    # 开始这一轮的那条消息的编号（退回时把文件恢复到它之前）
         self.flight = {}                      # 还没出结果的工具调用：编号 → (说明, 开始时刻)
         self.last = time.monotonic()          # 最近一次收到 Claude 的任何消息
+        self.active = 0                       # 最近一次看到正在跑的命令的进程在干活（用 CPU、起了或结束了进程，#222）
         self.warned = None                    # 没有卡片的渠道：已经提醒过卡住的是哪一步
         self.hinted = False                   # 这一轮已经提醒过发文件用错了工具（#190）
         self.writing = {}                     # 正在写的文件：工具调用编号 → 路径（工作区实时标出来，#206）
@@ -152,7 +182,7 @@ class Turn:
 
     def stalled(self):
         """卡住的那一步：(说明, 已经多少秒)。有工具调用没结果、而且 STALL 秒里没有任何新动静才算。"""
-        if not self.flight or time.monotonic() - self.last < STALL:
+        if not self.flight or time.monotonic() - max(self.last, self.active) < STALL:
             return None
         key = min(self.flight, key=lambda k: self.flight[k][1])
         desc, since = self.flight[key]
@@ -592,6 +622,7 @@ class Chat:
     async def _turn_inner(self, prompt, reply_to):
         t = self.turn = Turn()
         ticker = asyncio.create_task(self._tick(t, reply_to))
+        watcher = asyncio.create_task(self._watch(t))
         result, error = None, None
         try:
             await self._connect()
@@ -671,7 +702,7 @@ class Chat:
                                 d = describe_tool(blk.name, blk.input)
                                 if d:
                                     t.steps.append(d)
-                                if not m.parent_tool_use_id:
+                                if not m.parent_tool_use_id and not blk.name.startswith("mcp__ccim__"):  # ccim 的工具有自己的超时
                                     t.flight[blk.id] = (d or blk.name, time.monotonic())
                                 t.wrote(blk.id, blk.name, blk.input)
                             elif isinstance(blk, TextBlock) and blk.text.strip():
@@ -707,6 +738,7 @@ class Chat:
                         break
         finally:
             ticker.cancel()
+            watcher.cancel()
         self.tail = t.uuid if self.client else None
         await self._finish(t, result, error, reply_to)
         await self._context()
@@ -782,6 +814,27 @@ class Chat:
         if state != "working" and t.prompt:
             snap["prompt"] = t.prompt
         return snap
+
+    async def _watch(self, t):
+        """命令跑的时候 Claude 不发任何消息，光看消息会把跑得久的命令当成卡住（#222）。
+        看 Claude Code 进程下面、这些工具调用开始之后起的进程：用了 CPU、有新进程起来或结束，就算在干活。"""
+        prev = None
+        while True:
+            await asyncio.sleep(WATCH)
+            proc = getattr(getattr(self.client, "_transport", None), "_process", None)
+            pid = getattr(proc, "pid", None)
+            if not t.flight or not pid:
+                prev = None
+                continue
+            within = time.monotonic() - min(v[1] for v in t.flight.values()) + 3
+            try:
+                now = await asyncio.to_thread(tool_procs, pid, within)
+            except Exception:
+                log.debug("看命令进程失败", exc_info=True)
+                continue
+            if prev is not None and (now.keys() != prev.keys() or any(now[k] - prev[k] >= 0.05 for k in now)):
+                t.active = time.monotonic()
+            prev = now
 
     async def _tick(self, t, reply_to):
         if getattr(self.b.channel, "live", False):   # 网页：每一步、正在写的字实时推过去

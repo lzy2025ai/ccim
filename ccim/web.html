@@ -1304,6 +1304,57 @@ html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transit
   .ws-ask{position:absolute;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:6px;background:var(--qing);color:#fff;border-radius:22px;padding:9px 16px;font-size:14px;box-shadow:0 6px 18px rgba(43,76,111,.35)}
   .ws-ask svg{width:16px;height:16px}
 }
+/* 工作区深色（#237）：文件树、编辑区换一套颜色，和对话模式一眼分开；右边的对话栏照旧 */
+#main.ws .ws-tree,#main.ws .ws-ed,#main.ws-files .ws-tree,#main.ws-file .ws-ed{
+  --paper:#16191E; --panel:#1C2026; --sunk:#272C34; --line:#2C3139; --line-strong:#3A4049;
+  --ink:#E4E7EB; --ink-2:#C3C8CF; --muted:#9097A0; --faint:#6A717A;
+  --qing:#8DB2DA; --qing-soft:#24364A; --zhe:#E0A375; --huang:#E2BE5C; --bad:#F0806E;
+  color:var(--ink);color-scheme:dark}
+#main.ws .ws-tree{background:#181B20}
+#main.ws .ws-tabs{background:#16191E}
+#main.ws .ws-tab.on{background:var(--panel)}
+#main.ws .ws-ren{background:#0F1215;color:var(--ink)}
+#main.ws .ws-flag.new{background:#1F3A2A;color:#8FD3A8}
+#main.ws .ws-flag.mod{background:#3D2E1D;color:#E8B98C}
+#main.ws .ws-row .ic.dir{color:#C9A86A}
+#main.ws .doc-old{background:#2E2814;border-color:#4A4020;color:#E6CF86}
+#main.ws .doc-md pre{background:#12151A}
+#main.ws .wx-page,#main.ws .doc-body iframe{color-scheme:light}
+#main.ws .wx-page{--ink:#1D222B;--ink-2:#3A404A;--muted:#6C7169;--line:#DCDFD8;--paper:#F1F2EE;--sunk:#E8EAE5;--qing:#2B4C6F;color:var(--ink)}
+#main.ws .ws-ed ::selection{background:#2F4A68}
+/* 文件类型图标 */
+.ws-row .ic.ft svg{width:15px;height:15px}
+/* 代码编辑：高亮层垫在透明文字的输入框下面，行号跟着滚 */
+.code-ed{--cf:13px;--cl:1.7;display:flex;height:100%;overflow:hidden;background:var(--panel)}
+.code-gut{flex:none;overflow:hidden;padding:16px 0 80px;min-width:3.4em;text-align:right;color:var(--faint);font:var(--cf)/var(--cl) var(--mono);user-select:none;border-right:1px solid var(--line)}
+.code-gut pre{margin:0;padding:0 10px 0 8px;font:inherit}
+.code-main{position:relative;flex:1;min-width:0}
+.code-main pre.code-hl,.code-main textarea{position:absolute;inset:0;margin:0;padding:16px 18px 80px;border:0;font:var(--cf)/var(--cl) var(--mono)!important;tab-size:4;white-space:pre;overflow-wrap:normal;letter-spacing:0}
+.code-main pre.code-hl{overflow:hidden;color:var(--ink);pointer-events:none}
+.code-main pre.code-hl code{display:block;font:inherit;min-width:max-content}
+.code-main textarea{width:100%;height:100%;overflow:auto;resize:none;outline:0;background:transparent;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--ink)}
+.code-ed .hl-c{color:#6E7781} .code-ed .hl-s{color:#0A3069} .code-ed .hl-n{color:#0550AE} .code-ed .hl-w{color:#CF222E} .code-ed .hl-k{color:#8250DF} .code-ed .hl-t{color:#116329}
+#main.ws .code-ed .hl-c,#main.ws-file .code-ed .hl-c{color:#6B7682;font-style:italic}
+#main.ws .code-ed .hl-s,#main.ws-file .code-ed .hl-s{color:#A5D6A0}
+#main.ws .code-ed .hl-n,#main.ws-file .code-ed .hl-n{color:#E7B77C}
+#main.ws .code-ed .hl-w,#main.ws-file .code-ed .hl-w{color:#E28FBF}
+#main.ws .code-ed .hl-k,#main.ws-file .code-ed .hl-k{color:#8DC3F2}
+#main.ws .code-ed .hl-t,#main.ws-file .code-ed .hl-t{color:#F08A7E}
+@media (max-width:760px){.code-ed{--cf:16px;--cl:1.6}.code-main pre.code-hl,.code-main textarea{padding:14px 14px 70px}}
+/* 右边对话栏窄：消息下面的按钮只留图标，不折行 */
+.msg-acts{flex-wrap:wrap}
+.msg-acts button{white-space:nowrap}
+#main.ws .msg-acts button{font-size:0;gap:0;padding:0 7px}
+#main.ws .composer .opts{flex-wrap:wrap;row-gap:4px}
+/* iPad 横屏窄一些：文件树收窄；竖屏：对话栏浮在编辑区上面，不挤占编辑区 */
+@media (max-width:1280px) and (min-width:761px){
+  #main.ws .chat-body{grid-template-columns:210px minmax(0,1fr) minmax(300px,32%)}
+  #main.ws.ws-nochat .chat-body{grid-template-columns:210px minmax(0,1fr)}
+}
+@media (max-width:1000px) and (min-width:761px){
+  #main.ws .chat-body,#main.ws.ws-nochat .chat-body{grid-template-columns:190px minmax(0,1fr)}
+  #main.ws .ws-convo{grid-column:auto;position:absolute;top:0;right:0;bottom:0;width:min(400px,56%);z-index:6;box-shadow:-12px 0 32px rgba(0,0,0,.28)}
+}
 .ws-ask{display:none}
 @media (max-width:760px){#main.ws-file .ws-ask{display:flex}}
 </style>
@@ -3674,7 +3725,29 @@ const HL_KW = {
   rs: "as async await break const continue crate else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while",
 };
 const HL_ALIAS = {mjs: "js", cjs: "js", ts: "js", tsx: "js", jsx: "js", json: "json", yaml: "yaml", yml: "yaml", toml: "yaml", bash: "sh", zsh: "sh", rb: "py", go: "go", rs: "rs", java: "js", c: "js", h: "js", cpp: "js", css: "css"};
+function hlMarkup(text){          // HTML / XML：标签名、属性名、属性值、注释
+  return text.replace(/<!--[\s\S]*?-->|<[^<>]*>|[^<]+|</g, t => {
+    if (t.startsWith("<!--")) return `<span class="hl-c">${esc(t)}</span>`;
+    if (!/^<[\/!?A-Za-z]/.test(t) || !t.endsWith(">")) return esc(t);
+    return t.replace(/^(<\/?[!?]?)([\w:.-]*)|("[^"]*"|'[^']*')|([\w:@.-]+)(?==)|[^"'\w]+|[\s\S]/g, (m, open, name, str, attr) =>
+      open !== undefined ? `${esc(open)}<span class="hl-t">${esc(name)}</span>` : str ? `<span class="hl-s">${esc(str)}</span>` : attr ? `<span class="hl-k">${esc(attr)}</span>` : esc(m));
+  });
+}
+function hlMd(text){              // Markdown 源码：标题、列表符号、代码块、行内代码、链接
+  let fence = false;
+  return text.split("\n").map(l => {
+    if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return `<span class="hl-c">${esc(l)}</span>`; }
+    if (fence) return `<span class="hl-s">${esc(l)}</span>`;
+    if (/^#{1,6}\s/.test(l)) return `<span class="hl-w">${esc(l)}</span>`;
+    if (/^\s*>/.test(l)) return `<span class="hl-c">${esc(l)}</span>`;
+    const m = /^(\s*)([-*+]|\d+\.)(\s.*)$/.exec(l);
+    const inline = x => esc(x).replace(/`[^`]+`/g, c => `<span class="hl-s">${c}</span>`).replace(/\[[^\]]*\]\([^)]*\)/g, c => `<span class="hl-k">${c}</span>`);
+    return m ? `${m[1]}<span class="hl-n">${esc(m[2])}</span>${inline(m[3])}` : inline(l);
+  }).join("\n");
+}
 function hlCode(text, ext){
+  if (["html", "htm", "xml", "svg", "vue", "plist"].includes(ext)) return hlMarkup(text);
+  if (["md", "markdown", "mdx"].includes(ext)) return hlMd(text);
   const lang = HL_ALIAS[ext] || ext;
   const hash = ["py", "sh", "yaml", "md"].includes(lang), slash = ["js", "go", "rs", "css", "json"].includes(lang);
   const kws = new Set((HL_KW[lang] || "").split(" ").filter(Boolean));
@@ -5888,13 +5961,38 @@ function docBody(){
   if (d.kind === "img") return `<div class="ws-img"><img src="${esc(docFileUrl())}" alt="${esc(d.name)}"></div>`;
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
-  if (d.kind === "text") return `<textarea id="doc-ta" class="code" spellcheck="false" ${d.latest ? "" : "readonly"} oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
-  if (DOC.mode === "edit") return `<textarea id="doc-ta" class="${d.kind === "html" ? "code" : ""}" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
+  if (d.kind === "text") return codeEd(!d.latest);
+  if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
+  if (DOC.mode === "edit") return `<textarea id="doc-ta" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
   if (d.kind === "md" && DOC.mode === "wx") return wxView();
   if (d.kind === "md") return `<article class="doc-md ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${docMd(DOC.draft, d.assets)}</article>`;
   if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
+}
+// 代码编辑（#237）：输入框文字透明，下面垫一层高亮，左边行号；滚动时两层一起动
+function codeEd(ro){
+  return `<div class="code-ed"><div class="code-gut" aria-hidden="true"><pre></pre></div><div class="code-main"><pre class="code-hl" aria-hidden="true"><code></code></pre>`
+    + `<textarea id="doc-ta" class="code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" ${ro ? "readonly" : ""} oninput="docInput(this);codeSync()" onscroll="codeScroll(this)" onkeydown="codeKey(event)">${esc(DOC.draft)}</textarea></div></div>`;
+}
+function codeSync(){
+  const ed = docRoot()?.querySelector(".code-ed"); if (!ed || !DOC) return;
+  const ta = ed.querySelector("textarea"), v = ta.value, ext = (DOC.path.split("/").pop().split(".").pop() || "").toLowerCase();
+  ed.querySelector(".code-hl code").innerHTML = (v.length > 300000 ? esc(v) : hlCode(v, ext)) + "\n";   // 太大的文件不高亮，免得打字卡
+  const n = v.split("\n").length, g = ed.querySelector(".code-gut pre");
+  if (g.dataset.n != n) { g.dataset.n = n; g.textContent = Array.from({length: n}, (_, i) => i + 1).join("\n"); }
+  codeScroll(ta);
+}
+function codeScroll(ta){
+  const ed = ta.closest(".code-ed"); if (!ed) return;
+  ed.querySelector(".code-hl code").style.transform = `translate(${-ta.scrollLeft}px,${-ta.scrollTop}px)`;
+  ed.querySelector(".code-gut pre").style.transform = `translateY(${-ta.scrollTop}px)`;
+}
+function codeKey(e){
+  if (e.key === "Tab" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.readOnly) {   // Tab 缩进，不跳到别的控件
+    e.preventDefault(); document.execCommand("insertText", false, e.shiftKey ? "" : "    "); return;
+  }
+  docKey(e);
 }
 function verLabel(x, k){
   const t = x.at ? new Date(x.at * 1000) : null, p = n => String(n).padStart(2, "0");
@@ -5918,6 +6016,7 @@ function drawWsDoc(){                    // 工作区：文档画在中间的编
     <button class="ws-ask" onclick="WS.ctx=true;WS.phoneCtx=true;wsGo('chat')">${ICON.chat}问 AI</button>`;
   if (same) el.querySelector(".doc-body").scrollTop = keep;
   if (DOC.mode === "wx") wxImgTools();
+  codeSync();
   drawWsCtx();
 }
 function drawDoc(){
@@ -5941,6 +6040,7 @@ function drawDoc(){
       ${d.editable ? `<button class="btn" onclick="docRestore()">用这一版的内容</button>` : ""}<button class="btn" onclick="openDoc(DOC.path)">看最新的</button></div>` : ""}
     <div class="doc-body">${docBody()}</div>`;
   if (DOC.mode === "wx") wxImgTools();
+  codeSync();
 }
 function docFileUrl(){   // 正在看的这一版：最新的是原文件，旧版本是留底
   return `/api/file/-/${encodeURIComponent(String(DOC.path).split("/").pop() || "file")}?chat=${encodeURIComponent(DOC.chat)}&path=${encodeURIComponent(DOC.d.file || DOC.path)}`
@@ -6226,6 +6326,7 @@ function drawDocBody(){
   const top = b.scrollTop;
   b.innerHTML = docBody(); b.scrollTop = top;
   if (DOC.mode === "wx") wxImgTools();
+  codeSync();
 }
 
 // ================= 工作区（#206） =================
@@ -6275,16 +6376,20 @@ function wsFlagsFromLog(c){
   if (!r) return;
   for (const f of r.changed) if (wsInside(f.path) && !((WS.seen[f.path] || 0) >= (r.at || 0))) WS.flags[f.path] = f.new ? "new" : "mod";
 }
+// iPad 竖屏（#237）：对话栏浮在编辑区上面，默认收起，点按钮滑出来；横屏照旧按用户上次的选择
+const wsFloat = () => innerWidth > 760 && innerWidth <= 1000;
+const wsNoChat = () => !!WS && (wsFloat() ? !WS.pchat : WS.nochat);
+addEventListener("resize", () => { if (WS && WS.on) wsApply(); });
 function wsApply(){
   const m = $("#main"), app = document.querySelector(".app");
   const on = !!(WS && WS.on && !narrow());
   m?.classList.toggle("ws", on);
-  m?.classList.toggle("ws-nochat", on && WS.nochat);
+  m?.classList.toggle("ws-nochat", on && wsNoChat());
   m?.classList.toggle("ws-files", !!(WS && narrow() && WS.scr === "files"));
   m?.classList.toggle("ws-file", !!(WS && narrow() && WS.scr === "file"));
   app.classList.toggle("ws-mode", on);
   const sw = $("#ws-sw"); if (sw) sw.dataset.on = on ? "ws" : "chat";
-  const cb = $("#ws-chatbtn"); if (cb) { cb.hidden = !on; cb.classList.toggle("on", !!(WS && !WS.nochat)); cb.title = WS && WS.nochat ? "显示对话" : "收起对话"; }
+  const cb = $("#ws-chatbtn"); if (cb) { cb.hidden = !on; cb.classList.toggle("on", !!WS && !wsNoChat()); cb.title = wsNoChat() ? "显示对话" : "收起对话"; }
   const fb = $("#ws-filesbtn"); if (fb) { const n = WS ? Object.keys(WS.flags).length : 0; fb.innerHTML = ICON.folder + (n ? `<span class="badge">${n}</span>` : ""); }
   drawWsCtx();
 }
@@ -6312,7 +6417,7 @@ function wsSetMode(on){
     if (on) wsShow();
   });
 }
-function wsToggleChat(){ if (!WS) return; wsVt("side", () => { WS.nochat = !WS.nochat; wsStore(); wsApply(); }); }
+function wsToggleChat(){ if (!WS) return; wsVt("side", () => { if (wsFloat()) WS.pchat = !WS.pchat; else { WS.nochat = !WS.nochat; wsStore(); } wsApply(); }); }
 const WS_DEPTH = {chat: 0, files: 1, file: 2};
 function wsGo(scr){           // 手机：对话 → 文件树 → 文件
   if (!WS) return;
@@ -6369,15 +6474,31 @@ function wsExpandTo(p){
 }
 
 // ---- 文件树 ----
-function wsIcon(e){ return e.dir ? ICON.folder : ICON.file; }
+// 文件树图标（#237）：文件夹实心，文件按类型上色、折角处标两三个字母
+const FT = [
+  [/^(py|pyi|ipynb)$/, "#4B8BBE", "PY"], [/^(js|mjs|cjs|jsx)$/, "#D9B43A", "JS"], [/^(ts|tsx)$/, "#3178C6", "TS"],
+  [/^(json|jsonl)$/, "#C08A2E", "{}"], [/^(md|markdown|mdx)$/, "#5B8DEF", "MD"], [/^(html|htm|xml|svg|vue)$/, "#E06A3B", "<>"],
+  [/^(css|scss|less)$/, "#7E57C2", "#"], [/^(sh|bash|zsh|fish|command)$/, "#5FA05A", "$"], [/^(yml|yaml|toml|ini|cfg|conf|env|plist)$/, "#B8545A", "⚙"],
+  [/^(png|jpe?g|gif|webp|heic|bmp|ico)$/, "#A66BC9", "◩"], [/^(mp4|mov|webm|m4v|mp3|wav|m4a)$/, "#D2577F", "▶"],
+  [/^(pdf)$/, "#D24B3E", "PDF"], [/^(docx?|pages)$/, "#2F6DB5", "W"], [/^(xlsx?|csv|numbers)$/, "#2E8B57", "X"], [/^(zip|gz|tgz|tar|7z|rar|whl)$/, "#8A8F98", "ZIP"],
+  [/^(go)$/, "#3FA7C9", "GO"], [/^(rs)$/, "#C4734B", "RS"], [/^(java|kt)$/, "#C7623A", "J"], [/^(c|h|cpp|hpp|cc|m|swift)$/, "#5C7FB8", "C"],
+  [/^(txt|log|lock)$/, "#8A8F98", ""],
+];
+function wsIcon(e){
+  if (e.dir) return `<svg viewBox="0 0 24 24"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h5l2 2h9a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5z" fill="currentColor" opacity=".9"/></svg>`;
+  const n = e.name || "", ext = n.includes(".") ? n.split(".").pop().toLowerCase() : n.toLowerCase();
+  const t = FT.find(([re]) => re.test(ext)) || [null, "#8A8F98", ""];
+  const lab = t[2], fs = lab.length >= 3 ? 6 : lab.length === 2 ? 7.5 : 9.5;
+  return `<svg viewBox="0 0 24 24"><path d="M5 2.5h9.5L20 8v13.5H5z" fill="${t[1]}" opacity=".18"/><path d="M5 2.5h9.5L20 8v13.5H5z" fill="none" stroke="${t[1]}" stroke-width="1.5" stroke-linejoin="round"/><path d="M14.5 2.5V8H20" fill="none" stroke="${t[1]}" stroke-width="1.5" stroke-linejoin="round"/>${lab ? `<text x="12.5" y="18.2" text-anchor="middle" font-size="${fs}" font-weight="700" font-family="-apple-system,Helvetica,Arial,sans-serif" fill="${t[1]}">${esc(lab)}</text>` : ""}</svg>`;
+}
 function wsRow(e, depth){
   const p = e.path, on = !e.dir && p === WS.cur;
-  if (WS.renaming === p) return `<div class="ws-row" style="--d:${depth}"><span class="chev none">${ICON.chev}</span><span class="ic ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
+  if (WS.renaming === p) return `<div class="ws-row" style="--d:${depth}"><span class="chev none">${ICON.chev}</span><span class="ic ft ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
     <input class="ws-ren" id="ws-ren" value="${esc(e.name)}" onkeydown="wsRenKey(event)" onblur="wsRenDone(this.value)"></div>`;
   const fl = WS.writing.has(p) ? `<span class="ws-writing" title="正在写"></span>` : WS.flags[p] ? `<span class="ws-flag ${WS.flags[p]}">${WS.flags[p] === "new" ? "新" : "改"}</span>` : "";
   return `<button class="ws-row ${on ? "on" : ""}" style="--d:${depth}" data-p="${esc(p)}" data-dir="${e.dir ? 1 : ""}" draggable="true"
       onclick="wsClick(${q(p)},${e.dir ? 1 : 0})" oncontextmenu="wsMenu(event,${q(p)},${e.dir ? 1 : 0})">
-    <span class="chev ${e.dir ? (WS.open.has(p) ? "open" : "") : "none"}">${ICON.chev}</span><span class="ic ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
+    <span class="chev ${e.dir ? (WS.open.has(p) ? "open" : "") : "none"}">${ICON.chev}</span><span class="ic ft ${e.dir ? "dir" : ""}">${wsIcon(e)}</span>
     <span class="nm">${esc(e.name)}</span>${fl}<span class="more" onclick="wsMenu(event,${q(p)},${e.dir ? 1 : 0})">${ICON.more}</span></button>`;
 }
 function wsWalk(dir, depth){
@@ -6559,7 +6680,7 @@ async function wsUpload(list, dir){
 function wsMention(p){
   const input = $("#input"); if (!input) return;
   input.value += (input.value && !/\s$/.test(input.value) ? " " : "") + `「${wsRel(p)}」`;
-  if (narrow()) wsGo("chat"); else if (WS.nochat) wsToggleChat();
+  if (narrow()) wsGo("chat"); else if (wsNoChat()) wsToggleChat();
   drawComposerState(); input.focus();
 }
 function wsMenu(e, p, isDir){
@@ -6678,7 +6799,7 @@ function wsSelTool(sel){
   const go = how => {
     t.remove(); getSelection().removeAllRanges();
     const p = DOC.path;
-    if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (WS.nochat) wsToggleChat();
+    if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (wsNoChat()) wsToggleChat();
     setTimeout(() => { addQuote(`${wsRel(p)}：\n${text}`); const i = $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
   };
   ed.onclick = () => go("edit"); ask.onclick = () => go("ask");
@@ -6737,9 +6858,23 @@ function toggleList(on){
   addEventListener("pointerup", end); addEventListener("pointercancel", end);
   rz.addEventListener("dblclick", () => { app.style.removeProperty("--list-w"); try { localStorage.removeItem("ccim.listW"); } catch {} });
 })();
-// iPad、手机：输入法收起后 Safari 有时不把页面滚回去，上半截卡着（#56）。输入框失焦、可视区域变回原高时滚回顶部
+// iPad、手机：输入法收起后 Safari 有时不把页面滚回去，上半截卡着（#56）。输入框失焦、可视区域变回原高时滚回顶部。
+// 弹出输入法时 Safari 不只滚整页，还会把输入框外层 overflow:hidden 的容器（布局用的，用户自己滚不动）也滚上去，
+// 只复位整页的话换个页面结构就又卡住（#237 工作区）。所以把这类被滚过的容器一起复位，所有页面通用
 (function(){
-  const reset = () => { if (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop) { window.scrollTo(0, 0); document.documentElement.scrollTop = document.body.scrollTop = 0; } };
+  const stuck = () => {
+    const out = [];
+    for (const el of document.querySelectorAll("body *")) {
+      if (!el.scrollTop && !el.scrollLeft) continue;
+      const o = getComputedStyle(el);
+      if (/hidden|clip/.test(o.overflowY + o.overflowX) && !/auto|scroll/.test(o.overflowY)) out.push(el);
+    }
+    return out;
+  };
+  const reset = () => {
+    if (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop) { window.scrollTo(0, 0); document.documentElement.scrollTop = document.body.scrollTop = 0; }
+    for (const el of stuck()) { el.scrollTop = 0; el.scrollLeft = 0; }
+  };
   document.addEventListener("focusout", e => { if (e.target.matches && e.target.matches("textarea,input")) setTimeout(() => { if (!document.activeElement || !document.activeElement.matches("textarea,input")) reset(); }, 120); });
   const vv = window.visualViewport;
   if (vv) { let full = vv.height; vv.addEventListener("resize", () => { if (vv.height >= full - 1) { full = vv.height; reset(); } else if (vv.height > full) full = vv.height; }); }

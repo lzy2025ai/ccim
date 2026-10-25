@@ -1368,6 +1368,7 @@ const ICON = {
   branch:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-5 4-11 7"/></svg>',
   fold:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg>',
   check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L19 7"/></svg>',
+  photo:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>',
   file:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/></svg>',
   grow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
   shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
@@ -2416,7 +2417,7 @@ function drawChat(){
         <div class="ta-wrap" id="ta-wrap"><textarea id="input" rows="2" aria-label="输入消息"></textarea>
           <button class="icon-btn" id="ta-size" hidden onclick="toggleInput()"></button></div>
         <div class="bar"><div class="opts">
-          <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
+          <button class="icon-btn" aria-label="添加图片或文件" onclick="pickFiles(event)">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
@@ -2970,6 +2971,16 @@ async function thumbOf(file){
 }
 const isImg = name => /\.(png|jpe?g|gif|webp|svg)$/i.test(name || "");
 const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
+// Android 的浏览器：不限类型的选择框直接进文件管理器，只收图片视频才打开相册，所以先问选哪个（#234）
+function pickFiles(e){
+  const inp = $("#fileinput");
+  if (!/Android/i.test(navigator.userAgent)) { inp.removeAttribute("accept"); return inp.click(); }
+  const pp = pop(e, `<button data-k="media">${ICON.photo}照片和视频</button><button data-k="file">${ICON.file}文件</button>`);
+  pp.querySelectorAll("[data-k]").forEach(b => b.onclick = () => {
+    if (b.dataset.k === "media") inp.accept = "image/*,video/*"; else inp.removeAttribute("accept");
+    closePop(); inp.click();
+  });
+}
 async function addFiles(list){
   for (const file of list){
     const f = {name: file.name || "粘贴的图片.png"}, k = draftKeys.input;
@@ -3019,7 +3030,7 @@ function renderNewChat(){
           <div class="pending" id="pending"></div>
           <textarea id="input" rows="3" placeholder="想让它做什么？" aria-label="输入消息"></textarea>
           <div class="bar"><div class="opts">
-            <button class="icon-btn" aria-label="添加图片或文件" onclick="$('#fileinput').click()">${ICON.clip}</button>
+            <button class="icon-btn" aria-label="添加图片或文件" onclick="pickFiles(event)">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
             <span class="seg mini">${(noCodex(d.machine || S.me) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>

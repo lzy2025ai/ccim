@@ -1131,12 +1131,9 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .retry{color:var(--bad);font-size:13px}
 
 /* ---------- 工作区（#206）：对话 / 工作区两种看法 ---------- */
-.ws-sw{position:relative;display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;flex:none}
-.ws-sw button{position:relative;z-index:1;width:76px;display:flex;align-items:center;justify-content:center;gap:5px;padding:3px 0;border-radius:7px;font-size:13px;color:var(--muted);transition:color .3s}
-.ws-sw button svg{width:15px;height:15px}
-.ws-sw .pill{position:absolute;top:3px;bottom:3px;left:3px;width:76px;border-radius:7px;background:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.12);transition:transform .5s cubic-bezier(.3,1.35,.5,1)}
-.ws-sw[data-on=ws] .pill{transform:translateX(76px)}
-.ws-sw[data-on=chat] button:first-of-type,.ws-sw[data-on=ws] button:last-of-type{color:var(--ink)}
+.ws-backchat{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;font-size:13px}
+.ws-backchat svg{width:15px;height:15px}
+.ws-backchat[hidden]{display:none}
 .ws-chatbtn.on{color:var(--qing);background:var(--qing-soft)}
 .ws-chatbtn[hidden]{display:none}
 .ws-filesbtn{display:none;position:relative}
@@ -1273,7 +1270,7 @@ html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transit
 @keyframes ws-fade{to{opacity:0}}
 
 @media (max-width:760px){
-  .ws-sw,.ws-chatbtn{display:none!important}
+  .ws-backchat,.ws-chatbtn{display:none!important}
   .ws-filesbtn{display:grid}
   #main.ws-files .chat-head,#main.ws-file .chat-head,#main.ws-files #ext-notice,#main.ws-file #ext-notice{display:none}
   #main.ws-files .ws-convo,#main.ws-file .ws-convo{display:none}
@@ -2699,7 +2696,9 @@ function itemMenu(e, id, below){
   const ref = detail && detail.agent && !detail.readonly && c.agent === detail.agent && id !== detail.id && current.view === "agents";
   const ag = c.agent && agentOf(c.agent);
   const away = current.view === "agents" && ag && !ag.shared && !String(id).startsWith("x:");   // 网页里和 Agent 的对话：能转到微信、飞书接着聊（#212）
+  const wsOk = !c.readonly && !c.mention_of && !c.side_of && !String(id).startsWith("x:");
   pop(at, [
+    wsOk ? b(`wsFromMenu(${q(id)})`, WS && WS.chat === id && WS.on && !narrow() ? "回到对话" : "打开工作区") : "",
     ref ? b(`addRef(${q(id)})`, "引用到输入框") : "",
     b(`renameChat(${q(id)})`, "重命名"),
     away ? b(`handoffChat(${q(id)},'weixin')`, "到微信接着聊") + b(`handoffChat(${q(id)},'feishu')`, "到飞书接着聊") : "",
@@ -6346,7 +6345,7 @@ const wsShown = () => !!(WS && (narrow() ? WS.scr === "file" || WS.scr === "file
 const wsEdShown = () => !!(WS && (narrow() ? WS.scr === "file" : WS.on));
 
 function wsMount(c){
-  if (!wsCan(c)) { if (WS && DOC && DOC.ws) DOC = null; WS = null; wsApply(); return; }
+  if (!wsCan(c)) { if (WS && DOC && DOC.ws) DOC = null; WS = null; wsPending = null; wsApply(); return; }
   if (!WS || WS.chat !== c.id) {
     if (WS && DOC && DOC.ws) DOC = null;
     const s = wsSaved(c.id);
@@ -6360,6 +6359,7 @@ function wsMount(c){
   wsFlagsFromLog(c);
   wsApply();
   if (wsShown()) wsShow();
+  if (wsPending === c.id) { wsPending = null; setTimeout(() => narrow() ? wsGo("files") : wsSetMode(true)); }
 }
 // 最近一次改了文件的回答：没打开看过的标出来（「AI 刚改的」）
 function wsFlagsFromLog(c){
@@ -6381,15 +6381,22 @@ function wsApply(){
   m?.classList.toggle("ws-file", !!(WS && narrow() && WS.scr === "file"));
   app.classList.toggle("ws-mode", on);
   document.documentElement.classList.toggle("ws-dark", on || !!(WS && narrow() && (WS.scr === "files" || WS.scr === "file")));
-  const sw = $("#ws-sw"); if (sw) sw.dataset.on = on ? "ws" : "chat";
+  const bb = $("#ws-backbtn"); if (bb) bb.hidden = !on;
   const cb = $("#ws-chatbtn"); if (cb) { cb.hidden = !on; cb.classList.toggle("on", !!WS && !wsNoChat()); cb.title = wsNoChat() ? "显示对话" : "收起对话"; }
   const fb = $("#ws-filesbtn"); if (fb) { const n = WS ? Object.keys(WS.flags).length : 0; fb.innerHTML = ICON.folder + (n ? `<span class="badge">${n}</span>` : ""); }
   drawWsCtx();
 }
+// 三点菜单里的「打开工作区 / 回到对话」：不是当前打开的对话就先打开它，等工作区准备好再进去
+let wsPending = null;
+function wsFromMenu(id){
+  if (WS && WS.chat === id) return narrow() ? wsGo("files") : wsSetMode(!WS.on);
+  const c = rowOf(id); if (!c) return;
+  wsPending = id; location.hash = boardHref(c);
+}
 function wsHead(c){
   if (!wsCan(c)) return "";
-  return `<span class="ws-sw" id="ws-sw" data-on="chat" role="tablist" aria-label="看法"><i class="pill"></i>
-      <button role="tab" onclick="wsSetMode(false)">${ICON.chat}对话</button><button role="tab" onclick="wsSetMode(true)">${ICON.cols}工作区</button></span>
+  // 工作区是对话的补充（#206 第二轮）：入口在三点菜单里，顶部只在工作区里时放一个「回到对话」
+  return `<button class="btn ws-backchat" id="ws-backbtn" hidden onclick="wsSetMode(false)">${ICON.chat}回到对话</button>
     <button class="icon-btn ws-chatbtn" id="ws-chatbtn" hidden aria-label="收起对话" onclick="wsToggleChat()">${ICON.panel}</button>
     <button class="icon-btn ws-filesbtn" id="ws-filesbtn" aria-label="文件" title="文件" onclick="wsGo('files')">${ICON.folder}</button>`;
 }

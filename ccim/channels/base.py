@@ -94,6 +94,10 @@ class Channel:
     async def send_file(self, chat_id, path):
         raise NotImplementedError
 
+    async def send_chatlog(self, chat_id, log):
+        """一份聊天记录 {"title", "items": [{"sender", "time", "text", "image"}]}。不能显示成卡片的渠道发成文字时间线。"""
+        await chatlog_as_text(self, chat_id, log)
+
     async def download(self, message_id, kind, key, name, folder):
         """把收到的图片、文件下载到 folder，返回本地路径。"""
         raise NotImplementedError
@@ -150,3 +154,22 @@ def split_text(s, limit):
         fixed.append(part + ("\n```" if open_fence else ""))
     return fixed
 
+
+
+def chatlog_text(log):
+    """聊天记录写成 Markdown：每条一个引用块，发言人和时间在上面一行；图片写成「[图片]」，另外发。"""
+    out = [f"**{log.get('title') or '聊天记录'}**"]
+    for it in log.get("items") or []:
+        head = " ".join(x for x in (f"**{it.get('sender') or ''}**" if it.get("sender") else "", it.get("time") or "") if x)
+        body = it.get("text") or ""
+        if it.get("image"):
+            body = (body + "\n" if body else "") + "[图片]"
+        out.append((head + "\n" if head else "") + "\n".join("> " + x for x in body.split("\n")))
+    return "\n\n".join(out)
+
+
+async def chatlog_as_text(channel, chat_id, log):
+    await channel.send_text(chat_id, chatlog_text(log))
+    for it in log.get("items") or []:
+        if it.get("image"):
+            await channel.send_file(chat_id, it["image"])

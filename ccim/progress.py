@@ -45,6 +45,8 @@ def describe_tool(name, inp):
                 "skill_install": "安装 Skill", "skill_enable": "启用 / 停用 Skill", "skill_delete": "删除 Skill"}.get(name.split("__")[-1], "处理 Skill")
         target = "/".join(x for x in (inp.get("name"), inp.get("path")) if x) or inp.get("source") or ""
         return f"{what} {short(target, 50)}".strip()
+    if name.startswith("mcp__ccim__send_chatlog"):
+        return f"发送聊天记录 {short(inp.get('title'), 40)}".strip()
     if name.startswith("mcp__ccim__send_file"):
         return f"发送文件 {base(inp.get('path'))}"
     if name.startswith("mcp__"):

@@ -82,6 +82,8 @@ class Mentions:
                 lines.append(f"{self._who(cid, r.get('by'))}：{r['text']}")
             elif r.get("type") == "answer" or (r.get("type") == "mention" and r.get("state") == "done"):
                 lines.append(f"{self._name(m, r)}：{r['text']}")
+            elif r.get("type") == "chatlog":
+                lines.append(f"{self._name(m, r)}发了一份聊天记录：\n{r['text']}")
         text = "\n\n".join(lines)
         return text[-CONTEXT_LIMIT:] if len(text) > CONTEXT_LIMIT else text
 

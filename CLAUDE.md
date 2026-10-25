@@ -257,6 +257,8 @@
 - 能选的模型（`ccim/models.py`）：Claude Code 的列表来自连一次会话时 initialize 里的 models（不发消息，要用和对话同一个 claude，
   不同版本别名指向不同型号），平台每天刷新，存 ~/.ccim/models.json；「更多模型」（旧版本）来自 Claude Code 按账号缓存的
   ~/.claude/cache/model-catalog/*-cc.json（section=overflow），和桌面端模型菜单一致。Codex 读它自己的 ~/.codex/models_cache.json
+- 聊天记录（#218）：`send_chatlog` 工具（标题 + 每条的发言人、时间、原文、图片），原文不经助手改写。WebChannel 记 type=chatlog（图片存一份到 snaps，text 是文字版，给 @ 的人看），
+  网页显示成卡片、点开看全部；别的渠道 `Channel.send_chatlog` 退回成文字时间线再逐张发图（微信里包了一层的项目渠道走 `chatlog_as_text`）
 - 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（ccim 里没有，报 disabled，钩子接不到）：`_turn_inner` 看到这个调用就像中途补充一样补一句改用 mcp__ccim__send_file（#190）
 - 连不上 Claude 时 Claude Code 会发 `SystemMessage(api_retry)`（attempt），`Turn.retry` 记下，网页进度和飞书卡片显示「网络不稳，正在重试」
 - `ccim/search.py`：Agent 搜自己参与过的对话（#180）。`search_chats` / `open_chat`（session.py `_search_tools`，平台上 Agent 的对话都有，含群聊里被 @ 的子对话）。

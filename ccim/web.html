@@ -1624,7 +1624,8 @@ async function loadState(){
     if (on !== SKC.on) { SKC.on = on; drawSkChat(); }
   }
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
-    clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(current.id), 300);   // 它的对话列表（含终端里的）单独拉
+    const aid = current.id;                // 300 毫秒后可能已经跳到别的对话（#/chats/<对话>），要记下现在是哪个 Agent
+    clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(aid), 300);   // 它的对话列表（含终端里的）单独拉
   }
   seeOpen(); renderList(); drawAttention();
   if (current.view === "board") renderBoard(true);
@@ -1949,6 +1950,11 @@ async function openChat(id){
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
     current = {view: "agents", id: detail.agent, sub: id};
     document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === "agents"));
+    if (agentSide && agentSide.id === detail.agent && !agentSide.chats.some(c => c.id === id)) {   // 刚分叉、刚开的：先插进列表，再整份重取
+      const row = S.chats.find(c => c.id === id);
+      if (row) agentSide.chats.unshift(row);
+      fetchAgentSide(detail.agent);
+    }
     renderList();
   }
   drawChat(); doJump(); markSeen(id);

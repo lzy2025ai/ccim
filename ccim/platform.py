@@ -852,7 +852,7 @@ class Platform:
         if text and not m.get("title"):       # 用用户的原话当标题：交给助手的会拼上引用说明等前缀
             chats = self.chats()
             if cid in chats and not chats[cid].get("title"):
-                chats[cid]["title"] = " ".join(text.split())[:30]
+                chats[cid]["title"] = title_text(text)[:30]
                 self.store.write(chats)
         from .bridge import QUEUE
         head = re.match(r"(?:>[^\n]*\n)*\s*", text or "").end()   # 网页的引用拼在最前面，跳过它再认（#117）
@@ -1141,7 +1141,7 @@ class Platform:
         if not m.get("parent"):
             return None
         q = next((r.get("text") for r in reversed(self.channel.logs.read(cid)) if r.get("type") == "user" and r.get("text")), "")
-        q = " ".join(q.split())
+        q = title_text(q)
         return f"从「{q[:16]}{'…' if len(q) > 16 else ''}」分出" if q else None
 
     def chat_view(self, cid):
@@ -2278,6 +2278,12 @@ def _busy_of(a):
     for kind, proc, path in agents.linked_paths(a["id"]):
         rows += [c for c in console._all_chats(proc) if c.get("busy")]
     return rows
+
+
+def title_text(text):
+    """用户的话当标题：网页的引用（> 开头的行）拼在最前面，有正文用正文，只有引用就用引用的字。"""
+    body = re.sub(r"^(?:>[^\n]*(?:\n|$))*", "", text or "").strip()
+    return " ".join((body or re.sub(r"^>\s?", "", text or "", flags=re.M)).split())
 
 
 def agent_view(pf, aid, detail=False):

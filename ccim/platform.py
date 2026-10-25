@@ -859,7 +859,8 @@ class Platform:
                 out.append({"id": i, "title": v.get("title") or "对话"})
         return out[:10]
 
-    async def send(self, cid, text, files=(), ctx=None, refs=None):
+    async def send(self, cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None):
+        """hidden：接在用户这句话后面交给助手、不进记录的内容（复盘的材料）；mark：记在用户这条记录上的标记。"""
         b = self._bridge(cid)
         m = self.meta(cid)
         refs = self._refs(cid, refs)
@@ -869,7 +870,7 @@ class Platform:
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
-                                                               **({"refs": refs} if refs else {})}))
+                                                               **({"refs": refs} if refs else {}), **(mark or {})}))
         if text and not m.get("title"):       # 用用户的原话当标题：交给助手的会拼上引用说明等前缀
             chats = self.chats()
             if cid in chats and not chats[cid].get("title"):
@@ -893,9 +894,34 @@ class Platform:
             text = f"（{str(ctx)[:300]}）\n{text}"
         elif isinstance(ctx, dict) and isinstance(ctx.get("ws_file"), str) and text and self.ws_in(cid, ctx["ws_file"]):
             text = f"（我正在工作区里看这个文件：{ctx['ws_file']}）\n{text}"     # 工作区（#206）
+        if hidden and text:
+            text = f"{text}\n\n{hidden}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
+
+    def review(self, d, aid, mat):
+        """复盘某一天（#241）：交给选的 Agent，复盘是它的一个普通对话（meta 的 review 记日期），同一天再复盘接着这个对话。
+        材料由网页从各台电脑取来（/api/board/day?material=1）。在主循环里调。"""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""):
+            raise Problem("日期不对。")
+        if not agents.get(aid):
+            raise Problem("找不到这个 Agent。")
+        chats = self.chats()
+        cid = next((c for c, m in chats.items() if m.get("review") == d and m.get("agent") == aid and not m.get("account")), None)
+        again = bool(cid)
+        if not cid:
+            y, mo, dd = d.split("-")
+            cid = self.new_chat(agent=aid, title=f"{int(mo)}月{int(dd)}日 复盘")
+            chats = self.chats()
+            chats[cid]["review"] = d
+            self.store.write(chats)
+        prompt = (registry.global_config().get("review_prompt") or board_mod.REVIEW_PROMPT).replace("{date}", d)
+        hidden = prompt + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
+        t = asyncio.ensure_future(self.send(cid, "重新复盘这一天" if again else "复盘这一天", hidden=hidden, mark={"review": d}))
+        self.background.add(t)
+        t.add_done_callback(self.background.discard)
+        return {"chat": cid}
 
     async def helper_chat(self, kind, fresh=False, account=None):
         """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个（共享电脑上的访客各自一个），不进对话列表；fresh 就换一个新的。"""
@@ -1180,7 +1206,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m),
+                "listed": listed(cid, m), "review": m.get("review"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -1972,7 +1998,11 @@ def _handler(pf):
                 "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
                 "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
-                "/api/board/day": lambda: pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
+                "/api/board/day": lambda: {**pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
+                                           **({"material": pf.call(board_mod.material, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
+                                              if q.get("material") else {})},
+                "/api/board/review_prompt": lambda: {"prompt": registry.global_config().get("review_prompt") or board_mod.REVIEW_PROMPT,
+                                                     "default": board_mod.REVIEW_PROMPT},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
@@ -2050,6 +2080,8 @@ def _handler(pf):
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
+                "/api/board/review": lambda: pf.call(pf.review, b("date") or "", b("agent") or "", b("material") or ""),
+                "/api/board/review_prompt": lambda: (registry.set_global(review_prompt=(b("prompt") or "").strip()[:4000] or None), {})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),
                 "/api/ws/rename": lambda: pf.ws_call(b("chat"), workspace.rename, b("path") or "", b("name")),

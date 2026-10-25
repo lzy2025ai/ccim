@@ -173,7 +173,7 @@ def day(pf, d, keep=None, everything=True):
     chats = pf.chats()
     own = _sid_owners(pf, chats)
     for cid, m in chats.items():
-        if not _counted(cid, m, keep) or m.get("mention_of"):
+        if not _counted(cid, m, keep) or m.get("mention_of") or m.get("review"):
             continue
         s = summary(pf.channel.logs, cid)
         sp = (s.get("spans") or {}).get(d)
@@ -191,6 +191,43 @@ def day(pf, d, keep=None, everything=True):
         tk = tokens.days().get(d) or [0, 0] if everything else \
             [sum(r["tokens"][0] for r in rows), sum(r["tokens"][1] for r in rows)]
     return {"date": d, "chats": rows, "hours": hours, "tokens": tk}
+
+
+# ----- 复盘（#241） -----
+
+REVIEW_PROMPT = """帮我复盘 {date} 这一天。后面附了这一天各个对话的材料：我说了什么、一句话进度、最后的回答。
+
+用要点写，简洁，分三部分：
+## 今天做成了
+## 卡在我这里（要我决定、确认或提供什么）
+## 明天建议先做
+
+材料不够时用 search_chats / open_chat 去看那个对话；也可以搜你以前的复盘，连着几天没动的事要指出来。"""
+
+MATERIAL_MAX = 60000
+
+
+def material(pf, d, keep=None):
+    """某一天的复盘材料：每个对话的标题、谁、几点、一句话进度、那天我说的话、最后的回答。"""
+    from .agents import get as agent_get
+    out = []
+    for r in day(pf, d, keep)["chats"]:
+        rows = [x for x in pf.channel.logs.read(r["id"])
+                if time.strftime("%Y-%m-%d", time.localtime(x.get("at") or x.get("done_at") or 0)) == d]
+        asks = [ask_preview(x.get("text")) for x in rows if x.get("type") == "user" and not x.get("by") and x.get("text")]
+        ans = next((x.get("text") for x in reversed(rows) if x.get("type") == "answer" and x.get("text")), "")
+        a = agent_get(r["agent"]) if r.get("agent") else None
+        head = f"### {r['title']}（{a['name'] if a else '临时对话'}，{time.strftime('%H:%M', time.localtime(r['first']))}"
+        head += f"–{time.strftime('%H:%M', time.localtime(r['last']))}）"
+        part = [head]
+        if r.get("brief"):
+            part.append(f"进度：{r['brief']}")
+        part += [f"我说：{t[:200]}" for t in asks[-6:]]
+        if ans:
+            part.append("最后的回答：" + " ".join(ans.split())[:600])
+        out.append("\n".join(part))
+    text = "\n\n".join(out)
+    return text[:MATERIAL_MAX]
 
 
 # ----- 一句话进度 -----

@@ -263,13 +263,21 @@ class Dev:
         main = runtime._git("rev-parse", "origin/main").stdout.strip()
         phase = _phase()                      # 更新做到一半时按旧版本算会说「有改动没用上」，这时不算
         updating = bool(phase)
+        promote = bool(main) and runtime.stable_behind(main)
+        restart = bool(main and self.started) and not trying and runtime.needs_restart(self.started, main, live=True)
+        if main and not updating and not promote and not restart and not trying:
+            # 只改了文档、网页这类不用重启的（#228）：代码目录直接跟上，不提示「更新这台 Mac」
+            if not runtime._git("rev-parse", "HEAD").stdout.strip().startswith(main):
+                _run(["git", "-C", runtime._repo(), "pull", "-q", "--ff-only"], timeout=120)
+            merged = []
         return {"repo": repo, "review": review, "merged": [] if updating else merged, "updating": updating, "phase": phase,
                 "shipped": shipped,
                 "stable": runtime._channel().get("current"),
                 "last": runtime.last_promote(),
                 "local_url": f"http://127.0.0.1:{registry.read_state(self.pf.home).get('port') or 8977}/",
                 "trying": trying and {"label": trying.get("label"), "branch": trying.get("branch")},
-                "stale": bool(main and self.started and not main.startswith(self.started[:7]) and not trying and not updating),
+                "stale": restart and not updating,
+                "restart": promote or restart,     # 「更新这台 Mac」会不会重启
                 "at": time.time()}
 
     def _shipped(self, repo):
@@ -387,7 +395,11 @@ class Dev:
             if not it["problem"] and any(m in bad for m in below[it["pr"]]):
                 it["problem"] = "叠在合不了的 " + "、".join(f"#{m}" for m in below[it["pr"]] if m in bad) + " 后面"
                 bad.add(it["pr"])
-        return {"items": items, "merged": [n for n, x in info.items() if x.get("state") == "MERGED"]}
+        for it in items:                      # 合进去之后这台 Mac 要不要重启（#228）：只改了文档这类的不用
+            base = _run(["git", "-C", main, "merge-base", "origin/main", it["head"]], timeout=30).stdout.strip()
+            it["restart"] = runtime.needs_restart(base, it["head"])
+        return {"items": items, "merged": [n for n, x in info.items() if x.get("state") == "MERGED"],
+                "pending": bool((getattr(self, "cache", None) or {}).get("restart"))}   # 之前合进去、还没用上的要重启
 
     def ship(self, prs):
         """上线（#156 第二轮、#207）：先检查，有合不了的就不开始；逐个合并，中途失败就停、不更新；全部合好最后更新一次。"""
@@ -399,7 +411,7 @@ class Dev:
 
     def update(self):
         """已经合并了（比如 Agent 在对话里合的）、这台 Mac 还没用上：只做更新。"""
-        return self._start("update", lambda: (self._update(), "")[1])
+        return self._start("update", lambda: "这台 Mac 已更新，不用重启" if self._update() else "")
 
     def _ship(self, prs):
         self._step("检查能不能合并")
@@ -419,8 +431,8 @@ class Dev:
                 raise RuntimeError(note)
             done.append(tag)
             heads[it["pr"]] = it["head"]
-        self._update()
-        return "、".join(done) + " 已上线"
+        quiet = self._update()
+        return "、".join(done) + " 已上线" + ("，不用重启" if quiet else "")
 
     def _sync(self, it, onto_from=None):
         """把分支对齐到最新的 main 并强推。onto_from：它叠在后面、刚合进去的那个分支原来的最后一次提交，只搬自己的提交（#207）。"""
@@ -497,11 +509,17 @@ class Dev:
             _run(["git", "-C", main, "branch", "-D", p["branch"]], timeout=30)
 
     def _update(self):
+        """拉最新代码；有要重启的改动才打稳定版、重启（#228）。什么都没重启返回 True。"""
         main = runtime._repo()
         self._step("更新这台 Mac")
         _run(["git", "-C", main, "pull", "-q", "--ff-only"], timeout=120)
+        new = runtime._git("rev-parse", "HEAD").stdout.strip()
         trying = runtime.trying()
-        runtime.start_promote()               # 独立进程：装新版本、等各项目手头的活做完再重启
+        promote = runtime.stable_behind(new)
+        if promote:
+            runtime.start_promote()           # 独立进程：装新版本、等各项目手头的活做完再重启
+        if not trying and not runtime.needs_restart(self.started, new, live=True):
+            return not promote
         if trying:                            # 切回 main 后，试用的工作目录（已合并的）可以清掉
             merged = trying.get("branch")
             r = _run(["git", "-C", main, "branch", "-r", "--list", f"origin/{merged}"], timeout=30)
@@ -510,6 +528,7 @@ class Dev:
                                   main, trying["src"], merged], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, start_new_session=True, cwd="/")
         runtime.set_try("main")               # 本机跑开发版的进程（网页平台也是）用上最新代码；平台会重启，网页断开一会儿
+        return False
 
     # 平台重启后还能看到上一次上线的结果
     def _job_file(self):

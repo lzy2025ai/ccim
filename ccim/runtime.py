@@ -435,6 +435,42 @@ def promote(wait=180):
 
 # ---------- 在对话里升级：先确认，后台做，做完回报（#146） ----------
 
+# 改了也不用重启的（#228）：文档、仓库说明、插件里的 skill 和钩子、CI 和部署脚本。
+# 网页和随包图标每次请求现读，只对直接从代码目录跑的进程（开发版）不用重启
+NO_RESTART = ("docs/", ".github/", "deploy/", "skills/", "hooks/", ".claude-plugin/", "tests/", "LICENSE")
+LIVE = ("ccim/web.html", "ccim/static/")
+
+
+def needs_restart(a, b, live=False):
+    """代码从提交 a 换到 b，在跑的进程要不要重启。比不出来（没有 a、提交找不到）算要。"""
+    if not a or not b:
+        return True
+    if all(re.fullmatch(r"[0-9a-f]{7,40}", x) for x in (a, b)) and (b.startswith(a) or a.startswith(b)):
+        return False                          # 同一个提交（一个是缩写）
+    r = _git("diff", "--name-only", "-z", a, b)      # -z：中文文件名不加引号转义
+    if r.returncode != 0:
+        return True
+    free = NO_RESTART + (LIVE if live else ())
+    return any(not (f.endswith(".md") or f.startswith(free)) for f in r.stdout.split("\0") if f)
+
+
+def _stale_stable(py=None):
+    """跑稳定版、但不是当前稳定版的进程（钉了版本的也算）。"""
+    from . import daemon
+    py = py or stable_python()
+    return [proc_label(p) for p, e in sorted(registry.all_projects().items())
+            if which(p, e)[1] != "开发版" and daemon.running(p)
+            and (e.get("stable_version") or not py or _env(registry.read_state(p).get("python") or "") != _env(py))]
+
+
+def stable_behind(new=None):
+    """要不要打新的稳定版、重启跑稳定版的进程：main 上有要重启的改动，或者还有进程在跑旧的稳定版。"""
+    cur = (_channel().get("current") or "").rsplit("-", 1)[-1]
+    new = new or _git("rev-parse", "origin/main").stdout.strip()
+    web = any(e.get("kind") == "platform" and which(p, e)[1] != "开发版" for p, e in registry.all_projects().items())
+    return needs_restart(cur, new, live=not web) or bool(_stale_stable())   # 跑稳定版的里没有网页平台：网页的改动用不上
+
+
 def promote_plan():
     """确认卡片上写的：升级的是什么、这次改了什么、会重启哪些。不用升级（已是最新、也没有要重启的）返回 None。"""
     from . import daemon
@@ -442,10 +478,7 @@ def promote_plan():
     cur = (_channel().get("current") or "").rsplit("-", 1)[-1]
     ref = "origin/main" if _git("rev-parse", "--verify", "-q", "origin/main").returncode == 0 else "main"
     new = _git("rev-parse", ref).stdout.strip()
-    py = stable_python()
-    stale = [proc_label(p) for p, e in sorted(registry.all_projects().items())
-             if which(p, e)[1] != "开发版" and daemon.running(p)
-             and (e.get("stable_version") or not py or _env(registry.read_state(p).get("python") or "") != _env(py))]
+    stale = _stale_stable()
     same = bool(cur) and new.startswith(cur)
     if same and not stale:
         return None

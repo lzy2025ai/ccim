@@ -150,6 +150,13 @@
   （HTML 还有样式表、脚本）由 `docs.view` 打包成 data: 地址，所以别的电脑、服务器上也能显示，HTML 放 sandbox iframe 的 srcdoc。
   Markdown 用 `docMd`（比聊天的 md() 全，每块带 data-l 原文行号）。保存（/api/doc/save）带打开时的 mtime，文件被改过就拒绝；
   记一条 type=edit，对话 meta 的 doc_edits 在下一次发消息时拼在前面告诉助手。Word 自己转（`docx_html`），只能看
+- 工作区（#206，`ccim/workspace.py`，原型 docs/prototype/workspace.html）：对话页头部「对话 | 工作区」切换（每个对话记在 localStorage，`WS`）。
+  工作区 = 左边对话工作目录（`Platform.chat_dir`，和 `_bridge` 一样算）的文件树、中间编辑区、右边还是这个对话；手机上是头部「文件」→ 全屏文件树 → 全屏文件，「问 AI」回对话。
+  编辑区就是文档面板画在中间（DOC.ws，每个标签一个 DOC，`drawWsDoc`），自己改的停 1.2 秒自动保存，连着几次保存在记录里合成一条 edit（MERGED 带 edit、同一个 id）。
+  docs 多了 text 类型（代码、纯文本，直接改）；工作目录里的文件 `ws_in` 放行预览、下载。文件操作 /api/ws/*（`resolve` / `entry_path` 圈在工作目录里，软链接指到外面的不列；删除进废纸篓，返回撤销用的记号）。
+  AI 改了哪些文件：Turn.writing / changed / created（编辑工具，进度里实时推，网页标「正在写」）+ 答完时扫目录里修改时间晚于这一轮开始的（`changed_since`，主目录不扫），
+  记在回答的 changed（用户自己在网页里保存的不算，`user_saved`），回答下面列出来、点了在工作区打开。发消息带 ctx.ws_file（正在看的文件）拼在前面。
+  切换动效用 View Transitions（html[data-vt]），不支持或减弱动态效果时直接切
 - `ccim/filesend.py`：对话里的文件发给浏览器（#76）。本机的边读边发，支持 Range（206 / 416）和 ETag（304）。别的电脑上的（网页的 /api/file 带 machine，平台 `_remote` 和服务器 hubserver 都走 `serve_peer`）按段取 /api/file/part（一段 4 MB，回应是一行 JSON 文件信息 + 这一段），经现有转交通道（签名照旧），收到一段写一段、预取两段，所以没有大小上限；中途文件被改（ETag 变了）就断开连接。那边是旧版本（part 返回 404）时退回整个文件转发。链接、<img>、<video> 带不了 X-CCIM 头，所以 /api/file 在 `_remote` 里只校验 Host
 - `ccim/devices.py`：设备管理（#100）。「设置 → 电脑」点一台进入 #/settings/machines/<编号>/<概况 | files | clean>，接口 /api/fs/*，
   按 X-Machine 转到那台电脑。范围是那台的主目录（realpath 后比较）；主目录本身、第一层的系统文件夹（KEEP）和 ~/.ccim 不能删、不能改名

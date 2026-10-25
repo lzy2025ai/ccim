@@ -28,6 +28,7 @@ END = object()                # 收件箱里：和 Claude 的连接断了
 AWAKE = object()              # 没人问，Claude 自己开了一轮（比如后台任务做完了）
 MAX_BUFFER = 64 * 1024 * 1024   # SDK 默认单条消息 1 MB，Claude 读图片、大文件时会超，放宽到 64 MB
 STRAY_WAIT = 30           # 收到一个什么都没说的「一轮结束」（比如接上对话时补的后台任务通知那一轮）后，再等多久用户这一轮的结果
+FILE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}   # 改文件的工具（工作区标出 AI 改了哪些，#206）
 STALL = 300               # 某一步这么久没结果、也没有任何新动静，就提醒用户（#109）
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
@@ -126,6 +127,21 @@ class Turn:
         self.last = time.monotonic()          # 最近一次收到 Claude 的任何消息
         self.warned = None                    # 没有卡片的渠道：已经提醒过卡住的是哪一步
         self.hinted = False                   # 这一轮已经提醒过发文件用错了工具（#190）
+        self.writing = {}                     # 正在写的文件：工具调用编号 → 路径（工作区实时标出来，#206）
+        self.changed = []                     # 这一轮编辑工具写过的文件
+        self.created = []                     # 其中写之前还不存在的（新建的）
+
+    def wrote(self, tool_id, name, inp):
+        """编辑工具开始写一个文件：记下来，网页的工作区实时显示。"""
+        if name not in FILE_TOOLS or not isinstance(inp, dict):
+            return
+        p = inp.get("file_path") or inp.get("notebook_path")
+        if isinstance(p, str) and p:
+            self.writing[tool_id] = p
+            if p not in self.changed:
+                self.changed.append(p)
+                if not os.path.exists(p):     # 工具调用先到、真正写在后面：这时还没有就是新建的
+                    self.created.append(p)
 
     def say(self, text):
         self.text, self.live = text, ""
@@ -620,6 +636,7 @@ class Chat:
                             for b in m.content:
                                 if isinstance(b, ToolResultBlock):
                                     t.flight.pop(b.tool_use_id, None)
+                                    t.writing.pop(b.tool_use_id, None)
                         if (isinstance(m.content, list) and any(isinstance(b, ToolResultBlock) for b in m.content)
                                 and not self.stopping):    # 打断时那条「已中断」的工具结果不算
                             t.unseen = []         # 插进来的消息会跟着工具结果一起交给 Claude
@@ -648,6 +665,7 @@ class Chat:
                                     t.steps.append(d)
                                 if not m.parent_tool_use_id:
                                     t.flight[blk.id] = (d or blk.name, time.monotonic())
+                                t.wrote(blk.id, blk.name, blk.input)
                             elif isinstance(blk, TextBlock) and blk.text.strip():
                                 if m.parent_tool_use_id:
                                     t.text, t.live = blk.text, ""
@@ -746,7 +764,7 @@ class Chat:
 
     def _snap(self, t, state="working"):
         snap = {"state": state, "steps": list(t.steps), "text": t.live or t.text or "", "said": [list(x) for x in t.said],
-                "retry": t.retry,
+                "retry": t.retry, "writing": sorted(set(t.writing.values())), "changed": list(t.changed), "created": list(t.created),
                 "elapsed": round(time.monotonic() - t.start, 1)}
         st = t.stalled() if state == "working" else None
         if st:

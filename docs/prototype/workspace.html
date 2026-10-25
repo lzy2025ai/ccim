@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="zh-CN" data-fx="morph">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ccim · 对话 / 工作区 原型</title>
+<style>
+:root{
+  --paper:#F1F2EE; --panel:#FFFFFF; --sunk:#E8EAE5; --line:#DCDFD8; --line-strong:#C9CDC4;
+  --ink:#1D222B; --ink-2:#3A404A; --muted:#6C7169; --faint:#9A9F97;
+  --qing:#2B4C6F; --qing-soft:#E3EAF1;
+  --lu:#3F7A5E; --zhe:#9A5B34; --huang:#B8902A; --zhu:#B5402F;
+  --song:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.6 var(--sans);color:var(--ink);background:#D9DCD5;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+svg{flex:none}
+
+/* ---------- 原型控制条（不是产品界面） ---------- */
+.demo{flex:none;display:flex;align-items:center;gap:10px;padding:7px 14px;background:#2A2F37;color:#C9CDD3;font-size:12.5px;flex-wrap:wrap}
+.demo b{color:#fff;font-weight:600}
+.demo .seg{display:inline-flex;background:#3A404A;border-radius:7px;padding:2px}
+.demo .seg button{padding:2px 10px;border-radius:5px;color:#C9CDD3}
+.demo .seg button.on{background:#fff;color:#1D222B}
+.demo .act{padding:3px 10px;border-radius:6px;border:1px solid #4A515C;color:#E4E7EB}
+.demo .act:hover{background:#3A404A}
+.demo .grow{flex:1}
+@media (max-width:760px){.demo .dev{display:none}}
+
+.stage{flex:1;min-height:0;display:flex;justify-content:center;align-items:center}
+.frame{width:100%;height:100%;container-type:inline-size;container-name:f;background:var(--paper);position:relative;overflow:hidden}
+.stage.phone{padding:18px}
+.stage.phone .frame{width:390px;height:min(800px,100%);border-radius:34px;box-shadow:0 0 0 10px #1D222B,0 20px 50px rgba(0,0,0,.3)}
+
+/* ---------- 骨架 ---------- */
+.app{display:grid;grid-template-columns:76px 280px 1fr;height:100%}
+.app.ws{grid-template-columns:76px 0 1fr}
+.app.ws .list{display:none}
+.rail{grid-column:1}.list{grid-column:2}.main{grid-column:3}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0;border-right:1px solid var(--line)}
+.brand{font:700 15px/1 var(--song);margin-bottom:18px}
+.rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);text-decoration:none;font-size:12px}
+.rail a svg{width:20px;height:20px}
+.rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.list-head{padding:18px 16px 10px}
+.list-head h1{font:600 19px/1.2 var(--song);margin:0;white-space:nowrap}
+.group{font-size:12px;color:var(--faint);padding:12px 18px 4px;white-space:nowrap}
+.item{display:flex;gap:10px;padding:9px 10px;margin:0 8px;border-radius:10px;align-items:center;width:calc(100% - 16px);text-align:left;white-space:nowrap}
+.item:hover{background:var(--sunk)}
+.item.on{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.item .t{flex:1;min-width:0}
+.item .title{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.item .sub{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.seal{flex:none;width:30px;height:30px;border-radius:7px;background:var(--c,var(--qing));color:#fff;display:grid;place-items:center;font:700 14px/1 var(--song)}
+
+.main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+.head{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);min-height:57px}
+.head .name{font:600 16px/1.3 var(--song);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head .meta{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.head .grow{flex:1;min-width:0}
+.path{font:12px/1.4 var(--mono);color:var(--muted)}
+.icon-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted);position:relative}
+.icon-btn:hover{background:var(--sunk);color:var(--ink)}
+.icon-btn svg{width:17px;height:17px}
+.icon-btn.on{color:var(--qing);background:var(--qing-soft)}
+.badge{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--qing);color:#fff;font-size:10px;line-height:15px;text-align:center}
+
+/* 对话 | 工作区 切换 */
+.hl,.hr{display:contents}
+.mode{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px;flex:none;position:relative}
+.mode button{position:relative;z-index:1;width:84px;display:flex;align-items:center;justify-content:center;gap:5px;padding:4px 0;border-radius:7px;font-size:13px;color:var(--muted);transition:color .3s}
+.mode button svg{width:15px;height:15px}
+.mode .pill{position:absolute;top:3px;bottom:3px;left:3px;width:84px;border-radius:7px;background:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.12);transition:transform .5s cubic-bezier(.3,1.35,.5,1)}
+.mode[data-on=ws] .pill{transform:translateX(84px)}
+.mode[data-on=chat] [data-mode=chat],.mode[data-on=ws] [data-mode=ws]{color:var(--ink)}
+.m-only{display:none!important}
+
+/* 主体：文件树 | 编辑区 | 对话 —— 对话是同一个元素，只是换了位置 */
+.body{flex:1;min-height:0;display:grid;grid-template-columns:0 0 1fr}
+.app.ws .body{grid-template-columns:250px 1fr 370px}
+.app.ws.nochat .body{grid-template-columns:250px 1fr 0}
+.tree{grid-column:1}.editor{grid-column:2}.convo{grid-column:3}
+.app:not(.ws) .tree,.app:not(.ws) .editor,.app.ws.nochat .convo{display:none!important}
+
+/* ---------- 切换动效（View Transitions） ---------- */
+.head{view-transition-name:head}
+.list{view-transition-name:list}
+.tree{view-transition-name:tree}
+.editor{view-transition-name:editor}
+.convo{view-transition-name:convo}
+html[data-fx=flip] .body{view-transition-name:mbody}
+html[data-fx=flip] .tree,html[data-fx=flip] .editor,html[data-fx=flip] .convo{view-transition-name:none}
+::view-transition-group(*){animation-duration:.62s;animation-timing-function:cubic-bezier(.22,.9,.24,1)}
+::view-transition-old(head){display:none}
+::view-transition-new(head){animation:none}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+/* 对话列表收起、展开 */
+html[data-vt=to-ws]::view-transition-old(list){animation:list-out .22s cubic-bezier(.5,0,.75,0) both}
+html[data-vt=to-chat]::view-transition-new(list){animation:list-out .5s .12s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes list-out{to{transform:translateX(-24px) scale(.97);opacity:0;filter:blur(3px)}}
+/* 展开：文件树像门一样从左边转进来，编辑区像书页从右边翻开，对话滑到右边 */
+html[data-vt=to-ws]::view-transition-new(tree){animation:door .62s .06s cubic-bezier(.22,.9,.24,1) both;transform-origin:left center}
+html[data-vt=to-ws]::view-transition-new(editor){animation:page .72s .14s cubic-bezier(.22,.9,.24,1) both;transform-origin:right center}
+html[data-vt=to-chat]::view-transition-old(tree){animation:door .4s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:left center}
+html[data-vt=to-chat]::view-transition-old(editor){animation:page .42s cubic-bezier(.5,0,.75,0) reverse both;transform-origin:right center}
+@keyframes door{from{transform:perspective(1100px) rotateY(-88deg);opacity:0}}
+@keyframes page{from{transform:perspective(1800px) rotateY(58deg) translateX(60px);opacity:0}}
+::view-transition-group(editor),::view-transition-group(tree){overflow:clip}
+/* 对话：不缩放文字，整块滑到新位置（去工作区时滑到右边，回来时从右边滑回中间） */
+html[data-vt=to-ws]::view-transition-group(convo),html[data-vt=to-chat]::view-transition-group(convo){animation:none;z-index:5}
+html[data-vt=to-ws]::view-transition-old(convo),html[data-vt=to-chat]::view-transition-old(convo){display:none}
+html[data-vt=to-ws]::view-transition-new(convo){animation:convo-r .62s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=to-chat]::view-transition-new(convo){animation:convo-c .62s cubic-bezier(.22,.9,.24,1) both}
+@keyframes convo-r{from{transform:translateX(-95%) scale(.98);opacity:.2}}
+@keyframes convo-c{from{transform:translateX(32%) scale(.98);opacity:.2}}
+@keyframes fade-out{to{opacity:0}} @keyframes fade-in{from{opacity:0}}
+/* 收起 / 显示右边的对话 */
+html[data-vt=side]::view-transition-old(convo){animation:side-out .35s cubic-bezier(.5,0,.75,0) both}
+html[data-vt=side]::view-transition-new(convo){animation:side-out .45s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes side-out{to{transform:translateX(100%);opacity:0}}
+/* 翻转：整块像卡片一样翻到背面 */
+::view-transition-group(mbody){animation-duration:.8s}
+html[data-vt=to-ws]::view-transition-old(mbody){animation:flip-a .4s cubic-bezier(.4,0,1,.6) both}
+html[data-vt=to-ws]::view-transition-new(mbody){animation:flip-b .45s .38s cubic-bezier(.2,.8,.35,1.08) both}
+html[data-vt=to-chat]::view-transition-old(mbody){animation:flip-b .4s cubic-bezier(.4,0,1,.6) reverse both}
+html[data-vt=to-chat]::view-transition-new(mbody){animation:flip-a .45s .38s cubic-bezier(.2,.8,.35,1.08) reverse both}
+@keyframes flip-a{to{transform:perspective(2200px) rotateY(-90deg) scale(.94);filter:brightness(.92)}}
+@keyframes flip-b{from{transform:perspective(2200px) rotateY(90deg) scale(.94);filter:brightness(.92)}}
+/* 手机：一层层推进去、退出来 */
+html[data-vt=push]::view-transition-old(mbody){animation:push-back .38s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=push]::view-transition-new(mbody){animation:push-in .38s cubic-bezier(.22,.9,.24,1) both}
+html[data-vt=pop]::view-transition-old(mbody){animation:push-in .34s cubic-bezier(.22,.9,.24,1) reverse both;z-index:2}
+html[data-vt=pop]::view-transition-new(mbody){animation:push-back .34s cubic-bezier(.22,.9,.24,1) reverse both}
+@keyframes push-in{from{transform:translateX(100%);box-shadow:-10px 0 30px rgba(0,0,0,.12)}}
+@keyframes push-back{to{transform:translateX(-28%);opacity:.6}}
+html[data-vt=push]::view-transition-old(head),html[data-vt=pop]::view-transition-old(head){display:block;animation:fade-out .2s both}
+html[data-vt=push]::view-transition-new(head),html[data-vt=pop]::view-transition-new(head){animation:fade-in .25s .08s both}
+.tree,.editor,.convo{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.tree{background:#FAFAF8;border-right:1px solid var(--line)}
+.app.ws .convo{border-left:1px solid var(--line);background:#FBFBFA}
+
+/* ---------- 文件树 ---------- */
+.tree-head{display:flex;align-items:center;gap:2px;padding:10px 8px 6px 14px}
+.tree-head .root{flex:1;min-width:0;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree-head .icon-btn{width:26px;height:26px}
+.tree-head .icon-btn svg{width:15px;height:15px}
+.tree-scroll{flex:1;overflow:auto;padding:0 6px 20px}
+.tsec{font-size:11.5px;color:var(--faint);padding:10px 8px 3px;display:flex;align-items:center;gap:6px}
+.tsec button{margin-left:auto;font-size:11.5px;color:var(--faint)}
+.tsec button:hover{color:var(--ink)}
+.row{display:flex;align-items:center;gap:5px;width:100%;height:28px;padding:0 6px 0 calc(6px + var(--d,0) * 14px);border-radius:6px;font-size:13px;color:var(--ink-2);text-align:left;position:relative;user-select:none}
+.row:hover{background:var(--sunk)}
+.row.on{background:var(--qing-soft);color:var(--qing)}
+.row.drop{box-shadow:inset 0 0 0 1.5px var(--qing);background:var(--qing-soft)}
+.row .chev,.row .ic{display:flex;align-items:center;justify-content:center}
+.row .chev svg,.row .ic svg{width:100%;height:100%}
+.row .chev{width:12px;height:12px;color:var(--faint);transition:transform .15s}
+.row .chev.open{transform:rotate(90deg)}
+.row .chev.none{visibility:hidden}
+.row .ic{width:15px;height:15px;color:var(--faint)}
+.row .ic.folder{color:#A89268}
+.row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .more{opacity:0;width:22px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--muted)}
+.row:hover .more,.row .more.on{opacity:1}
+.row .more:hover{background:var(--line)}
+.row .more svg{width:14px;height:14px}
+.flag{font-size:10.5px;line-height:16px;padding:0 5px;border-radius:4px;flex:none}
+.flag.new{background:#E3F1E7;color:#2E6E45}
+.flag.mod{background:#F6ECDD;color:var(--zhe)}
+.flag.me{background:var(--qing-soft);color:var(--qing)}
+.writing{width:7px;height:7px;border-radius:50%;background:var(--huang);flex:none;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25;transform:scale(.7)}}
+.row.appear{animation:appear .6s ease}
+@keyframes appear{from{background:#FBF2D9}}
+.row input{flex:1;min-width:0;height:22px;border:1px solid var(--qing);border-radius:4px;padding:0 5px;outline:none;font-size:13px;background:#fff}
+.tree-drop{margin:8px 8px 0;padding:12px;border:1.5px dashed var(--line-strong);border-radius:8px;text-align:center;font-size:12px;color:var(--faint)}
+.tree.dragover .tree-drop{border-color:var(--qing);color:var(--qing);background:var(--qing-soft)}
+
+/* ---------- 编辑区 ---------- */
+.tabs{display:flex;align-items:flex-end;gap:1px;padding:6px 8px 0;border-bottom:1px solid var(--line);background:#F6F6F3;overflow-x:auto;flex:none;min-height:39px}
+.tab{display:flex;align-items:center;gap:6px;height:32px;padding:0 6px 0 12px;border-radius:7px 7px 0 0;font-size:13px;color:var(--muted);white-space:nowrap;border:1px solid transparent;border-bottom:0;margin-bottom:-1px}
+.tab.on{background:var(--panel);color:var(--ink);border-color:var(--line)}
+.tab .x{width:18px;height:18px;border-radius:4px;display:grid;place-items:center;color:var(--faint)}
+.tab .x:hover{background:var(--sunk);color:var(--ink)}
+.tab .x svg{width:12px;height:12px}
+.tab .dirty{width:7px;height:7px;border-radius:50%;background:var(--ink-2)}
+.edbar{display:flex;align-items:center;gap:10px;padding:7px 16px;border-bottom:1px solid var(--line);flex:none}
+.edbar .crumb{flex:1;min-width:0;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.edbar .crumb b{color:var(--ink);font-weight:500}
+.saved{font-size:12px;color:var(--faint);white-space:nowrap}
+.rtabs{display:inline-flex;gap:2px;background:var(--sunk);border-radius:8px;padding:2px;flex:none}
+.rtabs button{padding:2px 10px;border-radius:6px;font-size:12.5px;color:var(--muted)}
+.rtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.edscroll{flex:1;overflow:auto;position:relative}
+.doc{max-width:720px;margin:0 auto;padding:28px 36px 120px;line-height:1.85;font-size:15px}
+.doc h1{font:700 26px/1.35 var(--song);margin:0 0 18px}
+.doc h2{font:600 19px/1.4 var(--song);margin:26px 0 10px}
+.doc h3{font:600 16px/1.4 var(--song);margin:20px 0 8px}
+.doc p{margin:0 0 14px}
+.doc ul,.doc ol{margin:0 0 14px;padding-left:22px}
+.doc blockquote{margin:0 0 14px;border-left:3px solid var(--line-strong);padding:2px 0 2px 14px;color:var(--muted)}
+.doc code{font:13px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
+.blk{border-radius:6px;margin:0 -10px;padding:0 10px;cursor:text;transition:background .15s}
+.blk:hover{background:#F7F7F4}
+.blk.edit{background:transparent;padding:0}
+.blk textarea{display:block;width:100%;border:1px solid var(--qing);border-radius:6px;padding:8px 10px;font:14px/1.75 var(--mono);outline:none;resize:none;background:#fff;overflow:hidden}
+.blk.flash{animation:flash 1.6s ease}
+@keyframes flash{0%,40%{background:#FBF2D9}}
+.diff{margin:0 -10px 14px;border:1px solid #E6D7AE;border-radius:8px;overflow:hidden;cursor:default}
+.diff .old{background:#FBEDEA;color:#8A3A2E;padding:8px 12px;text-decoration:line-through;text-decoration-color:rgba(181,64,47,.45)}
+.diff .new{background:#EAF4EE;color:#24583F;padding:8px 12px}
+.diff .bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#FBF7EA;font-size:12.5px;color:#6B5A27}
+.diff .bar .grow{flex:1}
+.src{display:block;width:100%;height:100%;min-height:100%;border:0;outline:none;resize:none;padding:24px 36px 120px;font:13.5px/1.8 var(--mono);color:var(--ink-2);background:var(--panel)}
+.doc.wx{max-width:580px;font-size:15px;color:#333;letter-spacing:.3px}
+.doc.wx h1{font:700 22px/1.4 var(--sans);text-align:center;color:#222}
+.doc.wx h2{font:700 17px/1.4 var(--sans);color:#3F7A5E;border-left:4px solid #3F7A5E;padding-left:10px}
+.doc.wx blockquote{background:#F3F7F4;border-left-color:#3F7A5E;color:#4E5A52;padding:10px 14px;border-radius:0 6px 6px 0}
+.wxbar{max-width:580px;margin:16px auto 0;display:flex;gap:8px;justify-content:flex-end;padding:0 36px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--qing);border-color:var(--qing);color:#fff}
+.btn.sm{padding:3px 10px;font-size:12.5px}
+.btn svg{width:14px;height:14px}
+.imgview{display:grid;place-items:center;height:100%;padding:30px}
+.imgview .ph{width:min(520px,100%);aspect-ratio:2.35/1;border-radius:10px;background:linear-gradient(135deg,#2B4C6F,#3F7A5E);color:#fff;display:grid;place-items:center;font:700 22px/1.4 var(--song);text-align:center;padding:20px}
+.imgview .cap{margin-top:10px;font-size:12px;color:var(--faint);text-align:center}
+.ed-empty{margin:auto;text-align:center;color:var(--muted);padding:40px}
+.ed-empty h2{font:600 20px/1.3 var(--song);color:var(--ink);margin:0 0 6px}
+.conflict{display:flex;align-items:center;gap:10px;padding:8px 16px;background:#FBF7EA;border-bottom:1px solid #EFE5C8;font-size:13px;color:#6B5A27;flex:none}
+.conflict .grow{flex:1}
+.selbar{position:absolute;z-index:20;display:flex;gap:2px;padding:3px;background:#1D222B;border-radius:9px;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:translate(-50%,-100%)}
+.selbar button{display:flex;align-items:center;gap:5px;color:#fff;font-size:12.5px;padding:4px 10px;border-radius:6px;white-space:nowrap}
+.selbar button:hover{background:#3A404A}
+.selbar svg{width:14px;height:14px}
+
+/* ---------- 对话 ---------- */
+.thread{flex:1;overflow:auto;padding:22px 0 10px}
+.msg{max-width:760px;margin:0 auto 20px;padding:0 22px}
+.app.ws .msg{padding:0 16px;margin-bottom:16px}
+.msg.me{display:flex;flex-direction:column;align-items:flex-end}
+.bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:85%}
+.bq{border-left:3px solid var(--line-strong);padding-left:10px;color:var(--muted);font-size:12.5px;margin:2px 0 6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bq .f{display:block;font-size:11.5px;color:var(--faint)}
+.from{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.from .seal{width:22px;height:22px;font-size:11px;border-radius:5px}
+.answer{line-height:1.75;overflow-wrap:anywhere}
+.answer p{margin:0 0 8px}
+.answer code{font:12.5px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
+.answer pre{font:12.5px/1.7 var(--mono);background:var(--paper);border:1px solid var(--line);padding:10px 12px;border-radius:8px;margin:0 0 8px;overflow:auto}
+.steps{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+.steps svg{width:14px;height:14px}
+.steps.live{color:#7A6216;border-color:#EFE5C8;background:#FBF7EA}
+.steps.live svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.changes{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:4px 0 6px;background:var(--panel)}
+.changes .h{display:flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line);background:#FAFAF8}
+.changes .h .grow{flex:1}
+.changes .h svg{width:14px;height:14px}
+.changes .h button{color:var(--qing);font-size:12.5px}
+.chg{display:flex;align-items:center;gap:8px;width:100%;padding:7px 12px;font-size:13px;text-align:left;border-top:1px solid #EFF0EC}
+.chg:first-of-type{border-top:0}
+.chg:hover{background:var(--qing-soft)}
+.chg>svg,.chg .p+svg{width:15px;height:15px;color:var(--faint)}
+.chg .p{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chg .p i{font-style:normal;color:var(--faint)}
+.chg .go{color:var(--faint);width:14px;height:14px}
+
+.composer{max-width:760px;width:100%;margin:0 auto 16px;padding:0 22px;flex:none}
+.app.ws .composer{padding:0 12px;margin-bottom:12px}
+.box{border:1px solid var(--line-strong);border-radius:14px;background:var(--panel)}
+.box:focus-within{border-color:var(--qing)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 0}
+.chips:empty{display:none}
+.chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;font-size:12px;padding:2px 4px 2px 8px;border-radius:6px;background:var(--sunk);color:var(--ink-2)}
+.chip.ctx{background:var(--qing-soft);color:var(--qing)}
+.chip.quote{display:flex;width:100%;align-items:flex-start;background:#F6F6F3;padding:6px 6px 6px 10px;border-left:3px solid var(--qing);border-radius:4px 6px 6px 4px}
+.chip.quote .qt{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--muted)}
+.chip span.t{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip svg{width:13px;height:13px}
+.chip button{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;color:inherit;opacity:.6;flex:none}
+.chip button:hover{opacity:1;background:rgba(0,0,0,.06)}
+.box textarea{display:block;width:100%;border:0;outline:none;resize:none;padding:10px 14px 4px;min-height:48px;background:none}
+.box .acts{display:flex;align-items:center;padding:4px 8px 8px}
+.box .acts .grow{flex:1}
+.send{width:30px;height:30px;border-radius:8px;background:var(--qing);color:#fff;display:grid;place-items:center}
+.send svg{width:16px;height:16px}
+
+/* ---------- 浮层 ---------- */
+.menu{position:absolute;z-index:40;min-width:168px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.16);padding:4px}
+.menu button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 10px;border-radius:6px;font-size:13px;text-align:left}
+.menu button:hover,.menu button.kb{background:var(--sunk)}
+.menu button svg{width:15px;height:15px;color:var(--muted)}
+.menu button.danger{color:var(--zhu)}
+.menu button.danger svg{color:var(--zhu)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:50;background:#1D222B;color:#fff;border-radius:10px;padding:8px 8px 8px 14px;font-size:13px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);white-space:nowrap}
+.toast button{color:#9CC3EA;padding:2px 8px;border-radius:6px}
+.toast button:hover{background:#3A404A}
+
+/* ---------- 手机 ---------- */
+@container f (max-width:760px){
+  .app,.app.ws{grid-template-columns:1fr}
+  .rail,.list{display:none}
+  .d-only{display:none!important}
+  .m-only{display:inline-flex!important}
+  .head{padding:8px 10px;min-height:52px}
+  .body,.app.ws .body,.app.ws.nochat .body{grid-template-columns:1fr;display:block;position:relative;view-transition-name:mbody}
+  .tree,.editor,.convo,html[data-fx] .tree,html[data-fx] .editor,html[data-fx] .convo{view-transition-name:none}
+  .app.ws.nochat .convo{display:flex!important}
+  .tree,.editor,.convo{position:absolute;inset:0;background:var(--panel);border:0!important}
+  .tree,.editor{display:none}
+  .app[data-scr=files] .tree{display:flex!important}
+  .app[data-scr=files] .convo,.app[data-scr=file] .convo{display:none}
+  .app[data-scr=file] .editor{display:flex!important}
+  .app .msg{padding:0 14px}
+  .app .composer{padding:0 10px;margin-bottom:10px}
+  .tree-head{padding:8px 8px 6px 14px}
+  .row{height:40px;font-size:15px}
+  .row .more{opacity:1}
+  .tabs{display:none}
+  .edbar{padding:7px 12px;justify-content:flex-end}
+  .edbar .crumb{display:none}
+  .doc{padding:20px 18px 120px;font-size:16px}
+  .src{padding:18px}
+  .ask-fab{position:absolute;right:14px;bottom:18px;z-index:10;display:flex;align-items:center;gap:6px;background:var(--qing);color:#fff;border-radius:22px;padding:9px 16px;font-size:14px;box-shadow:0 6px 18px rgba(43,76,111,.35)}
+  .ask-fab svg{width:16px;height:16px}
+  .wxbar{padding:0 18px}
+}
+.ask-fab{display:none}
+@container f (max-width:760px){.ask-fab{display:flex}}
+</style>
+</head>
+<body>
+
+<div class="demo">
+  <b>原型</b><span>对话 / 工作区</span>
+  <span class="seg dev"><button data-dev="pc" class="on">电脑</button><button data-dev="phone">手机</button></span>
+  <span class="dev">切换动效</span><span class="seg dev"><button data-fx="morph" class="on">展开</button><button data-fx="flip">翻转</button></span>
+  <span class="grow"></span>
+  <span>试一下：</span>
+  <button class="act" data-sim="write">AI 新建文件</button>
+  <button class="act" data-sim="conflict">AI 改了你开着的文件</button>
+  <button class="act" data-sim="reset">重来</button>
+</div>
+
+<div class="stage" id="stage"><div class="frame" id="frame">
+<div class="app" id="app" data-scr="chat">
+  <nav class="rail">
+    <div class="brand">ccim</div>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>面板</a>
+    <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Agent</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h6v16H4zM14 4h6v16h-6z"/></svg>知识库</a>
+  </nav>
+  <aside class="list">
+    <div class="list-head"><h1>对话</h1></div>
+    <div class="group">今天</div>
+    <button class="item on"><span class="seal" style="--c:#3F7A5E">文</span><span class="t"><span class="title">公众号：AI 工具为什么像 Obsidian</span><span class="sub">写作助手 · ~/写作</span></span></button>
+    <button class="item"><span class="seal">码</span><span class="t"><span class="title">对话列表标题挤压的修复</span><span class="sub">ccim 开发 · ~/ccim</span></span></button>
+    <div class="group">昨天</div>
+    <button class="item"><span class="seal" style="--c:#9A5B34">研</span><span class="t"><span class="title">Obsidian AI 插件调研</span><span class="sub">调研员</span></span></button>
+    <button class="item"><span class="seal" style="--c:#3F7A5E">文</span><span class="t"><span class="title">十月读书笔记整理</span><span class="sub">写作助手 · ~/写作</span></span></button>
+  </aside>
+
+  <section class="main">
+    <header class="head" id="head"><div class="hl" id="headL"></div>
+      <span class="mode d-only" id="mode" data-on="chat"><i class="pill"></i>
+        <button data-mode="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</button>
+        <button data-mode="ws"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>工作区</button></span>
+      <div class="hr" id="headR"></div></header>
+    <div class="body">
+      <aside class="tree" id="tree"></aside>
+      <section class="editor" id="editor"></section>
+      <section class="convo">
+        <div class="thread" id="thread"></div>
+        <div class="composer">
+          <div class="box">
+            <div class="chips" id="chips"></div>
+            <textarea id="input" rows="1" placeholder="说点什么…"></textarea>
+            <div class="acts">
+              <button class="icon-btn" title="附件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12l-8.5 8.5a5 5 0 01-7-7L14 5a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L15 8"/></svg></button>
+              <span class="grow"></span>
+              <button class="send" id="send" title="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</div>
+<input type="file" id="upload" multiple hidden>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const I={
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5"/></svg>',
+  md:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>',
+  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  newf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg>',
+  newd:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 10v6M9 13h6"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  ws:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg>',
+  files:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
+  side:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
+  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+  ask:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.5a2 2 0 113 1.7c-.6.4-1 .8-1 1.5"/></svg>',
+  spin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 109 9"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+  at:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M16 12v1.5a2.5 2.5 0 005 0V12a9 9 0 10-4 7.5"/></svg>',
+  finder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>',
+};
+
+/* ---------- 数据 ---------- */
+const ROOT='写作';
+const D='公众号/AI工作区/';
+function seed(){
+  return {
+    folders:new Set(['公众号','公众号/AI工作区','公众号/AI工作区/配图','素材','读书笔记']),
+    files:{
+      'README.md':{c:'# 写作\n\n这里放我的公众号稿子、素材和读书笔记。\n\n- 公众号/：每篇一个文件夹\n- 素材/：访谈、摘录\n- 读书笔记/：按月份'},
+      '读书笔记/2026-09.md':{c:'# 九月读书笔记\n\n- 《写作这回事》：先写给自己看'},
+      '素材/访谈记录.md':{c:'# 访谈记录 · 内容创作者 A\n\n> 我不怕 AI 写得不好，我怕的是不知道它写了什么。\n\n她用 Obsidian 写稿，AI 插件只在右边，需要时才叫。'},
+      [D+'大纲.md']:{c:'# 大纲\n\n1. 开头：一个现象——用 AI 用得好的人都不在聊天窗口里写东西\n2. 聊天窗口的问题：内容散、改不动\n3. 文件才是主角\n4. 掌控感从哪来\n5. 结尾：工具会变，习惯会留下',ai:'new'},
+      [D+'正文.md']:{c:'# 为什么好用的 AI 工具，都长得像 Obsidian\n\n上个月我发现一个现象：身边把 AI 用得最好的那批人，几乎都不在聊天窗口里写东西。\n\n聊天窗口适合问答，不适合写作。内容散落在一条条回复里，想改一句话，只能让 AI 整篇重写，再复制出来。\n\n## 文件才是主角\n\n他们的做法是反过来的：左边是文件夹，中间是正在写的文档，AI 待在右边，随叫随到。\n\n- 文档一直在自己的目录里，不会聊完就散\n- 想改哪句直接改，AI 看得到你改了什么\n- AI 新建了什么、放在哪，一眼就能看清\n\n## 掌控感从哪来\n\n> 我不怕 AI 写得不好，我怕的是不知道它写了什么。\n\n这句话是一位做内容的朋友说的。她的意思是：AI 的产出要摊开在眼前，能看、能改、能扔，才敢放心交给它。',ai:'new'},
+      [D+'配图/封面.png']:{img:'为什么好用的 AI 工具\n都长得像 Obsidian',ai:'new'},
+    },
+  };
+}
+let S;
+function reset(){
+  const d=seed();
+  S={mode:'chat',scr:'chat',nochat:false,folders:d.folders,files:d.files,
+     open:[],cur:null,view:{},expanded:new Set(['公众号','公众号/AI工作区','公众号/AI工作区/配图']),
+     ctx:true,quote:null,edited:new Set(),writing:null,diffs:{},editing:null,renaming:null,conflict:false,savedAt:{},
+     msgs:[
+       {who:'me',text:'帮我写一篇公众号：为什么好用的 AI 工具都长得像 Obsidian。素材在 素材/访谈记录.md'},
+       {who:'ai',steps:'读了 1 个文件，写了 3 个文件',text:'写好了初稿，按「一篇一个文件夹」放在 `公众号/AI工作区/` 下：\n\n<pre>公众号/AI工作区/\n├── 大纲.md\n├── 正文.md\n└── 配图/封面.png</pre>\n<p>正文大约 1800 字，开头用了访谈里那句话。你先看看，哪段不对直接改，或者选中让我改。</p>',
+        files:[[D+'大纲.md','new'],[D+'正文.md','new'],[D+'配图/封面.png','new']]},
+     ]};
+  $('#input').value='';
+  render();
+}
+
+/* ---------- 工具 ---------- */
+const base=p=>p.split('/').pop();
+const dir=p=>p.includes('/')?p.slice(0,p.lastIndexOf('/')):'';
+const isImg=p=>/\.(png|jpe?g|gif|webp)$/i.test(p);
+const iconOf=p=>isImg(p)?I.img:/\.md$/.test(p)?I.md:I.file;
+const phone=()=>$('#frame').clientWidth<=760;
+function children(d){
+  const pre=d?d+'/':'';
+  const ds=[...S.folders].filter(f=>f.startsWith(pre)&&!f.slice(pre.length).includes('/')&&f!==d).sort((a,b)=>a.localeCompare(b,'zh'));
+  const fs=Object.keys(S.files).filter(f=>dir(f)===d).sort((a,b)=>a.localeCompare(b,'zh'));
+  return {ds,fs};
+}
+function aiCount(){return Object.values(S.files).filter(f=>f.ai).length}
+function uniq(d,name){let n=name,i=2;const ext=name.includes('.')?name.slice(name.lastIndexOf('.')):'';const stem=ext?name.slice(0,-ext.length):name;
+  while(S.files[(d?d+'/':'')+n]||S.folders.has((d?d+'/':'')+n)){n=stem+' '+(i++)+ext}return (d?d+'/':'')+n}
+
+/* ---------- 头部 ---------- */
+function renderHead(){
+  const n=aiCount(),L=$('#headL'),R=$('#headR');
+  $('#mode').dataset.on=S.mode;
+  if(phone()&&S.scr==='files'){
+    L.innerHTML=`<button class="icon-btn" data-go="chat">${I.back}</button>
+      <div class="grow"><div class="name">文件</div><div class="meta path">~/${ROOT}</div></div>`;
+    R.innerHTML=`<button class="icon-btn" data-act="newfile">${I.newf}</button><button class="icon-btn" data-act="newdir">${I.newd}</button><button class="icon-btn" data-act="upload">${I.up}</button>`;
+    return;
+  }
+  if(phone()&&S.scr==='file'){
+    L.innerHTML=`<button class="icon-btn" data-go="files">${I.back}</button>
+      <div class="grow"><div class="name">${esc(base(S.cur||''))}</div><div class="meta path">${esc(dir(S.cur||''))||'~/'+ROOT}</div></div>`;
+    R.innerHTML='';return;
+  }
+  L.innerHTML=`<button class="icon-btn m-only">${I.back}</button>
+    <span class="seal d-only" style="--c:#3F7A5E">文</span>
+    <div class="grow"><div class="name">公众号：AI 工具为什么像 Obsidian</div>
+      <div class="meta"><span>写作助手</span><span class="path">~/${ROOT}</span></div></div>`;
+  R.innerHTML=`${S.mode==='ws'?`<button class="icon-btn d-only ${S.nochat?'':'on'}" data-act="togglechat" title="${S.nochat?'显示对话':'收起对话'}">${I.side}</button>`:''}
+    <button class="icon-btn m-only" data-go="files" title="文件">${I.files}${n?`<span class="badge">${n}</span>`:''}</button>`;
+}
+
+/* 切换动效：浏览器支持 View Transitions 就用，不支持就直接切 */
+function vt(kind,fn){
+  const h=document.documentElement;
+  if(!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches){fn();return}
+  hideSel();closeMenu();
+  h.dataset.vt=kind;
+  const t=document.startViewTransition(fn);
+  t.finished.finally(()=>{if(h.dataset.vt===kind)delete h.dataset.vt});
+}
+function setMode(m){
+  if(m===S.mode)return;
+  vt(m==='ws'?'to-ws':'to-chat',()=>{S.mode=m;if(m==='ws'&&!S.cur)pickFile();render()});
+}
+function pickFile(){const p=Object.keys(S.files).find(p=>S.files[p].ai)||D+'正文.md';if(!S.open.includes(p))S.open.push(p);S.cur=p;if(S.files[p].ai)S.files[p].ai=null}
+const DEPTH={chat:0,files:1,file:2};
+function goScr(scr){
+  if(scr===S.scr)return;
+  vt(DEPTH[scr]>DEPTH[S.scr]?'push':'pop',()=>{S.scr=scr;S.editing=null;render();if(scr==='chat')$('#thread').scrollTop=1e9});
+}
+
+/* ---------- 文件树 ---------- */
+function rowHtml(p,isDir,d){
+  const on=!isDir&&p===S.cur;
+  if(S.renaming===p) return `<div class="row" style="--d:${d}" data-path="${esc(p)}">
+      <span class="chev none">${I.chev}</span><span class="ic ${isDir?'folder':''}">${isDir?I.folder:iconOf(p)}</span>
+      <input id="ren" value="${esc(base(p))}"></div>`;
+  const f=S.files[p];
+  const flag=isDir?'':S.writing===p?'<span class="writing" title="正在写"></span>':
+    f.ai==='new'?'<span class="flag new">新</span>':f.ai==='mod'?'<span class="flag mod">改</span>':S.edited.has(p)?'<span class="flag me">我改</span>':'';
+  const open=S.expanded.has(p);
+  return `<button class="row ${on?'on':''} ${f&&f.appear?'appear':''}" style="--d:${d}" data-path="${esc(p)}" data-dir="${isDir?1:''}" draggable="true">
+    <span class="chev ${isDir?(open?'open':''):'none'}">${I.chev}</span>
+    <span class="ic ${isDir?'folder':''}">${isDir?I.folder:iconOf(p)}</span>
+    <span class="nm">${esc(base(p))}</span>${flag}
+    <span class="more" data-more="${esc(p)}">${I.more}</span></button>`;
+}
+function walk(d,depth){
+  const {ds,fs}=children(d);let h='';
+  for(const x of ds){h+=rowHtml(x,true,depth);if(S.expanded.has(x))h+=walk(x,depth+1)}
+  for(const x of fs)h+=rowHtml(x,false,depth);
+  return h;
+}
+function renderTree(){
+  const changed=Object.keys(S.files).filter(p=>S.files[p].ai);
+  const recent=changed.length?`<div class="tsec">AI 刚改的 ${changed.length} 个<button data-act="clearflags">都看过了</button></div>`+
+    changed.map(p=>`<button class="row ${p===S.cur?'on':''}" style="--d:0" data-path="${esc(p)}" data-recent="1">
+      <span class="chev none">${I.chev}</span><span class="ic">${iconOf(p)}</span>
+      <span class="nm">${esc(base(p))} <span style="color:var(--faint);font-size:11.5px">${esc(dir(p))}</span></span>
+      ${S.writing===p?'<span class="writing"></span>':`<span class="flag ${S.files[p].ai}">${S.files[p].ai==='new'?'新':'改'}</span>`}</button>`).join('')+'<div class="tsec">全部文件</div>':'';
+  $('#tree').innerHTML=`<div class="tree-head d-only">
+      <span class="root">${ROOT}</span>
+      <button class="icon-btn" data-act="newfile" title="新建文件">${I.newf}</button>
+      <button class="icon-btn" data-act="newdir" title="新建文件夹">${I.newd}</button>
+      <button class="icon-btn" data-act="upload" title="上传">${I.up}</button></div>
+    <div class="tree-scroll" id="tscroll">${recent}${walk('',0)}<div class="tree-drop d-only">把文件拖到这里上传</div></div>`;
+  for(const p in S.files) delete S.files[p].appear;
+  const r=$('#ren'); if(r){r.focus();const dot=r.value.lastIndexOf('.');r.setSelectionRange(0,dot>0?dot:r.value.length)}
+}
+
+/* ---------- Markdown ---------- */
+function inline(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>')}
+function blockHtml(b){
+  const L=b.split('\n');
+  if(/^### /.test(b))return `<h3>${inline(b.slice(4))}</h3>`;
+  if(/^## /.test(b))return `<h2>${inline(b.slice(3))}</h2>`;
+  if(/^# /.test(b))return `<h1>${inline(b.slice(2))}</h1>`;
+  if(L.every(l=>/^- /.test(l)))return `<ul>${L.map(l=>`<li>${inline(l.slice(2))}</li>`).join('')}</ul>`;
+  if(L.every(l=>/^\d+\. /.test(l)))return `<ol>${L.map(l=>`<li>${inline(l.replace(/^\d+\. /,''))}</li>`).join('')}</ol>`;
+  if(L.every(l=>/^> ?/.test(l)))return `<blockquote>${L.map(l=>inline(l.replace(/^> ?/,''))).join('<br>')}</blockquote>`;
+  return `<p>${L.map(inline).join('<br>')}</p>`;
+}
+const blocks=p=>S.files[p].c.split(/\n{2,}/);
+function setBlock(p,i,v){const b=blocks(p);b[i]=v;S.files[p].c=b.filter((x,j)=>x.trim()||j===i).join('\n\n')}
+
+/* ---------- 编辑区 ---------- */
+function renderEditor(){
+  const ed=$('#editor');
+  if(!S.cur){ed.innerHTML=`<div class="tabs d-only"></div><div class="ed-empty"><h2>从左边选个文件</h2><div>或者在右边让 AI 写一个</div></div>`;return}
+  const p=S.cur,f=S.files[p],v=S.view[p]||'pre';
+  const tabs=S.open.map(t=>`<button class="tab ${t===p?'on':''}" data-tab="${esc(t)}"><span class="ic" style="width:14px;height:14px;color:var(--faint);display:flex">${iconOf(t)}</span>${esc(base(t))}<span class="x" data-close="${esc(t)}">${I.x}</span></button>`).join('');
+  const isMd=/\.md$/.test(p);
+  const bar=`<div class="edbar"><span class="crumb">${esc(dir(p)).replace(/\//g,' / ')}${dir(p)?' / ':''}<b>${esc(base(p))}</b></span>
+    ${S.savedAt[p]?`<span class="saved">已保存</span>`:''}
+    ${isMd?`<span class="rtabs"><button data-view="pre" class="${v==='pre'?'on':''}">预览</button><button data-view="src" class="${v==='src'?'on':''}">源码</button><button data-view="wx" class="${v==='wx'?'on':''}">公众号</button></span>`:''}</div>`;
+  const conflict=S.conflict?`<div class="conflict"><span class="grow">AI 刚改了这个文件，和你没保存的改动不一样</span>
+     <button class="btn sm" data-cf="ai">用 AI 的</button><button class="btn sm primary" data-cf="me">保留我的</button></div>`:'';
+  let body;
+  if(f.img) body=`<div class="imgview"><div><div class="ph">${esc(f.img).replace(/\n/g,'<br>')}</div><div class="cap">${esc(base(p))} · 900 × 383</div></div></div>`;
+  else if(v==='src') body=`<textarea class="src" id="src" spellcheck="false">${esc(f.c)}</textarea>`;
+  else {
+    const df=S.diffs[p];
+    body=(v==='wx'?`<div class="wxbar"><button class="btn sm">复制到公众号</button></div>`:'')+
+      `<div class="doc ${v==='wx'?'wx':''}" id="doc">`+blocks(p).map((b,i)=>{
+      if(df&&df.i===i)return `<div class="diff" data-b="${i}"><div class="old">${esc(df.old)}</div><div class="new">${esc(df.nw)}</div>
+        <div class="bar"><span class="grow">AI 的改动</span><button class="btn sm" data-diff="undo">撤销</button><button class="btn sm primary" data-diff="keep">保留</button></div></div>`;
+      if(S.editing&&S.editing.p===p&&S.editing.i===i)return `<div class="blk edit" data-b="${i}"><textarea id="blkta">${esc(b)}</textarea></div>`;
+      return `<div class="blk ${S.flash===i?'flash':''}" data-b="${i}">${blockHtml(b)}</div>`;
+    }).join('')+'</div>';
+    S.flash=null;
+  }
+  const keep=$('#edscroll')?.scrollTop||0;
+  ed.innerHTML=`<div class="tabs d-only">${tabs}</div>${bar}${conflict}<div class="edscroll" id="edscroll">${body}</div>
+    <button class="ask-fab" data-go="chat">${I.chat}问 AI</button>`;
+  $('#edscroll').scrollTop=keep;
+  const ta=$('#blkta'); if(ta){fit(ta);ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+}
+function fit(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+2+'px'}
+
+/* ---------- 对话 ---------- */
+function msgHtml(m){
+  if(m.who==='me') return `<div class="msg me">${m.quote?`<div class="bubble" style="background:#F6F6F3;margin-bottom:4px"><div class="bq" style="margin:0"><span class="f">${esc(base(m.quote.p))}</span>${esc(m.quote.t)}</div></div>`:''}<div class="bubble">${esc(m.text)}</div></div>`;
+  const ch=m.files&&m.files.length?`<div class="changes"><div class="h">${I.edit}<span class="grow">改了 ${m.files.length} 个文件</span><button data-openall="${esc(m.files.map(f=>f[0]).join('|'))}">在工作区查看</button></div>
+    ${m.files.map(([p,k,note])=>`<button class="chg" data-openf="${esc(p)}">${iconOf(p)}<span class="p">${esc(base(p))} <i>${esc(dir(p))}</i></span><span class="flag ${k}">${k==='new'?'新建':'改了'}${note?' '+esc(note):''}</span><svg class="go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>`).join('')}</div>`:'';
+  return `<div class="msg"><div class="from"><span class="seal" style="--c:#3F7A5E">文</span>写作助手</div>
+    ${m.live?`<div class="steps live">${I.spin}${esc(m.live)}</div>`:m.steps?`<div class="steps">${I.check}${esc(m.steps)}</div>`:''}
+    ${m.text?`<div class="answer">${/^</.test(m.text)||m.text.includes('<pre>')?m.text.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/^([^<].*?)\n\n/,'<p>$1</p>'):`<p>${inline(m.text)}</p>`}</div>`:''}${ch}</div>`;
+}
+function renderThread(){
+  const t=$('#thread');const atEnd=t.scrollHeight-t.scrollTop-t.clientHeight<40;
+  t.innerHTML=S.msgs.map(msgHtml).join('');
+  if(atEnd||S.stick){t.scrollTop=t.scrollHeight;S.stick=false}
+}
+function renderChips(){
+  let h='';
+  if(S.quote) h+=`<span class="chip quote"><span class="qt"><b style="color:var(--ink-2);font-weight:500">${esc(base(S.quote.p))}</b>　${esc(S.quote.t)}</span><button data-chip="quote">${I.x}</button></span>`;
+  if(S.mode==='ws'||phone()) if(S.cur&&S.ctx&&!S.quote) h+=`<span class="chip ctx">${iconOf(S.cur)}<span class="t">正在看 ${esc(base(S.cur))}</span><button data-chip="ctx">${I.x}</button></span>`;
+  for(const p of S.edited) h+=`<span class="chip">${I.edit}<span class="t">我改了 ${esc(base(p))}</span><button data-chip="ed" data-p="${esc(p)}">${I.x}</button></span>`;
+  $('#chips').innerHTML=h;
+  $('#input').placeholder=S.quote?(S.quote.mode==='edit'?'要怎么改？比如：说得更口语一点':'想问什么？'):'说点什么…';
+}
+function render(){
+  const a=$('#app');a.classList.toggle('ws',S.mode==='ws');a.classList.toggle('nochat',S.nochat);a.dataset.scr=S.scr;
+  renderHead();renderTree();renderEditor();renderThread();renderChips();
+}
+
+/* ---------- 打开文件 ---------- */
+function openFile(p,{fromChat}={}){
+  if(!S.files[p])return;
+  if(!S.open.includes(p))S.open.push(p);
+  S.cur=p;S.editing=null;S.ctx=true;
+  if(S.files[p].ai&&S.writing!==p)S.files[p].ai=null;
+  let d=dir(p);while(d){S.expanded.add(d);d=dir(d)}
+  if(phone()){if(S.scr!=='file')return goScr('file');}
+  else if(S.mode!=='ws')return vt('to-ws',()=>{S.mode='ws';render()});
+  render();
+}
+function closeTab(p){const i=S.open.indexOf(p);S.open.splice(i,1);if(S.cur===p)S.cur=S.open[Math.min(i,S.open.length-1)]||null;render()}
+function markEdited(p){S.edited.add(p);S.savedAt[p]=Date.now()}
+
+/* ---------- 浮层：菜单、提示、选中条 ---------- */
+let menuEl=null;
+function closeMenu(){menuEl?.remove();menuEl=null;document.querySelectorAll('.more.on').forEach(x=>x.classList.remove('on'))}
+function openMenu(anchor,items){
+  closeMenu();const fr=$('#frame').getBoundingClientRect(),r=anchor.getBoundingClientRect();
+  menuEl=document.createElement('div');menuEl.className='menu';
+  menuEl.innerHTML=items.map((it,i)=>it==='-'?'<hr>':`<button data-i="${i}" class="${it.danger?'danger':''}">${it.icon||''}${esc(it.label)}</button>`).join('');
+  $('#frame').appendChild(menuEl);
+  const w=menuEl.offsetWidth,h=menuEl.offsetHeight;
+  let x=r.right-fr.left-w,y=r.bottom-fr.top+4;
+  if(x<8)x=r.left-fr.left; if(y+h>fr.height-8)y=r.top-fr.top-h-4;
+  menuEl.style.left=x+'px';menuEl.style.top=y+'px';
+  menuEl.onclick=e=>{const b=e.target.closest('button[data-i]');if(!b)return;const it=items[+b.dataset.i];closeMenu();it.run()};
+  anchor.classList.add('on');
+}
+let toastT;
+function toast(text,undo){
+  document.querySelector('.toast')?.remove();clearTimeout(toastT);
+  const t=document.createElement('div');t.className='toast';t.innerHTML=`<span>${esc(text)}</span>${undo?'<button>撤销</button>':''}`;
+  $('#frame').appendChild(t);if(undo)t.querySelector('button').onclick=()=>{undo();t.remove()};
+  toastT=setTimeout(()=>t.remove(),4000);
+}
+function fileMenu(p,isDir,anchor){
+  const items=[];
+  if(isDir){items.push({label:'新建文件',icon:I.newf,run:()=>newFile(p)},{label:'新建文件夹',icon:I.newd,run:()=>newDir(p)},'-')}
+  items.push({label:'重命名',icon:I.edit,run:()=>{S.renaming=p;renderTree()}});
+  items.push({label:'在对话里提到它',icon:I.at,run:()=>{const i=$('#input');i.value+=(i.value&&!/\s$/.test(i.value)?' ':'')+'@'+p+' ';if(phone())S.scr='chat';else S.nochat=false;render();i.focus()}});
+  items.push({label:'在访达中显示',icon:I.finder,run:()=>toast('已在访达中打开')});
+  items.push('-',{label:'移到废纸篓',icon:I.trash,danger:true,run:()=>trash(p,isDir)});
+  openMenu(anchor,items);
+}
+function newFile(d=''){
+  if(d)S.expanded.add(d);
+  const p=uniq(d,'未命名.md');S.files[p]={c:'# 未命名\n\n',appear:1};S.renaming=p;S.newRen=p;
+  if(phone()&&S.scr!=='files')S.scr='files';render();
+}
+function newDir(d=''){if(d)S.expanded.add(d);const p=uniq(d,'新建文件夹');S.folders.add(p);S.renaming=p;render()}
+function commitRename(v){
+  const p=S.renaming;S.renaming=null;v=(v||'').trim();
+  const np=v&&v!==base(p)?uniq(dir(p),v):p;
+  if(np!==p) movePath(p,np);
+  const wasNew=S.newRen===p;S.newRen=null;
+  if(wasNew&&S.files[np])openFile(np);else render();
+}
+function movePath(p,np){
+  if(S.folders.has(p)){
+    for(const f of [...S.folders])if(f===p||f.startsWith(p+'/')){S.folders.delete(f);S.folders.add(np+f.slice(p.length))}
+    for(const f of Object.keys(S.files))if(f.startsWith(p+'/')){S.files[np+f.slice(p.length)]=S.files[f];delete S.files[f];re(f,np+f.slice(p.length))}
+    if(S.expanded.has(p)){S.expanded.delete(p);S.expanded.add(np)}
+  }else{S.files[np]=S.files[p];delete S.files[p];re(p,np)}
+  function re(a,b){S.open=S.open.map(x=>x===a?b:x);if(S.cur===a)S.cur=b;if(S.edited.has(a)){S.edited.delete(a);S.edited.add(b)}}
+}
+function trash(p,isDir){
+  const snapF={...S.files},snapD=new Set(S.folders),open=[...S.open],cur=S.cur;
+  if(isDir){S.folders.forEach(f=>{if(f===p||f.startsWith(p+'/'))S.folders.delete(f)});Object.keys(S.files).forEach(f=>{if(f.startsWith(p+'/'))delete S.files[f]})}
+  else delete S.files[p];
+  S.open=S.open.filter(x=>S.files[x]);if(!S.files[S.cur])S.cur=S.open[0]||null;render();
+  toast(`已把「${base(p)}」移到废纸篓`,()=>{S.files=snapF;S.folders=snapD;S.open=open;S.cur=cur;render()});
+}
+
+/* 选中文字 → 让 AI 改 / 问一下 */
+let selEl=null,selData=null;
+function hideSel(){selEl?.remove();selEl=null}
+document.addEventListener('selectionchange',()=>{clearTimeout(window._selT);window._selT=setTimeout(checkSel,180)});
+function checkSel(){
+  const sel=getSelection(),doc=$('#doc');
+  if(!doc||!sel.rangeCount||sel.isCollapsed||!doc.contains(sel.anchorNode)){hideSel();return}
+  const t=sel.toString().trim();if(t.length<2){hideSel();return}
+  const r=sel.getRangeAt(0).getBoundingClientRect(),fr=$('#frame').getBoundingClientRect();
+  const blk=sel.anchorNode.parentElement?.closest('.blk');
+  selData={p:S.cur,t,i:blk?+blk.dataset.b:null};
+  if(!selEl){selEl=document.createElement('div');selEl.className='selbar';$('#frame').appendChild(selEl)}
+  selEl.innerHTML=`<button data-sel="edit">${I.spark}让 AI 改</button><button data-sel="ask">${I.ask}问一下</button>`;
+  selEl.style.left=(r.left+r.width/2-fr.left)+'px';selEl.style.top=Math.max(44,r.top-fr.top-8)+'px';
+}
+
+/* ---------- 发送 & 模拟 AI ---------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function send(){
+  const i=$('#input'),text=i.value.trim();
+  if(!text&&!S.quote)return;
+  const q=S.quote;S.msgs.push({who:'me',text:text||(q.mode==='edit'?'改一下这段':'这段什么意思？'),quote:q?{p:q.p,t:q.t}:null});
+  S.quote=null;S.edited.clear();i.value='';S.stick=true;render();
+  if(q&&q.mode==='edit'&&q.i!=null) return aiEdit(q);
+  const m={who:'ai',live:'正在想…'};S.msgs.push(m);renderThread();await sleep(1100);
+  m.live=null;m.text=q?'这段想说的是：聊天窗口天生是「一问一答」，答完就过去了；写文章需要反复改同一份东西，所以更适合放在文件里。':'好的，我记下了。要我直接改正文的话，选中那段点「让 AI 改」更快。';
+  renderThread();
+}
+async function aiEdit(q){
+  const p=q.p,old=blocks(p)[q.i];
+  const m={who:'ai',live:`正在改 ${base(p)}`};S.msgs.push(m);S.writing=p;S.files[p].ai='mod';render();
+  await sleep(1500);
+  const nw=/^#/.test(old)?old:/^- /.test(old)?old.split('\n').map(l=>l.replace(/，.*$/,'')).join('\n'):
+    '说白了：聊天窗口适合问答，不适合写东西。内容散在一条条回复里，想改一句，只能让 AI 整篇重写，再一段段复制出来。';
+  S.diffs[p]={i:q.i,old,nw};S.writing=null;
+  m.live=null;m.steps='改了 1 个文件';m.text='换成了更口语的说法，在正文里标出来了，你看着保留或撤销。';m.files=[[p,'mod','1 处']];
+  if(S.cur===p)S.files[p].ai=null;
+  render();
+}
+async function simWrite(){
+  const m={who:'ai',live:'正在写 发布清单.md'};S.msgs.push({who:'me',text:'再加一份发布清单，和一张文中插图'});S.msgs.push(m);S.stick=true;
+  const a=D+'发布清单.md',b=D+'配图/插图-1.png';
+  S.expanded.add('公众号/AI工作区');S.expanded.add(D+'配图');
+  S.files[a]={c:'# 发布清单\n\n',ai:'new',appear:1};S.writing=a;render();
+  for(const line of ['- 标题定稿','- 封面 900×383','- 摘要不超过 120 字','- 文末加原文链接']){await sleep(450);S.files[a].c+=(S.files[a].c.endsWith('\n\n')?'':'\n')+line;if(S.cur===a)renderEditor()}
+  m.live='正在画 插图-1.png';S.files[b]={img:'左：文件\n中：正在写的\n右：AI',ai:'new',appear:1};S.writing=b;render();
+  await sleep(1300);S.writing=null;m.live=null;m.steps='写了 2 个文件';m.text='加好了，清单和插图都放在这篇的文件夹里。';
+  m.files=[[a,'new'],[b,'new']];render();
+}
+function simConflict(){
+  let p=S.cur;
+  if(!p||!/\.md$/.test(p)){openFile(D+'正文.md');p=S.cur}
+  const i=blocks(p).findIndex(b=>!/^#/.test(b))||1;
+  S.view[p]='pre';S.editing={p,i};S.conflict=true;render();
+  toast('正在改的段落还没保存时，AI 也改了这个文件');
+}
+
+/* ---------- 事件 ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(menuEl&&!menuEl.contains(t)&&!t.closest('[data-more]'))closeMenu();
+  let b;
+  if(b=t.closest('[data-dev]')){document.querySelectorAll('[data-dev]').forEach(x=>x.classList.toggle('on',x===b));$('#stage').classList.toggle('phone',b.dataset.dev==='phone');S.scr='chat';requestAnimationFrame(render);return}
+  if(b=t.closest('[data-sim]')){const k=b.dataset.sim;if(k==='reset')return reset();if(k==='write'){if(phone())S.scr='chat';return simWrite()}if(k==='conflict')return simConflict()}
+  if(b=t.closest('button[data-fx]')){document.querySelectorAll('button[data-fx]').forEach(x=>x.classList.toggle('on',x===b));document.documentElement.dataset.fx=b.dataset.fx;return}
+  if(b=t.closest('[data-mode]')){setMode(b.dataset.mode);return}
+  if(b=t.closest('[data-go]')){goScr(b.dataset.go);return}
+  if(b=t.closest('[data-act]')){const k=b.dataset.act;
+    if(k==='togglechat')vt('side',()=>{S.nochat=!S.nochat;render()})
+    if(k==='newfile')newFile(S.cur?dir(S.cur):'');
+    if(k==='newdir')newDir(S.cur?dir(S.cur):'');
+    if(k==='upload')$('#upload').click();
+    if(k==='clearflags'){for(const p in S.files)S.files[p].ai=null;render()}
+    return}
+  if(b=t.closest('[data-more]')){e.stopPropagation();const p=b.dataset.more;fileMenu(p,S.folders.has(p),b);return}
+  if(b=t.closest('.row[data-path]')){if(t.closest('input'))return;const p=b.dataset.path;
+    if(b.dataset.dir){S.expanded.has(p)?S.expanded.delete(p):S.expanded.add(p);renderTree()}else openFile(p);return}
+  if(b=t.closest('[data-close]')){e.stopPropagation();closeTab(b.dataset.close);return}
+  if(b=t.closest('[data-tab]')){S.cur=b.dataset.tab;S.editing=null;render();return}
+  if(b=t.closest('[data-view]')){S.view[S.cur]=b.dataset.view;S.editing=null;renderEditor();return}
+  if(b=t.closest('[data-openf]')){openFile(b.dataset.openf,{fromChat:1});return}
+  if(b=t.closest('[data-openall]')){const ps=b.dataset.openall.split('|').filter(p=>S.files[p]);ps.forEach(p=>{if(!S.open.includes(p))S.open.push(p)});openFile(ps.find(p=>/正文|\.md$/.test(p))||ps[0]);return}
+  if(b=t.closest('[data-diff]')){const p=S.cur,d=S.diffs[p];if(b.dataset.diff==='keep'){setBlock(p,d.i,d.nw);S.flash=d.i;toast('已保留 AI 的改动')}delete S.diffs[p];renderEditor();return}
+  if(b=t.closest('[data-cf]')){S.conflict=false;S.editing=null;if(b.dataset.cf==='ai'){toast('已换成 AI 的版本')}else{markEdited(S.cur);toast('已保留你的版本')}render();return}
+  if(b=t.closest('[data-chip]')){const k=b.dataset.chip;if(k==='quote')S.quote=null;if(k==='ctx')S.ctx=false;if(k==='ed')S.edited.delete(b.dataset.p);renderChips();return}
+  if(b=t.closest('[data-sel]')){const d=selData;hideSel();getSelection().removeAllRanges();
+    S.quote={...d,mode:b.dataset.sel};if(phone())goScr('chat');else if(S.nochat)vt('side',()=>{S.nochat=false;render()});render();$('#input').focus();return}
+  if(b=t.closest('.blk[data-b]')){if(!getSelection().isCollapsed||b.classList.contains('edit'))return;
+    if(t.closest('a'))return;S.editing={p:S.cur,i:+b.dataset.b};renderEditor();return}
+  if(t.closest('#send')){send();return}
+});
+document.addEventListener('focusout',e=>{
+  if(e.target.id==='blkta'){const ed=S.editing;if(!ed)return;const v=e.target.value;
+    if(v!==blocks(ed.p)[ed.i]){setBlock(ed.p,ed.i,v);markEdited(ed.p)}
+    if(S.conflict)return;S.editing=null;setTimeout(()=>{renderEditor();renderTree();renderChips()},0)}
+  if(e.target.id==='ren')commitRename(e.target.value);
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='blkta')fit(e.target);
+  if(e.target.id==='src'){S.files[S.cur].c=e.target.value;clearTimeout(window._sv);window._sv=setTimeout(()=>{markEdited(S.cur);renderTree();renderChips();const s=document.querySelector('.saved');if(!s)renderEditorBarOnly()},600)}
+  if(e.target.id==='input'){e.target.style.height='auto';e.target.style.height=Math.min(160,e.target.scrollHeight)+'px'}
+});
+function renderEditorBarOnly(){const bar=document.querySelector('.edbar .crumb');if(bar)bar.insertAdjacentHTML('afterend','<span class="saved">已保存</span>')}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){closeMenu();hideSel();if(S.renaming){S.renaming=null;S.newRen=null;renderTree()}if(S.editing&&!S.conflict){S.editing=null;renderEditor()}}
+  if(e.target.id==='ren'&&e.key==='Enter'){e.preventDefault();e.target.blur()}
+  if(e.target.id==='input'&&e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send()}
+  if(menuEl&&/Arrow(Up|Down)|Enter/.test(e.key)){const bs=[...menuEl.querySelectorAll('button')];let i=bs.findIndex(x=>x.classList.contains('kb'));
+    if(e.key==='Enter'&&i>=0){bs[i].click();e.preventDefault();return}
+    bs.forEach(x=>x.classList.remove('kb'));i=e.key==='ArrowDown'?(i+1)%bs.length:(i-1+bs.length)%bs.length;bs[i].classList.add('kb');e.preventDefault()}
+});
+/* 拖动移动 & 拖进来上传 */
+let dragP=null;
+document.addEventListener('dragstart',e=>{const r=e.target.closest?.('.row[data-path]');if(r&&!r.dataset.recent){dragP=r.dataset.path;e.dataTransfer.effectAllowed='move'}});
+document.addEventListener('dragover',e=>{
+  const tree=e.target.closest?.('#tree');if(!tree)return;e.preventDefault();
+  document.querySelectorAll('.row.drop').forEach(x=>x.classList.remove('drop'));
+  if(dragP){const r=e.target.closest('.row[data-dir="1"]');if(r&&r.dataset.path!==dragP&&!r.dataset.path.startsWith(dragP+'/'))r.classList.add('drop')}
+  else tree.classList.add('dragover');
+});
+document.addEventListener('dragleave',e=>{if(e.target.closest?.('#tree')&&!e.relatedTarget?.closest?.('#tree'))$('#tree').classList.remove('dragover')});
+document.addEventListener('drop',e=>{
+  const tree=e.target.closest?.('#tree');if(!tree)return;e.preventDefault();tree.classList.remove('dragover');
+  if(dragP){const r=e.target.closest('.row[data-dir="1"]');const to=r?r.dataset.path:'';
+    if(to!==dir(dragP)&&to!==dragP&&!to.startsWith(dragP+'/')){const np=uniq(to,base(dragP));movePath(dragP,np);if(to)S.expanded.add(to);toast(`已移到「${to||ROOT}」`)}
+    dragP=null;render();return}
+  addUploads(e.dataTransfer.files);
+});
+document.addEventListener('dragend',()=>{dragP=null;document.querySelectorAll('.row.drop').forEach(x=>x.classList.remove('drop'))});
+$('#upload').onchange=e=>{addUploads(e.target.files);e.target.value=''};
+function addUploads(list){
+  const d=S.cur?dir(S.cur):'';let n=0;
+  for(const f of list){const p=uniq(d,f.name);S.files[p]=isImg(p)?{img:f.name,appear:1}:{c:'# '+f.name+'\n\n（上传的文件）',appear:1};n++}
+  if(n){if(d)S.expanded.add(d);render();toast(`已上传 ${n} 个文件`)}
+}
+new ResizeObserver(()=>{if(!phone()&&S.scr!=='chat'){S.scr='chat'}renderHead();renderChips()}).observe($('#frame'));
+
+reset();
+</script>
+</body>
+</html>

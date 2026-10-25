@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
-from . import devices, docs, filesend, share
+from . import devices, docs, filesend, share, workspace
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
@@ -70,7 +70,7 @@ SIDE_ROLE = ("\n\n## 侧边对话\n"
              "- 用户要你动手时，说明这里只能问问题，请他回主对话说，可以把要对主对话说的话写好给他。\n"
              "- 回答简短。")
 SIDE_CTX = 6000                                                    # 每次带上的主对话新进展，最多这么多字
-MERGED = ("card", "reply", "run", "mention", "secret")                   # 记录里会被更新的：同一个 id 后来的覆盖前面的
+MERGED = ("card", "reply", "run", "mention", "secret", "edit")           # 记录里会被更新的：同一个 id 后来的覆盖前面的（edit：工作区连着自动保存，#206）
 
 
 def home():
@@ -152,12 +152,12 @@ class Logs:
                         r = json.loads(line)
                     except ValueError:
                         continue
-                    if r.get("type") in MERGED and r.get("id") in pos:
+                    if r.get("type") in MERGED and r.get("id") and r["id"] in pos:
                         old = out[pos[r["id"]]]
                         # 卡片每次都是整张：处理过的卡片没有按钮，合并的话旧按钮会留下，看着还在等批准（#48）
                         out[pos[r["id"]]] = {**(r if r["type"] == "card" else {**old, **r}), "at": old["at"]}
                         continue
-                    if r.get("type") in MERGED:
+                    if r.get("type") in MERGED and r.get("id"):
                         pos[r["id"]] = len(out)
                     out.append(r)
         except OSError:
@@ -211,6 +211,8 @@ class WebChannel(Channel):
         self.done_steps = {}                  # 对话 → 刚做完那一轮的步骤，接下来的回答带上它
         self.card_chat = {}                   # 卡片 id → 对话
         self.secrets = {}                     # 等用户输密码的卡片 id → (对话, future)
+        self.turn_t0 = {}                     # 对话 → 这一轮开始的时刻（找 AI 这一轮改了哪些文件，#206）
+        self.user_saved = {}                  # (对话, 文件) → 用户在网页里保存后的修改时间，不算 AI 改的
         self.server = None
 
     async def start(self):
@@ -238,6 +240,8 @@ class WebChannel(Channel):
 
     async def progress(self, chat_id, snap):
         if snap["state"] == "working":
+            if chat_id not in self.progress_of:
+                self.turn_t0[chat_id] = time.time() - (snap.get("elapsed") or 0)
             self.progress_of[chat_id] = snap
         else:
             self.progress_of.pop(chat_id, None)
@@ -259,11 +263,40 @@ class WebChannel(Channel):
                 rec["fork"] = done["fork"]
             if done.get("prompt"):
                 rec["prompt"] = done["prompt"]
+            changed = await self._changed(chat_id, done)
+            if changed:
+                rec["changed"] = changed
         else:
             rec = {"type": "note", "text": markdown or ""}
         self._emit(chat_id, self.logs.append(chat_id, rec))
         if rec["type"] == "answer" and getattr(self, "on_answer", None):
             self.on_answer(chat_id)
+
+    async def _changed(self, chat_id, done):
+        """这一轮 AI 改了工作目录里的哪些文件（#206）：[{path, new}]。"""
+        t0 = self.turn_t0.pop(chat_id, None)
+        if t0 is None:
+            return []
+        try:
+            root = self.platform.chat_dir(chat_id)
+        except Exception:
+            return []
+        if not os.path.isdir(root):
+            return []
+        mine = {p: m for (c, p), m in self.user_saved.items() if c == chat_id}
+
+        def skip(p, mtime):
+            return p in mine and abs(mine[p] - mtime) < 0.001
+
+        try:
+            rows = await asyncio.to_thread(workspace.changed_since, root, t0, done.get("changed") or [], skip, done.get("created") or [])
+        except Exception:
+            log.warning("找这一轮改了哪些文件时出错", exc_info=True)
+            return []
+        for k in [k for k in self.user_saved if k[0] == chat_id]:
+            self.user_saved.pop(k, None)
+        rroot = os.path.realpath(root)
+        return [r for r in rows if r["path"] == rroot or r["path"].startswith(rroot + os.sep)]
 
     async def send_card(self, chat_id, card, reply_to=None):
         mid = "card-" + uuid.uuid4().hex[:10]
@@ -599,6 +632,46 @@ class Platform:
             raise Problem("找不到这个对话。")
         return c
 
+    def chat_dir(self, cid):
+        """这个对话在哪个目录里干活（工作区的根，#206）。和 _bridge 里一样算，只是不建目录、不开会话。"""
+        m = self.meta(cid)
+        if m.get("agent"):
+            a = agents.get(m["agent"])
+            if not a:
+                raise Problem("这个对话的 Agent 已经删掉了。")
+            return m.get("cwd") or agents.cwd(a)
+        t = m.get("temp") or {}
+        return t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
+
+    def _ws_root(self, cid):
+        root = self.chat_dir(cid)
+        if share.chat_owner(self, cid) and os.path.realpath(root) in (workspace.HOME, "/"):
+            raise Problem("这个对话的工作目录不能在这里打开。")     # 访客的对话：工作目录是整个主目录时不给看
+        os.makedirs(root, exist_ok=True)
+        return root
+
+    def ws_call(self, cid, fn, *args):
+        try:
+            return fn(self._ws_root(cid), *args)
+        except workspace.Problem as e:
+            raise Problem(str(e))
+        except PermissionError:
+            raise Problem("没有权限。")
+        except FileExistsError:
+            raise Problem("已经有同名的了。")
+        except OSError as e:
+            raise Problem(f"没做成：{e.strerror or e}")
+
+    def ws_in(self, cid, path):
+        """这个文件在不在对话的工作目录里（工作区里打开、预览、下载用）。"""
+        if not cid or cid.startswith("x:") or cid == devices.FS_CHAT or cid not in self.chats():
+            return False
+        try:
+            workspace.resolve(self._ws_root(cid), path)
+            return True
+        except (workspace.Problem, Problem, OSError):
+            return False
+
     def _bridge(self, cid):
         from .bridge import Bridge
         m = self.meta(cid)
@@ -796,6 +869,8 @@ class Platform:
                 "；".join(f"「{r['title']}」id={short(r['id'])}" for r in refs) + "）\n\n" + text
         if ctx and m.get("helper") and text:      # 助手要知道用户在页面上正看着什么（不记进对话记录）
             text = f"（{str(ctx)[:300]}）\n{text}"
+        elif isinstance(ctx, dict) and isinstance(ctx.get("ws_file"), str) and text and self.ws_in(cid, ctx["ws_file"]):
+            text = f"（我正在工作区里看这个文件：{ctx['ws_file']}）\n{text}"     # 工作区（#206）
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
@@ -1109,6 +1184,10 @@ class Platform:
             if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
                 r.update(state="expired")
         v["progress"] = self.channel.progress_of.get(cid)
+        try:
+            v["ws_root"] = os.path.realpath(self.chat_dir(cid))
+        except Problem:
+            v["ws_root"] = None
         v["sub_progress"] = {r["chat"]: self.channel.progress_of[r["chat"]] for r in v["log"]
                              if r.get("type") == "mention" and r.get("chat") in self.channel.progress_of}
         m = self.meta(cid)
@@ -1231,6 +1310,9 @@ class Platform:
                 out.append({"by": "me" if r["type"] == "edit" else "agent", "at": r.get("at"), "snap": r.get("snap")})
             elif r.get("type") == "user":
                 out += [{"by": "me", "at": r.get("at"), "snap": f["path"]} for f in r.get("files") or [] if f.get("path") == path]
+        if self.ws_in(cid, path) and os.path.isfile(path):     # 工作区里的文件（#206）：现在这一版就是最新的
+            if not out or out[-1].get("snap"):
+                out.append({"by": "me", "at": os.path.getmtime(path), "snap": None})
         if not out:
             raise Problem("找不到这个文件。")
         return out
@@ -1255,12 +1337,23 @@ class Platform:
         if not isinstance(text, str):
             raise Problem("内容不对。")
         try:
-            docs.save(path, text, mtime)
+            saved = docs.save(path, text, mtime)
         except docs.Problem as e:
             raise Problem(str(e))
+        self.channel.user_saved[(cid, os.path.realpath(path))] = saved
         if cid == devices.FS_CHAT:
             return self.doc_view(cid, path)
-        rec = {"type": "edit", "path": path, "name": os.path.basename(path)}
+        rec = {"type": "edit", "id": "edit-" + uuid.uuid4().hex[:10], "path": path, "name": os.path.basename(path)}
+        log_ = self.channel.logs.read(cid)
+        last = log_[-1] if log_ else None
+        if last and last.get("type") == "edit" and last.get("path") == path and last.get("id"):
+            rec["id"] = last["id"]            # 连着几次保存（工作区里自动保存）算一次，不在对话里刷屏
+            old = last.get("snap")
+            if old and os.path.isfile(old) and os.path.dirname(old) == docs.snap_dir(self.channel.logs.folder, cid):
+                try:
+                    os.remove(old)
+                except OSError:
+                    pass
         snap = docs.snapshot(self.channel.logs.folder, cid, path)
         if snap:
             rec["snap"] = snap
@@ -1791,6 +1884,7 @@ def _handler(pf):
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
+                "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
                 "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
@@ -1863,6 +1957,13 @@ def _handler(pf):
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
+                "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),
+                "/api/ws/rename": lambda: pf.ws_call(b("chat"), workspace.rename, b("path") or "", b("name")),
+                "/api/ws/move": lambda: pf.ws_call(b("chat"), workspace.move, b("path") or "", b("to") or ""),
+                "/api/ws/trash": lambda: pf.ws_call(b("chat"), workspace.trash, b("path") or ""),
+                "/api/ws/restore": lambda: pf.ws_call(b("chat"), workspace.restore, b("token"), b("path") or ""),
+                "/api/ws/put": lambda: pf.ws_call(b("chat"), workspace.put, os.path.join(registry.pdir(pf.home), "uploads"),
+                                                  b("key"), b("path") or "", b("name")),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
                 "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index"), b("src") or "log"),
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
@@ -1942,6 +2043,8 @@ def _handler(pf):
             """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。设备管理里的按它的范围（#100）。"""
             if chat == devices.FS_CHAT:
                 return devices.allowed_file(path)
+            if os.path.isfile(path) and pf.ws_in(chat, path):    # 工作区里的文件（#206）
+                return True
             return os.path.isfile(path) and any(
                 r.get("type") in ("file", "edit") and path in (r.get("path"), r.get("snap"))   # snap：旧版本的留底，下载用
                 or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])

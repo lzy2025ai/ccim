@@ -1908,6 +1908,7 @@ def _handler(pf):
             return True
 
         def do_GET(self):
+            filesend.unname(self)
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             if u.path.startswith("/api/") and u.path != "/api/events" and self._remote():

@@ -1655,7 +1655,7 @@ function mtag(mid, always){   // 在哪台电脑：只有几台电脑时才显�
   return `<span class="tag mach ${m.online === false ? "off" : ""}">${esc(m.name)}${m.online === false ? "（离线）" : ""}</span>`;
 }
 const isRemote = mid => !!S.hub || !!(mid && S.me && mid !== S.me);   // 在服务器上打开的网页：每台电脑都算「别的电脑」
-const fileUrl = (chat, path) => `/api/file?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}`
+const fileUrl = (chat, path) => `/api/file/-/${encodeURIComponent(String(path).split("/").pop() || "file")}?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}`
   + (isRemote(ctxMachine) ? `&machine=${encodeURIComponent(ctxMachine)}` : "");
 
 const stallSeen = new Set();
@@ -5834,7 +5834,7 @@ function drawDoc(){
   if (DOC.mode === "wx") wxImgTools();
 }
 function docFileUrl(){   // 正在看的这一版：最新的是原文件，旧版本是留底
-  return `/api/file?chat=${encodeURIComponent(DOC.chat)}&path=${encodeURIComponent(DOC.d.file || DOC.path)}`
+  return `/api/file/-/${encodeURIComponent(String(DOC.path).split("/").pop() || "file")}?chat=${encodeURIComponent(DOC.chat)}&path=${encodeURIComponent(DOC.d.file || DOC.path)}`
     + (isRemote(DOC.machine) ? `&machine=${encodeURIComponent(DOC.machine)}` : "");
 }
 function docVersions(e){

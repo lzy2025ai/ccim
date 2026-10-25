@@ -402,7 +402,8 @@ class Dev:
                 "pending": bool((getattr(self, "cache", None) or {}).get("restart"))}   # 之前合进去、还没用上的要重启
 
     def ship(self, prs):
-        """上线（#156 第二轮、#207）：先检查，有合不了的就不开始；逐个合并，中途失败就停、不更新；全部合好最后更新一次。"""
+        """上线（#156 第二轮、#207）：先检查，有合不了的就不开始；逐个合并，中途某个合不上就跳过它和叠在它后面的，
+        其余接着合（#207 第二轮），有合进去的最后更新一次。"""
         names = {x["pr"]: f"#{x['issue'] or x['pr']}" for x in (self.cache or {}).get("review") or []}
         prs = [int(n) for n in prs or []]
         if not prs:
@@ -419,18 +420,28 @@ class Dev:
         bad = [it for it in c["items"] if it["problem"]]
         if bad:                               # 网页上线前已经问过；这里是兜底，一个都不动
             raise RuntimeError("没有开始上线：" + "；".join(f"#{it['issue'] or it['pr']} {it['problem']}" for it in bad))
-        done, heads, n = [], {}, len(c["items"])
+        # 检查时是逐个和 main 比的，前面的合进去后，后面的才可能冲突：跳过它和叠在它后面的，其余接着合
+        done, missed, heads, failed, n = [], [], {}, set(), len(c["items"])
+        self.job.update(done=done, missed=missed)
         for i, it in enumerate(c["items"]):
             tag = f"#{it['issue'] or it['pr']}"
+            stuck = [m for m in it["after"] if m in failed]
+            if stuck:
+                failed.add(it["pr"])
+                missed.append({"tag": tag, "pr": it["pr"], "why": "叠在没合上的 " + "、".join(
+                    next((f"#{x['issue'] or x['pr']}" for x in c["items"] if x["pr"] == m), f"#{m}") for m in stuck) + " 后面"})
+                continue
             try:
                 self._merge(it, f"{tag}{f'（{i + 1}/{n}）' if n > 1 else ''}", heads)
             except Exception as e:
-                rest = [f"#{x['issue'] or x['pr']}" for x in c["items"][i + 1:]]
-                note = ("、".join(done) + " 已上线；" if done else "") + f"{tag} 没合上：{e}" + \
-                    (f"；{'、'.join(rest)} 没动" if rest else "") + "。这台 Mac 没有更新"
-                raise RuntimeError(note)
+                log.warning("上线 %s 没合上", tag, exc_info=True)
+                failed.add(it["pr"])
+                missed.append({"tag": tag, "pr": it["pr"], "why": str(e)})
+                continue
             done.append(tag)
             heads[it["pr"]] = it["head"]
+        if not done:
+            raise RuntimeError("一个都没合上")
         quiet = self._update()
         return "、".join(done) + " 已上线" + ("，不用重启" if quiet else "")
 

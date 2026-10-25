@@ -2790,7 +2790,7 @@ function drawChatRcpt(){
 function refCands(qs){
   if (!detail || !detail.agent || detail.readonly || current.view !== "agents") return [];
   const k = (qs || "").toLowerCase();
-  return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !chatRefs.some(r => r.id === c.id)
+  return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !c.side_of && !chatRefs.some(r => r.id === c.id)
     && (!k || (c.title || "").toLowerCase().includes(k))).slice(0, 8);
 }
 function refTyped(){
@@ -3126,7 +3126,7 @@ async function startAgent(aid){
 function renderChatEmptyOr(){ renderChatEmpty(); }
 
 // ================= 任务面板（#48） =================
-const isTop = c => !c.mention_of && !c.project && (!c.schedule || c.listed) && !c.external;
+const isTop = c => !c.mention_of && !c.side_of && !c.project && (!c.schedule || c.listed) && !c.external;
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
 // 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
@@ -4107,7 +4107,7 @@ function renderAgentSide(){
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
   const a = agentOf(id) || agentSide.a || {name: "", seal: "", base: "claude"};
   const m = machineOf(a.machine || ownerOf(id) || S.me);
-  const rows = agentSide.chats.filter(c => !c.project && (!c.schedule || c.listed));   // 群聊里被 @ 的那份也列出来（#78）
+  const rows = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));   // 群聊里被 @ 的那份也列出来（#78）
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>

@@ -4612,7 +4612,7 @@ async function devShip(prs){
   const tag = n => { const r = items.find(x => x.pr === n); return r ? `#${r.issue || r.pr}` : `#${n}`; };
   const li = r => `<li>${name(r)}${r.problem ? ` <span class="state-err">· ${esc(r.problem)}</span>`
     : r.after.length ? ` <span class="muted">· 接在 ${r.after.map(tag).join("、")} 后面合</span>` : ""}</li>`;
-  const how = `<p class="muted">${ok.length > 1 ? "按顺序逐个合进正式版本（每个要等一分钟左右的检查），全部合好后" : "合进正式版本后，"}服务器上的网页和这台 Mac 一起更新。中途有一个合不上就停下，这台 Mac 不更新。这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。</p>`;
+  const how = `<p class="muted">${ok.length > 1 ? "按顺序逐个合进正式版本（每个要等一分钟左右的检查），全部合好后" : "合进正式版本后，"}服务器上的网页和这台 Mac 一起更新。中途有一个合不上就停下，这台 Mac 不更新。${c.pending || ok.some(r => r.restart !== false) ? "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。" : "这次不用重启。"}</p>`;
   const body = bad.length
     ? `<p>${bad.length === items.length ? "选中的都合不了：" : `有 ${bad.length} 个合不了：`}</p><ul>${bad.map(li).join("")}</ul>`
       + (ok.length ? `<p>可以只上线其余 ${ok.length} 个：</p><ul>${ok.map(li).join("")}</ul>${how}` : `<p class="muted">回到提这些需求的对话让 Agent 处理好再来。</p>`)
@@ -4624,7 +4624,7 @@ async function devShip(prs){
   $("#dev-ship-ok").onclick = async () => { closeDialog(); await act(() => api("/api/dev/ship", {prs: ok.map(r => r.pr)}, devMachine())); shipPick = new Set(); renderDev(true); };
 }
 async function devUpdate(){
-  if (!await confirmBox("更新这台 Mac", "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。", "更新")) return;
+  if (DEVP && DEVP.restart !== false && !await confirmBox("更新这台 Mac", "这台 Mac 上的机器人会重启一次（等手头的活做完），网页断开十几秒。", "更新")) return;
   await act(() => api("/api/dev/update", {}, devMachine()));
   renderDev(true);
 }

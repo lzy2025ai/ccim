@@ -2427,7 +2427,7 @@ def install_skill(pf, body):
     elif body.get("key"):
         names = skills_mod.install_upload(body["key"], registry.pdir(pf.home), body.get("name") or "")
     elif body.get("local"):
-        names = skills_mod.import_local(body["local"], pf.peers.me.get("name") or "")
+        names = skills_mod.import_local(body["local"], pf.peers.me.get("name") or "", pf.peers.me.get("id") or "")
     else:
         raise Problem("选一个来源。")
     return {"names": names}

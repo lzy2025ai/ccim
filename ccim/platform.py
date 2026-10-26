@@ -933,7 +933,7 @@ class Platform:
         chats = self.chats()
         chats[cid].update(review=d, review_view=v["id"], review_name=v["name"])
         self.store.write(chats)
-        hidden = v["prompt"].replace("{date}", d) + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
+        hidden = v["prompt"].replace("{date}", d) + "\n\n" + board_mod.LINK_NOTE + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
         t = asyncio.ensure_future(self.send(cid, f"复盘这一天：{v['name']}", hidden=hidden, mark={"review": d}))
         self.background.add(t)
         t.add_done_callback(self.background.discard)

@@ -148,6 +148,8 @@ class Shared:
     def changed(self, ev=None):
         if ev and ev.get("type") == "progress" and ev.get("state") == "working":
             return                            # 正在干活的进度每 0.3 秒一条，只是在做哪一步，不作废
+        if ev and ev.get("type") == "bg" and ev.get("moved"):
+            return                            # 后台任务走到下一步，也一样
         with self.lock:
             self.gen += 1
 

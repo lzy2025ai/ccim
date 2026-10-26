@@ -266,6 +266,21 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .lnk{color:var(--qing);font-size:12.5px} .lnk:hover{text-decoration:underline}
 .rv-ask{display:flex;align-items:center;gap:8px;margin:0 12px 12px;border:1px solid var(--line-strong);border-radius:12px;padding:9px 12px;color:var(--faint);font-size:13px;text-decoration:none}
 .rv-ask:hover{border-color:var(--qing);color:var(--muted)} .rv-ask svg{width:14px;height:14px}
+.rv-bar{padding:10px 12px 0}
+.rv-ver{display:flex;align-items:center;gap:8px;width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);font-size:13px;text-align:left}
+.rv-ver:hover{border-color:var(--line-strong)} .rv-ver .nm{font-weight:600;color:var(--ink)} .rv-ver .sub{color:var(--muted);font-size:12px}
+.rv-ver .n{margin-left:auto;color:var(--faint);font-size:12px} .rv-ver svg{width:12px;height:12px;color:var(--faint);flex:none}
+.rv-views{padding:12px} .rv-sec{font-size:12px;color:var(--faint);margin:0 4px 6px}
+.rv-view{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:9px 12px;margin-bottom:6px;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-align:left}
+.rv-view:hover{border-color:var(--qing)} .rv-view .nm{font-size:13.5px;font-weight:600;color:var(--ink)} .rv-view .desc{font-size:12px;color:var(--muted)}
+.dialog.wide{width:min(860px,94vw)}
+.rve{display:grid;grid-template-columns:180px 1fr;gap:14px;min-height:380px}
+.rve-list{display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line);padding-right:10px}
+.rve-list button{padding:7px 10px;border-radius:7px;text-align:left;font-size:13px;color:var(--ink-2)}
+.rve-list button:hover{background:var(--sunk)} .rve-list button.on{background:var(--sunk);font-weight:600;color:var(--ink)}
+.rve-list .add{display:flex;align-items:center;gap:6px;color:var(--qing)} .rve-list .add svg{width:13px;height:13px}
+.rve-form{display:flex;flex-direction:column;gap:8px} .rve-form .textarea{flex:1;min-height:300px;font-size:13px;line-height:1.6}
+@media (max-width:760px){.rve{grid-template-columns:1fr}.rve-list{flex-direction:row;flex-wrap:wrap;border-right:0;padding-right:0}}
 /* 当天详情 */
 .dhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .crumb{color:var(--muted);text-decoration:none;font-size:14px} .crumb:hover{color:var(--ink)}
@@ -3504,8 +3519,11 @@ function renderBoardDay(quick){
   if (keep && quick) $(".board").scrollTop = keep;
 }
 // ----- 复盘这一天（#241）：交给一个 Agent，复盘是它的普通对话，接着聊就在那个对话里 -----
+// 几套视角（#263）：每次复盘都是一个新对话，互不影响；这一天的几次复盘作为几个版本切换着看
 let reviewAgent = null;                 // 这次选的 Agent（没选用上次的）
 const reviewText = {};                  // 对话编号 → {key, text, at}
+const reviewSel = {};                   // 日期 → 正在看的那个版本（对话编号）
+let reviewViews = null;                 // {mid, at, list}：复盘视角（存在 Agent 所在的电脑上）
 function reviewAid(d){
   if (reviewAgent && agentOf(reviewAgent)) return reviewAgent;
   const last = localStorage.getItem("ccim.reviewAgent");
@@ -3513,7 +3531,19 @@ function reviewAid(d){
   const c = (S.chats || []).find(c => c.review === d);
   return c ? c.agent : (S.agents[0] || {}).id;
 }
-const reviewChat = (d, aid) => (S.chats || []).find(c => c.review === d && c.agent === aid && !c.archived);
+const reviewVersions = d => (S.chats || []).filter(c => c.review === d && !c.archived)
+  .sort((x, y) => ((y.created || "") > (x.created || "") ? 1 : -1));
+const reviewName = c => c.review_name || "工作总结";        // 有视角之前的复盘都是工作总结
+function loadReviewViews(d, force, quiet){   // quiet：拿到后不重画（菜单正挂在面板里的按钮上）
+  const mid = ownerOf(reviewAid(d)) || S.me;
+  if (!force && reviewViews && reviewViews.mid === mid && Date.now() - reviewViews.at < 60000) return Promise.resolve(reviewViews.list);
+  return api("/api/board/review_views", undefined, mid).then(r => {
+    const first = !reviewViews || reviewViews.mid !== mid;
+    reviewViews = {mid, at: Date.now(), list: r.views || []};
+    if (first && !quiet && current.view === "board" && current.id === "day") renderBoardDay(true);
+    return reviewViews.list;
+  });
+}
 function loadReview(c){
   const key = `${c.last_active}|${working(c)}`, hit = reviewText[c.id];
   if (hit && hit.key === key) return;
@@ -3529,49 +3559,99 @@ function loadReview(c){
 function reviewHtml(d){
   const aid = reviewAid(d), a = agentOf(aid);
   if (!a) return "";
-  const c = reviewChat(d, aid), r = c && reviewText[c.id];
-  if (c) loadReview(c);
-  const who = `<button class="rv-who" onclick="pickReviewAgent(event, '${d}')">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${ICON.down}</button>`;
+  const who = `<button class="rv-who" title="由谁复盘" onclick="pickReviewAgent(event, '${d}')">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${ICON.down}</button>`;
   const head = `<div class="rv-head"><h2>复盘</h2><span class="sp"></span>${who}</div>`;
-  const tools = `<button class="lnk" onclick="editReviewPrompt()">复盘提示词</button>`;
-  if (!c) return `<div class="review">${head}<div class="rv-empty"><p>把这一天做了什么、卡在哪、下一步先做什么理一遍</p>
-      <button class="btn primary" onclick="startReview('${d}')">复盘这一天</button></div><div class="rv-foot"><span class="sp"></span>${tools}</div></div>`;
+  const tools = `<button class="lnk" onclick="editReviewViews('${d}')">编辑视角</button>`;
+  const vs = reviewVersions(d);
+  if (!vs.length) {
+    const views = reviewViews && reviewViews.mid === (ownerOf(aid) || S.me) ? reviewViews.list : null;
+    if (!views) loadReviewViews(d).catch(e => toast(e.message));
+    const pick = views ? views.map(v => `<button class="rv-view" onclick="startReview('${d}', ${q(v.id)})"><span class="nm">${esc(v.name)}</span>${v.desc ? `<span class="desc">${esc(v.desc)}</span>` : ""}</button>`).join("")
+      : `<p class="bempty">…</p>`;
+    return `<div class="review">${head}<div class="rv-views"><div class="rv-sec">用哪套视角复盘这一天</div>${pick}</div><div class="rv-foot"><span class="sp"></span>${tools}</div></div>`;
+  }
+  const c = vs.find(x => x.id === reviewSel[d]) || vs[0], r = reviewText[c.id];
+  loadReview(c);
+  loadReviewViews(d, false, true).catch(() => {});       // 先备好，点「换个视角复盘」时直接弹
+  const ca = agentOf(c.agent);
+  const ver = `<button class="rv-ver" onclick="pickReviewVersion(event, '${d}')"><span class="nm">${esc(reviewName(c))}</span><span class="sub">${esc([c.created ? c.created.slice(11, 16) : "", ca ? ca.name : ""].filter(Boolean).join(" · "))}</span>${vs.length > 1 ? `<span class="n">${vs.length} 个版本</span>` : ""}${ICON.down}</button>`;
   const busy = working(c);
   const body = busy ? `<div class="rv-busy"><span class="spin"></span>${esc(c.doing ? "正在" + c.doing : "正在复盘…")}</div>`
     : r && r.text ? `<div class="rv-body md">${md(r.text)}</div>` : r ? `<p class="bempty rv-pad">还没有复盘结果。</p>` : `<p class="bempty rv-pad">…</p>`;
-  return `<div class="review">${head}${body}
-    <div class="rv-foot">${!busy && r && r.at ? `${hm(r.at)} 生成` : ""}<span class="sp"></span>${busy ? "" : `<button class="lnk" onclick="startReview('${d}')">重新复盘</button><span>·</span>`}${tools}</div>
+  return `<div class="review">${head}<div class="rv-bar">${ver}</div>${body}
+    <div class="rv-foot">${!busy && r && r.at ? `${hm(r.at)} 生成` : ""}<span class="sp"></span><button class="lnk" onclick="pickReviewView(event, '${d}')">换个视角复盘</button><span>·</span>${tools}</div>
     <a class="rv-ask" href="${boardHref(c)}"><span>接着聊，或 @ 其他 Agent 安排后面的事</span><span class="sp"></span>${ICON.chev}</a></div>`;
 }
 function pickReviewAgent(ev, d){
   const cur = reviewAid(d);
   pop(ev, `<div class="sec">由谁复盘</div>` + S.agents.map(a => `<button class="${a.id === cur ? "on" : ""}" onclick="reviewAgent=${q(a.id)};closePop();renderBoardDay(true)">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${a.id === cur ? ICON.check : ""}</button>`).join(""), true);
 }
-async function startReview(d){
+function pickReviewVersion(ev, d){
+  const vs = reviewVersions(d), cur = (vs.find(x => x.id === reviewSel[d]) || vs[0] || {}).id;
+  pop(ev, `<div class="sec">这一天的复盘</div>` + vs.map(c => {
+    const ca = agentOf(c.agent);
+    return `<button onclick="reviewSel['${d}']=${q(c.id)};closePop();renderBoardDay(true)"><span><div>${esc(reviewName(c))}${working(c) ? "（复盘中）" : ""}</div><div class="desc">${esc([c.created ? c.created.slice(11, 16) : "", ca ? ca.name : ""].filter(Boolean).join(" · "))}</div></span>${c.id === cur ? `<span class="ck">${ICON.check}</span>` : ""}</button>`;
+  }).join(""), true);
+}
+function pickReviewView(ev, d){
+  const t = ev.currentTarget;
+  const show = list => pop({currentTarget: t, stopPropagation(){}}, `<div class="sec">用哪套视角再复盘一次</div>` + list.map(v =>
+    `<button onclick="closePop();startReview('${d}', ${q(v.id)})"><span><div>${esc(v.name)}</div>${v.desc ? `<div class="desc">${esc(v.desc)}</div>` : ""}</span></button>`).join(""), true);
+  ev.stopPropagation();
+  loadReviewViews(d, false, true).then(show).catch(e => toast(e.message));
+}
+async function startReview(d, view){
   const aid = reviewAid(d);
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
+  let r;
   try {
     const parts = await Promise.all(ms.map(m => api(`/api/board/day?d=${d}&material=1`, undefined, m.id).catch(() => null)));
     const material = parts.filter(p => p && p.material).map(p => p.material).join("\n\n");
-    await api("/api/board/review", {date: d, agent: aid, material}, ownerOf(aid));
+    r = await api("/api/board/review", {date: d, agent: aid, material, view}, ownerOf(aid));
   } catch (e) { return toast(e.message); }
   try { localStorage.setItem("ccim.reviewAgent", aid); } catch {}
-  toast("开始复盘了"); refreshSoon();
+  reviewSel[d] = r.chat;
+  toast("开始复盘了"); await loadState();
+  if (current.view === "board" && current.id === "day") renderBoardDay(true);
 }
-async function editReviewPrompt(){
-  const where = ownerOf(reviewAid(current.sub)) || S.me;
-  let r;
-  try { r = await api("/api/board/review_prompt", undefined, where); } catch (e) { return toast(e.message); }
-  dialog("复盘提示词", `<textarea id="rv-prompt" class="textarea" style="min-height:240px">${esc(r.prompt)}</textarea>
-    <p class="hint">写 {date} 的地方会换成那一天的日期。这一天各对话的材料会接在后面。</p>`,
-    `<button class="btn" id="rv-def" style="margin-right:auto">恢复默认</button><button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" id="rv-save">保存</button>`);
-  $("#rv-def").onclick = () => { $("#rv-prompt").value = r.default; };
-  $("#rv-save").onclick = async () => {
-    const v = $("#rv-prompt").value.trim(), prompt = v === r.default.trim() ? "" : v;
-    const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
-    try { await Promise.all(ms.map(m => api("/api/board/review_prompt", {prompt}, m.id))); } catch (e) { return toast(e.message); }
-    closeDialog(); toast("已保存");
-  };
+// 编辑视角：左边选哪套，右边改名字和提示词；自带的能改、能恢复默认，新加的能删
+let RVE = null;
+async function editReviewViews(d){
+  let list;
+  try { list = await loadReviewViews(d, true); } catch (e) { return toast(e.message); }
+  RVE = {d, list: list.map(v => ({...v})), i: 0};
+  dialog("复盘视角", `<div class="rve"><div class="rve-list" id="rve-list"></div><div class="rve-form">
+      <input id="rve-name" class="input" maxlength="20" placeholder="名字">
+      <textarea id="rve-prompt" class="textarea" placeholder="提示词"></textarea>
+      <p class="hint">写 {date} 的地方会换成那一天的日期，这一天各对话的材料接在后面。</p></div></div>`,
+    `<button class="btn" id="rve-x" style="margin-right:auto"></button><button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveReviewViews()">保存</button>`);
+  $(".dialog").classList.add("wide");
+  drawRve();
+}
+function rveTake(){
+  const v = RVE.list[RVE.i]; if (!v || !$("#rve-name")) return;
+  v.name = $("#rve-name").value; v.prompt = $("#rve-prompt").value;
+}
+function drawRve(){
+  $("#rve-list").innerHTML = RVE.list.map((v, i) => `<button class="${i === RVE.i ? "on" : ""}" onclick="rveTake();RVE.i=${i};drawRve()">${esc(v.name || "未命名")}</button>`).join("")
+    + (RVE.list.length < 12 ? `<button class="add" onclick="rveAdd()">${ICON.plus}新加一套</button>` : "");
+  const v = RVE.list[RVE.i];
+  $("#rve-name").value = v.name || ""; $("#rve-prompt").value = v.prompt || "";
+  const x = $("#rve-x");
+  if (v.builtin) { x.textContent = "恢复默认"; x.className = "btn"; x.onclick = () => { $("#rve-prompt").value = v.default; }; }
+  else { x.textContent = "删掉这套"; x.className = "btn danger"; x.onclick = () => { RVE.list.splice(RVE.i, 1); RVE.i = 0; drawRve(); }; }
+}
+function rveAdd(){
+  rveTake();
+  RVE.list.push({name: "", prompt: "复盘 {date} 这一天。后面附了这一天各个对话的材料。\n\n", builtin: false});
+  RVE.i = RVE.list.length - 1; drawRve(); $("#rve-name").focus();
+}
+async function saveReviewViews(){
+  rveTake();
+  const views = RVE.list.map(v => ({id: v.id, name: v.name, prompt: v.prompt}));
+  const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub) && !sharedM(m.id)) : [{id: S.me}];
+  try { await Promise.all(ms.map(m => api("/api/board/review_views", {views}, m.id))); } catch (e) { return toast(e.message); }
+  closeDialog(); toast("已保存"); reviewViews = null; loadReviewViews(RVE.d).catch(() => {});
 }
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);

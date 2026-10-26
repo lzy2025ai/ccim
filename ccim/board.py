@@ -164,7 +164,24 @@ def stats(pf, keep=None, everything=True):
            "tokens": {d: v for d, v in tk.items() if d >= tsince} if tokens.ready() else None}
     if everything:
         out["quota"] = usage.cached()
+    out["recent"] = recent(pf, chats, keep)
     return out
+
+
+def recent(pf, chats, keep=None):
+    """任务面板「最近在跟」（#268）：没归档、不在等你、没在干活的顶层对话里，星标的和最近 7 天聊过的。
+    整体状态里只带了最近一部分对话，这一栏要的自己给。"""
+    since = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = []
+    for cid, m in chats.items():
+        if not top_level(m, cid) or not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
+            continue
+        if not (m.get("star") or (m.get("last_active") or "") >= since):
+            continue
+        v = pf.chat_view(cid)
+        if not v.get("attention") and not v.get("crew"):
+            rows.append(v)
+    return rows
 
 
 def day(pf, d, keep=None, everything=True):
@@ -190,7 +207,8 @@ def day(pf, d, keep=None, everything=True):
     if tokens.ready():
         tk = tokens.days().get(d) or [0, 0] if everything else \
             [sum(r["tokens"][0] for r in rows), sum(r["tokens"][1] for r in rows)]
-    return {"date": d, "chats": rows, "hours": hours, "tokens": tk}
+    reviews = [pf.chat_view(cid) for cid, m in chats.items() if m.get("review") == d and _counted(cid, m, keep)]
+    return {"date": d, "chats": rows, "hours": hours, "tokens": tk, "reviews": reviews}   # 那天的复盘对话（#268）
 
 
 # ----- 复盘（#241） -----

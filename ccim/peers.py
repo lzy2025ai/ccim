@@ -32,9 +32,12 @@ PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Acco
 OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_REFRESH = 10                            # 别的电脑的 state 超过这么久，返回上次取的同时后台再取一次（有变化会推送过来，标记现取）
+POOL_IDLE = 30                                # 和总控之间空着的连接放这么久就不用了（nginx 默认 75 秒断开空闲连接，#264）
+POOL_MAX = 4
+RETRY_SAFE = ("/peer/poll", "/peer/reply", "/peer/push")   # 复用的连接断了换一条重发：这几个重发没有副作用
 GZIP_MIN = 4096                               # 回给总控的结果超过这么大才压缩（#260）
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
-QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
+QUICK = {"/api/state", "/api/chats", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
          "/api/peer/result"}
 QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
 
@@ -221,6 +224,7 @@ class Peers:
         self.hub = _load("hub.json", None)            # {url, hub_id, hub_name, key}
         self.hub_ok = 0                               # 最近一次连上总控的时间
         self.machines_from_hub = []
+        self.pool = []                        # 和总控之间空着的连接：[(连接, 放回来的时刻)]（#264）
         self.hub_gzip = False                  # 总控收得了压缩的回复（它在长轮询的回应里说，#260）
         self.cache = _load("peer-cache.json", {})     # 各台电脑上次的 state，离线时显示
         self.cache_at = {}                    # 上次从那台电脑取 state 的时间：新的直接用，不每次都现问（#32）
@@ -479,7 +483,8 @@ class Peers:
         key = lambda mid: f"{mid}|{account}" if mid in guest else mid
         hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
-                      "home": local.get("home"), "ccim": local.get("ccim"), "global": local.get("global") or {}}}
+                      "home": local.get("home"), "ccim": local.get("ccim"), "global": local.get("global") or {},
+                      "chat_more": local.get("chat_more")}}     # 这台还有多少更早的、已归档的对话没带上（#268）
         results = {}
 
         def fetch(m):
@@ -545,6 +550,7 @@ class Peers:
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
                               "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {}),
+                              "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话
                               "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）
                                          if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}}
         if changed:
@@ -658,18 +664,50 @@ class Peers:
 
     # ----- 加入的电脑：和总控说话 -----
 
+    def _take(self):
+        """拿一条和总控之间的连接：有空着的就复用（省掉每次 0.1 秒左右的 HTTPS 握手，#264），没有就新建。"""
+        with self.lock:
+            while self.pool:
+                c, at = self.pool.pop()
+                if time.time() - at < POOL_IDLE:
+                    return c, True
+                c.close()
+        return _conn(self.hub["url"], 30), False
+
+    def _give(self, c):
+        with self.lock:
+            if len(self.pool) < POOL_MAX:
+                self.pool.append((c, time.time()))
+                return
+        c.close()
+
     def _hub_request(self, path, body=b"", headers=None, timeout=30):
-        c = _conn(self.hub["url"], timeout)
-        ts, nonce = str(int(time.time())), secrets.token_hex(12)
-        h = dict(headers or {}, **{"X-Node": self.me["id"], "X-Ts": ts, "X-Nonce": nonce,
-                                   "X-Sig": _sign(self.hub["key"], "POST", path, ts, nonce, _digest(body))})
-        try:
-            c.request("POST", path, body=body or b"", headers=h)
-            r = c.getresponse()
-            data = r.read()
-            rh = {k: v for k, v in r.getheaders()}
-        finally:
-            c.close()
+        for attempt in (0, 1):
+            c, reused = self._take()
+            c.timeout = timeout
+            if c.sock:
+                c.sock.settimeout(timeout)
+            ts, nonce = str(int(time.time())), secrets.token_hex(12)   # 重发也要换：总控不收用过的随机数
+            h = dict(headers or {}, **{"X-Node": self.me["id"], "X-Ts": ts, "X-Nonce": nonce,
+                                       "X-Sig": _sign(self.hub["key"], "POST", path, ts, nonce, _digest(body))})
+            try:
+                c.request("POST", path, body=body or b"", headers=h)
+                r = c.getresponse()
+                data = r.read()
+                rh = {k: v for k, v in r.getheaders()}
+            except (ConnectionError, http.client.HTTPException):
+                c.close()
+                if reused and not attempt and path in RETRY_SAFE:   # 放着的时候被总控那边断了
+                    continue
+                raise
+            except BaseException:
+                c.close()
+                raise
+            if r.will_close:
+                c.close()
+            else:
+                self._give(c)
+            break
         if r.status == 401:
             raise PermissionError("总控不认这台电脑了（可能被移除了），重新运行 ccim join。")
         sig = rh.get("X-Sig") or ""

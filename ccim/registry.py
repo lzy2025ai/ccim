@@ -17,7 +17,8 @@ def key(path):
 
 def pdir(path):
     d = os.path.join(HOME, "projects", key(path))
-    os.makedirs(d, exist_ok=True)
+    if not os.path.isdir(d):                  # 生成整体状态时要调几百次：先看一眼，比每次都去建目录便宜（#264）
+        os.makedirs(d, exist_ok=True)
     return d
 
 
@@ -52,19 +53,27 @@ def snapshot():
             _snap.files = None
 
 
+def _json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_json(path):
     """读一个 JSON 文件，读不了抛 OSError / ValueError。在 snapshot() 里同一个文件没变就不重读。"""
+    return load_file(path, _json)
+
+
+def load_file(path, parse):
+    """parse(path) 读出来的内容；在 snapshot() 里同一个文件没变就不重读（JSON 以外的配置文件也用，#264）。"""
     files = getattr(_snap, "files", None)
     if files is None:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
+        return parse(path)
     st = os.stat(path)
     stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
     hit = files.get(path)
     if hit and hit[0] == stamp:
         return hit[1]
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = parse(path)
     files[path] = (stamp, data)
     return data
 

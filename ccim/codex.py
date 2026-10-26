@@ -13,7 +13,7 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 import asyncio, glob, json, logging, os, re, signal, sys, time, tomllib
 
 from .progress import describe_tool, short
-from . import share
+from . import registry, share
 from .session import Chat, Turn, _tools_ready, guest_of, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
@@ -69,13 +69,17 @@ def find_codex():
     return hits[-1] if hits else None
 
 
+def _toml(path):
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
 def defaults(path):
     """Codex 自己设置里的模型和思考深度：项目 .codex/config.toml 优先，其次 ~/.codex/config.toml。"""
     model = effort = None
     for f in (os.path.join(path, ".codex", "config.toml"), os.path.expanduser("~/.codex/config.toml")):
         try:
-            with open(f, "rb") as fh:
-                c = tomllib.load(fh)
+            c = registry.load_file(f, _toml)  # 列表里每个 Codex 对话都要查一遍：一次请求里只读一遍（#264）
         except (OSError, ValueError):
             continue
         model = model or c.get("model")

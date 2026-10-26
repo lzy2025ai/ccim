@@ -2187,7 +2187,7 @@ def _handler(pf):
                 "/api/skills/install": lambda: skill_write(pf, install_skill, pf, body),
                 "/api/skills/toggle": lambda: skill_write(pf, skills_mod.set_disabled, b("name"), not b("on")),
                 "/api/skills/delete": lambda: skill_write(pf, skills_mod.delete, b("name")),
-                "/api/skills/update": lambda: skill_write(pf, skills_mod.update, b("name")),
+                "/api/skills/update": lambda: skill_write(pf, skills_mod.update, b("name"), pf.peers.me),
                 "/api/skills/file/save": lambda: skill_write(pf, skills_mod.save_file, b("name"), b("path"), b("text"), b("mtime")),
                 "/api/agent/skill/file/save": lambda: skills_mod.agent_save(_agent(b("id")), b("group"), b("name"), b("path"), b("text"), b("mtime")),
                 "/api/agent/skill/share": lambda: skill_write(pf, lambda: {"names": skills_mod.agent_share(_agent(b("id")), b("group"), b("name"),

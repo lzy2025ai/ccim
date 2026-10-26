@@ -129,9 +129,14 @@ def latest(url, block=False):
     return v
 
 
+_shown = [0, None]                            # 网页上显示的版本：开发版要问 git，整体状态每次都要带，几秒内不重问（#264）
+
+
 def status():
     """给网页：版本、有没有新版本、正在升级或上次升级的结果。"""
-    i = info()
+    if not _shown[1] or time.time() - _shown[0] > 10:
+        _shown[:] = [time.time(), info()]
+    i = _shown[1]
     out = dict(i, job=job() or None)
     if i["kind"] == "release":
         lt = latest(i["url"])

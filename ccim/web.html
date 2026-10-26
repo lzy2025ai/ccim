@@ -1752,7 +1752,15 @@ let S = {agents:[], chats:[], global:{}, defaults:{}, home:""};
 let current = {view:"chats", id:null};
 let detail = null;                // 当前打开的对话
 let refreshTimer = null;
-async function loadState(){
+// 整体状态同一时间只取一份（#256）：有一份在路上时再要，等它回来后只补取一次，这期间要的都等这一次；
+// 在路上的那份可能是改动之前发出的，所以不能直接拿它的结果
+let stateReq = null, stateAgain = null;
+function loadState(){
+  if (!stateReq) return (stateReq = fetchState().finally(() => { stateReq = null; }));
+  if (!stateAgain) stateAgain = stateReq.catch(() => {}).then(() => { stateAgain = null; return loadState(); });
+  return stateAgain;
+}
+async function fetchState(){
   S = await api("/api/state");
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
@@ -1794,6 +1802,8 @@ const fileUrl = (chat, path) => `/api/file/-/${encodeURIComponent(String(path).s
   + (isRemote(ctxMachine) ? `&machine=${encodeURIComponent(ctxMachine)}` : "");
 
 const stallSeen = new Set();
+// 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
+const LOCAL_EVENTS = new Set(["ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
 function connectEvents(){
   const es = new EventSource("/api/events");
   let lost = false;
@@ -1858,12 +1868,13 @@ function connectEvents(){
       }
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
-    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; } }
+    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; renderList(); } }
+    if (ev.type === "ctx") { const c = S.chats.find(x => x.id === ev.chat); if (c) c.ctx = ev.ctx; }
     if (ev.type === "dev") { clearTimeout(window._devt); window._devt = setTimeout(() => { loadState().then(drawAttention); if (current.view === "settings" && current.id === "dev") renderDev(true); }, 300); }
     if (ev.type === "skills") { skillsCache = null; if (current.view === "skills") { clearTimeout(window._skt); window._skt = setTimeout(route, 400); } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
-    if (ev.type !== "progress" || ev.state !== "working") refreshSoon();
-    else { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
+    if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
+    else if (!LOCAL_EVENTS.has(ev.type)) refreshSoon();
   };
   es.onerror = () => { lost = true; };   // 浏览器会自己重连
   es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）

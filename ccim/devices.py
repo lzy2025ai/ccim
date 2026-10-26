@@ -87,7 +87,97 @@ def overview(pdir):
     ver = _platform.mac_ver()[0]
     return {"model": _model_name(), "os": f"macOS {ver}" if ver else _platform.platform(),
             "home": HOME, "disk": {"total": du.total, "free": du.free, "used": du.total - du.free},
-            "ops": recent_ops(pdir)}
+            "ops": recent_ops(pdir), "perms": perms(wait=True)}
+
+
+# ---------- 系统权限（#266） ----------
+# 截屏、模拟键鼠、读别的应用的数据要 macOS 授权。后台拉起的命令（Agent 跑的截屏等）算在后台的程序头上，
+# 没授权时截屏只拿到壁纸、不报错，所以在网页上标出来，并告诉 Agent。
+PERMS = [("screen", "屏幕录制", "Privacy_ScreenCapture"), ("accessibility", "辅助功能", "Privacy_Accessibility"),
+         ("disk", "完全磁盘访问", "Privacy_AllFiles")]
+PERM_TTL = 30
+# 用子进程查：和 Agent 跑的命令一样算在后台头上，每次都是新进程，刚授权完再查就能查到
+_PERM_CHECK = """
+import ctypes, json, os
+cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+cg.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+ax = ctypes.CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+ax.AXIsProcessTrusted.restype = ctypes.c_bool
+try:
+    open(os.path.expanduser("~/Library/Application Support/com.apple.TCC/TCC.db"), "rb").close()
+    disk = True
+except PermissionError:
+    disk = False
+except OSError:
+    disk = None
+print(json.dumps({"screen": cg.CGPreflightScreenCaptureAccess(), "accessibility": ax.AXIsProcessTrusted(), "disk": disk}))
+"""
+_perm = {"at": 0, "value": None, "busy": False}
+_perm_lock = threading.Lock()
+
+
+def _check_perms():
+    import sys
+    try:
+        r = subprocess.run([sys.executable, "-I", "-c", _PERM_CHECK], capture_output=True, text=True, timeout=15)
+        got = json.loads(r.stdout)
+    except Exception as e:
+        log.warning("查系统权限失败：%s", e)
+        got = None
+    with _perm_lock:
+        _perm.update(at=time.time(), busy=False, **({"value": got} if got else {}))
+    return got
+
+
+def perms(fresh=False, wait=False):
+    """各项系统权限有没有开（不是 macOS 的给 None）。平时用缓存；fresh 现查，wait 过期了等重查完。"""
+    if _platform.system() != "Darwin":
+        return None
+    if fresh:
+        _check_perms()
+    else:
+        with _perm_lock:
+            stale = time.time() - _perm["at"] > PERM_TTL and not _perm["busy"]
+            if stale:
+                _perm["busy"] = True
+        if stale:
+            if wait or _perm["value"] is None:     # 头一回查要等结果，之后过期了后台重查、先用旧的
+                _check_perms()
+            else:
+                threading.Thread(target=_check_perms, daemon=True).start()
+    v = _perm["value"]
+    if not v:
+        return None
+    import sys
+    return {"items": [{"key": k, "name": n, "ok": v.get(k)} for k, n, _ in PERMS],
+            "app": os.path.realpath(sys.executable)}
+
+
+def open_perm(key, reveal=False):
+    """在这台电脑上打开系统设置里对应的页面；reveal 在访达里选中要添加的程序（拖进列表就行）。"""
+    pane = next((p for k, _, p in PERMS if k == key), None)
+    if not pane:
+        raise Problem("没有这项权限")
+    subprocess.Popen(["open", f"x-apple.systempreferences:com.apple.preference.security?{pane}"])
+    if reveal:
+        import sys
+        subprocess.Popen(["open", "-R", os.path.realpath(sys.executable)])
+    return {"ok": True}
+
+
+PERM_NOTE = {"screen": "截屏只能截到桌面壁纸，看不到窗口", "accessibility": "模拟鼠标点击、键盘输入不起作用",
+             "disk": "读不到邮件、信息、Safari 等受保护的数据"}
+
+
+def perm_note():
+    """缺权限时给 Agent 的说明（拼在系统提示后面）。"""
+    p = perms()
+    miss = [i for i in (p or {}).get("items", []) if i["ok"] is False]
+    if not miss:
+        return ""
+    return ("\n- 这台电脑还没给 ccim 开" + "、".join(i["name"] for i in miss) + "权限：" +
+            "；".join(PERM_NOTE[i["key"]] for i in miss) +
+            "。用户要做这些事时，先告诉用户到网页「设置 → 电脑」里这台电脑的概况页开启，不要把没拿到的结果当成成功。")
 
 
 # ---------- 文件 ----------

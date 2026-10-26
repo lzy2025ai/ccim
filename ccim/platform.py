@@ -2130,6 +2130,7 @@ def _handler(pf):
                 "/api/fs/info": lambda: devices.overview(registry.pdir(pf.home)),
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
+                "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
             }
             if u.path in ("/api/state", "/api/agent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
@@ -2257,6 +2258,7 @@ def _handler(pf):
                 "/api/fs/put": lambda: devices.put(registry.pdir(pf.home), b("key"), b("path"), b("name")),
                 "/api/fs/scan": lambda: pf.cleaner.start(),
                 "/api/fs/clean": lambda: pf.cleaner.clean(b("paths") or []),
+                "/api/fs/perm": lambda: devices.open_perm(b("key"), bool(b("reveal"))),
             }
             if u.path in routes:
                 return self._api(routes[u.path])
@@ -2500,7 +2502,7 @@ def state(pf, acct=None):
         "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
-        "codex": console._codex(), "home": os.path.expanduser("~"),
+        "codex": console._codex(), "home": os.path.expanduser("~"), "perms": devices.perms(),
         "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
 

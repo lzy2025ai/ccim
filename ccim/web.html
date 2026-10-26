@@ -306,7 +306,9 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .btop{display:flex;align-items:center;gap:8px;min-width:0;line-height:20px}
 .btitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brow.quiet .btitle{font-weight:500}
-.bico{position:relative;display:flex;align-self:center}
+.bico{position:relative;display:flex;align-self:start;margin-top:-2px}   /* 和标题那一行对齐，细线连到下一行的 Agent 名字（#273） */
+.bico>.seal,.bico>.chaticon{width:24px;height:24px}
+.bico.linked::after{content:"";position:absolute;left:11.5px;top:27px;width:22px;height:9px;border:solid var(--line-strong);border-width:0 0 1.2px 1.2px;border-bottom-left-radius:8px;pointer-events:none}
 .bico .udot{position:absolute;top:-2px;right:-2px;margin:0;box-shadow:0 0 0 2px var(--panel)}
 .bico .udot.soft{background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--qing),0 0 0 2px var(--panel)}
 .bside{display:flex;flex-direction:column;align-items:flex-end;align-self:start;gap:4px;min-width:0;max-width:200px}
@@ -3446,7 +3448,7 @@ function boardRow(c, kind){
     : kind === "wait" ? `<button class="btn" onclick="event.preventDefault();dismissTask(${q(c.id)})">知道了</button>${replying ? "" : `<button class="btn primary" onclick="event.preventDefault();openBoardReply(${q(c.id)})">回复</button>`}` : "";
   const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
   const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
-  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico">${iconOf(c, a, kind === "recent" ? "sm" : "")}${dot}</span>
+  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
     <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.star ? `<span class="bstar" title="星标">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
     <span class="bside"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;

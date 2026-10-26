@@ -22,4 +22,10 @@
   写文件走 `skills.write_any`（没有的新建），删除先弹审批卡片（approvals.ask）。改了平台 Skill 都调 `skills.changed()`：
   叫别的电脑同步、推送 type=skills 让网页刷新。发消息带 ctx（正看着哪个 Skill、哪个文件），拼在交给助手的话前面，不进记录。
   助手在哪台电脑上跑（`skcMid`）：localStorage 记的；没选过用总控那台，再不行用 S.me；标题下一行显示电脑 · 模型 · 思考深度，点开换（模型、思考深度走 /api/chat/set）；那台离线时提示并给「换到 xx」
+  普通 Agent 对话（#276）：`_skill_tools(chat, full=False)` 只给 skill_list / skill_read（只读），再加 `platform_skill_sync`（`_can_sync`：
+  访客、借给访客的、侧边对话、助手不给）把本机 ~/.claude/skills 的同步到平台。平台 Skill 会装到所有电脑的所有 Agent 上，而用户常常只想装到某个项目，
+  所以名字、工具说明、系统提示（SKILL_SYNC）都写死「只有用户明确说同步到平台才用，平常装到项目或 ~/.claude/skills，没说装哪先问」，
+  执行前弹确认卡片。改写、停用、删除、从 GitHub 装照旧只给助手。
+  从电脑导入的（source.type=local、没有 agent）记 machine 名字和 mid：Skill 页「更新」= 回那台电脑按原名重新导入（`updateSkill`，旧记录没 mid 按名字找），
+  是拷贝，原件改了不会自己跟着变
   市场：`market` 查 skills.sh / ClawHub / SkillsMP 的公开搜索接口，名字相同的算，同一个 GitHub 仓库的优先（same），结果缓存 6 小时；网页显示安装、下载、仓库星数，没收录的链到市场搜索

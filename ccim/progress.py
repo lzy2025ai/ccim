@@ -40,6 +40,8 @@ def describe_tool(name, inp):
         return "读以前的对话"
     if name.startswith("mcp__ccim__platform_agents"):
         return "查看平台上的 Agent"
+    if name.startswith("mcp__ccim__platform_skill_sync"):   # #276
+        return f"同步 Skill 到平台 {short(inp.get('name'), 50)}".strip()
     if name.startswith("mcp__ccim__skill_"):     # Skill 助手（#116）
         what = {"skill_list": "看 Skill 列表", "skill_files": "看 Skill 里的文件", "skill_read": "读", "skill_write": "改",
                 "skill_install": "安装 Skill", "skill_enable": "启用 / 停用 Skill", "skill_delete": "删除 Skill"}.get(name.split("__")[-1], "处理 Skill")
@@ -66,6 +68,9 @@ def describe_request(name, inp):
         return f"访问网页 {inp.get('url')}"
     if name.endswith("skill_delete"):
         return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"
+    if name.endswith("platform_skill_sync"):
+        return (f"把这台电脑 ~/.claude/skills 里的「{inp.get('name')}」同步到平台 Skill 库，所有电脑上的 Agent 都会加载它"
+                + ("（平台上同名的会被替换）" if inp.get("replace") else ""))
     return f"{name}\n```\n{short(inp, 600)}\n```"
 
 

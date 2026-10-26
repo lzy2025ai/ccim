@@ -14,7 +14,7 @@
 - 离线：发消息给离线的电脑先存在本机 outbox，连上后发出。
 - 管理员密码不跨电脑传：从别的电脑来的 /api/chat/secret 只能选「在那台 Mac 上弹授权窗口」。
 """
-import base64, hashlib, hmac, http.client, json, logging, os, queue, secrets, socket, subprocess, threading, time, uuid
+import base64, gzip, hashlib, hmac, http.client, json, logging, os, queue, secrets, socket, subprocess, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -31,8 +31,8 @@ CODE_TTL = 600
 PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Account-Share")   # 转交时带过去的头；X-Account 只有服务器总控会加（#154）
 OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
-STATE_FRESH = 60                              # 别的电脑的 state 多久内直接用上次取的（有变化会推送过来，标记重取）
-STATE_REFRESH = 10                            # 超过这么久，返回缓存的同时后台再取一次
+STATE_REFRESH = 10                            # 别的电脑的 state 超过这么久，返回上次取的同时后台再取一次（有变化会推送过来，标记现取）
+GZIP_MIN = 4096                               # 回给总控的结果超过这么大才压缩（#260）
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
 QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
          "/api/peer/result"}
@@ -221,6 +221,7 @@ class Peers:
         self.hub = _load("hub.json", None)            # {url, hub_id, hub_name, key}
         self.hub_ok = 0                               # 最近一次连上总控的时间
         self.machines_from_hub = []
+        self.hub_gzip = False                  # 总控收得了压缩的回复（它在长轮询的回应里说，#260）
         self.cache = _load("peer-cache.json", {})     # 各台电脑上次的 state，离线时显示
         self.cache_at = {}                    # 上次从那台电脑取 state 的时间：新的直接用，不每次都现问（#32）
         self.dirty = set()                    # 刚往那台电脑发过操作、或它有了新动静：下次要现问
@@ -494,9 +495,9 @@ class Peers:
 
         now = time.time()
         others = [m for m in machines if not m["me"] and m["online"]]
-        # 刚操作过、有新动静、或者太久没取的现问；其余用上次取的，后台再更新一下
-        now_ = [m for m in others if m["id"] in self.dirty or key(m["id"]) in self.dirty or key(m["id"]) not in self.cache
-                or now - self.cache_at.get(key(m["id"]), 0) > STATE_FRESH]
+        # 刚操作过、有新动静、或者从没取过的现问；其余用上次取的，后台再更新一下。
+        # 只是放久了不现问（#260）：那台有变化会推送过来标 dirty，没推送说明没变，不值得让网页等它一趟
+        now_ = [m for m in others if m["id"] in self.dirty or key(m["id"]) in self.dirty or key(m["id"]) not in self.cache]
         later = [m for m in others if m not in now_ and now - self.cache_at.get(key(m["id"]), 0) > STATE_REFRESH
                  and key(m["id"]) not in self.refreshing]
         for m in now_:
@@ -691,6 +692,7 @@ class Peers:
                 self.hub_ok, fails = time.time(), 0
                 msg = json.loads(data)
                 self.machines_from_hub = msg.get("machines") or self.machines_from_hub
+                self.hub_gzip = bool(msg.get("gzip"))
                 for m in msg.get("msgs") or []:
                     if m["kind"] == "ev":
                         self._touched(m["ev"])
@@ -715,8 +717,11 @@ class Peers:
                                                 m.get("headers"), timeout)
         except Exception as e:
             status, ctype, data = 500, "application/json", json.dumps({"error": f"出错了：{e}"}).encode()
+        h = {"X-Rid": m["rid"], "X-Status": str(status), "X-Ctype": ctype}
+        if self.hub_gzip and len(data) > GZIP_MIN:   # 整体状态一两百 KB，家里上行慢，压完小很多；总控没升级时它不会说支持
+            data, h["X-Enc"] = gzip.compress(data, 5), "gzip"
         try:
-            self._hub_request("/peer/reply", data, {"X-Rid": m["rid"], "X-Status": str(status), "X-Ctype": ctype}, 60)
+            self._hub_request("/peer/reply", data, h, 60)
         except Exception:
             log.warning("回复总控失败", exc_info=True)
 
@@ -808,7 +813,12 @@ def _handler(peers):
                 if path == "/peer/reply":
                     w = peers.waiting.get(self.headers.get("X-Rid") or "")
                     if w:
-                        w[1] = (int(self.headers.get("X-Status") or 200), self.headers.get("X-Ctype") or "application/json", body)
+                        try:
+                            if self.headers.get("X-Enc") == "gzip":
+                                body = gzip.decompress(body)
+                            w[1] = (int(self.headers.get("X-Status") or 200), self.headers.get("X-Ctype") or "application/json", body)
+                        except (OSError, EOFError):
+                            w[1] = (502, "application/json", json.dumps({"error": "那台电脑的回复坏了，再试一次。"}).encode())
                         w[0].set()
                     return self._reply(200, {}, key, nonce)
                 if path == "/peer/push":
@@ -857,7 +867,7 @@ def _handler(peers):
                 w = peers.waiting.get(m.get("rid") or "")
                 if w:
                     w[2].set()
-            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs}, key, nonce)
+            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs, "gzip": True}, key, nonce)
 
     return Handler
 

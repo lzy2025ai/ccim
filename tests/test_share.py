@@ -100,7 +100,9 @@ class ShareTests(unittest.TestCase):
         self.assertNotIn(cid, [c["id"] for c in o["chats"]])
         self.assertNotIn(t["id"], [c["id"] for c in o["chats"]])
         _, g = self.req("GET", "/api/state?local=1")
-        self.assertEqual({c["id"] for c in g["chats"]}, {cid, t["id"]})
+        self.assertEqual({c["id"] for c in g["chats"]}, {t["id"]})     # 和 Agent 的对话不在整体状态里，在 Agent 页（#268）
+        _, ga = self.req("GET", f"/api/agent?id={aid}")
+        self.assertIn(cid, [c["id"] for c in ga["chats"]])
         _, owner_chat = self.req("POST", "/api/chat/new", {"agent": self.owner_agent}, guest=None)
         self.assertEqual(self.req("GET", f"/api/chat?id={owner_chat['id']}")[0], 403)
         self.assertEqual(self.req("POST", "/api/chat/send", {"id": owner_chat["id"], "text": "hi"})[0], 403)

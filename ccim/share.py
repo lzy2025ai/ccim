@@ -348,15 +348,25 @@ def check(pf, acct, method, path, q, body):
 
 # ---------- 给谁看什么 ----------
 
-def filter_state(pf, st, acct):
-    """state 里只留这个人的（主人 acct=None：去掉访客的）。终端、飞书、微信里的对话跟着它的 Agent。"""
+def chat_filter(pf, acct):
+    """(对话编号, 它的 Agent) 是不是这个人的（主人 acct=None：去掉访客的）。终端、飞书、微信里的对话跟着它的 Agent。
+    列表分页要在挑前几条之前就按人过滤（#268），不然别人的对话会占掉名额。"""
     owners = owner_map(pf)
 
-    def chat_ok(c):
-        cid = str(c.get("id") or "")
+    def ok(cid, aid=None):
+        cid = str(cid or "")
         if cid.startswith("x:"):
-            return of_agent(agents.get(c.get("agent") or "")) == acct
+            return of_agent(agents.get(aid or "")) == acct
         return owners.get(cid) == acct
+    return ok
+
+
+def filter_state(pf, st, acct):
+    """state 里只留这个人的（主人 acct=None：去掉访客的）。终端、飞书、微信里的对话跟着它的 Agent。"""
+    ok = chat_filter(pf, acct)
+
+    def chat_ok(c):
+        return ok(c.get("id"), c.get("agent"))
 
     shared = set(shared_agents(acct)) if acct else set()
     st["agents"] = [view_agent(a, acct) for a in st.get("agents") or []

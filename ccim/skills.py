@@ -590,11 +590,12 @@ def install_upload(key, pdir, name):
         return _install_dir(tmp, src)
 
 
-def import_local(name, machine_name=""):
+def import_local(name, machine_name="", machine_id=""):
+    """从这台电脑的 ~/.claude/skills 拷进平台（已有就覆盖）。记下电脑编号，Skill 页「更新」时转到这台电脑重新导入（#275）。"""
     d = os.path.realpath(os.path.join(os.path.expanduser("~/.claude/skills"), _check(name)))
     if not os.path.isfile(os.path.join(d, "SKILL.md")):
-        raise Problem("这台电脑上没有这个 Skill。")
-    return [_put(d, {"type": "local", "machine": machine_name}, name=name)]
+        raise Problem(f"这台电脑的 ~/.claude/skills 里没有「{name}」。")
+    return [_put(d, {"type": "local", "machine": machine_name, **({"mid": machine_id} if machine_id else {})}, name=name)]
 
 
 def update(name):

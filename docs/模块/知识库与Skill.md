@@ -12,7 +12,7 @@
   挂载：`Chat._connect` 按 `b.entry["agent_id"]` 取 Agent，`plugin_for` 生成 views/<Agent>/ 本地插件（plugin.json 名字 platform，skills/ 下软链到 lib，
   只放没停用、Agent 的 skills_off 里没有的），SDK `plugins` 挂上，Claude 里是 platform:名字，不和本地 Skill 冲突；没变就不重建。只有 Claude Code。
   安装：GitHub（codeload 下 tar.gz，地址可以指到仓库里某个文件夹，找出所有带 SKILL.md 的文件夹）、上传（zip / .skill / tar.gz / SKILL.md）、
-  从某台电脑的 ~/.claude/skills 导入（请求发到那台电脑，装进它的平台库再同步）。解压时拦掉往外写的路径和软链。网页 #/skills：装好后留在列表；详情左边文件树、右边看文件（Markdown 预览 / 源码，代码用 hlCode 简单高亮，图片直接显示），能改能存（/api/skills/file/save 带打开时的 mtime，改完算这个 Skill 更新、同步）。Agent 设置里勾挂哪些
+  从某台电脑的 ~/.claude/skills 导入（请求发到那台电脑，装进它的平台库再同步；source 记 machine 名字和 mid 编号）。导入是拷贝，原件改了不跟着变（不做监听）：Skill 页「更新」对这种 Skill 是按 mid（老记录没有 mid 按名字找，只有一台电脑就用它）把 /api/skills/install {local} 再发到那台电脑，同名覆盖（#275）；`skills.update` 仍然只管 GitHub。Agent 分享的（source 带 agent）没有「更新」。普通 Agent 对话也有 skill_list / read / install（见 会话.md），能自己把本机 Skill 同步上来。解压时拦掉往外写的路径和软链。网页 #/skills：装好后留在列表；详情左边文件树、右边看文件（Markdown 预览 / 源码，代码用 hlCode 简单高亮，图片直接显示），能改能存（/api/skills/file/save 带打开时的 mtime，改完算这个 Skill 更新、同步）。Agent 设置里勾挂哪些
   Agent 的本地 Skill（#115）：Agent 页「Skill」标签，`agent_skills` 按 `_groups` 分组（工作目录 .claude/skills、~/.claude/skills、开着的插件带的只读；
   Codex 是 ~/.codex/skills），接口 /api/agent/skill*（按 id 转到 Agent 所在的电脑）。查看编辑和平台 Skill 共用 SKV（src.kind platform / local），
   软链接过去的保存前提示改的是原件（原地写）。「提交成平台 Skill」= `agent_share` → `_put`（同名替换，source 记 agent）。

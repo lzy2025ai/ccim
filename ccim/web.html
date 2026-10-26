@@ -3933,7 +3933,7 @@ async function openSkill(name){
           <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
           <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div>
           <div class="sk-market" id="sk-mk"></div></div>
-        <div class="sk-acts">${s.shared ? "" : `${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
+        <div class="sk-acts">${s.shared ? "" : `${skUpdatable(s.source) ? `<button class="btn" onclick="updateSkill(${q(name)},${q((s.source || {}).type === "local" ? s.source.mid || s.source.machine || "" : "")})">更新</button>` : ""}
           <button class="btn" onclick="toggleSkill(${q(name)},${s.disabled ? "true" : "false"})">${s.disabled ? "启用" : "停用"}</button>
           <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button>`}</div></div></div>
     <div class="sk-body"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div></div>`;
@@ -4110,8 +4110,15 @@ async function toggleSkill(name, on){
   await act(() => skApi("/api/skills/toggle", {name, on}), on ? "已启用" : "已停用");
   skillsCache = null; openSkill(name);
 }
-async function updateSkill(name){
-  await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
+function skUpdatable(x){ x = x || {}; return x.type === "github" || (x.type === "local" && !x.agent); }
+async function updateSkill(name, from){
+  if (from) {                                 // 从电脑导入的（#275）：在那台电脑上按原名重新导入，再同步过来
+    const ms = (S.machines || []).length ? S.machines : [{id: S.me, name: from, online: true}];
+    const m = ms.length === 1 ? ms[0] : ms.find(m => m.id === from) || ms.find(m => m.name === from);
+    if (!m) return toast(`找不到「${from}」这台电脑`);
+    if (m.online === false) return toast(`「${m.name}」离线了，开机后再更新`);
+    await act(() => api("/api/skills/install", {local: name}, m.id), "已更新到最新");
+  } else await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
   skillsCache = null; openSkill(name);
 }
 async function deleteSkill(name){

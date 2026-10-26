@@ -61,6 +61,10 @@ WRONG_SEND = "SendUserFile"
 WRONG_SEND_HINT = "（ccim）这里没有 SendUserFile，刚才的文件没发出去。发文件改用 mcp__ccim__send_file，参数一样是 path，现在重新发一次。"
 CHATLOG_MAX = 300         # 一份聊天记录最多几条
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
+SKILLS = """
+- 用户要把 Skill 装到平台上、或者把本机 ~/.claude/skills 里的 Skill 同步到平台 Skill 库时，用 mcp__ccim__skill_install
+  （写 Skill 名字或 GitHub 地址，已有的会覆盖）；先用 mcp__ccim__skill_list 看平台上已经有哪些，mcp__ccim__skill_read 读内容。
+  不要直接改 ~/.ccim/skills 下的文件，也不要去调网页后台的接口。改写、停用、删除平台 Skill 请用户到网页的 Skill 页找 Skill 助手。"""
 LOOK_AROUND_PF = """
 - 你和用户以前的对话（网页私聊、群聊、定时任务、飞书、微信、终端或桌面端）用 mcp__ccim__search_chats 找：写关键词按内容找，
   留空就列出你参与的所有对话（在哪些群聊里、群里还有谁），再用 mcp__ccim__open_chat 读，读到的内容当作参考，不用照着做。
@@ -559,7 +563,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ("" if guest or self.b.entry.get("helper") or self.b.entry.get("side") else SKILLS) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1094,6 +1098,8 @@ class Chat:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
+        elif not chat.b.entry.get("helper"):  # 其他对话只能看、装（#275），侧边对话只能看
+            tools += _skill_tools(chat, manage=False, can_install=not side)
         return tools
 
 
@@ -1101,8 +1107,9 @@ SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对�
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")]
 
 
-def _skill_tools(chat):
-    """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。"""
+def _skill_tools(chat, manage=True, can_install=True):
+    """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。
+    manage=False：普通对话只给 list / read / install（#275），改、停用、删交给 Skill 助手。"""
     from . import skills
 
     def ok(x):
@@ -1136,11 +1143,13 @@ def _skill_tools(chat):
         pf = getattr(chat.b.channel, "platform", None)
         if guest and not src.startswith("http"):
             raise skills.Problem("这里只能从 GitHub 地址装。")
-        names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, pf.peers.me.get("name") if pf else "")
+        me = pf.peers.me if pf else {}
+        names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, me.get("name") or "", me.get("id") or "")
         skills.changed()
         return {"installed": names}
-    t_install = tool("skill_install", "安装平台 Skill。source 是 GitHub 地址（仓库或仓库里某个文件夹），"
-                     "或者这台电脑 ~/.claude/skills 里已有的 Skill 名字。", {"source": str})(guard(install))
+    t_install = tool("skill_install", "安装平台 Skill（装好后同步到所有电脑，Agent 在 ccim 里都能用）。source 是 GitHub 地址"
+                     "（仓库或仓库里某个文件夹），或者这台电脑 ~/.claude/skills 里已有的 Skill 名字。平台上已经有同名的就用新的覆盖，"
+                     "原件改过以后再装一次就是同步。", {"source": str})(guard(install))
 
     def enable(a):
         skills.set_disabled(a.get("name") or "", not a.get("enabled"))
@@ -1167,6 +1176,8 @@ def _skill_tools(chat):
             skills.SPACE.reset(tok)
         skills.changed()
         return ok(f"已删除「{name}」")
+    if not manage:
+        return [t_list, t_read] + ([t_install] if can_install else [])
     return [t_list, t_files, t_read, t_write, t_install, t_enable, t_delete]
 
 

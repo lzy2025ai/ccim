@@ -37,7 +37,7 @@ POOL_MAX = 4
 RETRY_SAFE = ("/peer/poll", "/peer/reply", "/peer/push")   # 复用的连接断了换一条重发：这几个重发没有副作用
 GZIP_MIN = 4096                               # 回给总控的结果超过这么大才压缩（#260）
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
-QUICK = {"/api/state", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
+QUICK = {"/api/state", "/api/chats", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
          "/api/peer/result"}
 QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
 
@@ -483,7 +483,8 @@ class Peers:
         key = lambda mid: f"{mid}|{account}" if mid in guest else mid
         hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
-                      "home": local.get("home"), "ccim": local.get("ccim"), "global": local.get("global") or {}}}
+                      "home": local.get("home"), "ccim": local.get("ccim"), "global": local.get("global") or {},
+                      "chat_more": local.get("chat_more")}}     # 这台还有多少更早的、已归档的对话没带上（#268）
         results = {}
 
         def fetch(m):
@@ -549,6 +550,7 @@ class Peers:
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
                               "home": s.get("home"), "ccim": s.get("ccim"), **({"guest": s["guest"]} if s.get("guest") else {}),
+                              "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话
                               "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）
                                          if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}}
         if changed:

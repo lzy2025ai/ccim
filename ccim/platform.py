@@ -30,6 +30,7 @@ from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_pa
 log = logging.getLogger("ccim.platform")
 
 PORT = 8977
+CHAT_PAGE = 50                                # 整体状态里带最近多少条对话，更早的每页多少条（#268）
 OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
@@ -1302,11 +1303,87 @@ class Platform:
                 out.append(dict(r, elsewhere=True))
         return out
 
-    def chat_list(self):
-        rows = [self.chat_view(cid) for cid, c in self.chats().items() if board_mod.top_level(c, cid)] + \
-            self.external_chats()
-        rows.sort(key=lambda r: r.get("last_active") or "", reverse=True)
-        return rows
+    # ----- 对话列表：整体状态里只带一部分，其余按页取（#268） -----
+    # 对话一直在涨，每次都给全部对话生成列表数据、整份传给网页太重。先用记录里现成的字段挑出要的，只给挑中的生成。
+
+    def _tops(self, ok):
+        """列表里的对话，新的在前：[(最后活跃, 编号, 网页对话的记录 或 None, 飞书 / 微信 / 终端里那行 或 None)]。"""
+        out = [(m.get("last_active") or "", cid, m, None) for cid, m in self.chats().items()
+               if board_mod.top_level(m, cid) and ok(cid, m.get("agent"))]
+        out += [(r.get("last_active") or "", r["id"], None, r) for r in self.external_chats() if ok(r["id"], r.get("agent"))]
+        out.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        return out
+
+    @staticmethod
+    def _archived(t):
+        return bool((t[2] if t[2] is not None else t[3]).get("archived"))
+
+    def _hot(self, t):
+        """一直带在整体状态里的：置顶、星标、在干活 / 卡住 / 群里有人在干活、等你处理、没看过的回答。"""
+        m = t[2] if t[2] is not None else t[3]
+        if m.get("pin") is not None or m.get("star") or m.get("busy"):
+            return True
+        if t[2] is None:
+            return False
+        if self._stall(t[1]) or self.mentions.crew(t[1]):
+            return True
+        summ = board_mod.summary(self.channel.logs, t[1])
+        return bool(board_mod.attention(m, summ) or board_mod.unread(m, summ))
+
+    def _parent(self, t):
+        if t[2] is None:
+            return t[3].get("parent")
+        m = t[2]
+        return m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None)
+
+    def _row(self, t):
+        return t[3] if t[3] is not None else self.chat_view(t[1])
+
+    @staticmethod
+    def _listed(t):
+        """出现在「对话」列表里的：和 Agent 的对话在 Agent 页里列（走 /api/agent），不算在这里。"""
+        return not (t[2] if t[2] is not None else t[3]).get("agent")
+
+    def chat_head(self, acct=None):
+        """整体状态里的对话：「对话」列表里最近 CHAT_PAGE 条（不含归档）、常驻的（和 Agent 的对话也算）、它们分叉前的原对话
+        （分叉出来的挂在它下面）。另外给列表里更早的、已归档的各有多少，和翻下一页从哪开始。"""
+        tops = self._tops(share.chat_filter(self, acct))
+        listed = [t for t in tops if self._listed(t)]
+        live = [t for t in listed if not self._archived(t)]
+        keep = {t[1] for t in live[:CHAT_PAGE]} | {t[1] for t in tops if self._hot(t)}
+        byid = {t[1]: t for t in tops}
+        for cid in list(keep):
+            seen = set()
+            while cid in byid and cid not in seen:
+                seen.add(cid)
+                keep.add(cid)
+                cid = self._parent(byid[cid])
+        more = {"older": sum(1 for t in live[CHAT_PAGE:] if t[1] not in keep),
+                "archived": sum(1 for t in listed if self._archived(t) and t[1] not in keep),
+                "next": _cursor(live[CHAT_PAGE - 1]) if len(live) > CHAT_PAGE else None}
+        return [self._row(t) for t in tops if t[1] in keep], more
+
+    def chat_page(self, acct=None, before=None, archived=False, q="", groups=False):
+        """/api/chats：「对话」列表里 before 之后（更早）的一页、已归档的一页、按标题和摘要搜；全部群聊。
+        {rows, next}，next 是下一页从哪开始。"""
+        tops = self._tops(share.chat_filter(self, acct))
+        if groups:                            # 定时任务里选「发到群聊」
+            return {"rows": [self._row(t) for t in tops if t[2] is not None and t[2].get("agent") and t[2].get("members")
+                             and not self._archived(t)], "next": None}
+        tops = [t for t in tops if self._listed(t)]
+        if q:
+            words = q.lower().split()
+            hit = [t for t in tops if all(w in self._text(t) for w in words)]
+            return {"rows": [self._row(t) for t in hit[:CHAT_PAGE]], "next": None}
+        at = _uncursor(before) if before else None
+        sel = [t for t in tops if self._archived(t) == bool(archived) and (at is None or (t[0], t[1]) < at)]
+        return {"rows": [self._row(t) for t in sel[:CHAT_PAGE]], "next": _cursor(sel[CHAT_PAGE - 1]) if len(sel) > CHAT_PAGE else None}
+
+    def _text(self, t):
+        if t[2] is None:
+            return (t[3].get("title") or "").lower()
+        m = t[2]
+        return " ".join([m.get("title") or self._fork_title(t[1], m) or "新对话", m.get("brief") or ""]).lower()
 
     # ----- 列表里的标记：重命名、置顶、星标、归档、图标、颜色、从列表里去掉 -----
 
@@ -1852,6 +1929,16 @@ class Platform:
         return server
 
 
+def _cursor(t):
+    """翻页的位置：最后活跃 + 编号（同一秒的也分得开）。"""
+    return f"{t[0]}|{t[1]}"
+
+
+def _uncursor(c):
+    at, _, cid = str(c).partition("|")
+    return at, cid
+
+
 def _defaults(base, path):
     """不传参数时 Claude Code / Codex 自己会用的模型和思考深度（只用于显示）。"""
     if base == "codex":
@@ -2010,6 +2097,8 @@ def _handler(pf):
                 "/api/agent/skill": lambda: skills_mod.agent_detail(_agent(q.get("id")), q.get("group", ""), q.get("name", "")),
                 "/api/agent/skill/file": lambda: skills_mod.agent_read(_agent(q.get("id")), q.get("group", ""), q.get("name", ""), q.get("path", "")),
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
+                "/api/chats": lambda: pf.chat_page(acct, q.get("before") or None, q.get("archived") == "1", (q.get("q") or "").strip(),
+                                                   q.get("groups") == "1"),
                 "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
                 "/api/board/day": lambda: {**pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
                                            **({"material": pf.call(board_mod.material, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
@@ -2034,7 +2123,7 @@ def _handler(pf):
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
             }
-            if u.path in ("/api/state", "/api/agent"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
+            if u.path in ("/api/state", "/api/agent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
                 return self._api(lambda: _snapshot(fn))
             if u.path in routes:
@@ -2396,8 +2485,10 @@ def state(pf, acct=None):
     from . import web as console
     g = registry.global_config()
     from . import upgrade
+    chats, more = pf.chat_head(acct)
     return share.filter_state(pf, {
-        "ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()], "chats": pf.chat_list(),
+        "ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()],
+        "chats": chats, "chat_more": more,
         "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},

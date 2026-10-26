@@ -414,6 +414,9 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .item .mk.dot{width:8px;height:8px;border-radius:50%;vertical-align:1px;flex:none}
 .item.child .t .title{min-width:0}
 .arch-toggle{display:flex;align-items:center;gap:4px;width:100%;text-align:left}
+.more-chats{display:block;width:100%;text-align:left;color:var(--qing)}
+.more-chats:hover{text-decoration:underline}
+.more-chats:disabled{color:var(--faint);text-decoration:none}
 .arch-toggle .chev{transition:transform .15s}
 .arch-toggle.open .chev{transform:rotate(90deg)}
 .pop .marks{display:flex;gap:4px;padding:2px 6px}
@@ -1772,10 +1775,75 @@ async function fetchState(){
   }
   seeOpen(); renderList(); drawAttention();
   if (current.view === "board") renderBoard(true);
-  const c = detail && S.chats.find(x => x.id === detail.id);
+  const c = detail && chatById(detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
 }
 function refreshSoon(){ clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }
+
+// ================= 对话分页（#268） =================
+// 整体状态里只带「对话」列表最近 50 条和常驻的（在干活、等你处理、置顶、星标……）。更早的、已归档的按需取来放在 MORE.rows，
+// 和整体状态里的合起来就是列表；搜到的、任务面板和复盘带来的放在 MORE.known，只用来按编号找。
+const MORE = {rows: {}, known: {}, next: {}, archNext: {}, archLoaded: false, loading: false, found: null, asked: {}};
+function chatMachines(){ return multi() ? (S.machines || []).filter(m => m.online !== false && !(S.hub && m.hub)) : [{id: S.me}]; }
+const moreOf = mid => ((S.machine_info || {})[mid] || {}).chat_more || null;   // 旧版本的电脑没有：它的整体状态里本来就是全部
+function allChats(){
+  const seen = new Set(S.chats.map(c => c.id));
+  return S.chats.concat(Object.values(MORE.rows).filter(c => !seen.has(c.id)));
+}
+const chatById = id => id && (S.chats.find(c => c.id === id) || MORE.rows[id] || MORE.known[id]) || null;
+function remember(rows, mid){ return (rows || []).map(c => MORE.known[c.id] = {...c, machine: c.machine || mid}); }
+function unlisted(id){                // 推送里的对话列表里没有（比如很早的对话又开始干活）：取一次整体状态。
+  const now = Date.now();               // 群聊里被 @ 的子对话从来不在列表里、进度每 0.3 秒一条：同一个一分钟最多取一次
+  if (!id || now - (MORE.asked[id] || 0) < 60000) return false;
+  MORE.asked[id] = now; return true;
+}
+const hasMore = (next, key) => chatMachines().some(m => m.id in next ? !!next[m.id] : !!(moreOf(m.id) || {})[key]);
+async function loadPage(kind){        // 每台还有的各取一页：older 更早的、arch 已归档的
+  if (MORE.loading) return;
+  MORE.loading = true; renderList();
+  const next = kind === "arch" ? MORE.archNext : MORE.next;
+  try {
+    await Promise.all(chatMachines().map(async m => {
+      const cur = m.id in next ? next[m.id] : kind === "arch" ? "" : (moreOf(m.id) || {}).next;
+      if (cur === null || (kind === "older" && !cur)) { next[m.id] = null; return; }
+      if (kind === "arch" && !(m.id in next) && !(moreOf(m.id) || {}).archived) { next[m.id] = null; return; }
+      try {
+        const r = await api(`/api/chats?${kind === "arch" ? "archived=1&" : ""}before=${encodeURIComponent(cur || "")}`, undefined, m.id);
+        for (const c of remember(r.rows, m.id)) MORE.rows[c.id] = c;
+        next[m.id] = r.next || null;
+      } catch { next[m.id] = null; }   // 那台没有这个接口（旧版本）或者连不上：当作没有更多
+    }));
+    if (kind === "arch") MORE.archLoaded = true;
+  } finally { MORE.loading = false; renderList(); }
+}
+function archCount(){
+  return allChats().filter(c => !c.agent && c.archived).length + (MORE.archLoaded ? 0 : chatMachines().reduce((n, m) => n + ((moreOf(m.id) || {}).archived || 0), 0));
+}
+function toggleArchived(){
+  showArchived = !showArchived;
+  if (showArchived && !MORE.archLoaded) loadPage("arch"); else renderList();
+}
+let searchT = null;
+function searchChats(v){              // 先在已有的里找，停 250 毫秒再到每台电脑上搜（更早的、已归档的也搜得到）
+  chatFilter = v.toLowerCase(); MORE.found = null; clearTimeout(searchT);
+  renderChatList();
+  const q = v.trim();
+  if (!q) return;
+  searchT = setTimeout(async () => {
+    const parts = await Promise.all(chatMachines().map(m => api(`/api/chats?q=${encodeURIComponent(q)}`, undefined, m.id)
+      .then(r => remember(r.rows, m.id)).catch(() => [])));
+    if (chatFilter !== v.toLowerCase()) return;
+    MORE.found = parts.flat(); renderChatList();
+    const i = document.querySelector("#list .search input");
+    if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  }, 250);
+}
+function searchRows(){
+  const local = allChats().filter(c => (c.title || "").toLowerCase().includes(chatFilter));
+  const seen = new Set(local.map(c => c.id));
+  for (const c of MORE.found || []) if (!seen.has(c.id)) { seen.add(c.id); local.push(c); }
+  return local.sort((a, b) => ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+}
 const agentOf = id => S.agents.find(a => a.id === id);
 const multi = () => (S.machines || []).length > 1;
 const machineOf = id => (S.machines || []).find(m => m.id === id);
@@ -1787,7 +1855,7 @@ let ctxMachine = null;            // 当前打开的东西在哪台电脑
 function ownerOf(id){
   if (!id) return null;
   for (const k of ["agents", "chats", "projects", "schedules"]){
-    const x = (S[k] || []).find(x => x.id === id);
+    const x = k === "chats" ? chatById(id) : (S[k] || []).find(x => x.id === id);
     if (x && x.machine) return x.machine;
   }
   return null;
@@ -1868,12 +1936,12 @@ function connectEvents(){
       }
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
-    if (ev.type === "brief") { const c = S.chats.find(x => x.id === ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; renderList(); } }
-    if (ev.type === "ctx") { const c = S.chats.find(x => x.id === ev.chat); if (c) c.ctx = ev.ctx; }
+    if (ev.type === "brief") { const c = chatById(ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; renderList(); } }
+    if (ev.type === "ctx") { const c = chatById(ev.chat); if (c) c.ctx = ev.ctx; }
     if (ev.type === "dev") { clearTimeout(window._devt); window._devt = setTimeout(() => { loadState().then(drawAttention); if (current.view === "settings" && current.id === "dev") renderDev(true); }, 300); }
     if (ev.type === "skills") { skillsCache = null; if (current.view === "skills") { clearTimeout(window._skt); window._skt = setTimeout(route, 400); } }
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
-    if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c && !c.busy) refreshSoon(); }
+    if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c ? !c.busy : unlisted(ev.chat)) refreshSoon(); }
     else if (!LOCAL_EVENTS.has(ev.type)) refreshSoon();
   };
   es.onerror = () => { lost = true; };   // 浏览器会自己重连
@@ -2033,8 +2101,12 @@ function chatSections(rows, inAgent){
     const items = roots.filter(c => !c._sec && group(c._latest || c.last_active) === g);
     if (items.length) html += `<div class="group">${g}</div>` + items.map(item).join("");
   }
-  if (arch.length) html += `<button class="group arch-toggle ${showArchived ? "open" : ""}" onclick="showArchived=!showArchived;renderList()">已归档 ${arch.length}${ICON.chev}</button>` +
-    (showArchived ? arch.map(item).join("") : "");
+  if (!inAgent && hasMore(MORE.next, "next"))
+    html += `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('older')">${MORE.loading ? "正在加载…" : "加载更早的对话"}</button>`;
+  const na = inAgent ? arch.length : archCount();
+  if (na) html += `<button class="group arch-toggle ${showArchived ? "open" : ""}" onclick="${inAgent ? "showArchived=!showArchived;renderList()" : "toggleArchived()"}">已归档 ${na}${ICON.chev}</button>` +
+    (showArchived ? arch.map(item).join("") + (!inAgent && MORE.archLoaded && hasMore(MORE.archNext, "archived")
+      ? `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('arch')">${MORE.loading ? "正在加载…" : "加载更多已归档的"}</button>` : "") : "");
   return html;
 }
 const MARK_COLORS = {red: "var(--zhu)", orange: "var(--zhe)", yellow: "var(--huang)", green: "var(--lu)", blue: "var(--qing)", purple: "#7B5BA6"};
@@ -2098,10 +2170,10 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
-  const rows = S.chats.filter(c => !c.agent && (!chatFilter || c.title.toLowerCase().includes(chatFilter)));   // 和 Agent 的对话在 Agent 里
+  const rows = chatFilter ? searchRows().filter(c => !c.agent) : allChats().filter(c => !c.agent);   // 和 Agent 的对话在 Agent 里
   $("#list").innerHTML = `
     <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
-    <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="chatFilter=this.value.toLowerCase();renderChatList();this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
+    <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="searchChats(this.value);this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.length ? chatFilter ? rows.map(c => chatItem(c, {}, false)).join("") : chatSections(rows)
       : `<p class="muted" style="padding:10px">${chatFilter ? "没有找到。" : "还没有对话。"}</p>`}</div>`;
 }
@@ -2122,20 +2194,31 @@ async function openChat(id){
   if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
   if (!detail || detail.id !== id) { chatRcpt = []; chatRefs = []; }
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
-  try { detail = await api(`/api/chat?id=${encodeURIComponent(id)}`); }
+  try { detail = await openOn(id); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
   if (detail.agent && current.view === "chats") {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
     current = {view: "agents", id: detail.agent, sub: id};
     document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === "agents"));
     if (agentSide && agentSide.id === detail.agent && !agentSide.chats.some(c => c.id === id)) {   // 刚分叉、刚开的：先插进列表，再整份重取
-      const row = S.chats.find(c => c.id === id);
+      const row = chatById(id);
       if (row) agentSide.chats.unshift(row);
       fetchAgentSide(detail.agent);
     }
     renderList();
   }
   drawChat(); doJump(); markSeen(id);
+}
+async function openOn(id){            // 列表里没有它（更早的、别的电脑上的，#268）：这台找不到就挨台电脑再找
+  const path = `/api/chat?id=${encodeURIComponent(id)}`;
+  try { return await api(path); }
+  catch (e) {
+    if (ownerOf(id) || !multi()) throw e;
+    for (const m of chatMachines().filter(m => m.id !== ctxMachine)) {
+      try { const d = await api(path, undefined, m.id); ctxMachine = m.id; MORE.known[id] = {id, machine: m.id, title: d.title}; return d; } catch {}
+    }
+    throw e;
+  }
 }
 function stepsHtml(steps, open, head){
   if (!steps || !steps.length) return "";
@@ -2225,7 +2308,7 @@ function recHtml(r, i, src = "log"){
       <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div></div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "user"){
-    const from = r.from_chat && S.chats.find(x => x.id === r.from_chat);
+    const from = r.from_chat && chatById(r.from_chat);
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
     return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
@@ -2424,7 +2507,7 @@ addEventListener("visibilitychange", checkExt);
 function forkFrom(c){
   const d = c.dispatched_from;             // Agent 给自己派活新开的（#179）
   if (d) return `<a class="fork-from" href="#/chats/${encodeURIComponent(d.id)}">由「${esc(d.title)}」派出</a>`;
-  const p = c.parent && S.chats.find(x => x.id === c.parent);
+  const p = c.parent && chatById(c.parent);
   return p ? `<a class="fork-from" href="#/chats/${encodeURIComponent(p.id)}">${ICON.branch.replace("<svg", '<svg width="12" height="12" style="vertical-align:-1px"')} 分叉自「${esc(p.title)}」</a>` : "";
 }
 function splitFrom(c){
@@ -2752,7 +2835,7 @@ async function setChat(key, value){
 }
 // ---- 对话列表里每一项的操作：重命名、置顶、排序、标记、归档、删除 ----
 function listRows(){
-  return current.view === "agents" ? (agentSide && agentSide.chats || []) : S.chats.filter(c => !c.agent);
+  return current.view === "agents" ? (agentSide && agentSide.chats || []) : allChats().filter(c => !c.agent);
 }
 function rowOf(id){
   return listRows().find(c => c.id === id) || (detail && detail.id === id ? detail : null);
@@ -3257,7 +3340,7 @@ async function startTemp0(v, files){
 async function startAgent(aid){
   const {id} = await act(() => api("/api/chat/new", {agent: aid}));
   await loadState();                     // 列表不清空，新对话先插到最上面，完整列表在后台刷新
-  const row = S.chats.find(c => c.id === id);
+  const row = chatById(id);
   if (row && agentSide && agentSide.id === aid && !agentSide.chats.some(c => c.id === id)) agentSide.chats.unshift(row);
   location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
@@ -3271,7 +3354,7 @@ const viewing = id => !!detail && detail.id === id && document.visibilityState =
   && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id));
 function seeOpen(){
   if (!detail || !viewing(detail.id)) return;
-  const c = (S.chats || []).find(x => x.id === detail.id);
+  const c = chatById(detail.id);
   if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
 }
 addEventListener("visibilitychange", seeOpen);
@@ -3295,7 +3378,7 @@ function drawAttention(){
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
 async function markSeen(id, force){
-  const c = (S.chats || []).find(x => x.id === id);
+  const c = chatById(id);
   if (c && !c.attention && !c.unread && !force) return;
   if (c) { if (c.attention !== "ask") c.attention = null; c.unread = false; drawAttention(); }
   try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
@@ -3318,7 +3401,12 @@ async function loadBoardStats(){
     }
     if (p.quota && p.quota.windows && (!out.quota || p.quota.at > out.quota.at)) out.quota = p.quota;   // 额度：用最新的那份
   }
+  out.recent = parts.flatMap((p, i) => p ? remember(p.recent, ms[i].id) : []);   // 「最近在跟」（#268）
   boardStats = out; boardStatsAt = Date.now();
+}
+function withRecent(){                // 整体状态里的对话加上任务面板「最近在跟」要的那几条（#268）
+  const seen = new Set(S.chats.map(c => c.id));
+  return S.chats.concat(((boardStats || {}).recent || []).filter(c => !seen.has(c.id)));
 }
 const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
@@ -3353,7 +3441,7 @@ function boardRow(c, kind){
 }
 let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
 async function dismissTask(id){
-  const c = (S.chats || []).find(x => x.id === id);
+  const c = chatById(id);
   const was = c && {attention: c.attention, unread: c.unread};
   if (c) { c.attention = null; c.unread = true; }
   if (boardReply && boardReply.id === id) boardReply = null;
@@ -3376,7 +3464,7 @@ async function sendBoardReply(){
   try { await act(() => api("/api/chat/send", {id: r.id, text: v, files: []}, ownerOf(r.id) || ctxMachine)); }
   catch { if (b) b.disabled = false; return; }
   boardReply = null;
-  const c = (S.chats || []).find(x => x.id === r.id);
+  const c = chatById(r.id);
   if (c) { c.busy = true; c.attention = null; c.unread = false; }
   markSeen(r.id);
   toast("已发出"); drawAttention(); renderBoard(true); refreshSoon();
@@ -3453,6 +3541,7 @@ async function loadBoardDay(d){
   const out = {at: Date.now(), rows: [], hours: Array(24).fill(0), tokens: null};
   for (const p of parts.filter(Boolean)) {
     out.rows.push(...(p.chats || []).map(r => ({...r, machine: p.machine})));
+    out.reviews = (out.reviews || []).concat(remember(p.reviews, p.machine));   // 那天的复盘对话（#268）
     (p.hours || []).forEach((n, i) => out.hours[i] += n);
     if (p.tokens) { out.tokens = out.tokens || [0, 0]; out.tokens[0] += p.tokens[0]; out.tokens[1] += p.tokens[1]; }
   }
@@ -3464,7 +3553,7 @@ function renderBoardDay(quick){
   const d = /^\d{4}-\d{2}-\d{2}$/.test(current.sub || "") ? current.sub : today;
   const data = dayData[d];
   if (!quick || !data || Date.now() - data.at > 60000) loadBoardDay(d).then(() => current.view === "board" && current.id === "day" && current.sub === d && renderBoardDay(true)).catch(e => toast(e.message));
-  const rows = data ? data.rows.map(r => ({...r, c: (S.chats || []).find(x => x.id === r.id)})) : [];
+  const rows = data ? data.rows.map(r => ({...r, c: chatById(r.id)})) : [];
   const groups = {};
   for (const r of rows) (groups[r.agent || ""] = groups[r.agent || ""] || []).push(r);
   const order = Object.entries(groups).map(([aid, rs]) => ({aid, rs, msgs: rs.reduce((n, r) => n + r.msgs, 0), tok: rs.reduce((n, r) => n + r.tokens[0], 0)}))
@@ -3510,10 +3599,15 @@ function reviewAid(d){
   if (reviewAgent && agentOf(reviewAgent)) return reviewAgent;
   const last = localStorage.getItem("ccim.reviewAgent");
   if (last && agentOf(last)) return last;
-  const c = (S.chats || []).find(c => c.review === d);
+  const c = reviewsOf(d)[0];
   return c ? c.agent : (S.agents[0] || {}).id;
 }
-const reviewChat = (d, aid) => (S.chats || []).find(c => c.review === d && c.agent === aid && !c.archived);
+function reviewsOf(d){
+  const got = ((dayData[d] || {}).reviews || []).map(c => chatById(c.id) || c);
+  const seen = new Set(got.map(c => c.id));
+  return got.concat(allChats().filter(c => c.review === d && !seen.has(c.id)));
+}
+const reviewChat = (d, aid) => reviewsOf(d).find(c => c.agent === aid && !c.archived);
 function loadReview(c){
   const key = `${c.last_active}|${working(c)}`, hit = reviewText[c.id];
   if (hit && hit.key === key) return;
@@ -3577,7 +3671,7 @@ async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
-  const tops = (S.chats || []).filter(c => isTop(c) && !c.archived);
+  const tops = withRecent().filter(c => isTop(c) && !c.archived);
   const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
   const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => !!b.star - !!a.star);
   const weekAgo = new Date(Date.now() - 7 * 86400000);
@@ -5787,7 +5881,7 @@ function freqText(s){
   if (s.freq === "monthly") return `每月 ${s.dom} 号 ${s.time}`;
   return `${s.date ? fmtDay(new Date(s.date + "T00:00")) : ""} ${s.time}，只跑一次`;
 }
-const groupOf = id => S.chats.find(c => c.id === id);
+const groupOf = id => chatById(id) || (GROUPS || []).find(c => c.id === id);
 function schedMark(s){
   if (s.target.kind === "chat") { const c = groupOf(s.target.id); return seal(c && c.agent ? agentOf(c.agent) : null, "", false); }
   if (s.target.kind === "group") { const g = groupOf(s.target.id); return seal(g ? agentOf(g.agent) : null, "", false); }
@@ -5877,6 +5971,17 @@ async function renderScheduleForm(id){
             date: iso(tomorrow), deliver: [], session: "same", every: 60, quiet: false};
   sd._id = id || null;
   drawScheduleForm();
+  loadGroups().then(() => { if (sd && sd._id === (id || null) && $("#sd-name")) drawScheduleForm(); });
+}
+let GROUPS = null;                    // 全部群聊（#268）：整体状态里只带了一部分
+async function loadGroups(){
+  const parts = await Promise.all(chatMachines().map(m => api("/api/chats?groups=1", undefined, m.id).then(r => remember(r.rows, m.id)).catch(() => [])));
+  GROUPS = parts.flat();
+}
+function groupChats(){
+  const seen = new Set(), out = [];
+  for (const c of S.chats.concat(GROUPS || [])) if (c.agent && (c.members || []).length && !c.archived && !seen.has(c.id)) { seen.add(c.id); out.push(c); }
+  return out;
 }
 function drawScheduleForm(){
   const d = sd, keep = {name: $("#sd-name")?.value, prompt: $("#sd-prompt")?.value};
@@ -5886,7 +5991,7 @@ function drawScheduleForm(){
   const [hh, mm] = d.time.split(":");
   const where = x => multi() ? "，在" + ((machineOf(x.machine) || {}).name || "") : "";
   const tgtOpts = [...S.agents.map(a => ["agent:" + a.id, a.name, BASE[a.base || "claude"] + where(a)]),
-                   ...S.chats.filter(c => c.agent && (c.members || []).length).map(c => ["group:" + c.id, `群聊「${c.title}」`, `${c.members.length + 1} 个 Agent` + where(c)]),
+                   ...groupChats().map(c => ["group:" + c.id, `群聊「${c.title}」`, `${c.members.length + 1} 个 Agent` + where(c)]),
                    ...(d.target.kind === "chat" ? [["chat:" + d.target.id, schedTarget(d), "到点在这个对话里跑"]] : [])];
   const g = d.target.kind === "group" ? groupOf(d.target.id) : null;
   const p = g ? {members: g.members} : null;          // 群聊里选交给谁（不选就是主 Agent）

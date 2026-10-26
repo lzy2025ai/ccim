@@ -1067,6 +1067,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   .list,.app.list-off .list{position:static;display:flex;width:auto;height:calc(100dvh - env(safe-area-inset-top));box-shadow:none;border-right:0;
     padding-bottom:calc(64px + env(safe-area-inset-bottom))}
   .list .fold{display:none}
+  .chat-head .lback{display:none}
   .main{height:calc(100dvh - env(safe-area-inset-top))}
   .app:not(.phone-main) .main{display:none}
   .app.phone-main .list{display:none!important}
@@ -1636,6 +1637,7 @@ function md(src){
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\[([^\]]+)\]\((#\/[\w\-.~%\/]+)\)/g, '<a href="$2">$1</a>')   // 站内链接（复盘里提到的对话，#284）：当前页打开
     .replace(/(^|[\s（(])(https?:\/\/[^\s<）)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   let i = 0;
   while (i < lines.length){
@@ -2076,6 +2078,7 @@ function closeListTip(){
 }
 function phoneBack(){
   if (document.querySelector(".list-tip")) closeListTip();
+  if (linkTrail.length) return linkBack();
   const v = current.view, id = current.id;
   const to = v === "agents" ? (current.sub && id !== "new" ? `#/agents/${encodeURIComponent(id)}` : "#/agents")
     : v === "kb" && current.sub ? `#/kb/${encodeURIComponent(id)}`
@@ -2127,6 +2130,21 @@ function route(){
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
 }
+// 回答里的站内链接（#284）：点过去的对话顶上有返回，回到点链接的地方（手机左上角的返回也一样），连着点几层就一层层回去；回去时滚动位置还原
+let linkTrail = [], linkNav = false;
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest(".answer a[href^='#/'], .rv-body a[href^='#/']");
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.getAttribute("href") === location.hash) return;
+  let box = a.parentElement;
+  while (box && box !== document.body && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  const sel = box && box !== document.body ? (box.id ? "#" + box.id : box.classList.length ? "." + [...box.classList].join(".") : null) : null;
+  linkTrail.push({hash: location.hash || "#/", sel, top: sel ? box.scrollTop : 0}); linkNav = true;
+});
+function linkBack(){
+  const t = linkTrail.pop(); linkNav = true; location.hash = t.hash;
+  if (t.sel) [0, 150, 400, 900].forEach(ms => setTimeout(() => { const el = document.querySelector(t.sel); if (el) el.scrollTop = t.top; }, ms));
+}
+addEventListener("hashchange", () => { if (!linkNav) linkTrail = []; linkNav = false; });   // 别的方式离开了就不再记着
 addEventListener("hashchange", route);
 // 列表每次都整个重画（点对话、状态推送、Agent 的对话拉回来），滚动区域是新建的，会回到顶上。
 // 滚动时记下位置，重画后在绘制前放回去；换了一个列表（另一个 Agent、另一个库）才从顶上开始（#45）
@@ -2691,7 +2709,7 @@ async function reloadChat(){
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
   $("#main").innerHTML = `
-    <div class="chat-head">${a ? seal(a) : chatIcon(c)}
+    <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}${splitFrom(c)}

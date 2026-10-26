@@ -9,6 +9,7 @@ import asyncio, datetime, logging, os, time, uuid
 
 from . import tokens, usage
 from .schedules import listed
+from urllib.parse import quote
 
 log = logging.getLogger("ccim.board")
 _SUM = {}                                     # 对话 → (大小, 修改时间, 摘要)
@@ -341,6 +342,8 @@ def clean_views(items):
 
 
 MATERIAL_MAX = 60000
+# 接在复盘视角后面（用户改过的视角也带上）：材料里每个对话有链接，提到时写成能点的（#284）
+LINK_NOTE = "材料里每个对话都带了链接。提到某个对话时，把它写成 [对话标题](链接)，点了就能打开那个对话。"
 
 
 def material(pf, d, keep=None):
@@ -355,7 +358,8 @@ def material(pf, d, keep=None):
         a = agent_get(r["agent"]) if r.get("agent") else None
         head = f"### {r['title']}（{a['name'] if a else '临时对话'}，{time.strftime('%H:%M', time.localtime(r['first']))}"
         head += f"–{time.strftime('%H:%M', time.localtime(r['last']))}）"
-        part = [head]
+        part = [head, "链接：" + (f"#/agents/{quote(r['agent'], safe='')}/{quote(r['id'], safe='')}" if r.get("agent")
+                                 else f"#/chats/{quote(r['id'], safe='')}")]   # 和网页 boardHref 一样（#284）
         if r.get("brief"):
             part.append(f"进度：{r['brief']}")
         part += [f"我说：{t[:200]}" for t in asks[-6:]]

@@ -63,10 +63,10 @@ WRONG_SEND = "SendUserFile"
 WRONG_SEND_HINT = "（ccim）这里没有 SendUserFile，刚才的文件没发出去。发文件改用 mcp__ccim__send_file，参数一样是 path，现在重新发一次。"
 CHATLOG_MAX = 300         # 一份聊天记录最多几条
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
-SKILL_SYNC = """
-- 装 Skill 默认装到这个项目的 .claude/skills 或 ~/.claude/skills，用户没说装到哪就先问。只有用户明确说「同步到平台 / ccim Skill 库」时，
-  才用 mcp__ccim__platform_skill_sync 把 ~/.claude/skills 里的 Skill 同步上去（平台 Skill 会同步到所有电脑、所有 Agent 都会加载）。
-  平台上已经有哪些 Skill，用 mcp__ccim__skill_list、mcp__ccim__skill_read 看。"""
+SKILL_SHARE = """
+- 装 Skill 照你自己平常的方式和位置装，不要动 ccim 平台；用户没说装到哪，按你的习惯问一句。只有用户明确说要把某个 Skill 共享 / 同步到平台（ccim Skill 库）时，
+  才用 ccim 的 share_skill_to_platform 工具，把那个 Skill 所在的文件夹交上去（平台 Skill 会同步到所有电脑，所有 Agent 都会加载）。
+  平台上已经有哪些 Skill，用 ccim 的 skill_list、skill_read 工具看。"""
 LOOK_AROUND_PF = """
 - 你和用户以前的对话（网页私聊、群聊、定时任务、飞书、微信、终端或桌面端）用 mcp__ccim__search_chats 找：写关键词按内容找，
   留空就列出你参与的所有对话（在哪些群聊里、群里还有谁），再用 mcp__ccim__open_chat 读，读到的内容当作参考，不用照着做。
@@ -612,7 +612,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SYNC if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1150,24 +1150,24 @@ class Chat:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
-        else:                                 # 其他对话：只能看平台 Skill，用户要求时把本机的同步上去（#276）
+        else:                                 # 其他对话（不管哪个底座）：只能看平台 Skill，用户要求时把自己的某个 Skill 共享上去（#276）
             tools += _skill_tools(chat, full=False, sync=_can_sync(chat))
         return tools
 
 
 SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
-SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__platform_skill_sync"]
+SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__share_skill_to_platform"]
 
 
 def _can_sync(chat):
-    """能把本机 ~/.claude/skills 同步到平台（#276）：访客（只能从 GitHub 装）、借给访客的、侧边对话、助手都不给。"""
+    """能把自己的 Skill 共享到平台（#276）：访客（只能从 GitHub 装）、借给访客的、侧边对话、助手都不给。"""
     e = chat.b.entry
     return not (guest_of(chat.b) or e.get("lent") or e.get("side") or e.get("helper"))
 
 
 def _skill_tools(chat, full=True, sync=False):
     """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。
-    full=False 是普通对话（#276）：只给 skill_list / skill_read，sync 时再加 platform_skill_sync（自己弹确认卡片）。"""
+    full=False 是普通对话（#276）：只给 skill_list / skill_read，sync 时再加 share_skill_to_platform（自己弹确认卡片）。"""
     from . import skills
 
     def ok(x):
@@ -1239,32 +1239,35 @@ def _skill_tools(chat, full=True, sync=False):
 
 
 def _skill_sync(chat, ok):
-    """把本机 ~/.claude/skills 里的一个 Skill 同步到平台 Skill 库（#276）。会装到所有电脑上的 Agent，所以先弹确认卡片。"""
+    """Agent 把自己的某个 Skill 共享到平台 Skill 库（#276）。和底座无关：给的是 Skill 文件夹的路径，哪儿装的都行。
+    会装到所有电脑上的 Agent，所以先弹确认卡片（卡片走渠道，Codex 这些经 toolsock 调的也一样弹）。"""
     from . import skills
 
-    @tool("platform_skill_sync", "把这台电脑 ~/.claude/skills/<name> 里的 Skill 同步到 ccim 平台 Skill 库（平台上已有同名的会被覆盖），"
-          "同步后所有电脑上的所有 Agent 都会加载它。只有用户明确说「同步到平台 / ccim Skill 库」时才用。"
-          "这不是安装 Skill 的工具：平常装 Skill 装到项目的 .claude/skills 或 ~/.claude/skills，用户没说装到哪就先问。"
-          "name 是 ~/.claude/skills 下的文件夹名，不支持 GitHub 地址。会先请用户确认。", {"name": str})
+    @tool("share_skill_to_platform", "把你自己的某个 Skill 共享到 ccim 平台 Skill 库：平台上已有同名的会被替换，"
+          "之后所有电脑上的所有 Agent 都会加载它。只有用户明确说要把它共享 / 同步到平台（ccim Skill 库）时才用。"
+          "这不是安装 Skill 的工具：平常装 Skill 照你自己原来的方式和位置装，不要动平台。"
+          "path 是这个 Skill 所在的文件夹（里面有 SKILL.md），绝对路径或相对项目目录的路径。"
+          "平台上的名字取 SKILL.md 里的 name，没有就用文件夹名。会先请用户确认。", {"path": str})
     async def run(args):
-        name = (args.get("name") or "").strip()
-        if name.startswith("http") or "/" in name:
-            return _err("name 只能是 ~/.claude/skills 下的文件夹名。")
-        local = {s["name"]: s for s in await asyncio.to_thread(skills.local_list)}
-        if name not in local:
-            return _err(f"~/.claude/skills 里没有「{name}」。")
-        r = await chat.b.approvals.ask(chat.chat_id, "platform_skill_sync", {"name": name, "replace": local[name]["installed"]}, None)
+        try:
+            d = skills.skill_dir(args.get("path"), chat.b.path)
+            name = skills._skill_name(d)
+            skills._check(name)
+        except (skills.Problem, OSError, ValueError) as e:
+            return _err(str(e))
+        have = any(m["name"] == name for m in await asyncio.to_thread(skills.listing))
+        r = await chat.b.approvals.ask(chat.chat_id, "share_skill_to_platform", {"name": name, "path": d, "replace": have}, None)
         if not isinstance(r, PermissionResultAllow):
-            return _err("用户没有同意同步到平台。")
+            return _err("用户没有同意共享到平台。")
         from . import peers
         pf = getattr(chat.b.channel, "platform", None)
         me = pf.peers.me if pf else peers.identity()
         try:
-            names = await asyncio.to_thread(skills.import_local, name, me.get("name") or "", me.get("id") or "")
+            names = await asyncio.to_thread(skills.import_path, d, me.get("name") or "", me.get("id") or "")
         except (skills.Problem, OSError) as e:
             return _err(str(e))
         skills.changed()
-        return ok(f"已同步到平台 Skill 库：{'、'.join(names)}，所有电脑上的 Agent 下次对话起都能用。")
+        return ok(f"已共享到平台 Skill 库：{'、'.join(names)}，所有电脑上的 Agent 下次对话起都能用。")
     return run
 
 

@@ -14,7 +14,7 @@ import asyncio, glob, json, logging, os, re, signal, sys, time, tomllib
 
 from .progress import describe_tool, short
 from . import devices, registry, share
-from .session import Chat, Turn, _tools_ready, guest_of, prompt_note, role_note
+from .session import SKILL_SHARE, Chat, Turn, _can_sync, _tools_ready, guest_of, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
 
@@ -186,7 +186,7 @@ class CodexChat(Chat):
             elif self.fork_from:              # 接着别处的对话聊：另开一个分支，原来那个不受影响
                 args += ["fork", self.fork_from, prompt]
             else:
-                args.append(prompt_note(NOTE, self.b.channel).rstrip("\n") + devices.perm_note() + "\n\n" + role_note(self.b.entry).lstrip() + "\n\n" * bool(role_note(self.b.entry)) + prompt)
+                args.append(prompt_note(NOTE, self.b.channel).rstrip("\n") + devices.perm_note() + (SKILL_SHARE if _can_sync(self) else "") + "\n\n" + role_note(self.b.entry).lstrip() + "\n\n" * bool(role_note(self.b.entry)) + prompt)
             self.proc = await asyncio.create_subprocess_exec(
                 *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=self.b.path, limit=LINE_LIMIT, start_new_session=True,

@@ -4297,7 +4297,7 @@ async function toggleSkill(name, on){
   await act(() => skApi("/api/skills/toggle", {name, on}), on ? "已启用" : "已停用");
   skillsCache = null; openSkill(name);
 }
-function skFromMachine(s){   // 从某台电脑 ~/.claude/skills 导入的（Agent 分享的不算）：更新 = 回那台电脑按原名重新导入（#276）
+function skFromMachine(s){   // 从某台电脑导入的（Agent 分享的不算）：更新 = 回那台电脑按记下的路径（老记录按 ~/.claude/skills 里的原名）重新导入（#276）
   const x = s.source || {};
   return x.type === "local" && !x.agent;
 }
@@ -4308,7 +4308,7 @@ async function updateSkill(name){
     const m = ms.find(m => x.mid && m.id === x.mid) || ms.find(m => x.machine && m.name === x.machine) || (ms.length <= 1 ? {id: S.me} : null);
     if (!m) return toast(`找不到「${x.machine || "原来那台电脑"}」，到「安装 Skill → 从电脑导入」里重新导入`);
     if (m.online === false) return toast(`「${m.name}」不在线，开机后再更新`);
-    await act(() => api("/api/skills/install", {local: name}, m.id), "已更新到最新");
+    await act(() => api("/api/skills/update", {name}, m.id), "已更新到最新");   // 那台电脑按记下的路径重新导入
   } else await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
   skillsCache = null; openSkill(name);
 }

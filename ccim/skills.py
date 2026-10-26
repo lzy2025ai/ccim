@@ -597,9 +597,65 @@ def import_local(name, machine_name="", machine_id=""):
     return [_put(d, {"type": "local", "machine": machine_name, "mid": machine_id}, name=name)]   # mid：Skill 页「更新」回那台电脑重新导入（#276）
 
 
-def update(name):
+def _skill_name(d):
+    """d 这个 Skill 装到平台上叫什么：SKILL.md 里的 name，不合规矩就用文件夹名（和 _put 一样）。"""
+    with open(os.path.join(d, "SKILL.md"), encoding="utf-8", errors="replace") as f:
+        fm = _front(f.read(4000))
+    return fm.get("name") if NAME.fullmatch(fm.get("name") or "") else os.path.basename(d.rstrip("/"))
+
+
+def skill_dir(path, base):
+    """Agent 交上来的 Skill 文件夹（#276）：绝对路径、~ 开头，或者相对 base（项目目录），里面要有 SKILL.md。"""
+    p = os.path.expanduser((path or "").strip())
+    if not p or p.startswith(("http://", "https://")):
+        raise Problem("要 Skill 所在文件夹的路径（里面有 SKILL.md）。")
+    d = os.path.realpath(os.path.join(base, p))
+    if os.path.basename(d) == "SKILL.md" and os.path.isfile(d):
+        d = os.path.dirname(d)
+    if not os.path.isfile(os.path.join(d, "SKILL.md")):
+        raise Problem(f"{d} 里没有 SKILL.md。")
+    return d
+
+
+def _copy_plain(src, dest):
+    """只拷普通文件：软链、设备文件这些都不要（不会顺着软链拷到外面的东西），太大的中途就停。"""
+    n = 0
+    for dp, dirs, files in os.walk(src):  # 不跟着软链进文件夹
+        dirs[:] = sorted(x for x in dirs if x not in SKIP and not os.path.islink(os.path.join(dp, x)))
+        out = os.path.join(dest, os.path.relpath(dp, src))
+        os.makedirs(out, exist_ok=True)
+        for f in files:
+            fp = os.path.join(dp, f)
+            if f in SKIP or os.path.islink(fp) or not os.path.isfile(fp):
+                continue
+            n += os.path.getsize(fp)
+            if n > MAX:
+                raise Problem(f"「{os.path.basename(src)}」太大了（最多 {MAX >> 20} MB）。")
+            shutil.copyfile(fp, os.path.join(out, f))
+
+
+def import_path(d, machine_name="", machine_id=""):
+    """把这台电脑上任意位置的一个 Skill 文件夹装成平台 Skill（#276，Agent 共享自己的 Skill，不管它是哪个底座装的）。
+    来源记电脑和路径，Skill 页「更新」回这台电脑按路径重新导入。"""
+    name = _skill_name(d)
+    with tempfile.TemporaryDirectory() as tmp:
+        dst = os.path.join(tmp, name)
+        _copy_plain(d, dst)
+        if not os.path.isfile(os.path.join(dst, "SKILL.md")):
+            raise Problem("SKILL.md 不能是软链。")
+        return [_put(dst, {"type": "local", "machine": machine_name, "mid": machine_id, "path": d}, name=name)]
+
+
+def update(name, me=None):
     m = _read_meta(_check(name)) or {}
     src = m.get("source") or {}
+    if src.get("type") == "local" and not src.get("agent") and not SPACE.get():   # 从电脑导入的（#276）：网页把请求发到原来那台
+        me = me or {}
+        if src.get("mid") and me.get("id") and src["mid"] != me["id"]:
+            raise Problem(f"要在「{src.get('machine') or '原来那台电脑'}」上更新。")
+        if src.get("path"):
+            return {"names": import_path(skill_dir(src["path"], "/"), me.get("name") or "", me.get("id") or "")}
+        return {"names": import_local(name, me.get("name") or "", me.get("id") or "")}
     if src.get("type") != "github":
         raise Problem("只有从 GitHub 装的能在这里更新，其他的重新上传或导入就行。")
     owner, repo, ref, sub = _github(src["url"])

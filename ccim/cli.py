@@ -607,7 +607,8 @@ def cmd_ship(args):
         raise SystemExit("有合不了的，一个都没动。处理好再运行（冲突：在它的工作目录里 rebase 到最新的 main、推上去）。")
     if not items:
         raise SystemExit("没有要上线的。")
-    _platform_api("/api/dev/ship", {"prs": [it["pr"] for it in items]})
+    caller = {"process": os.environ.get("CCIM_PROCESS"), "chat": os.environ.get("CCIM_CHAT")}   # 在对话里运行的（#282）
+    _platform_api("/api/dev/ship", {"prs": [it["pr"] for it in items], "caller": caller if all(caller.values()) else None})
     print("开始上线：" + "、".join(f"#{it.get('issue') or it['pr']}" for it in items), flush=True)
     last, started = None, time.time()
     while True:
@@ -623,8 +624,13 @@ def cmd_ship(args):
         if j.get("step") and j["step"] != last:
             last = j["step"]
             print(last, flush=True)
+        for m in j.get("missed") or [] if j.get("state") in ("done", "failed") else []:
+            print(f"{m['tag']} 没合上：{m['why']}")
         if j.get("state") == "done":
             print(j.get("note") or "已上线")
+            if all(caller.values()) and "不用重启" not in (j.get("note") or ""):
+                print(f"这台 Mac 上的 ccim 会等这一轮答完再重启（最多等 {runtime.WAIT_IDLE // 60} 分钟），"
+                      "重启好了在这个对话里说明各进程的版本。这一轮先收尾，别再接着做别的。")
             return
         if j.get("state") == "failed":
             raise SystemExit(j.get("error") or "上线没成功")

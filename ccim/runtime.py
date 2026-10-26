@@ -181,10 +181,12 @@ def dev_projects():
     return [p for p, e in registry.all_projects().items() if which(p, e)[1] == "开发版"]
 
 
-def set_try(what):
-    """what 为 main / None 就切回主目录。返回 [说明]。"""
+def set_try(what, caller=None, label=None):
+    """what 为 main / None 就切回主目录。返回 [说明]。
+    caller：{process, chat}，由平台代为执行时（ccim ship，#282）发起的对话；label：重启后说明里的说法。"""
     if not _is_dev_install():
         raise SystemExit("要在 ccim 的代码目录（开发版）里运行。")
+    text = label
     if what in (None, "", "main"):
         _save_channel(**{"try": None})
         label = "main"
@@ -205,9 +207,11 @@ def set_try(what):
     base = 15 if inner else 1                 # 在 ccim 里调用：留时间把回复发出去（重启前还会等这一轮答完，#136）
     started = registry.now()
     paths.sort(key=lambda p: (registry.get(p) or {}).get("kind") == "platform")   # 网页平台最后
-    report = {"CCIM_RESTART_LABEL": f"切到 {label}" if label != "main" else f"切回正式版本 {code_version(_repo())}".strip(),
+    report = {"CCIM_RESTART_LABEL": text or (f"切到 {label}" if label != "main" else f"切回正式版本 {code_version(_repo())}".strip()),
               "CCIM_RESTART_PATHS": json.dumps(paths),
               "CCIM_RESTART_SINCE": started}   # 以这一刻为准判断各个进程重启过没有（#140：先重启好的不再误报没起来）
+    if caller:                                # 重启前等这个对话答完，重启后在这个对话里说结果（_before_restart 认这两个）
+        report.update(CCIM_PROCESS=caller["process"], CCIM_CHAT=caller["chat"])
     for i, p in enumerate(paths):
         schedule_restart(p, delay=base + 3 * i, notify=False, env=report)   # 结果由执行 ccim try 的人看，不再推到飞书、微信
     names = "、".join(proc_label(p) for p in paths)

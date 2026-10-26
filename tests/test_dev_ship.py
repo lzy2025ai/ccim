@@ -41,7 +41,7 @@ def merge(it, tag, heads):
         raise RuntimeError("检查没通过")
 
 
-dev._merge, dev._update = merge, lambda: calls.append("UPDATE")
+dev._merge, dev._update = merge, lambda **k: calls.append("UPDATE")
 assert dev._ship([901, 900]) == "#901 已上线", calls          # 901 合不上：跳过它，已合的 900 照常更新
 assert calls == [(900, {}), (901, {900: A}), "UPDATE"], calls
 assert [m["tag"] for m in dev.job["missed"]] == ["#902"] and "检查没通过" in dev.job["missed"][0]["why"], dev.job

@@ -401,9 +401,11 @@ class Dev:
         return {"items": items, "merged": [n for n, x in info.items() if x.get("state") == "MERGED"],
                 "pending": bool((getattr(self, "cache", None) or {}).get("restart"))}   # 之前合进去、还没用上的要重启
 
-    def ship(self, prs):
+    def ship(self, prs, caller=None):
         """上线（#156 第二轮、#207）：先检查，有合不了的就不开始；逐个合并，中途某个合不上就跳过它和叠在它后面的，
-        其余接着合（#207 第二轮），有合进去的最后更新一次。"""
+        其余接着合（#207 第二轮），有合进去的最后更新一次。
+        caller：在对话里运行 ccim ship 时发起的那个对话（#282），重启好了在那里说明各进程的版本。"""
+        self.caller = caller if isinstance(caller, dict) and caller.get("chat") and caller.get("process") else None
         names = {x["pr"]: f"#{x['issue'] or x['pr']}" for x in (self.cache or {}).get("review") or []}
         prs = [int(n) for n in prs or []]
         if not prs:
@@ -442,7 +444,7 @@ class Dev:
             heads[it["pr"]] = it["head"]
         if not done:
             raise RuntimeError("一个都没合上")
-        quiet = self._update()
+        quiet = self._update(label="上线 " + "、".join(done))
         return "、".join(done) + " 已上线" + ("，不用重启" if quiet else "")
 
     def _sync(self, it, onto_from=None):
@@ -519,7 +521,7 @@ class Dev:
             _run(["git", "-C", main, "worktree", "remove", wt], timeout=60)
             _run(["git", "-C", main, "branch", "-D", p["branch"]], timeout=30)
 
-    def _update(self):
+    def _update(self, label=None):
         """拉最新代码；有要重启的改动才打稳定版、重启（#228）。什么都没重启返回 True。"""
         main = runtime._repo()
         self._step("更新这台 Mac")
@@ -538,7 +540,8 @@ class Dev:
                 subprocess.Popen(["sh", "-c", 'sleep 300; git -C "$1" worktree remove "$2" && git -C "$1" branch -D "$3"', "sh",
                                   main, trying["src"], merged], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, start_new_session=True, cwd="/")
-        runtime.set_try("main")               # 本机跑开发版的进程（网页平台也是）用上最新代码；平台会重启，网页断开一会儿
+        caller, self.caller = getattr(self, "caller", None), None
+        runtime.set_try("main", caller=caller, label=label)   # 本机跑开发版的进程（网页平台也是）用上最新代码；平台会重启，网页断开一会儿
         return False
 
     # 平台重启后还能看到上一次上线的结果

@@ -2248,7 +2248,7 @@ def _handler(pf):
                 "/api/global": lambda: save_global(body),
                 "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
                 "/api/dev/check": lambda: pf._dev().check(b("prs") or []),
-                "/api/dev/ship": lambda: pf._dev().ship(b("prs") or []),
+                "/api/dev/ship": lambda: pf._dev().ship(b("prs") or [], b("caller")),
                 "/api/dev/update": lambda: pf._dev().update(),
                 "/api/pick": lambda: {"path": console.pick_folder()},
                 "/api/reveal": lambda: console.reveal(b("path")),

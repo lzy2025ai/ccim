@@ -101,18 +101,25 @@ def unname(handler):
         handler.path = "/api/file" + sep + query
 
 
-def disposition(name):
+def viewable(ctype):
+    """浏览器能直接显示的类型：页面里预览、<img>、<video> 要用 inline。"""
+    return (ctype or "").split("/")[0] in ("image", "video", "audio", "text") or ctype == "application/pdf"
+
+
+def disposition(name, ctype=""):
     """filename* 给认 RFC 5987 的浏览器；只认 filename= 的（安卓、应用内浏览器）不认就拿地址最后一段当名字，
-    所以也带一份百分号编码的 filename=，它们会解码。"""
+    所以也带一份百分号编码的 filename=，它们会解码。
+    显示不了的（zip、exe 等）回 attachment：iPad 的 Safari 遇到 inline 的这类文件会说下载不了。"""
     q = quote(name)
-    return f"inline; filename=\"{q}\"; filename*=UTF-8''{q}"
+    kind = "inline" if viewable(ctype) else "attachment"
+    return f"{kind}; filename=\"{q}\"; filename*=UTF-8''{q}"
 
 
 def _head(handler, m, code, start, end, extra):
     handler.send_response(code)
     handler.send_header("Content-Type", m["ctype"])
     handler.send_header("Content-Length", str(end - start + 1))
-    handler.send_header("Content-Disposition", disposition(m["name"]))
+    handler.send_header("Content-Disposition", disposition(m["name"], m["ctype"]))
     if code == 206:
         handler.send_header("Content-Range", f"bytes {start}-{end}/{m['size']}")
     _common(handler, m, extra)

@@ -1151,6 +1151,8 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .sentfile{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
   text-decoration:none;color:inherit;margin:2px 0 10px}
 .sentfile:hover{border-color:var(--ink-2)}
+.sentfile .sf-tip{color:var(--muted);font-size:12px}
+.sentfile .sf-tip:empty{display:none}
 .sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
 /* 聊天记录（#218）：像微信里转发的聊天记录 */
 .chatlog{display:block;width:min(320px,100%);text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;
@@ -1879,6 +1881,57 @@ const isRemote = mid => !!S.hub || !!(mid && S.me && mid !== S.me);   // 在服�
 const fileUrl = (chat, path) => `/api/file/-/${encodeURIComponent(String(path).split("/").pop() || "file")}?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}`
   + (isRemote(ctxMachine) ? `&machine=${encodeURIComponent(ctxMachine)}` : "");
 
+// 对话里发来的文件（zip、exe 等）。不开新窗口：主屏幕图标打开的网页，新窗口里没有登录状态。
+// 主屏幕图标打开的网页下载不了文件：先在页面里取下来，再交给系统分享面板（存储到文件、隔空投送）。
+const STANDALONE = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+const fileGet = new Map();            // 地址 → {pct, ctl} 正在取；{file} 已取好
+function fileChip(src, name){
+  const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
+  return `<a class="sentfile" href="${src}" download="${esc(name)}"${STANDALONE ? ` onclick="return saveFile(event,this)"` : ""}>${ICON.file}${esc(name)}<small class="sf-tip">${tip}</small></a>`;
+}
+function fileTip(src){
+  const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
+  document.querySelectorAll("a.sentfile").forEach(a => { if (a.getAttribute("href") === src) a.querySelector(".sf-tip").textContent = tip; });
+}
+async function shareGot(src){
+  const g = fileGet.get(src);
+  try { await navigator.share({files: [g.file]}); fileGet.delete(src); }
+  catch (e){ if (e.name !== "NotAllowedError") fileGet.delete(src); }   // 取消了就放掉；没被允许（离点击太久）就等再点一下
+  fileTip(src);
+}
+function saveFile(ev, a){
+  if (!navigator.canShare) return true;
+  ev.preventDefault();
+  const src = a.getAttribute("href"), name = a.getAttribute("download"), g = fileGet.get(src);
+  if (g && g.file){ shareGot(src); return false; }
+  if (g){ g.ctl.abort(); fileGet.delete(src); fileTip(src); return false; }   // 取的时候再点一下：取消
+  for (const [k, v] of fileGet) if (v.file){ fileGet.delete(k); fileTip(k); }   // 大文件只留一个在内存里
+  const ctl = new AbortController();
+  fileGet.set(src, {pct: 0, ctl}); fileTip(src);
+  (async () => {
+    try {
+      const r = await fetch(src, {signal: ctl.signal});
+      if (!r.ok) throw new Error(r.status === 401 ? "登录过期了，刷新页面重新登录。" : "文件取不到了。");
+      const total = +r.headers.get("Content-Length") || 0, reader = r.body.getReader(), parts = [];
+      let got = 0;
+      for (;;){
+        const {done, value} = await reader.read();
+        if (done) break;
+        parts.push(value); got += value.length;
+        if (total){ fileGet.get(src).pct = Math.floor(got * 100 / total); fileTip(src); }
+      }
+      const file = new File(parts, name, {type: r.headers.get("Content-Type") || "application/octet-stream"});
+      if (!navigator.canShare({files: [file]})){ fileGet.delete(src); fileTip(src); location.href = src; return; }
+      fileGet.set(src, {file}); fileTip(src);
+      shareGot(src);
+    } catch (e){
+      fileGet.delete(src); fileTip(src);
+      if (e.name !== "AbortError") toast(e.message || "文件取不下来，再试一次。");
+    }
+  })();
+  return false;
+}
+
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
 const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
@@ -2354,7 +2407,7 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
-      : `<a class="sentfile" href="${src}" download="${esc(r.name)}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
+      : fileChip(src, r.name)}</div>`;
   }
   if (r.type === "chatlog"){
     const items = r.items || [];

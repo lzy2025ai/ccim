@@ -131,6 +131,45 @@ class Nonces:
             return True
 
 
+class Shared:
+    """同时到的同一个请求只算一次、大家共用结果；刚算好的 TTL 秒内来的也直接用（#258）。
+    几个页面收到同一条推送会差不多同时来要整体状态，各算各的就互相排队。
+    有改动（POST 做完、推了会改列表的推送）就作废，之后来的重新算；改动之前开始算的那份也不给之后来的用。"""
+    TTL = 3
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.gen = 0                          # 改动一次加一
+        self.slots = {}                       # 键 → {gen, at 开始算的时刻, done, val, err}
+
+    def changed(self, ev=None):
+        if ev and ev.get("type") == "progress" and ev.get("state") == "working":
+            return                            # 正在干活的进度每 0.3 秒一条，只是在做哪一步，不作废
+        with self.lock:
+            self.gen += 1
+
+    def get(self, key, fn):
+        with self.lock:
+            s = self.slots.get(key)
+            mine = not (s and s["gen"] == self.gen and s["err"] is None
+                        and (not s["done"].is_set() or time.time() - s["at"] < self.TTL))
+            if mine:
+                s = self.slots[key] = {"gen": self.gen, "at": time.time(), "done": threading.Event(), "val": None, "err": None}
+        if mine:
+            try:
+                s["val"] = fn()
+            except BaseException as e:
+                s["err"] = e
+                raise
+            finally:
+                s["done"].set()
+            return s["val"]
+        s["done"].wait()
+        if s["err"] is not None:
+            raise s["err"]
+        return s["val"]
+
+
 # ---------- 执行本机接口 ----------
 
 def local_request(pf, method, path, body=b"", headers=None, timeout=CALL_TIMEOUT):

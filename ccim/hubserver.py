@@ -126,7 +126,9 @@ class Hub:
         self.home = home()
         self.channel = type("C", (), {})()
         self.channel.events = Events()
-        from .peers import Peers
+        from .peers import Peers, Shared
+        self.shared = Shared()                # 同时到的 /api/state 只合并一次（#258）
+        self.channel.events.on_publish.append(self.shared.changed)
         self.peers = Peers(self, server=True, public_url=self.public_url)
         self.lock = threading.Lock()
         self.fails = {}                       # 地址 → [失败时间]
@@ -633,7 +635,7 @@ def _handler(hub):
             if u.path != "/api/file" and self.headers.get("X-CCIM") != "1":
                 return self._send(403, {"error": "forbidden"})
             if u.path == "/api/state" and not (q.get("local") and self.headers.get("X-Machine")):   # 带 local 的是要某一台自己的（#140）
-                return self._send(200, hub.state(self.acct))
+                return self._send(200, hub.shared.get(("state", self.acct), lambda: hub.state(self.acct)))
             if u.path == "/api/accounts":
                 return self._send(200, hub.account_list()) if self.acct == OWNER and hub.accounts_on() \
                     else self._send(403, {"error": "forbidden"})
@@ -650,6 +652,12 @@ def _handler(hub):
             return self._forward(b"", q)
 
         def do_POST(self):
+            try:
+                self._post()
+            finally:
+                hub.shared.changed()          # 做完一次改动：之后来要整体状态的都重新合并（#258）
+
+        def _post(self):
             if not self._host_ok() or self.headers.get("X-CCIM") != "1":
                 return self._send(403, {"error": "forbidden"})
             u = urlparse(self.path)

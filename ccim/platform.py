@@ -99,6 +99,7 @@ class Events:
         self.lock = threading.Lock()
         self.subs = []
         self.tag = None                       # 平台：本机的推送标上属于哪个访客（#154）
+        self.on_publish = []                  # 每条推送先给这些看一眼（整体状态的缓存据此作废，#258）
 
     def subscribe(self):
         q = queue.Queue(maxsize=1000)
@@ -116,6 +117,8 @@ class Events:
             return q in self.subs
 
     def publish(self, ev):
+        for fn in self.on_publish:
+            fn(ev)
         if self.tag and not ev.get("_m"):
             ev = self.tag(ev)
         with self.lock:
@@ -432,6 +435,8 @@ class Platform:
         from . import devpanel                # 开发页（#156）：只在跑开发版的电脑上有
         self.dev = devpanel.Dev(self) if devpanel.enabled() else None
         self.titles = devpanel.Titles(self)  # 任务面板上对话在做的 issue 的标题（#157）
+        from .peers import Shared
+        self.shared = Shared()                # 同时到的 /api/state 只算一次（#258）
 
     def handlers(self):
         return {"platform": self}
@@ -453,6 +458,7 @@ class Platform:
 
     def attach(self, channel):
         self.channel = channel
+        channel.events.on_publish.append(self.shared.changed)
         self.loop = asyncio.get_event_loop()
         self.schedules.start()                # 到点就跑的定时任务
         from .peers import Peers
@@ -1986,7 +1992,8 @@ def _handler(pf):
             if u.path == "/api/file/part":
                 return self._file_part(q)
             routes = {
-                "/api/state": lambda: state(pf, acct) if q.get("local") else pf.peers.merged_state(state(pf)),
+                "/api/state": lambda: pf.shared.get(("state", bool(q.get("local")), acct), lambda: state(pf, acct) if q.get("local")
+                                                    else pf.peers.merged_state(state(pf))),
                 "/api/dirs": lambda: list_dirs(q.get("path") or "", share.root(acct) if acct else None),
                 "/api/kb": lambda: {"libs": share.filter_libs(kb_mod.libs(), acct)},
                 "/api/kb/lib": lambda: kb_mod.lib_detail(q.get("id", "")),
@@ -2035,6 +2042,12 @@ def _handler(pf):
             self._send(404, {"error": "not found"})
 
         def do_POST(self):
+            try:
+                self._post()
+            finally:
+                pf.shared.changed()           # 做完一次改动：之后来要整体状态的都重新算（#258）
+
+        def _post(self):
             u = urlparse(self.path)
             if self._remote():
                 return

@@ -16,11 +16,11 @@ Mac 们照旧用 peers.py 的方式主动连过来（/peer/* 由 Peers 自己的
 从这里转出去的请求，到了 Mac 那边都带 X-From-Peer：开机密码、选文件夹弹窗、在访达里显示这些 Mac 会拒绝。
 """
 import base64, hashlib, hmac, html, json, logging, os, queue, secrets, struct, threading, time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import registry
-from .peers import OWNER
+from .peers import OWNER, Server
 
 log = logging.getLogger("ccim.hub")
 
@@ -464,7 +464,7 @@ class Hub:
 
     def serve(self):
         self.peers.start()
-        server = ThreadingHTTPServer(("127.0.0.1", self.port), _handler(self))
+        server = Server(("127.0.0.1", self.port), _handler(self))
         server.daemon_threads = True
         log.info("总控网页：127.0.0.1:%d（前面用 nginx 做 HTTPS）", self.port)
         link = self.setup_link()

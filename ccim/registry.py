@@ -4,7 +4,7 @@
 ~/.ccim/projects/<key>/：这个项目的运行状态（pid、日志、各聊天的会话编号）
 App Secret 存进 macOS 钥匙串（服务名 ccim，账户名 app_id），不落盘。
 """
-import contextlib, fcntl, hashlib, json, os, subprocess, tempfile, time
+import contextlib, fcntl, hashlib, json, os, subprocess, tempfile, threading, time
 
 HOME = os.path.expanduser("~/.ccim")
 REG = os.path.join(HOME, "registry.json")
@@ -32,6 +32,50 @@ def _locked():
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+# ---------- 一次请求里同一个文件只读一遍 ----------
+# /api/state 要为每个对话、每个 Agent 查好几遍 state.json、agents.json 这些文件，每次都从头读、从头解析，
+# 对话一多就要好几秒。在 snapshot() 里，文件没变（修改时间、大小、inode 都一样）就用这次请求里已经读过的。
+# 读出来的东西在这次请求里共用，所以只给不改数据的接口用；要改了再写回去的地方照旧现读（_read、write_state、set_global）。
+
+_snap = threading.local()
+
+
+@contextlib.contextmanager
+def snapshot():
+    outer = getattr(_snap, "files", None) is not None
+    if not outer:
+        _snap.files = {}
+    try:
+        yield
+    finally:
+        if not outer:
+            _snap.files = None
+
+
+def load_json(path):
+    """读一个 JSON 文件，读不了抛 OSError / ValueError。在 snapshot() 里同一个文件没变就不重读。"""
+    files = getattr(_snap, "files", None)
+    if files is None:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    st = os.stat(path)
+    stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
+    hit = files.get(path)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    files[path] = (stamp, data)
+    return data
+
+
+def _load(path):
+    try:
+        return load_json(path)
+    except (OSError, ValueError):
+        return {}
+
+
 def _read():
     try:
         with open(REG, encoding="utf-8") as f:
@@ -49,11 +93,11 @@ def _write(data):
 
 
 def all_projects():
-    return _read()
+    return _load(REG)
 
 
 def get(path):
-    return _read().get(os.path.realpath(path))
+    return _load(REG).get(os.path.realpath(path))
 
 
 def put(path, entry):
@@ -141,15 +185,15 @@ def state_path(path):
 
 
 def read_state(path):
-    try:
-        with open(state_path(path), encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    return _load(state_path(path))
 
 
 def write_state(path, **changes):
-    s = read_state(path)
+    try:
+        with open(state_path(path), encoding="utf-8") as f:
+            s = json.load(f)
+    except (OSError, ValueError):
+        s = {}
     s.update(changes)
     fd, tmp = tempfile.mkstemp(dir=pdir(path), prefix=".state.", suffix=".json")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -161,16 +205,16 @@ def write_state(path, **changes):
 def global_config():
     """ccim config --global 设的全局默认：model / effort 给 Claude Code，codex_model / codex_effort 给 Codex；
     Agent（项目）自己设了的以它为准。"""
-    try:
-        with open(os.path.join(HOME, "config.json"), encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    return _load(os.path.join(HOME, "config.json"))
 
 
 def set_global(**changes):
     with _locked():
-        c = global_config()
+        try:
+            with open(os.path.join(HOME, "config.json"), encoding="utf-8") as f:
+                c = json.load(f)
+        except (OSError, ValueError):
+            c = {}
         c.update(changes)
         c = {k: v for k, v in c.items() if v}
         fd, tmp = tempfile.mkstemp(dir=HOME, prefix=".config.", suffix=".json")
@@ -209,8 +253,7 @@ def claude_defaults(path):
     for f in (os.path.join(path, ".claude/settings.local.json"), os.path.join(path, ".claude/settings.json"),
               os.path.expanduser("~/.claude/settings.json")):
         try:
-            with open(f, encoding="utf-8") as fh:
-                s = json.load(fh)
+            s = load_json(f)
         except (OSError, ValueError):
             continue
         model = model or s.get("model")

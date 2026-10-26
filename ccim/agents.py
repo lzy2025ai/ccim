@@ -53,11 +53,14 @@ def _write(data):
 
 
 def all_agents():
-    return _read()
+    try:
+        return registry.load_json(_file())    # 一次请求里只读一遍（registry.snapshot）；要改了写回去的用 _read
+    except (OSError, ValueError):
+        return {}
 
 
 def get(aid):
-    a = _read().get(aid)
+    a = all_agents().get(aid)
     return dict(a, id=aid) if a else None
 
 

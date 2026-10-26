@@ -5028,7 +5028,7 @@ function renderMachines(){
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span></div>` : `<div class="mem" style="padding:10px 0">
         <a class="t mlink" href="${devHref(m.id)}" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
         <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}${sharedTo(m)}</span></a>
-        ${upgradeBox(m)}
+        ${upgradeBox(m)}${permChip(m)}
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
       ${joined ? `<div class="sect"><h3>已加入「${esc(hub.name || "")}」</h3><p class="muted">要添加别的电脑，到「${esc(hub.name || "")}」上操作。</p>
@@ -5158,6 +5158,41 @@ async function devUpdate(){
   renderDev(true);
 }
 
+// 系统权限（#266）：截屏、模拟键鼠、读受保护的数据要 macOS 授权
+const PERM_USE = {screen: "截屏、看屏幕", accessibility: "模拟鼠标点击、键盘输入", disk: "读取邮件、信息等应用的数据"};
+function permMiss(p){ return p ? p.items.filter(i => i.ok === false) : []; }
+function permChip(m){
+  const miss = m.online ? permMiss(((S.machine_info || {})[m.id] || {}).perms) : [];
+  return miss.length ? `<a class="upg new" href="${devHref(m.id)}">缺${miss.map(i => esc(i.name)).join("、")}权限</a>` : "";
+}
+function permSect(p, me){
+  if (!p) return "";
+  const miss = permMiss(p);
+  return `<div class="sect" id="dev-perms"><div class="row" style="justify-content:space-between"><h3>系统权限</h3>
+      ${miss.length ? `<button class="link" onclick="devPermCheck(this)">重新检查</button>` : ""}</div>
+    ${p.items.map(i => `<div class="mem" style="padding:8px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(i.name)}</span>
+        <span class="sub">${PERM_USE[i.key] || ""}</span></span>
+      ${i.ok === false ? `<button class="btn" onclick="devPermOpen(${q(i.key)})">${me ? "打开设置" : "在那台电脑上打开设置"}</button>`
+        : `<span class="status ${i.ok ? "on" : ""}"><i></i>${i.ok ? "已开启" : "查不到"}</span>`}</div>`).join("")}
+    ${miss.length ? `<p class="muted" style="margin:10px 0 6px">在设置里点「+」添加这个程序，或把它拖进列表：</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><code style="word-break:break-all;flex:1;min-width:0">${esc(p.app)}</code>
+        <button class="btn" onclick="devPermOpen(${q(miss[0].key)},true)">在访达中显示</button>
+        <button class="btn" onclick="navigator.clipboard.writeText(${q(p.app)});toast('已复制')">复制</button></div>` : ""}</div>`;
+}
+async function devPermOpen(key, reveal){
+  await act(() => devApi("/api/fs/perm", {key, reveal: !!reveal}), machineOf(DEV.mid).me ? "" : "已在那台电脑上打开");
+}
+async function devPermCheck(btn){
+  const mid = DEV.mid;
+  btn.disabled = true;
+  let d;
+  try { d = await devApi("/api/fs/perms"); } catch (e) { btn.disabled = false; return toast(e.message); }
+  if (!devOn(mid)) return;
+  DEV.info.perms = d.perms;
+  const info = (S.machine_info || {})[mid]; if (info) info.perms = d.perms;
+  $("#dev-perms").outerHTML = permSect(d.perms, machineOf(mid).me);
+  toast(permMiss(d.perms).length ? "还有权限没开" : "都已开启");
+}
 function sharedTo(m){
   const n = Object.keys(m.shares || {}).length;    // 主人：这台开放给了几个账号（#154）
   return n ? ` · 共享给 ${n} 个账号` : "";
@@ -5335,6 +5370,7 @@ async function devOverview(){
     <div class="sect"><h3>这台电脑</h3><dl class="kv">
       ${d.model ? `<dt>型号</dt><dd>${esc(d.model)}</dd>` : ""}<dt>系统</dt><dd>${esc(d.os)}</dd>
       ${v ? `<dt>ccim</dt><dd>${esc([v.kind === "dev" ? "开发版" : "", v.version, v.commit].filter(Boolean).join(" "))}</dd>` : ""}</dl></div>
+    ${permSect(d.perms, m.me)}
     <div class="sect"><h3>Agent</h3>${ags.length ? ags.map(a => `<a class="mem" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a, "sm", false)}
         <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${BASE[a.base || "claude"]}</span></span>
         <span class="status ${a.busy ? "busy" : "on"}"><i></i>${a.busy ? esc(a.doing || "干活中") : "空闲"}</span></a>`).join("")

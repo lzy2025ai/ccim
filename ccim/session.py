@@ -9,7 +9,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
                               HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
-from . import registry, usage
+from . import devices, registry, usage
 from .channels.base import chatlog_as_text
 from .progress import clock, describe_tool, short
 
@@ -612,7 +612,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SYNC if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SYNC if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:

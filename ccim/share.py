@@ -379,6 +379,7 @@ def filter_state(pf, st, acct):
         st["global"] = {k: v for k, v in (st.get("global") or {}).items()     # 主人设的默认模型，只给它看（#154）
                         if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}
         st["ccim"] = {k: v for k, v in (st.get("ccim") or {}).items() if k != "dev"}   # 开发页只给电脑主人
+        st.pop("perms", None)
         st["guest"] = {"root": root(acct), "codex": bool(g.get("codex")), "own": bool(g.get("own", True))}
     return st
 

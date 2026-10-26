@@ -321,11 +321,20 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .btop{display:flex;align-items:center;gap:8px;min-width:0;line-height:20px}
 .btitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brow.quiet .btitle{font-weight:500}
-.bico{position:relative;display:flex;align-self:center}
+.bico{position:relative;display:flex;align-self:start;margin-top:-2px}   /* 和标题那一行对齐，细线连到下一行的 Agent 名字（#273） */
+.bico>.seal,.bico>.chaticon{width:24px;height:24px}
+.bico.linked::after{content:"";position:absolute;left:11.5px;top:27px;width:22px;height:9px;border:solid var(--line-strong);border-width:0 0 1.2px 1.2px;border-bottom-left-radius:8px;pointer-events:none}
 .bico .udot{position:absolute;top:-2px;right:-2px;margin:0;box-shadow:0 0 0 2px var(--panel)}
 .bico .udot.soft{background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--qing),0 0 0 2px var(--panel)}
 .bside{display:flex;flex-direction:column;align-items:flex-end;align-self:start;gap:4px;min-width:0;max-width:200px}
 .bwhen{color:var(--faint);font-size:12px;white-space:nowrap;line-height:20px}
+.bmore-btn{display:none;width:24px;height:20px;border-radius:6px;align-items:center;justify-content:center;color:var(--muted)}
+.bmore-btn svg{width:15px;height:15px}
+.bmore-btn:hover{background:var(--sunk);color:var(--ink)}
+.brow:hover .bmore-btn{display:inline-flex}
+.btopr{display:flex;align-items:center;gap:6px;min-height:20px}
+@media (hover:hover){.brow:hover .bwhen:has(+ .bmore-btn){display:none}}   /* 三点顶替时间那一格；手机上两个都在 */
+@media (hover:none){.bmore-btn{display:inline-flex}}
 .bwho{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .bprog{color:var(--muted);font-size:13px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bmeta{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;white-space:nowrap}
@@ -583,6 +592,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .steps ol{display:none;margin:0;padding:2px 12px 10px 34px;color:var(--muted)}
 .steps.open ol{display:block}
 .steps li{padding:2px 0}
+.steps.bg li .t{color:var(--faint)}
 .answer.said{margin-bottom:12px}
 .steps li code{font:12px var(--mono);color:var(--ink-2)}
 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--huang);animation:spin .8s linear infinite}
@@ -1156,6 +1166,8 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .sentfile{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
   text-decoration:none;color:inherit;margin:2px 0 10px}
 .sentfile:hover{border-color:var(--ink-2)}
+.sentfile .sf-tip{color:var(--muted);font-size:12px}
+.sentfile .sf-tip:empty{display:none}
 .sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
 /* 聊天记录（#218）：像微信里转发的聊天记录 */
 .chatlog{display:block;width:min(320px,100%);text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;
@@ -1884,12 +1896,64 @@ const isRemote = mid => !!S.hub || !!(mid && S.me && mid !== S.me);   // 在服�
 const fileUrl = (chat, path) => `/api/file/-/${encodeURIComponent(String(path).split("/").pop() || "file")}?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}`
   + (isRemote(ctxMachine) ? `&machine=${encodeURIComponent(ctxMachine)}` : "");
 
+// 对话里发来的文件（zip、exe 等）。不开新窗口：主屏幕图标打开的网页，新窗口里没有登录状态。
+// 主屏幕图标打开的网页下载不了文件：先在页面里取下来，再交给系统分享面板（存储到文件、隔空投送）。
+const STANDALONE = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+const fileGet = new Map();            // 地址 → {pct, ctl} 正在取；{file} 已取好
+function fileChip(src, name){
+  const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
+  return `<a class="sentfile" href="${src}" download="${esc(name)}"${STANDALONE ? ` onclick="return saveFile(event,this)"` : ""}>${ICON.file}${esc(name)}<small class="sf-tip">${tip}</small></a>`;
+}
+function fileTip(src){
+  const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
+  document.querySelectorAll("a.sentfile").forEach(a => { if (a.getAttribute("href") === src) a.querySelector(".sf-tip").textContent = tip; });
+}
+async function shareGot(src){
+  const g = fileGet.get(src);
+  try { await navigator.share({files: [g.file]}); fileGet.delete(src); }
+  catch (e){ if (e.name !== "NotAllowedError") fileGet.delete(src); }   // 取消了就放掉；没被允许（离点击太久）就等再点一下
+  fileTip(src);
+}
+function saveFile(ev, a){
+  if (!navigator.canShare) return true;
+  ev.preventDefault();
+  const src = a.getAttribute("href"), name = a.getAttribute("download"), g = fileGet.get(src);
+  if (g && g.file){ shareGot(src); return false; }
+  if (g){ g.ctl.abort(); fileGet.delete(src); fileTip(src); return false; }   // 取的时候再点一下：取消
+  for (const [k, v] of fileGet) if (v.file){ fileGet.delete(k); fileTip(k); }   // 大文件只留一个在内存里
+  const ctl = new AbortController();
+  fileGet.set(src, {pct: 0, ctl}); fileTip(src);
+  (async () => {
+    try {
+      const r = await fetch(src, {signal: ctl.signal});
+      if (!r.ok) throw new Error(r.status === 401 ? "登录过期了，刷新页面重新登录。" : "文件取不到了。");
+      const total = +r.headers.get("Content-Length") || 0, reader = r.body.getReader(), parts = [];
+      let got = 0;
+      for (;;){
+        const {done, value} = await reader.read();
+        if (done) break;
+        parts.push(value); got += value.length;
+        if (total){ fileGet.get(src).pct = Math.floor(got * 100 / total); fileTip(src); }
+      }
+      const file = new File(parts, name, {type: r.headers.get("Content-Type") || "application/octet-stream"});
+      if (!navigator.canShare({files: [file]})){ fileGet.delete(src); fileTip(src); location.href = src; return; }
+      fileGet.set(src, {file}); fileTip(src);
+      shareGot(src);
+    } catch (e){
+      fileGet.delete(src); fileTip(src);
+      if (e.name !== "AbortError") toast(e.message || "文件取不下来，再试一次。");
+    }
+  })();
+  return false;
+}
+
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
-const LOCAL_EVENTS = new Set(["ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
-function connectEvents(){
+const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
+let esFails = 0;                  // 推送连续连不上几次了：重连间隔 5、10、20…秒，最长 1 分钟
+function connectEvents(again){
   const es = new EventSource("/api/events");
-  let lost = false;
+  let lost = !!again;
   es.onmessage = e => {
     const ev = JSON.parse(e.data);
     if (ev.type === "idle") { refreshSoon(); return; }
@@ -1951,6 +2015,11 @@ function connectEvents(){
       }
     }
     if ((ev.type === "answer" || ev.type === "mention") && viewing(ev.chat)) markSeen(ev.chat, true);
+    if (ev.type === "bg") {               // 后台任务开始、结束、走到下一步（#271）
+      const c = chatById(ev.chat);
+      if (c) { const n = (c.bg || []).length; c.bg = ev.tasks; if (n !== ev.tasks.length) renderList(); }
+      if (detail && detail.id === ev.chat) { detail.bg = ev.tasks; drawThread(); }
+    }
     if (ev.type === "brief") { const c = chatById(ev.chat); if (c) { c.brief = ev.brief; if (ev.title) c.title = ev.title; renderList(); } }
     if (ev.type === "ctx") { const c = chatById(ev.chat); if (c) c.ctx = ev.ctx; }
     if (ev.type === "dev") { clearTimeout(window._devt); window._devt = setTimeout(() => { loadState().then(drawAttention); if (current.view === "settings" && current.id === "dev") renderDev(true); }, 300); }
@@ -1959,8 +2028,12 @@ function connectEvents(){
     if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c ? !c.busy : unlisted(ev.chat)) refreshSoon(); }
     else if (!LOCAL_EVENTS.has(ev.type)) refreshSoon();
   };
-  es.onerror = () => { lost = true; };   // 浏览器会自己重连
+  es.onerror = () => {                   // 一般浏览器会自己重连；重启、部署时收到错误响应就彻底关了，要自己再连（#249）
+    lost = true;
+    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), Math.min(60000, 5000 * 2 ** esFails++)); }
+  };
   es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
+    esFails = 0;
     if (!lost) return;
     lost = false;
     refreshSoon();
@@ -2175,7 +2248,8 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
     return nest(c, me, kids, child, inAgent, depth);
   }
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
-    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
+    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>`
+    : (c.bg || []).length ? `<span class="working"><span class="spin"></span>后台 ${c.bg.length} 个任务在跑</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
@@ -2353,7 +2427,7 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
-      : `<a class="sentfile" href="${src}" download="${esc(r.name)}" target="_blank">${ICON.file}${esc(r.name)}</a>`}</div>`;
+      : fileChip(src, r.name)}</div>`;
   }
   if (r.type === "chatlog"){
     const items = r.items || [];
@@ -2385,6 +2459,15 @@ function liveHtml(){
   return `<div class="msg">${fromRow()}${flowHtml(p.steps, p.said, {head, open: true})}
     ${stallBar(p, detail.id, ctxMachine)}${liveText(p)}</div>`;
 }
+// 一轮答完后还在跑的后台任务（#271）
+const BG_STEP = {Bash: "运行命令", Read: "读文件", Edit: "改文件", Write: "写文件", Grep: "搜索", Glob: "找文件", WebFetch: "看网页", WebSearch: "上网搜索"};
+function bgAge(start){ const m = Math.floor(Math.max(0, Date.now() / 1000 - (start || 0)) / 60); return m < 1 ? "刚开始" : m < 60 ? `已跑 ${m} 分钟` : `已跑 ${Math.floor(m / 60)} 小时 ${m % 60} 分钟`; }
+function bgHtml(){
+  const b = detail.bg || []; if (!b.length || detail.progress) return "";
+  return `<div class="msg"><div class="steps bg ${detail.bgOpen ? "open" : ""}"><button onclick="detail.bgOpen=!detail.bgOpen;this.parentElement.classList.toggle('open')"><span class="spin"></span>后台还有 ${b.length} 个任务在跑，做完它会接着回复${ICON.chev}</button>
+    <ol>${b.map(x => `<li>${esc(x.desc || "后台任务")} <span class="t">· <span data-bg="${x.start || 0}">${bgAge(x.start)}</span>${BG_STEP[x.step] ? ` · 正在${BG_STEP[x.step]}` : ""}</span></li>`).join("")}</ol></div></div>`;
+}
+setInterval(() => { for (const el of document.querySelectorAll("[data-bg]")) el.textContent = bgAge(+el.dataset.bg); }, 30000);
 // 群里 @ 别的 Agent 的消息（带 to）连同它们的回答自成一组；主 Agent 回完的内容挪回它回的那条消息下面，
 // 不夹在之后 @ 的消息和回答中间（#129）。liveAt 是主 Agent 干活进度该插的位置
 function threadOrder(log, from){
@@ -2419,7 +2502,7 @@ function drawThread(){
   const parts = order.map(i => { const r = detail.log[i]; return ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i); });
   if (liveAt < parts.length) parts.splice(liveAt, 0, liveHtml());
   t.innerHTML = more + (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
-    + parts.join("") + ewUpTo(Infinity) + (liveAt < parts.length ? "" : liveHtml());
+    + parts.join("") + ewUpTo(Infinity) + (liveAt < parts.length ? "" : liveHtml()) + bgHtml();
   for (const [sid, v, focus] of typed){
     const f = t.querySelector(`form[data-sid="${CSS.escape(sid)}"]`); if (!f) continue;
     f.pw.value = v; if (focus) f.pw.focus();
@@ -3442,19 +3525,25 @@ function boardRow(c, kind){
   const r = REASON[c.attention];
   const replying = boardReply && boardReply.id === c.id;
   const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
-    : kind === "wait" ? `<button class="btn" onclick="event.preventDefault();dismissTask(${q(c.id)})">知道了</button>${replying ? "" : `<button class="btn primary" onclick="event.preventDefault();openBoardReply(${q(c.id)})">回复</button>`}` : "";
+    : "";
+  const more = kind !== "work" && !replying ? `<button class="bmore-btn" aria-label="更多操作" title="更多操作" onclick="boardMenu(event,${q(c.id)},${kind === "wait"})">${ICON.more}</button>` : "";
   const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
   const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
-  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico">${iconOf(c, a, kind === "recent" ? "sm" : "")}${dot}</span>
+  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
     <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.star ? `<span class="bstar" title="星标">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
-    <span class="bside"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
+    <span class="bside"><span class="btopr"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span>${more}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
   if (!replying) return row;
   return `<div class="bitem">${row}<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"
       oninput="boardReply.text=this.value" onkeydown="if(sendKey(event)){event.preventDefault();sendBoardReply()}else if(event.key==='Escape')closeBoardReply()">${esc(boardReply.text)}</textarea>
     <div class="acts"><button class="btn" onclick="closeBoardReply()">取消</button><button class="btn primary" id="br-send" onclick="sendBoardReply()">发送</button></div></div></div>`;
 }
 let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
+function boardMenu(e, id, wait){     // 右上角的三点：知道了、快捷回复（#273）
+  e.preventDefault();
+  pop(e, (wait ? `<button onclick="closePop();dismissTask(${q(id)})">知道了</button>` : "")
+    + `<button onclick="closePop();openBoardReply(${q(id)})">快捷回复</button>`);
+}
 async function dismissTask(id){
   const c = chatById(id);
   const was = c && {attention: c.attention, unread: c.unread};
@@ -4013,7 +4102,7 @@ async function openSkill(name){
           <div class="sk-desc" title="${esc(s.desc || "")}">${esc(s.desc || "")}</div>
           <div class="skmeta">${esc(skillSrc(s))} · ${when(stamp(s.updated))} 更新 · ${bytes(s.size)}${offFor.length ? ` · ${offFor.map(a => esc(a.name)).join("、")} 没挂它` : ""}</div>
           <div class="sk-market" id="sk-mk"></div></div>
-        <div class="sk-acts">${s.shared ? "" : `${(s.source || {}).type === "github" ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
+        <div class="sk-acts">${s.shared ? "" : `${(s.source || {}).type === "github" || skFromMachine(s) ? `<button class="btn" onclick="updateSkill(${q(name)})">更新</button>` : ""}
           <button class="btn" onclick="toggleSkill(${q(name)},${s.disabled ? "true" : "false"})">${s.disabled ? "启用" : "停用"}</button>
           <button class="btn danger" onclick="deleteSkill(${q(name)})">删除</button>`}</div></div></div>
     <div class="sk-body"><nav class="sk-tree" id="sk-tree" aria-label="文件"></nav><section class="sk-view" id="sk-view"></section></div></div>`;
@@ -4190,8 +4279,19 @@ async function toggleSkill(name, on){
   await act(() => skApi("/api/skills/toggle", {name, on}), on ? "已启用" : "已停用");
   skillsCache = null; openSkill(name);
 }
+function skFromMachine(s){   // 从某台电脑 ~/.claude/skills 导入的（Agent 分享的不算）：更新 = 回那台电脑按原名重新导入（#276）
+  const x = s.source || {};
+  return x.type === "local" && !x.agent;
+}
 async function updateSkill(name){
-  await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
+  const s = SKV.s && SKV.s.name === name ? SKV.s : null;
+  if (s && skFromMachine(s)) {
+    const x = s.source, ms = S.machines || [];
+    const m = ms.find(m => x.mid && m.id === x.mid) || ms.find(m => x.machine && m.name === x.machine) || (ms.length <= 1 ? {id: S.me} : null);
+    if (!m) return toast(`找不到「${x.machine || "原来那台电脑"}」，到「安装 Skill → 从电脑导入」里重新导入`);
+    if (m.online === false) return toast(`「${m.name}」不在线，开机后再更新`);
+    await act(() => api("/api/skills/install", {local: name}, m.id), "已更新到最新");
+  } else await act(() => skApi("/api/skills/update", {name}), "已更新到最新");
   skillsCache = null; openSkill(name);
 }
 async function deleteSkill(name){
@@ -5008,7 +5108,7 @@ function renderMachines(){
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span></div>` : `<div class="mem" style="padding:10px 0">
         <a class="t mlink" href="${devHref(m.id)}" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
         <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}${sharedTo(m)}</span></a>
-        ${upgradeBox(m)}
+        ${upgradeBox(m)}${permChip(m)}
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
       ${joined ? `<div class="sect"><h3>已加入「${esc(hub.name || "")}」</h3><p class="muted">要添加别的电脑，到「${esc(hub.name || "")}」上操作。</p>
@@ -5138,6 +5238,41 @@ async function devUpdate(){
   renderDev(true);
 }
 
+// 系统权限（#266）：截屏、模拟键鼠、读受保护的数据要 macOS 授权
+const PERM_USE = {screen: "截屏、看屏幕", accessibility: "模拟鼠标点击、键盘输入", disk: "读取邮件、信息等应用的数据"};
+function permMiss(p){ return p ? p.items.filter(i => i.ok === false) : []; }
+function permChip(m){
+  const miss = m.online ? permMiss(((S.machine_info || {})[m.id] || {}).perms) : [];
+  return miss.length ? `<a class="upg new" href="${devHref(m.id)}">缺${miss.map(i => esc(i.name)).join("、")}权限</a>` : "";
+}
+function permSect(p, me){
+  if (!p) return "";
+  const miss = permMiss(p);
+  return `<div class="sect" id="dev-perms"><div class="row" style="justify-content:space-between"><h3>系统权限</h3>
+      ${miss.length ? `<button class="link" onclick="devPermCheck(this)">重新检查</button>` : ""}</div>
+    ${p.items.map(i => `<div class="mem" style="padding:8px 0"><span class="t" style="flex:1;min-width:0"><span class="title">${esc(i.name)}</span>
+        <span class="sub">${PERM_USE[i.key] || ""}</span></span>
+      ${i.ok === false ? `<button class="btn" onclick="devPermOpen(${q(i.key)})">${me ? "打开设置" : "在那台电脑上打开设置"}</button>`
+        : `<span class="status ${i.ok ? "on" : ""}"><i></i>${i.ok ? "已开启" : "查不到"}</span>`}</div>`).join("")}
+    ${miss.length ? `<p class="muted" style="margin:10px 0 6px">在设置里点「+」添加这个程序，或把它拖进列表：</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><code style="word-break:break-all;flex:1;min-width:0">${esc(p.app)}</code>
+        <button class="btn" onclick="devPermOpen(${q(miss[0].key)},true)">在访达中显示</button>
+        <button class="btn" onclick="navigator.clipboard.writeText(${q(p.app)});toast('已复制')">复制</button></div>` : ""}</div>`;
+}
+async function devPermOpen(key, reveal){
+  await act(() => devApi("/api/fs/perm", {key, reveal: !!reveal}), machineOf(DEV.mid).me ? "" : "已在那台电脑上打开");
+}
+async function devPermCheck(btn){
+  const mid = DEV.mid;
+  btn.disabled = true;
+  let d;
+  try { d = await devApi("/api/fs/perms"); } catch (e) { btn.disabled = false; return toast(e.message); }
+  if (!devOn(mid)) return;
+  DEV.info.perms = d.perms;
+  const info = (S.machine_info || {})[mid]; if (info) info.perms = d.perms;
+  $("#dev-perms").outerHTML = permSect(d.perms, machineOf(mid).me);
+  toast(permMiss(d.perms).length ? "还有权限没开" : "都已开启");
+}
 function sharedTo(m){
   const n = Object.keys(m.shares || {}).length;    // 主人：这台开放给了几个账号（#154）
   return n ? ` · 共享给 ${n} 个账号` : "";
@@ -5315,6 +5450,7 @@ async function devOverview(){
     <div class="sect"><h3>这台电脑</h3><dl class="kv">
       ${d.model ? `<dt>型号</dt><dd>${esc(d.model)}</dd>` : ""}<dt>系统</dt><dd>${esc(d.os)}</dd>
       ${v ? `<dt>ccim</dt><dd>${esc([v.kind === "dev" ? "开发版" : "", v.version, v.commit].filter(Boolean).join(" "))}</dd>` : ""}</dl></div>
+    ${permSect(d.perms, m.me)}
     <div class="sect"><h3>Agent</h3>${ags.length ? ags.map(a => `<a class="mem" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a, "sm", false)}
         <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${BASE[a.base || "claude"]}</span></span>
         <span class="status ${a.busy ? "busy" : "on"}"><i></i>${a.busy ? esc(a.doing || "干活中") : "空闲"}</span></a>`).join("")
@@ -7351,6 +7487,7 @@ addEventListener("resize", () => listTip());
   try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
   connectEvents();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
   if (!location.hash) history.replaceState(null, "", "#/chats/new");
   route();
 })();

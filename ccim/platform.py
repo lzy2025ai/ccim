@@ -213,6 +213,7 @@ class WebChannel(Channel):
         self.events = Events()
         self.logs = Logs(os.path.join(registry.pdir(project_path), "web"))
         self.progress_of = {}                 # 对话 → 正在干活的进度
+        self.bg_of = {}                       # 对话 → 一轮结束后还在跑的后台任务（#271）
         self.done_steps = {}                  # 对话 → 刚做完那一轮的步骤，接下来的回答带上它
         self.card_chat = {}                   # 卡片 id → 对话
         self.secrets = {}                     # 等用户输密码的卡片 id → (对话, future)
@@ -242,6 +243,13 @@ class WebChannel(Channel):
     def idle(self, chat_id):
         """这一轮结束的状态已经记下：叫网页再取一次列表。"""
         self.events.publish({"type": "idle", "chat": chat_id})
+
+    def background(self, chat_id, tasks, moved=False):
+        if tasks:
+            self.bg_of[chat_id] = tasks
+        elif not self.bg_of.pop(chat_id, None):
+            return
+        self._emit(chat_id, {"type": "bg", "tasks": tasks, "moved": moved})
 
     async def progress(self, chat_id, snap):
         if snap["state"] == "working":
@@ -1220,7 +1228,7 @@ class Platform:
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
                 **self._board_marks(cid, m), "issue": self._issue(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
-                "stall": self._stall(cid),
+                "stall": self._stall(cid), "bg": self.channel.bg_of.get(cid) or [],
                 "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"),
                 "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m)}
 
@@ -2121,6 +2129,7 @@ def _handler(pf):
                 "/api/fs/info": lambda: devices.overview(registry.pdir(pf.home)),
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
+                "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
             }
             if u.path in ("/api/state", "/api/agent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
@@ -2249,6 +2258,7 @@ def _handler(pf):
                 "/api/fs/put": lambda: devices.put(registry.pdir(pf.home), b("key"), b("path"), b("name")),
                 "/api/fs/scan": lambda: pf.cleaner.start(),
                 "/api/fs/clean": lambda: pf.cleaner.clean(b("paths") or []),
+                "/api/fs/perm": lambda: devices.open_perm(b("key"), bool(b("reveal"))),
             }
             if u.path in routes:
                 return self._api(routes[u.path])
@@ -2419,7 +2429,7 @@ def install_skill(pf, body):
     elif body.get("key"):
         names = skills_mod.install_upload(body["key"], registry.pdir(pf.home), body.get("name") or "")
     elif body.get("local"):
-        names = skills_mod.import_local(body["local"], pf.peers.me.get("name") or "")
+        names = skills_mod.import_local(body["local"], pf.peers.me.get("name") or "", pf.peers.me.get("id") or "")
     else:
         raise Problem("选一个来源。")
     return {"names": names}
@@ -2492,7 +2502,7 @@ def state(pf, acct=None):
         "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
-        "codex": console._codex(), "home": os.path.expanduser("~"),
+        "codex": console._codex(), "home": os.path.expanduser("~"), "perms": devices.perms(),
         "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
 

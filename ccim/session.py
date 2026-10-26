@@ -9,7 +9,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
                               HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
-from . import registry, usage
+from . import devices, registry, usage
 from .channels.base import chatlog_as_text
 from .progress import clock, describe_tool, short
 
@@ -34,6 +34,8 @@ STALL = 300               # 某一步这么久没结果、也没有任何新动�
 WATCH = 20                # 有命令在跑时，每隔多少秒看一次它的进程在不在干活（#222）
 INJECT_GRACE = 4          # 插进去的消息来得太晚（最后一步之后）时，这一轮结束后等几秒看 Claude 会不会接着处理
 REDELIVER_EVERY = 20       # 回答没发出去时，后台每隔多少秒补发一次（最多 10 分钟）
+BG_KEEP = 6 * 3600         # 有后台任务在跑时，空闲多久以内不断开会话（断开会把任务一起停掉，#271）
+TASK_DONE = {"completed", "failed", "stopped", "killed"}
 # 优先用本机装的 claude，和终端里的版本、登录一致；找不到再用 SDK 自带的
 CLI = shutil.which("claude") or next((p for p in map(os.path.expanduser, ["~/.local/bin/claude", "~/.claude/local/claude",
                                      "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]) if os.path.exists(p)), None)
@@ -61,6 +63,10 @@ WRONG_SEND = "SendUserFile"
 WRONG_SEND_HINT = "（ccim）这里没有 SendUserFile，刚才的文件没发出去。发文件改用 mcp__ccim__send_file，参数一样是 path，现在重新发一次。"
 CHATLOG_MAX = 300         # 一份聊天记录最多几条
 CRON_TOOLS = ["CronCreate", "CronDelete", "CronList"]   # 只在 Claude 进程活着时触发；ccim 的对话空闲会断开（#122）
+SKILL_SYNC = """
+- 装 Skill 默认装到这个项目的 .claude/skills 或 ~/.claude/skills，用户没说装到哪就先问。只有用户明确说「同步到平台 / ccim Skill 库」时，
+  才用 mcp__ccim__platform_skill_sync 把 ~/.claude/skills 里的 Skill 同步上去（平台 Skill 会同步到所有电脑、所有 Agent 都会加载）。
+  平台上已经有哪些 Skill，用 mcp__ccim__skill_list、mcp__ccim__skill_read 看。"""
 LOOK_AROUND_PF = """
 - 你和用户以前的对话（网页私聊、群聊、定时任务、飞书、微信、终端或桌面端）用 mcp__ccim__search_chats 找：写关键词按内容找，
   留空就列出你参与的所有对话（在哪些群聊里、群里还有谁），再用 mcp__ccim__open_chat 读，读到的内容当作参考，不用照着做。
@@ -231,6 +237,8 @@ class Chat:
         self.current = None                   # 正在做的这一轮：(消息, reply_to)
         self.skipping = False                 # 正在结束卡住的一步（打断后接着做）
         self.outcome = None                   # 这一轮的结果 (状态, 回答)，交给 ccim ask 派的任务
+        self.tasks = {}                       # 正在跑的任务（子 agent、后台命令）：task_id → 说明、开始时刻、最近一步（#271）
+        self.detached = set()                 # 其中工具调用已经返回、转到后台的那些 tool_use_id
 
     # ----- 对外 -----
 
@@ -450,7 +458,8 @@ class Chat:
     async def _next(self):
         """等下一条要处理的消息。空闲时 Claude 也可能自己开一轮（后台任务做完的通知）：
         那一轮要当场读完发出去，不然它的回答会被当成下一条消息的回答，之后每条都错一位。"""
-        deadline = time.monotonic() + IDLE
+        start = time.monotonic()
+        deadline = start + IDLE
         while True:
             if not self.client:
                 try:
@@ -480,11 +489,18 @@ class Chat:
                 return get.result()
             get.cancel()
             if not done:
+                if self.background() and time.monotonic() - start < BG_KEEP:
+                    deadline = time.monotonic() + 60
+                    continue
                 return None
 
     async def _pump(self, client, inbox):
         try:
             async for m in client.receive_messages():
+                try:
+                    self._track(m)
+                except Exception:
+                    log.debug("记后台任务出错", exc_info=True)
                 inbox.put_nowait(m)
                 self.arrived.set()
         except asyncio.CancelledError:
@@ -494,6 +510,43 @@ class Chat:
         else:
             inbox.put_nowait(END)
         self.arrived.set()
+
+    def _track(self, m):
+        """记下正在跑的任务（#271）。工具调用返回了任务还在跑的，就是转到后台的，一轮结束后网页上照样显示。"""
+        before = self.background()
+        if isinstance(m, SystemMessage):
+            d = m.data or {}
+            tid = d.get("task_id")
+            if m.subtype == "task_started" and tid:
+                self.tasks[tid] = {"desc": d.get("description") or "", "start": time.time(),
+                                   "tool": d.get("tool_use_id"), "type": d.get("task_type")}
+            elif m.subtype == "task_progress" and tid in self.tasks:
+                self.tasks[tid]["step"] = d.get("last_tool_name")   # 说明留开始时的，进展里的是「Running …」
+            elif tid and (m.subtype == "task_notification" or (
+                    m.subtype == "task_updated" and (d.get("patch") or {}).get("status") in TASK_DONE)):
+                t = self.tasks.pop(tid, None)
+                if t:
+                    self.detached.discard(t.get("tool"))
+        elif isinstance(m, UserMessage) and isinstance(m.content, list):
+            ids = {b.tool_use_id for b in m.content if isinstance(b, ToolResultBlock)}
+            self.detached |= {t["tool"] for t in self.tasks.values() if t.get("tool") in ids}
+        after = self.background()
+        if after != before:
+            self._publish_bg(moved=[t["start"] for t in after] == [t["start"] for t in before])
+
+    def background(self):
+        """转到后台、还在跑的任务：[{desc, start, step}]，先开始的在前。"""
+        return [{k: t.get(k) for k in ("desc", "start", "step")} for t in sorted(self.tasks.values(), key=lambda t: t["start"])
+                if t.get("tool") in self.detached or not t.get("tool")]
+
+    def _publish_bg(self, moved=False):
+        """moved：任务还是那几个，只是走到了下一步。"""
+        f = getattr(self.b.channel, "background", None)
+        if f:
+            try:
+                f(self.chat_id, self.background(), moved)
+            except Exception:
+                log.debug("推送后台任务失败", exc_info=True)
 
     async def _recv(self, wait=None):
         """读 Claude 的下一条消息；连接断了返回 END，读出错照原样抛出。"""
@@ -554,12 +607,12 @@ class Chat:
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
-                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 助手的（删除除外）
+                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SYNC if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -592,6 +645,9 @@ class Chat:
     async def _disconnect(self):
         c, self.client = self.client, None
         self.tail = None
+        if self.tasks:                        # 进程停了，任务跟着停
+            self.tasks, self.detached = {}, set()
+            self._publish_bg()
         if self.pump:
             self.pump.cancel()
             self.pump = None
@@ -1094,15 +1150,24 @@ class Chat:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
+        else:                                 # 其他对话：只能看平台 Skill，用户要求时把本机的同步上去（#276）
+            tools += _skill_tools(chat, full=False, sync=_can_sync(chat))
         return tools
 
 
 SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
-SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")]
+SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__platform_skill_sync"]
 
 
-def _skill_tools(chat):
-    """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。"""
+def _can_sync(chat):
+    """能把本机 ~/.claude/skills 同步到平台（#276）：访客（只能从 GitHub 装）、借给访客的、侧边对话、助手都不给。"""
+    e = chat.b.entry
+    return not (guest_of(chat.b) or e.get("lent") or e.get("side") or e.get("helper"))
+
+
+def _skill_tools(chat, full=True, sync=False):
+    """Skill 助手管理平台 Skill 的工具（#116）。删除不在 allowed_tools 里，工具自己先弹确认卡片。
+    full=False 是普通对话（#276）：只给 skill_list / skill_read，sync 时再加 platform_skill_sync（自己弹确认卡片）。"""
     from . import skills
 
     def ok(x):
@@ -1127,6 +1192,8 @@ def _skill_tools(chat):
         guard(lambda a: skills.detail(a.get("name") or "")["files"]))
     t_read = tool("skill_read", "读平台 Skill 里的一个文件，path 是相对路径，比如 SKILL.md。", {"name": str, "path": str})(
         guard(lambda a: skills.read_file(a.get("name") or "", a.get("path") or "SKILL.md").get("text") or "（这个文件不是文字，读不了）"))
+    if not full:
+        return [t_list, t_read] + ([_skill_sync(chat, ok)] if sync else [])
     t_write = tool("skill_write", "写平台 Skill 里的一个文件（整个内容）：没有的文件新建；还没有这个 Skill 时先写它的 SKILL.md 就建好了。"
                    "改动会同步到所有电脑。", {"name": str, "path": str, "content": str})(
         guard(lambda a: skills.write_any(a.get("name") or "", a.get("path") or "", a.get("content"))))
@@ -1136,7 +1203,8 @@ def _skill_tools(chat):
         pf = getattr(chat.b.channel, "platform", None)
         if guest and not src.startswith("http"):
             raise skills.Problem("这里只能从 GitHub 地址装。")
-        names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, pf.peers.me.get("name") if pf else "")
+        names = skills.install_github(src) if src.startswith("http") else skills.import_local(src, pf.peers.me.get("name") if pf else "",
+                                                                                              pf.peers.me.get("id") if pf else "")
         skills.changed()
         return {"installed": names}
     t_install = tool("skill_install", "安装平台 Skill。source 是 GitHub 地址（仓库或仓库里某个文件夹），"
@@ -1168,6 +1236,36 @@ def _skill_tools(chat):
         skills.changed()
         return ok(f"已删除「{name}」")
     return [t_list, t_files, t_read, t_write, t_install, t_enable, t_delete]
+
+
+def _skill_sync(chat, ok):
+    """把本机 ~/.claude/skills 里的一个 Skill 同步到平台 Skill 库（#276）。会装到所有电脑上的 Agent，所以先弹确认卡片。"""
+    from . import skills
+
+    @tool("platform_skill_sync", "把这台电脑 ~/.claude/skills/<name> 里的 Skill 同步到 ccim 平台 Skill 库（平台上已有同名的会被覆盖），"
+          "同步后所有电脑上的所有 Agent 都会加载它。只有用户明确说「同步到平台 / ccim Skill 库」时才用。"
+          "这不是安装 Skill 的工具：平常装 Skill 装到项目的 .claude/skills 或 ~/.claude/skills，用户没说装到哪就先问。"
+          "name 是 ~/.claude/skills 下的文件夹名，不支持 GitHub 地址。会先请用户确认。", {"name": str})
+    async def run(args):
+        name = (args.get("name") or "").strip()
+        if name.startswith("http") or "/" in name:
+            return _err("name 只能是 ~/.claude/skills 下的文件夹名。")
+        local = {s["name"]: s for s in await asyncio.to_thread(skills.local_list)}
+        if name not in local:
+            return _err(f"~/.claude/skills 里没有「{name}」。")
+        r = await chat.b.approvals.ask(chat.chat_id, "platform_skill_sync", {"name": name, "replace": local[name]["installed"]}, None)
+        if not isinstance(r, PermissionResultAllow):
+            return _err("用户没有同意同步到平台。")
+        from . import peers
+        pf = getattr(chat.b.channel, "platform", None)
+        me = pf.peers.me if pf else peers.identity()
+        try:
+            names = await asyncio.to_thread(skills.import_local, name, me.get("name") or "", me.get("id") or "")
+        except (skills.Problem, OSError) as e:
+            return _err(str(e))
+        skills.changed()
+        return ok(f"已同步到平台 Skill 库：{'、'.join(names)}，所有电脑上的 Agent 下次对话起都能用。")
+    return run
 
 
 ASK_WAIT = 20 * 60                            # ask_agent 等回答最多等这么久，没等到的做完后交回发起的对话

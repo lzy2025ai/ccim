@@ -5,7 +5,7 @@
   任务面板里点「知道了」记 dismissed_at：不再等你处理，但没打开过的仍算未读（#65）。
 - 一句话进度：每轮回答完（网页对话，不含 @ 的子对话、项目、定时任务）用小模型总结，存在 meta 的 brief。
 """
-import asyncio, datetime, logging, os, time
+import asyncio, datetime, logging, os, time, uuid
 
 from . import tokens, usage
 from .schedules import listed
@@ -213,14 +213,132 @@ def day(pf, d, keep=None, everything=True):
 
 # ----- 复盘（#241） -----
 
-REVIEW_PROMPT = """帮我复盘 {date} 这一天。后面附了这一天各个对话的材料：我说了什么、一句话进度、最后的回答。
+RULES = """写法：先结论后证据，每个判断点名是哪个对话；没发现就说没有，不为了凑格式硬写；每部分最多 3–5 条。
+材料不够时用 search_chats / open_chat 去看那个对话；查不到就写「不确定」，不要猜。"""
 
-用要点写，简洁，分三部分：
+# 复盘的几套视角（#263）：各回答一个问题，互不重叠；每次复盘是一个新的独立对话
+VIEWS = [
+    {"id": "summary", "name": "工作总结", "desc": "做成了什么、卡在哪、明天先做什么",
+     "prompt": f"""帮我复盘 {{date}} 这一天。后面附了这一天各个对话的材料：我说了什么、一句话进度、最后的回答。
+
+用要点写，分三部分：
 ## 今天做成了
 ## 卡在我这里（要我决定、确认或提供什么）
 ## 明天建议先做
 
-材料不够时用 search_chats / open_chat 去看那个对话；也可以搜你以前的复盘，连着几天没动的事要指出来。"""
+也可以搜你以前的复盘，连着几天没动的事要指出来。
+
+{RULES}"""},
+    {"id": "rethink", "name": "换个角度看看", "desc": "跳出原来的思路，看方向本身还对不对",
+     "prompt": f"""复盘 {{date}} 这一天。你是没参与过这些对话的旁观者：不要顺着对话里原来的思路往下想，只看事实。后面附了这一天各个对话的材料。
+
+## 可能该退一步的事
+哪些事在原方案上反复打补丁、越修越多？
+## 当初的前提
+这些事开始时基于什么判断？现在哪些前提已经变了，或者被推翻了？
+## 在猜的地方
+哪些决定是凭感觉做的，其实花一点工夫就能量出来？
+## 如果从零开始
+今天重做这件事，还会这么选吗？继续原方向和换方向，各要付出什么？
+
+只挑真正值得重新审视的一两件事，不用每件都审。
+
+{RULES}"""},
+    {"id": "time", "name": "时间花在哪", "desc": "投入和产出对不对得上",
+     "prompt": f"""复盘 {{date}} 这一天的投入。后面附了这一天各个对话的材料，带着每个对话几点到几点。
+
+## 时间去哪了
+按事情粗分，标出哪些是主动推进、哪些是被动应付。
+## 最值的一件，最不值的一件
+各说理由。
+## 碎片化
+有没有频繁切换、同时开太多、聊了很多却没有产出的？
+## 明天怎么分配更好
+
+不评价人，只看投入和产出对不对得上。
+
+{RULES}"""},
+    {"id": "repeat", "name": "反复出现的问题", "desc": "跨几天看，哪些问题不是偶然",
+     "prompt": f"""复盘 {{date}} 这一天，但要跨几天看。先用 search_chats 搜最近 7 天的复盘和相关对话，再看后面附的这一天的材料。
+
+## 重复出现的卡点
+同一类问题出现了几次，各在哪几天、哪几个对话。
+## 返工
+做了又改的事，根源是什么：需求不清、验收标准没说、方案没想透，还是外部原因。
+## 连着几天没动的事
+是被搁置了，还是在等别人。
+## 建议固定下来的做法
+哪一条变成规则、清单或 Skill，以后就能避免。
+
+只写有两次以上证据的，一次的不算。
+
+{RULES}"""},
+    {"id": "agent", "name": "我和 Agent 怎么配合", "desc": "怎么用 Agent 更省力",
+     "prompt": f"""复盘 {{date}} 这一天我和 Agent 的配合。后面附了这一天各个对话的材料：我说的话和它最后的回答。需要时打开对话看全过程，也可以搜近几天的对话。
+
+## 说得不清楚的指令
+哪几次因为我没说清楚，它做偏了或者来回确认。
+## 我手动做了、本可以交给它的事
+## 它常犯的错
+哪几种问题反复出现，适合写进它的角色说明或 Skill。
+## 一条最值得马上改的
+给出可以直接粘贴的角色说明或 Skill 文本。
+
+对我和对它都要坦率，不客套。
+
+{RULES}"""},
+]
+VIEW_MAX, NAME_MAX, PROMPT_MAX = 12, 20, 4000
+
+
+def views(cfg):
+    """复盘视角：自带的，叠上用户改过、新加的（全局设置 review_views，按顺序存）。
+    以前只有一套时存的 review_prompt，当作改过的「工作总结」。以后再加自带视角，没存过的接在后面。"""
+    builtin = {v["id"]: v for v in VIEWS}
+    saved = cfg.get("review_views")
+    if not isinstance(saved, list):
+        saved = [{"id": v["id"]} for v in VIEWS]
+        if cfg.get("review_prompt"):
+            saved[0]["prompt"] = cfg["review_prompt"]
+    out, seen = [], set()
+    for s in saved:
+        b = builtin.get(s.get("id"))
+        if not (b or s.get("prompt")) or s.get("id") in seen:
+            continue
+        seen.add(s["id"])
+        out.append({"id": s["id"], "name": s.get("name") or b["name"], "desc": (b or {}).get("desc", ""),
+                    "prompt": s.get("prompt") or b["prompt"], "builtin": bool(b), "default": b and b["prompt"]})
+    out += [dict(v, builtin=True, default=v["prompt"]) for v in VIEWS if v["id"] not in seen]
+    return out
+
+
+def clean_views(items):
+    """网页存回来的视角：检查一遍，自带的没改就不存（以后默认的更新了能跟上），新加的给个编号。"""
+    if not isinstance(items, list) or not items:
+        raise ValueError("至少要有一套复盘视角。")
+    if len(items) > VIEW_MAX:
+        raise ValueError(f"复盘视角最多 {VIEW_MAX} 套。")
+    builtin = {v["id"]: v for v in VIEWS}
+    out, names = [], set()
+    for it in items:
+        name = " ".join(str(it.get("name") or "").split())[:NAME_MAX]
+        prompt = str(it.get("prompt") or "").strip()[:PROMPT_MAX]
+        if not name:
+            raise ValueError("每套视角都要有名字。")
+        if name in names:
+            raise ValueError(f"有两套都叫「{name}」。")
+        names.add(name)
+        b = builtin.get(it.get("id"))
+        if not b and not prompt:
+            raise ValueError(f"「{name}」还没写提示词。")
+        if b:
+            out.append({"id": b["id"], **({"name": name} if name != b["name"] else {}),
+                        **({"prompt": prompt} if prompt and prompt != b["prompt"].strip() else {})})
+        else:
+            vid = it.get("id") if str(it.get("id") or "").startswith("v-") else "v-" + uuid.uuid4().hex[:8]
+            out.append({"id": vid, "name": name, "prompt": prompt})
+    return out
+
 
 MATERIAL_MAX = 60000
 

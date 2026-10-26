@@ -78,35 +78,65 @@ class ReviewTests(unittest.TestCase):
         cid = r["chat"]
         time.sleep(0.3)
         m = self.pf.meta(cid)
-        self.assertEqual((m["review"], m["agent"], m["title"]), (d, self.aid, "10月20日 复盘"))
-        self.assertEqual(self.sent[-1][1], "复盘这一天")
+        self.assertEqual((m["review"], m["review_view"], m["agent"], m["title"]), (d, "summary", self.aid, "10月20日 复盘·工作总结"))
+        self.assertEqual(self.sent[-1][1], "复盘这一天：工作总结")
         self.assertIn("帮我复盘 2026-10-20 这一天", self.sent[-1][2])
         self.assertIn("周报写好了", self.sent[-1][2])
         self.assertEqual(self.sent[-1][3], {"review": d})
-        self.assertEqual(self.pf.chat_view(cid)["review"], d)
+        v = self.pf.chat_view(cid)
+        self.assertEqual((v["review"], v["review_name"]), (d, "工作总结"))
 
         # 复盘对话本身不算进那天的对话
         st, r = self.req("GET", f"/api/board/day?d={d}")
         self.assertEqual(len(r["chats"]), 1)
 
-        # 同一天再复盘：接着原来的对话
-        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": ""})
-        self.assertEqual(r["chat"], cid)
+        # 换一套视角、同一套再来一次：都是新的独立对话（#263）
+        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "rethink"})
+        c2 = r["chat"]
+        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "rethink"})
+        c3 = r["chat"]
         time.sleep(0.3)
-        self.assertEqual(self.sent[-1][1], "重新复盘这一天")
+        self.assertEqual(len({cid, c2, c3}), 3)
+        self.assertEqual(self.pf.meta(c3)["title"], "10月20日 复盘·换个角度看看")
+        self.assertIn("旁观者", self.sent[-1][2])
+        self.assertEqual(self.sent[-1][1], "复盘这一天：换个角度看看")
+        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "nope"})
+        self.assertEqual(st, 400)
 
-    def test_custom_prompt(self):
-        st, r = self.req("GET", "/api/board/review_prompt")
-        self.assertEqual(r["prompt"], board.REVIEW_PROMPT)
-        self.req("POST", "/api/board/review_prompt", {"prompt": "只写三句话：{date}"})
-        st, r = self.req("GET", "/api/board/review_prompt")
-        self.assertEqual(r["prompt"], "只写三句话：{date}")
+    def test_views(self):
+        st, r = self.req("GET", "/api/board/review_views")
+        self.assertEqual([v["id"] for v in r["views"]], ["summary", "rethink", "time", "repeat", "agent"])
+        self.assertTrue(all("{date}" in v["prompt"] and v["builtin"] for v in r["views"]))
+        views = r["views"]
+        views[0]["prompt"] = "只写三句话：{date}"
+        views[1]["name"] = "旁观者"
+        views.append({"name": "情绪", "prompt": "看看 {date} 我的状态"})
+        st, r = self.req("POST", "/api/board/review_views", {"views": views})
+        self.assertEqual(st, 200, r)
+        got = {v["name"]: v for v in r["views"]}
+        self.assertEqual(got["工作总结"]["prompt"], "只写三句话：{date}")
+        self.assertEqual(got["旁观者"]["prompt"], board.VIEWS[1]["prompt"])
+        new = got["情绪"]
+        self.assertTrue(new["id"].startswith("v-") and not new["builtin"])
+        # 没改的自带视角不存，以后默认的更新了能跟上
+        saved = registry.global_config()["review_views"]
+        self.assertEqual(saved[2], {"id": "time"})
+        st, r = self.req("POST", "/api/board/review", {"date": "2026-10-21", "agent": self.aid, "material": "x", "view": new["id"]})
+        time.sleep(0.3)
+        self.assertTrue(self.sent[-1][2].startswith("看看 2026-10-21 我的状态"))
         st, r = self.req("POST", "/api/board/review", {"date": "2026-10-21", "agent": self.aid, "material": "x"})
         time.sleep(0.3)
         self.assertTrue(self.sent[-1][2].startswith("只写三句话：2026-10-21"))
-        self.req("POST", "/api/board/review_prompt", {"prompt": ""})      # 清空 = 用默认的
-        st, r = self.req("GET", "/api/board/review_prompt")
-        self.assertEqual(r["prompt"], board.REVIEW_PROMPT)
+        # 不合规的不存
+        for bad in ([], [{"name": "", "prompt": "x"}], [{"name": "a", "prompt": "x"}, {"name": "a", "prompt": "y"}], [{"name": "空的"}]):
+            st, r = self.req("POST", "/api/board/review_views", {"views": bad})
+            self.assertEqual(st, 400, bad)
+
+    def test_old_single_prompt(self):
+        registry.set_global(review_prompt="以前改过的：{date}")
+        st, r = self.req("GET", "/api/board/review_views")
+        self.assertEqual(r["views"][0]["prompt"], "以前改过的：{date}")
+        self.assertEqual(len(r["views"]), 5)
 
     def test_bad_input(self):
         st, r = self.req("POST", "/api/board/review", {"date": "昨天", "agent": self.aid})

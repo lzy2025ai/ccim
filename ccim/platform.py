@@ -916,25 +916,25 @@ class Platform:
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
 
-    def review(self, d, aid, mat):
-        """复盘某一天（#241）：交给选的 Agent，复盘是它的一个普通对话（meta 的 review 记日期），同一天再复盘接着这个对话。
+    def review(self, d, aid, mat, view=None):
+        """复盘某一天（#241）：交给选的 Agent，复盘是它的一个普通对话（meta 的 review 记日期，review_view 记用的哪套视角）。
+        每次都开一个新对话（#263）：几套视角、同一套跑几次都互不影响，在当天详情里作为几个版本切换着看。
         材料由网页从各台电脑取来（/api/board/day?material=1）。在主循环里调。"""
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""):
             raise Problem("日期不对。")
         if not agents.get(aid):
             raise Problem("找不到这个 Agent。")
+        vs = board_mod.views(registry.global_config())
+        v = next((x for x in vs if x["id"] == view), None) if view else vs[0]
+        if not v:
+            raise Problem("没有这套复盘视角了，刷新页面再选。")
+        y, mo, dd = d.split("-")
+        cid = self.new_chat(agent=aid, title=f"{int(mo)}月{int(dd)}日 复盘·{v['name']}")
         chats = self.chats()
-        cid = next((c for c, m in chats.items() if m.get("review") == d and m.get("agent") == aid and not m.get("account")), None)
-        again = bool(cid)
-        if not cid:
-            y, mo, dd = d.split("-")
-            cid = self.new_chat(agent=aid, title=f"{int(mo)}月{int(dd)}日 复盘")
-            chats = self.chats()
-            chats[cid]["review"] = d
-            self.store.write(chats)
-        prompt = (registry.global_config().get("review_prompt") or board_mod.REVIEW_PROMPT).replace("{date}", d)
-        hidden = prompt + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
-        t = asyncio.ensure_future(self.send(cid, "重新复盘这一天" if again else "复盘这一天", hidden=hidden, mark={"review": d}))
+        chats[cid].update(review=d, review_view=v["id"], review_name=v["name"])
+        self.store.write(chats)
+        hidden = v["prompt"].replace("{date}", d) + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
+        t = asyncio.ensure_future(self.send(cid, f"复盘这一天：{v['name']}", hidden=hidden, mark={"review": d}))
         self.background.add(t)
         t.add_done_callback(self.background.discard)
         return {"chat": cid}
@@ -1222,7 +1222,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "review": m.get("review"),
+                "listed": listed(cid, m), "review": m.get("review"), "review_name": m.get("review_name"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -2111,8 +2111,7 @@ def _handler(pf):
                 "/api/board/day": lambda: {**pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
                                            **({"material": pf.call(board_mod.material, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
                                               if q.get("material") else {})},
-                "/api/board/review_prompt": lambda: {"prompt": registry.global_config().get("review_prompt") or board_mod.REVIEW_PROMPT,
-                                                     "default": board_mod.REVIEW_PROMPT},
+                "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
@@ -2200,8 +2199,9 @@ def _handler(pf):
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
-                "/api/board/review": lambda: pf.call(pf.review, b("date") or "", b("agent") or "", b("material") or ""),
-                "/api/board/review_prompt": lambda: (registry.set_global(review_prompt=(b("prompt") or "").strip()[:4000] or None), {})[1],
+                "/api/board/review": lambda: pf.call(pf.review, b("date") or "", b("agent") or "", b("material") or "", b("view")),
+                "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
+                                                    {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),
                 "/api/ws/rename": lambda: pf.ws_call(b("chat"), workspace.rename, b("path") or "", b("name")),

@@ -70,9 +70,20 @@ SIDE_ROLE = ("\n\n## 侧边对话\n"
              "- 你只能看、不能动：可以读文件、搜索、跑只看不改的命令（git status、git log、查日志等）；"
              "不删改文件、不装东西、不提交推送、不启动或停止进程，用户明确要求也不做，现在不做、以后也不做。\n"
              "- 用户要你动手时，说明这里只能问问题，请他回主对话说，可以把要对主对话说的话写好给他。\n"
+             "- 想请别的 Agent 来看看、或让它去动手，用户在这里的输入框打 @ 选它就行（它也只能看，要动手会新开它自己的对话去做）。\n"
              "- 回答简短。")
+# 侧边对话里被 @ 的 Agent（#290）：和侧边对话一样只读，要动手就新开自己的对话去做
+SIDE_AT_ROLE = ("\n\n## 在侧边对话里被 @\n"
+                "用户在某个对话旁边开了侧边对话，在侧边对话里 @ 了你，请你看看、出出主意。消息前面括号里是平台附上的主对话和侧边对话的内容，"
+                "主对话里的人看不到你在这里说的话。\n"
+                "- 你在这里只能看、不能动：可以读文件、搜索、跑只看不改的命令；不删改文件、不装东西、不提交推送、不启动或停止进程。\n")
+SIDE_AT_WORK = ("- 需要动手的事（改代码、提 PR、跑长任务），或者用户让你去做（比如「去改吧」）：先在回答里用一句话说要新开对话去做，"
+                "再调用 start_work 新开一个你自己的对话去做。text 要写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里。"
+                "调用后这一轮简短收尾，做的过程和结果用户在侧边栏的卡片里看。\n- 回答简短。")
+SIDE_AT_FAR = ("- 需要动手的事（改代码、提 PR、跑长任务）：在这里做不了，请用户直接和你开一个对话去做，可以把要交代的话写好给用户。\n"
+               "- 回答简短。")
 SIDE_CTX = 6000                                                    # 每次带上的主对话新进展，最多这么多字
-MERGED = ("card", "reply", "run", "mention", "secret", "edit")           # 记录里会被更新的：同一个 id 后来的覆盖前面的（edit：工作区连着自动保存，#206）
+MERGED = ("card", "reply", "run", "mention", "secret", "edit", "work")           # 记录里会被更新的：同一个 id 后来的覆盖前面的（edit：工作区连着自动保存，#206）
 
 
 def home():
@@ -433,6 +444,7 @@ class Platform:
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
         self.peer_results = {}                # 别的电脑派来的活：编号 → 结果（还没做完是 None）
         self.background = set()
+        self.works = set()                    # 侧边对话里派出去、还在做的（work 卡片的 id，#290）
         from .projects import Projects
         from .schedules import Schedules
         from .mentions import Mentions
@@ -724,6 +736,8 @@ class Platform:
                 key += "#" + viewer
             if m.get("side_of"):              # 侧边对话（#196）：只读，单独一个 Bridge
                 key += "|side"
+            elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）：也只读
+                key += "|sideat" + ("-far" if m.get("remote_project") else "")
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
                      "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
@@ -743,6 +757,9 @@ class Platform:
                 name = h["title"]
         if m.get("side_of"):
             entry.update(side=True, role=(entry.get("role") or "") + SIDE_ROLE)
+        elif m.get("side_at"):
+            entry.update(side=True, side_at=True, role=(entry.get("role") or "") + SIDE_AT_ROLE +
+                         (SIDE_AT_FAR if m.get("remote_project") else SIDE_AT_WORK))
         entry.update(owner_open_id=OWNER, channel="web")
         b = self.bridges.get(key)
         if not b or b.path != path:
@@ -1017,12 +1034,8 @@ class Platform:
                 parts.append(f"用户：{t[:800]}")
             elif r.get("type") == "answer" and t:
                 parts.append(f"回答：{t[:1500]}{'…' if len(t) > 1500 else ''}")
-        p = self.channel.progress_of.get(of)
-        if p:
-            steps = p.get("steps") or []
-            now = "正在进行的这一轮：" + ("已经做了 " + "；".join(steps[-15:]) if steps else "刚开始")
-            if (p.get("text") or "").strip():
-                now += "\n正在写的回答：" + p["text"].strip()[-1500:]
+        now = self.live_of(of)
+        if now:
             parts.append(now)
         chats = self.chats()
         if cid in chats:
@@ -1034,6 +1047,68 @@ class Platform:
         if len(body) > SIDE_CTX:
             body = "…" + body[-SIDE_CTX:]
         return f"（平台自动附上的主对话最新进展）\n{body}\n\n——\n\n"
+
+    def live_of(self, cid):
+        """这个对话正在进行的那一轮做到哪了，整理成文字；没在干活返回空。"""
+        p = self.channel.progress_of.get(cid)
+        if not p:
+            return ""
+        steps = p.get("steps") or []
+        now = "正在进行的这一轮：" + ("已经做了 " + "；".join(steps[-15:]) if steps else "刚开始")
+        if (p.get("text") or "").strip():
+            now += "\n正在写的回答：" + p["text"].strip()[-1500:]
+        return now
+
+    def side_work(self, src, text, title=None):
+        """侧边对话里被 @ 的 Agent 要动手（#290）：新开一个它自己的对话去做（挂在主对话下面，如果是同一个 Agent），
+        侧边对话里记一张卡片（type=work），做完把回答和这一轮发的文件写回卡片。返回新对话。在主循环里调。"""
+        from .session import Task
+        sm = self.meta(src)
+        side = sm.get("mention_of")
+        sd = self.chats().get(side) or {}
+        of = sd.get("side_of")
+        aid = sm.get("agent")
+        if not sm.get("side_at") or not of or not agents.get(aid):
+            raise Problem("这里不能新开对话去做。")
+        om = self.chats().get(of) or {}
+        title = " ".join((title or text).split())[:30] or "新任务"
+        cid = self.new_chat(agent=aid, title=title, account=sd.get("account"),
+                            parent=of if om.get("agent") == aid else None)
+        chats = self.chats()
+        chats[cid]["dispatched_from"] = of
+        if sm.get("cwd") and sm["cwd"] != agents.cwd(agents.get(aid)):   # 在主对话的目录里看的，就在那里做
+            chats[cid]["cwd"] = sm["cwd"]
+        self.store.write(chats)
+        main = (self.chat_view(of).get("title") if of in self.chats() else None) or "另一个对话"
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
+                                                               "files": [], "from_chat": of, "dispatch": True}))
+        wid = "k-" + uuid.uuid4().hex[:10]
+        card = {"type": "work", "id": wid, "chat": cid, "agent": aid, "title": title, "state": "working"}
+        self.channel._emit(side, self.channel.logs.append(side, card))
+        task = Task(f"[用户在对话「{main}」的侧边对话里请你动手做这件事，新开这个对话来做；"
+                    f"做完把结果写清楚（做了什么、怎么验收），会发回侧边对话] {text}")
+        task.depth = 1
+        start = time.time()
+        self._bridge(cid).chat(cid, "p2p").submit(task)
+        self.works.add(wid)
+
+        async def wait():
+            try:
+                state, answer = await task.future
+            except Exception as e:
+                state, answer = "error", str(e)
+            rows = [r for r in self.channel.logs.read(cid) if r.get("at", 0) >= start]
+            last = next((r for r in reversed(rows) if r.get("type") == "answer"), {})
+            files = [{"name": r["name"], "path": r["path"], "size": r.get("size")} for r in rows if r.get("type") == "file"]
+            upd = dict(card, state={"ok": "done"}.get(state, state), text=answer or last.get("text") or "",
+                       files=files[-10:], done_at=time.time())
+            self.works.discard(wid)
+            if side in self.chats():
+                self.channel._emit(side, self.channel.logs.append(side, upd))
+        t = asyncio.ensure_future(wait())
+        self.background.add(t)
+        t.add_done_callback(self.background.discard)
+        return cid, title
 
     # ----- 对话之间转交（#121） -----
 
@@ -1247,6 +1322,8 @@ class Platform:
         for r in v["log"]:                    # 平台重启过：没处理的密码卡片作废
             if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
                 r.update(state="expired")
+            elif r.get("type") == "work" and r.get("state") == "working" and r["id"] not in self.works:
+                r.update(state="lost")
         v["progress"] = self.channel.progress_of.get(cid)
         try:
             v["ws_root"] = os.path.realpath(self.chat_dir(cid))
@@ -1857,7 +1934,7 @@ class Platform:
         r = rows[index]
         return {"text": r.get("text") or "", "files": r.get("files") or []}
 
-    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0):
+    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0, side=False):
         """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""
         from .session import Task
         if not agents.get(aid):
@@ -1869,7 +1946,8 @@ class Platform:
         if cid not in chats:
             chats[cid] = {"type": "p2p", "agent": aid, "title": title, "remote_project": True,
                           "created": registry.now(), "last_active": registry.now(),
-                          **({"mention_of": of} if kind == "mention" else {"project": project})}
+                          **({"mention_of": of} if kind == "mention" else {"project": project}),
+                          **({"side_at": True} if side and kind == "mention" else {})}   # 侧边对话里被 @ 的（#290）：只读
             self.store.write(chats)
         start = time.time()
         b = self._bridge(cid)
@@ -2253,7 +2331,8 @@ def _handler(pf):
                 "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index"), b("at")), timeout=90),
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files")), b("at")), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
-                                                              b("project") or "", b("kind"), b("of"), b("shown"), b("depth"))),
+                                                              b("project") or "", b("kind"), b("of"), b("shown"), b("depth"),
+                                                              bool(b("side")))),
                 "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
@@ -2542,6 +2621,7 @@ def state(pf, acct=None):
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "home": os.path.expanduser("~"), "perms": devices.perms(),
+        "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @ 时只读，#290）
         "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
 

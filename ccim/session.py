@@ -606,6 +606,7 @@ class Chat:
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
+                               "mcp__ccim__start_work",                             # 侧边栏里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
@@ -1141,6 +1142,8 @@ class Chat:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
                 tools += _search_tools(chat, pf)   # Agent 的对话：搜它参与过的所有对话（#180）
+        elif side and chat.b.entry.get("side_at") and pf and not (pf.chats().get(chat.chat_id) or {}).get("remote_project", True):
+            tools.append(_start_work(chat, pf))   # 侧边对话里被 @ 的（#290）：要动手就新开自己的对话去做
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             # 平台上 Agent 的对话用 search_chats / open_chat，范围更全，不再给 list_chats / read_chat（两套重叠，助手会挑错）
@@ -1393,6 +1396,31 @@ def _ask_agent(chat, pf):
         return {"content": [{"type": "text", "text": "\n\n".join(parts)}]}
 
     return [platform_agents, ask_agent]
+
+
+def _start_work(chat, pf):
+    """侧边对话里被 @ 的 Agent 新开自己的对话去动手（#290）。"""
+    @tool("start_work", "新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。这里只能看不能改，需要动手、或用户让你去做时用。"
+          "先在回答里用一句话说要新开对话去做，再调用。text 写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里；"
+          "title 是新对话的标题，十几个字。侧边栏里会有一张卡片，用户点进去能看进度，做完结果自动发回侧边栏。",
+          {"type": "object", "properties": {"text": {"type": "string", "description": "交代给新对话的话"},
+                                             "title": {"type": "string", "description": "新对话的标题"}},
+           "required": ["text"]})
+    async def start_work(args):
+        text = (args.get("text") or "").strip()
+        if not text:
+            return _err("text 要写。")
+        t = chat.turn
+        if t and getattr(t, "works", 0) >= 2:
+            return _err("这一轮已经新开过对话了，先收尾。")
+        try:
+            cid, title = pf.side_work(chat.chat_id, text, args.get("title"))
+        except Exception as e:
+            return _err(str(e))
+        if t:
+            t.works = getattr(t, "works", 0) + 1
+        return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在侧边栏的卡片里能看到。这一轮用一两句话收尾就好。"}]}
+    return start_work
 
 
 def _searchable(chat):

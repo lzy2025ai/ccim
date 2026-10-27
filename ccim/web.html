@@ -232,7 +232,8 @@ body{overflow:hidden}
 .bhead .blay{margin-left:auto}
 /* 泳道视图（#292）：三列各自滚动；卡片标题可两行，进度一行，底下是谁、在哪台电脑和操作 */
 .board.lanes-on{display:flex;flex-direction:column;overflow:hidden}
-.lanes{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:14px 36px 24px;max-width:1720px}
+.lkpis{padding:14px 36px 0;max-width:1720px}
+.lanes{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:16px 36px 24px;max-width:1720px}
 .lane{display:flex;flex-direction:column;min-height:0;background:var(--paper);border-radius:20px;padding:16px 12px 0}
 .lane h2{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink-2);margin:0 6px 12px;min-height:28px}
 .lane h2 i{width:8px;height:8px;border-radius:50%;flex:none}
@@ -270,7 +271,7 @@ body{overflow:hidden}
 .lcard.quiet.unread .lc-title{font-weight:600}
 .lc-sub{padding-left:34px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:1100px){.lanes{grid-template-columns:repeat(3,minmax(300px,1fr));overflow-x:auto;scroll-snap-type:x mandatory}.lane{scroll-snap-align:start}}
-@media (max-width:760px){.lanes{grid-template-columns:repeat(3,86%);gap:12px;padding:10px 14px 16px;scroll-padding:0 14px}}
+@media (max-width:760px){.lkpis{padding:10px 14px 0}.lanes{grid-template-columns:repeat(3,86%);gap:12px;padding:10px 14px 16px;scroll-padding:0 14px}}
 /* 数字卡（#240）：今天、今天 Token、本周 Token、额度；今天的两张点进当天详情 */
 .kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:12px}
 .kpi{border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:flex;flex-direction:column;gap:2px;min-width:0;color:inherit;text-decoration:none}
@@ -3947,7 +3948,7 @@ async function renderBoard(quick){
   if (boardLayout === "lanes") {      // 泳道（#292）：三件事各一列，每列自己滚动
     const keep = [...document.querySelectorAll(".lane-body")].map(e => e.scrollTop);
     const lane = (title, color, n, body, extra = "") => `<section class="lane"><h2><i style="background:${color}"></i>${title}${n === "" ? "" : `<span class="n">${n}</span>`}${extra}</h2><div class="lane-body">${body}</div></section>`;
-    $("#main").innerHTML = `<div class="board lanes-on">${head}<div class="lanes">
+    $("#main").innerHTML = `<div class="board lanes-on">${head}<div class="lkpis">${kpiHtml(st)}</div><div class="lanes">
       ${lane("等你处理", "var(--zhu)", wait.length, wait.length ? wait.map(c => laneCard(c, "wait")).join("") : `<p class="bempty">没有在等你的事。</p>`)}
       ${lane("正在干活", "var(--warn)", work.length, work.length ? work.map(c => laneCard(c, "work")).join("") : `<p class="bempty">现在没有在干活的。</p>`)}
       ${lane("最近在跟", "var(--faint)", "", rlist.length ? `<div class="lc-list">${rlist.map(c => laneCard(c, "recent")).join("")}</div>` : rempty, rtabs)}

@@ -1675,7 +1675,16 @@ class Platform:
         send(self, new, text, files)
         return {"id": new}
 
-    def fork_chat(self, cid, index, src="log"):
+    @staticmethod
+    def _locate(rows, index, at, kind):
+        """网页说的第 index 条：带了 at 就按 at 找那条 kind 记录，下标只当参考（网页开久了下标可能和这边对不上，#288）。"""
+        ok = isinstance(index, int) and 0 <= index < len(rows) and rows[index].get("type") == kind
+        if not isinstance(at, (int, float)) or ok and abs((rows[index].get("at") or 0) - at) < 1e-3:
+            return index
+        hit = [i for i, r in enumerate(rows) if r.get("type") == kind and abs((r.get("at") or 0) - at) < 1e-3]
+        return min(hit, key=lambda i: abs(i - index) if isinstance(index, int) else 0) if hit else index
+
+    def fork_chat(self, cid, index, src="log", at=None):
         """从这个对话的第 index 条回答分出一个新对话：之前的内容带过去，之后两边各聊各的。
         src=earlier：从接着聊之前（终端、桌面端里）的回答分；终端、桌面端的对话（x:）直接按记录里的编号分。"""
         if cid.startswith("x:") or src == "earlier":
@@ -1684,6 +1693,7 @@ class Platform:
         if m.get("busy"):
             raise Problem("等它这一轮做完再分叉。")
         rows = self.channel.logs.read(cid)
+        index = self._locate(rows, index, at, "answer")
         if not isinstance(index, int) or not 0 <= index < len(rows) or rows[index].get("type") != "answer":
             raise Problem("找不到这条回答。")
         base = self._effective(m)["base"]
@@ -1808,10 +1818,11 @@ class Platform:
                     out[i] = {"files": bool(p[0]), "turns": sum(1 for x in rows[i:] if x.get("type") == "user")}
         return out
 
-    async def rewind_preview(self, cid, index):
+    async def rewind_preview(self, cid, index, at=None):
         """退回第 index 条时会恢复哪些文件（相对工作目录）。"""
         m = self.meta(cid)
         rows = self.channel.logs.read(cid)
+        index = self._locate(rows, index, at, "user")
         plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"], m)
         if not plan or not plan[0] or m.get("busy"):
             return {"files": []}
@@ -1824,11 +1835,12 @@ class Platform:
         base = os.path.realpath(self._bridge(cid).path)
         return {"files": [os.path.relpath(f, base) if os.path.realpath(f).startswith(base + os.sep) else f for f in files]}
 
-    async def rewind_chat(self, cid, index, files):
+    async def rewind_chat(self, cid, index, files, at=None):
         m = self.meta(cid)
         if m.get("busy"):
             raise Problem("它还在回答，先停下再退回。")
         rows = self.channel.logs.read(cid)
+        index = self._locate(rows, index, at, "user")
         plan = self._rewind_plan(rows, index if isinstance(index, int) else -1, self._effective(m)["base"], m)
         if not plan:
             raise Problem("这条消息退不回去。")
@@ -2237,9 +2249,9 @@ def _handler(pf):
                 "/api/ws/put": lambda: pf.ws_call(b("chat"), workspace.put, os.path.join(registry.pdir(pf.home), "uploads"),
                                                   b("key"), b("path") or "", b("name")),
                 "/api/chat/chapter": lambda: pf.call(pf.set_chapter, b("id"), b("key"), b("name")),
-                "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index"), b("src") or "log"),
-                "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index")), timeout=90),
-                "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files"))), timeout=120),
+                "/api/chat/fork": lambda: pf.call(pf.fork_chat, b("id"), b("index"), b("src") or "log", b("at")),
+                "/api/chat/rewind_preview": lambda: pf.run(pf.rewind_preview(b("id"), b("index"), b("at")), timeout=90),
+                "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files")), b("at")), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"), b("depth"))),
                 "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),

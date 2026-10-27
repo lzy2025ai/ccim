@@ -582,6 +582,17 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .from-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .from-row b{font:600 14px var(--song)}
 .from-row .tag{margin-left:2px}
+.av-hov{display:inline-flex;cursor:pointer;border-radius:8px}
+.av-card{position:fixed;z-index:30;width:320px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px}
+.av-card-h{display:flex;align-items:center;gap:8px;padding:6px 8px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.av-task{display:block;padding:7px 8px;border-radius:8px;color:inherit;text-decoration:none}
+.av-task:hover{background:var(--sunk)}
+.av-task .tt{display:flex;align-items:center;gap:6px}
+.av-task .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+.av-task .when{flex:none;font-size:12px;color:var(--faint)}
+.av-task .ds{display:block;margin-top:2px;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av-empty{padding:8px;margin:0;font-size:13px}
+.av-all{display:block;margin-top:4px;padding:8px;border-top:1px solid var(--line);text-align:center;font-size:13px;color:var(--qing);text-decoration:none}
 .answer{line-height:1.75}
 .answer p{margin:0 0 10px}
 .answer code{font:12.5px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
@@ -2508,9 +2519,54 @@ function liveText(p){
   const said = p.said || [], last = said[said.length - 1];
   return p.text && !(last && last[1] === p.text) ? `<div class="answer cursor">${md(p.text)}</div>` : "";
 }
+// ---- 头像上停一下：这个 Agent 最近的任务（#298）。点一条跳过去；触屏上点头像打开 ----
+const avHov = (a, html) => a && a.id && agentOf(a.id) ? `<span class="av-hov" data-agent="${esc(a.id)}" tabindex="0" role="button" aria-label="${esc(a.name)}最近的任务">${html}</span>` : html;
+let avTimer = 0, avHide = 0;
+function agentTasks(aid){
+  return (S.chats || []).filter(c => (c.agent === aid || (c.members || []).includes(aid)) && !c.archived)
+    .sort((x, y) => String(y.last_active || "").localeCompare(String(x.last_active || "")));
+}
+function avCard(aid){
+  const a = agentOf(aid), cs = agentTasks(aid);
+  return `<div class="av-card-h">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span></div>`
+    + (cs.length ? cs.slice(0, 5).map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span><span class="when">${when(c.last_active)}</span></span>${c.brief ? `<span class="ds">${esc(c.brief)}</span>` : ""}</a>`).join("")
+      : `<p class="muted av-empty">还没有任务</p>`)
+    + `<a class="av-all" href="#/agents/${encodeURIComponent(aid)}" onclick="avClose()">查看全部${cs.length > 5 ? ` ${cs.length} 条` : ""}</a>`;
+}
+function avOpen(el){
+  avClose();
+  const aid = el.dataset.agent; if (!agentOf(aid) || !document.contains(el)) return;
+  const p = document.createElement("div"); p.className = "av-card"; p.innerHTML = avCard(aid); document.body.append(p);
+  const r = el.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+  p.style.left = Math.max(10, Math.min(r.left, innerWidth - w - 10)) + "px";
+  p.style.top = (r.bottom + 6 + h > innerHeight - 10 && r.top - 6 - h > 10 ? r.top - 6 - h : r.bottom + 6) + "px";
+  p.onmouseenter = () => clearTimeout(avHide);
+  p.onmouseleave = avLater;
+}
+function avClose(){ clearTimeout(avTimer); clearTimeout(avHide); document.querySelectorAll(".av-card").forEach(p => p.remove()); }
+function avLater(){ clearTimeout(avTimer); clearTimeout(avHide); avHide = setTimeout(avClose, 250); }
+document.addEventListener("mouseover", e => {
+  const el = e.target.closest?.(".av-hov");
+  if (!el || el.contains(e.relatedTarget)) return;
+  clearTimeout(avHide); clearTimeout(avTimer); avTimer = setTimeout(() => avOpen(el), 300);
+});
+document.addEventListener("mouseout", e => { const el = e.target.closest?.(".av-hov"); if (el && !el.contains(e.relatedTarget)) avLater(); });
+document.addEventListener("click", e => {
+  const el = e.target.closest?.(".av-hov");
+  if (el) { clearTimeout(avTimer); document.querySelector(".av-card") ? avClose() : avOpen(el); return; }
+  if (!e.target.closest?.(".av-card")) avClose();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") return avClose();
+  const el = (e.key === "Enter" || e.key === " ") && e.target.closest?.(".av-hov");
+  if (el) { e.preventDefault(); avOpen(el); document.querySelector(".av-card a")?.focus(); }
+});
+for (const t of ["wheel", "touchmove"]) addEventListener(t, e => { if (!e.target.closest?.(".av-card")) avClose(); }, {passive: true});   // 自己滚动才收起：干活时页面会自动往下滚
+addEventListener("hashchange", avClose);
+
 function fromRow(){
   const a = detail.agent ? agentOf(detail.agent) : null;
-  return `<div class="from-row">${iconOf(detail, a, "sm")}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
+  return `<div class="from-row">${avHov(a, iconOf(detail, a, "sm"))}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
 }
 function msgActs(src, i, r){
   if (r.sending) return "";
@@ -2575,7 +2631,7 @@ function canFork(i, r, src = "log"){
 function recHtml(r, i, src = "log"){
   if (r.type === "user" && r.by){           // 对话里的助手自己 @ 的人；assistant：没选 Agent 的对话里的（#179）
     const a = r.by === "assistant" ? null : agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
-    return `<div class="msg">${a ? `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b></div>` : fromRow()}
+    return `<div class="msg">${a ? `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b></div>` : fromRow()}
       <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div>${timeActs(r)}</div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "user"){
@@ -3388,7 +3444,7 @@ function mentionGroup(mid){
   if (!rs.length) return "";
   const one = ([r, i]) => {
     const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
-    return `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
+    return `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
       ${replyBody(r, live)}${mentionActs(i, r, live)}`;
   };
   if (rs.length === 1) return `<div class="msg">${one(rs[0])}</div>`;

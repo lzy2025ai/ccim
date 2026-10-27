@@ -45,7 +45,7 @@ class AvatarTests(unittest.TestCase):
         self.assertIsNone(static_file('/avatars/unknown.webp'))
 
     def test_every_builtin_is_packaged_webp(self):
-        self.assertEqual(len(set(agents.AVATARS)), 16)
+        self.assertEqual(len(set(agents.AVATARS)), 32)
         for avatar in agents.AVATARS:
             data, mime = static_file('/avatars/' + avatar + '.webp')
             self.assertEqual(mime, 'image/webp')

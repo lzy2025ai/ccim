@@ -566,6 +566,10 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .item .t2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .item .r1,.item .r2{display:flex;align-items:center;gap:8px;min-width:0}
 .item .r1 .title,.item .r2 .sub{flex:1;min-width:0}
+.item .r1 .title.by{display:flex;align-items:center}
+.item .r1 .title.by .nm{overflow:hidden;text-overflow:ellipsis}
+.item .r1 .title.by .seal{width:18px;height:18px;border-radius:5px;font-size:8px;padding:1px;margin-right:6px}
+.item .r1 .title.by .seal.one{font-size:10px}
 .item-tags{display:flex;justify-content:flex-end;flex:0 1 auto;min-width:0;max-width:60%}
 .item-tags .tag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;display:inline-block}
 .item-tags .tag:not(.mach){flex:none}   /* 来源短，留全；电脑名字长的先截 */
@@ -2431,14 +2435,16 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
       <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
+  // @ 过其他 Agent 的对话：标题处换成正在干活的、或最后回答的那个 Agent（#302）；主 Agent 在干活时还是标题
+  const by = a ? null : (c.crew || []).length ? agentOf(c.crew[0].agent) : !c.busy && c.last_by ? agentOf(c.last_by) : null;
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
-    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>`
+    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length || by && crewIds(c).length === 1 ? "干活中" : esc(crewText(c))}</span>`
     : (c.bg || []).length ? `<span class="working"><span class="spin"></span>后台 ${c.bg.length} 个任务在跑</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
-        ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span>${whenTag(c)}</span>
+        ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${whenTag(c)}</span>
           <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }

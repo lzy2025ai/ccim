@@ -88,13 +88,14 @@ class Mentions:
         text = "\n\n".join(lines)
         return text[-CONTEXT_LIMIT:] if len(text) > CONTEXT_LIMIT else text
 
-    def _ensure(self, cid, aid, cwd, title):
+    def _ensure(self, cid, aid, cwd, title, side=False):
         sub = self.sub(cid, aid)
         self.pf.store.deleted.discard(sub)
         chats = self.pf.chats()
         if sub not in chats:
             chats[sub] = {"type": "p2p", "agent": aid, "mention_of": cid, "cwd": cwd, "title": title,
-                          "created": registry.now(), "last_active": registry.now(), "seen_upto": 0}
+                          "created": registry.now(), "last_active": registry.now(), "seen_upto": 0,
+                          **({"side_at": True} if side else {})}
             self.pf.store.write(chats)
         return sub
 
@@ -109,10 +110,16 @@ class Mentions:
         for a in to:
             home[a] = me if agents.get(a) else await asyncio.to_thread(self.pf.peers.agent_home, a)
         to = [a for a in to if home[a]]
+        from .platform import Problem
         if not to:
-            from .platform import Problem
             raise Problem("找不到要 @ 的 Agent。")
-        if m.get("agent"):                    # Agent 的对话：@ 到的不在群里就顺手拉进来，这个对话就成了群聊
+        side = m.get("side_of")               # 侧边对话里 @（#290）：被 @ 的只读，带上主对话的内容，不拉进群
+        if side:
+            for a in to:
+                caps = (self.pf.peers.cache.get(home[a]) or {}).get("caps") or []
+                if home[a] != me and "side_at" not in caps:
+                    raise Problem(f"{self._agent_name(a)}所在的电脑要升级 ccim 后，才能在侧边对话里 @ 它。")
+        elif m.get("agent"):                  # Agent 的对话：@ 到的不在群里就顺手拉进来，这个对话就成了群聊
             groups.set_members(self.pf, cid, add=[a for a in to if a not in groups.members(m)])
         view = self.pf.chat_view(cid)
         mid = "u-" + uuid.uuid4().hex[:10]
@@ -137,12 +144,17 @@ class Mentions:
         if cid in chats:                      # 各人看到哪了
             chats[cid]["ctx_upto"] = dict(_upto(chats[cid]), **{aid: user["at"] for aid in to})
             self.pf.store.write(chats)
+        main = self._main_ctx(cid, m, to) if side else {}
         for aid in to:
             sub = self.sub(cid, aid)
-            prompt = groups.note_prefix(self.pf, cid, aid) + \
-                (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
-                 f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                f"[{self._who(cid, by)}在对话里 @ 了你] {text}{att}"
+            if side:
+                prompt = main[aid] + (f"（侧边对话里之前的内容，每段开头写的是谁说的，都不是你；你自己说过的在你的记忆里）\n{ctx[aid]}\n\n"
+                                      if ctx[aid] else "") + f"[用户在侧边对话里 @ 了你] {text}{att}"
+            else:
+                prompt = groups.note_prefix(self.pf, cid, aid) + \
+                    (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
+                     f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
+                    f"[{self._who(cid, by)}在对话里 @ 了你] {text}{att}"
             rid = f"{mid}:{aid}"
             self.running.add(rid)
             self.where[rid] = (cid, aid, sub)
@@ -151,15 +163,52 @@ class Mentions:
                                                         "chat": sub, "state": "queued", **({"by": by} if by else {}),
                                                         **({"machine": home[aid]} if remote else {})}))
             if remote:                        # 在别的电脑上：交给那台电脑开子对话
-                t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text, depth))
+                t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text, depth, bool(side)))
             else:
-                self._ensure(cid, aid, view.get("dir"), title)
+                self._ensure(cid, aid, view.get("dir"), title, bool(side))
                 t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text, depth))
             self.pf.background.add(t)
             t.add_done_callback(self.pf.background.discard)
             if by:
                 self.waiters[rid] = asyncio.get_running_loop().create_future()
         return {"id": mid, "rids": [f"{mid}:{aid}" for aid in to]}
+
+    def _main_ctx(self, cid, m, to):
+        """侧边对话里 @ 人时带上的主对话内容（#290）：每人上次之后的（第一次带最近的），群聊连成员的回答一起；
+        主对话正在进行的那一轮也带上。各人看到哪记在侧边对话 meta 的 main_upto。"""
+        of = m["side_of"]
+        title = self.pf.chat_view(of).get("title") if of in self.pf.chats() else "主对话"
+        upto = dict(m.get("main_upto") or {})
+        out = {}
+        for aid in to:
+            body = self._context(of, upto.get(aid) or 0)
+            live = self.pf.live_of(of)
+            head = (f"（用户在对话「{title}」旁边开了侧边对话，在那里 @ 了你。下面是主对话{'在你上次看过之后的新' if upto.get(aid) else '最近的'}内容，"
+                    f"每段开头写的是谁说的；写着「{self._agent_name(aid)}」的是你在主对话里说的，你在这里不记得）\n")
+            out[aid] = head + (body or "（没有新内容）") + (f"\n\n{live}" if live else "") + "\n\n" if body or live or not upto.get(aid) else ""
+        rows = self.pf.channel.logs.read(of)
+        at = max([r.get("at", 0) for r in rows] or [0])
+        chats = self.pf.chats()
+        if cid in chats:
+            chats[cid]["main_upto"] = dict(upto, **{aid: at for aid in to})
+            self.pf.store.write(chats)
+        return out
+
+    def report(self, cid, aid, prompt, extra):
+        """侧边对话里被 @ 的 Agent 派出去的活做完了（#290）：把结果作为新的一轮交回它在侧边对话里的会话，
+        由它自己在侧边栏里汇报（记录是一条 mention，report 标着，前面没有用户消息）。extra 合进这条记录（附上的文件）。在主循环里调。"""
+        sub = self.sub(cid, aid)
+        if cid not in self.pf.chats() or sub not in self.pf.chats():
+            return
+        rid = f"r-{uuid.uuid4().hex[:10]}:{aid}"
+        self.running.add(rid)
+        self.where[rid] = (cid, aid, sub)
+        rec = self.pf.channel.logs.append(cid, {"type": "mention", "id": rid, "msg": rid.split(":")[0], "agent": aid,
+                                                "chat": sub, "state": "queued", "report": True})
+        self.pf.channel._emit(cid, rec)
+        t = asyncio.create_task(self._run(cid, rid, sub, prompt, rec["at"], "（派出去的活有结果了）", 1, dict(extra, report=True)))
+        self.pf.background.add(t)
+        t.add_done_callback(self.pf.background.discard)
 
     def member_ctx(self, cid, m):
         """群里各成员的上下文占用（#183）：答完带回来的记在主对话 meta 的 member_ctx，没记过的看本机子对话。"""
@@ -197,10 +246,10 @@ class Mentions:
         elif f:
             self.waiters.pop(upd["id"], None)
 
-    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0):
+    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None):
         from .session import Task
         start = time.time()
-        upd = {"type": "mention", "id": rid}
+        upd = {"type": "mention", "id": rid, **(extra or {})}
         try:
             chats = self.pf.chats()
             if sub in chats:
@@ -229,7 +278,7 @@ class Mentions:
             self.tasks.pop(rid, None)
         self._settle(cid, upd)
 
-    async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text, depth=0):
+    async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text, depth=0, side=False):
         import json
         from .peers import Offline
         upd = {"type": "mention", "id": rid}
@@ -245,7 +294,8 @@ class Mentions:
             while token is None and rid in self.running:   # 那台电脑离线就等它上线
                 try:
                     status, r = await call("/api/peer/task", {"chat": sub, "agent": aid, "prompt": prompt, "title": title,
-                                                              "kind": "mention", "of": cid, "shown": text, "depth": depth})
+                                                              "kind": "mention", "of": cid, "shown": text, "depth": depth,
+                                                              **({"side": True} if side else {})})
                 except Offline:
                     if time.time() > deadline:
                         raise RuntimeError("那台电脑一直没上线。")

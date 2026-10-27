@@ -1003,6 +1003,18 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .sidepane .skc-head{padding-top:max(10px,env(safe-area-inset-top))}
 .side-av{background:var(--qing)}
 .sidepane .skc-foot .quote{margin-bottom:6px}
+#side-box{position:relative}
+#side-box .side-at{flex:none;width:30px;height:30px;font-size:15px;color:var(--ink-2)}
+.side-rcpt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.side-rcpt:empty{display:none}
+.work-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-decoration:none;color:var(--ink)}
+.work-card:hover{border-color:var(--qing)}
+.work-card .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.work-card .t b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.work-card .t span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.work-card>svg{width:14px;height:14px;color:var(--muted);flex:none}
+.work-out{margin-top:10px}
+.work-out .sentimg{max-width:100%}
 .sidepane .skc-msg.me .bubble .bq{font-size:13px}
 .docpane{position:fixed;top:0;right:0;bottom:0;width:var(--doc-w);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 34px rgba(29,34,43,.12);z-index:15;display:flex;flex-direction:column}
 body{--doc-w:min(52vw,780px)}
@@ -1719,7 +1731,7 @@ function pop(e, html, below){
   const p = document.createElement("div"); p.className = "pop"; p.innerHTML = html; document.body.append(p);
   p.addEventListener("click", ev => ev.stopPropagation());
   const r = e.currentTarget.getBoundingClientRect();
-  const box = !below && e.currentTarget.closest && e.currentTarget.closest("#box");
+  const box = !below && e.currentTarget.closest && e.currentTarget.closest("#box, #side-box");
   if (box) {   // 输入框上的列表挂在输入框里往上展开：iPad、手机弹出键盘时 Safari 推页面，按屏幕坐标放会和输入框错开（#163）
     box.append(p); p.classList.add("in-box");
     const b = box.getBoundingClientRect(), vv = window.visualViewport;
@@ -2010,6 +2022,10 @@ function connectEvents(again){
     }
     if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
     if (SIDE && ev.chat === SIDE.id) { sideEvent(ev); return; }   // 侧边对话（#196）
+    if (SIDE && SIDE.log && ev.type === "progress" && String(ev.chat || "").startsWith(`m-${SIDE.id}-`)) {   // 侧边对话里被 @ 的（#290）
+      if (ev.state === "working") SIDE.subs[ev.chat] = ev; else delete SIDE.subs[ev.chat];
+      drawSide(); return;
+    }
     if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
       if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }
       return;
@@ -6493,7 +6509,7 @@ function mdInline(s, assets = {}){
 }
 
 // ---- 侧边对话（#196）：主对话在干活、不想打断它时，在右侧另开一个对话问问题 ----
-let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, id, log, progress, busy, quote, error}
+let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, id, log, progress, busy, quote, error, to（@ 了谁）, subs（被 @ 的进度）}
 const SIDE_AV = `<span class="skc-av side-av">${ICON.side}</span>`;
 async function openSide(quote){
   const c = detail; if (!c) return;
@@ -6514,18 +6530,38 @@ async function sideLoad(fresh){
     const {id} = await api("/api/chat/side", {id: s.of, fresh: !!fresh}, s.mid);
     const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, s.mid);
     if (SIDE !== s) return;
-    Object.assign(s, {id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, error: null});
+    Object.assign(s, {id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, error: null, subs: d.sub_progress || {}});
   } catch (e) { if (SIDE === s) s.error = e.message; }
   drawSide();
 }
 async function sideNew(){
   if (!SIDE) return;
-  if (SIDE.busy && !await confirmBox("开一个新的侧边对话？", "它还在回答，会被停下。", "开新的")) return;
-  Object.assign(SIDE, {id: null, log: null, progress: null, busy: false, error: null});
+  const busy = SIDE.busy || (SIDE.log || []).some(r => r.type === "mention" && r.state === "queued");
+  if (busy && !await confirmBox("开一个新的侧边对话？", "还有回答没写完，会被停下。", "开新的")) return;
+  Object.assign(SIDE, {id: null, log: null, progress: null, busy: false, error: null, to: [], subs: {}});
   drawSide(); await sideLoad(true); $("#side-in")?.focus();
 }
 function sideRec(r, i){
-  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${userText(r.text)}</div></div>`;
+  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${r.to && r.to.length ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div></div>`;
+  if (r.type === "mention") {   // 侧边对话里 @ 的 Agent（#290）
+    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
+    const first = SIDE.log.find(x => x.type === "mention" && x.chat === r.chat && x.state === "queued");
+    const live = r.state === "queued" && first && first.id === r.id ? SIDE.subs[r.chat] || null : null;
+    const acts = live || r.state === "queued" ? `<div class="msg-acts" style="opacity:1"><button onclick="sideStopAt(${q(r.id)})">停下</button></div>`
+      : `<div class="msg-acts">${r.text ? `<button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
+          <button onclick="sideQuote(${i})" title="引用到主对话的输入框">${ICON.quote}引用到主对话</button>` : ""}
+          <button onclick="sideAsk(${q(r.agent)})">接着问它</button></div>`;
+    const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
+    return `<div class="skc-msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b>${r.machine && r.machine !== (SIDE.mid || S.me) ? whereTag(r.agent, SIDE.mid || S.me) : ""}${stateLabel(r, live)}</div>
+      ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
+  }
+  if (r.type === "work") {      // 被 @ 的 Agent 新开对话去做（#290）
+    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
+    const st = {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
+                error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"}[r.state] || "";
+    return `<div class="skc-msg"><a class="work-card" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(SIDE.mid || S.me)}">
+        ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a></div>`;
+  }
   if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>
     ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
     ${r.text ? `<div class="msg-acts"><button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
@@ -6536,6 +6572,10 @@ function sideRec(r, i){
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='sideAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
   return "";
+}
+function workFiles(fs, chat){
+  return (fs || []).map(f => { const src = fileUrl(chat, f.path);
+    return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : fileChip(src, f.name); }).join("");
 }
 async function sideCopy(btn, i){
   try { await navigator.clipboard.writeText(SIDE.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
@@ -6561,7 +6601,7 @@ function drawSide(){
   if (!SIDE.log) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
   const p = SIDE.progress, last = p && p.steps[p.steps.length - 1];
   const empty = !SIDE.log.length && !p ? `<div class="skc-empty">${SIDE_AV}<h3>有疑问，在这里问</h3>
-      <p>它看得到主对话聊过的内容和正在做的进度，只回答问题，不动文件。</p>
+      <p>它看得到主对话聊过的内容和正在做的进度，只回答问题，不动文件。打 @ 可以请别的 Agent 一起看。</p>
       ${SIDE.quote ? "" : ["它现在在做什么，做到哪一步了", "刚才那条回答是什么意思", "照现在的做法，有什么要注意的"]
         .map(t => `<button onclick="sideSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
   const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
@@ -6569,14 +6609,17 @@ function drawSide(){
       ${p ? `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
         ${stallBar(p, SIDE.id, SIDE.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
     <div class="skc-foot">${SIDE.quote ? `<div class="quote in-box"><span class="qt">${esc(SIDE.quote)}</span><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="SIDE.quote=null;drawSide()">${ICON.x}</button></div>` : ""}
-      <div class="skc-box"><textarea id="side-in" rows="1" placeholder="${SIDE.busy ? "补充说明，它做完这一步就会看到" : SIDE.quote ? "关于这段，想问什么" : "想问什么"}" aria-label="侧边对话"></textarea>
+      <div class="side-rcpt" id="side-rcpt">${sideRcpt()}</div>
+      <div class="skc-box" id="side-box"><button class="icon-btn side-at" aria-label="@ 其他 Agent" title="请别的 Agent 看看" onclick="sideAt(event)">@</button>
+      <textarea id="side-in" rows="1" placeholder="${SIDE.busy && !(SIDE.to || []).length ? "补充说明，它做完这一步就会看到" : SIDE.quote ? "关于这段，想问什么" : "想问什么"}" aria-label="侧边对话"></textarea>
       <button class="send ${SIDE.busy ? "stop" : ""}" aria-label="${SIDE.busy ? "停下" : "发送"}" onclick="${SIDE.busy ? "sideStop()" : "sideSend()"}">${SIDE.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#side-body"); b.scrollTop = b.scrollHeight;
   const ta = $("#side-in"); ta.value = typed; sideFit();
   if (focus) { ta.focus(); ta.setSelectionRange(...focus); }
   ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); sideSend(); } };
-  ta.oninput = () => {
+  ta.oninput = e => {
     sideFit();
+    if (e.data === "@" || e.data === "＠") setTimeout(() => sideAt({currentTarget: $("#side-box"), stopPropagation(){}}), 0);
     const s = el.querySelector(".send");
     if (SIDE.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => sideSend() : sideStop; }
   };
@@ -6588,6 +6631,15 @@ async function sideSend(text){
   const qs = SIDE.quote ? [SIDE.quote] : [], v = withQuotes(qs, typed);
   if (ta) ta.value = "";
   SIDE.quote = null;
+  const to = text ? [] : SIDE.to || [];
+  if (to.length) {                    // @ 了其他 Agent：它们在侧边栏里回答（#290）
+    const s = SIDE; s.to = [];
+    s.log.push({type: "user", text: v, to, sending: true}); drawSide();
+    try { await api("/api/chat/mention", {id: s.id, text: v, files: [], to}, s.mid); }
+    catch (e) { toast(e.message); if (SIDE !== s) return; s.log = s.log.filter(r => !r.sending); s.to = to; s.quote = qs[0] || null; drawSide();
+      const t = $("#side-in"); if (t && !t.value) { t.value = typed; sideFit(); } }
+    return;
+  }
   SIDE.log.push({type: "user", text: v, sending: true});
   if (!SIDE.busy) SIDE.progress = {steps: [], text: ""};
   SIDE.busy = true; drawSide();
@@ -6596,14 +6648,46 @@ async function sideSend(text){
     const t = $("#side-in"); if (t && !t.value && !text) { t.value = typed; sideFit(); } }
 }
 async function sideStop(){ if (SIDE && SIDE.id) await act(() => api("/api/chat/stop", {id: SIDE.id}, SIDE.mid)); }
+async function sideStopAt(rid){ if (SIDE) await act(() => api("/api/chat/mention/stop", {rid}, SIDE.mid), "正在停下"); }
+// 侧边对话里 @ 其他 Agent（#290）：和主对话输入框的 @ 一样选人，被 @ 的只看不改，在侧边栏里回答
+function sideAgents(){
+  const main = detail && detail.id === SIDE.of ? detail : null, own = main && main.agent, here = SIDE.mid || S.me;
+  return S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
+}
+function sideRcpt(){
+  return (SIDE.to || []).map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="SIDE.to=SIDE.to.filter(x=>x!==${q(r)});$('#side-rcpt').innerHTML=sideRcpt()">${ICON.x}</button></span>`).join("");
+}
+function sideAt(e){
+  if (!SIDE || !SIDE.id) return;
+  const list = sideAgents(), here = SIDE.mid || S.me;
+  if (!list.length) return toast("还没有别的 Agent，先去 Agent 页建一个");
+  SIDE.to = SIDE.to || [];
+  const pp = pop(e, `<div class="sec">请谁看看（可以多选）</div>` + list.map(a =>
+    `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${SIDE.to.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
+  pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+    const m = b.dataset.m;
+    SIDE.to = SIDE.to.includes(m) ? SIDE.to.filter(x => x !== m) : [...SIDE.to, m];
+    const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
+    const i = $("#side-in"); if (i && /[@＠]$/.test(i.value)) i.value = i.value.slice(0, -1);   // 打的 @ 换成上面的标签
+    $("#side-rcpt").innerHTML = sideRcpt();
+  });
+  const done = () => { removeEventListener("click", done); $("#side-in")?.focus(); };
+  setTimeout(() => addEventListener("click", done, {once: true}), 0);
+}
+function sideAsk(aid){
+  if (!SIDE) return;
+  SIDE.to = [aid]; drawSide(); $("#side-in")?.focus();
+}
 async function sideAct(mid, value){ await act(() => api("/api/chat/action", {id: SIDE.id, mid, value}, SIDE.mid)); }
 function sideEvent(ev){   // 推送：进度、记录
   if (!SIDE.log) return;
-  const rec = {...ev}; delete rec.chat;
+  const rec = {...ev}; delete rec.chat; delete rec.rec_chat;
+  if (ev.rec_chat) rec.chat = ev.rec_chat;
   if (ev.type === "progress") { SIDE.progress = ev.state === "working" ? ev : null; SIDE.busy = ev.state === "working"; }
   else if (ev.type === "user") { const i = SIDE.log.findIndex(r => r.sending && r.text === ev.text); i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec); }
-  else if (["answer", "note", "card"].includes(ev.type)) {
-    const i = ev.type === "card" ? SIDE.log.findIndex(r => r.type === "card" && r.id === ev.id) : -1;
+  else if (["answer", "note", "card", "mention", "work"].includes(ev.type)) {
+    const i = ["card", "mention", "work"].includes(ev.type) ? SIDE.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
+    if (ev.type === "mention" && ev.state !== "queued" && rec.chat) delete SIDE.subs[rec.chat];
     i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec);
     if (ev.type === "answer") SIDE.progress = null;
   } else return;

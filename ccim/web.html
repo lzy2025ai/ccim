@@ -227,7 +227,50 @@ body{overflow:hidden}
 .wait i{width:7px;height:7px;border-radius:50%;background:var(--zhu)}
 .board{overflow:auto;height:100%;background:var(--panel)}
 .bhead{padding:24px 36px 4px}
+.bhead{display:flex;align-items:center;gap:12px}
 .bhead h1{font:600 24px/1.2 var(--song);margin:0}
+.bhead .blay{margin-left:auto}
+/* 泳道视图（#292）：三列各自滚动；卡片标题可两行，进度一行，底下是谁、在哪台电脑和操作 */
+.board.lanes-on{display:flex;flex-direction:column;overflow:hidden}
+.lanes{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:14px 36px 24px;max-width:1720px}
+.lane{display:flex;flex-direction:column;min-height:0;background:var(--paper);border-radius:20px;padding:16px 12px 0}
+.lane h2{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink-2);margin:0 6px 12px;min-height:28px}
+.lane h2 i{width:8px;height:8px;border-radius:50%;flex:none}
+.lane h2 .n{font-weight:400;color:var(--faint)}
+.lane h2 .rtabs{margin-left:auto}
+.lane-body{flex:1;min-height:0;overflow:auto;padding:4px 4px 16px}
+.lane .bempty{padding:0 6px}
+.lane .bitem{margin-bottom:12px} .lane .bitem .lcard{margin-bottom:0}
+.lcard{position:relative;display:flex;flex-direction:column;gap:8px;padding:14px 16px;margin-bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:16px;color:inherit;text-decoration:none;box-shadow:0 1px 2px rgba(29,34,43,.04);transition:border-color .15s,box-shadow .15s}
+.lcard:hover{border-color:var(--line-strong);box-shadow:0 6px 18px -10px rgba(29,34,43,.25)}
+.lcard.fresh{border-color:color-mix(in srgb,var(--zhu) 20%,var(--line))}
+.lcard.work{border-color:transparent} .lcard .ants rect{rx:16px;ry:16px}
+.lcard.err{border-color:var(--bad)}
+.lcard.starred{background:#FBF8F0;border-color:rgba(184,144,42,.28)}
+.lc-top{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.lc-top .bico{margin-top:0}
+.lcard .bico>.seal,.lcard .bico>.chaticon{width:34px;height:34px}
+.lc-title{flex:1;min-width:0;font-size:14.5px;font-weight:600;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.lc-title .bstar{vertical-align:-1px;margin-right:4px;display:inline-flex}
+.lc-top .reason{margin-top:2px}
+.lc-prog{font-size:13px;line-height:1.55;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.lc-prog .working{display:inline-flex;align-items:flex-start;gap:6px;max-width:100%} .lc-prog .working .spin{flex:none;margin-top:4px}
+.lc-foot{display:flex;align-items:center;gap:10px;min-height:30px}
+.lc-who{flex:1;min-width:0;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-btns{display:flex;gap:8px;flex:none}
+.lc-list{background:var(--panel);border-radius:16px;padding:4px}
+.lcard.quiet{gap:2px;margin:0;padding:11px 12px;border:0;border-radius:12px;background:none;box-shadow:none}
+.lcard.quiet:hover{background:var(--paper)}
+.lcard.quiet+.lcard.quiet::before{content:"";position:absolute;top:0;left:12px;right:12px;border-top:1px solid var(--line)}
+.lcard.quiet:hover::before,.lcard.quiet:hover+.lcard.quiet::before{border-top-color:transparent}
+.lcard.quiet.starred{background:rgba(184,144,42,.08)}
+.lcard.quiet .lc-top{gap:10px;align-items:center}
+.lcard.quiet .bico>.seal,.lcard.quiet .bico>.chaticon{width:24px;height:24px}
+.lcard.quiet .lc-title{-webkit-line-clamp:1;font-size:14px;font-weight:500}
+.lcard.quiet.unread .lc-title{font-weight:600}
+.lc-sub{padding-left:34px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1100px){.lanes{grid-template-columns:repeat(3,minmax(300px,1fr));overflow-x:auto;scroll-snap-type:x mandatory}.lane{scroll-snap-align:start}}
+@media (max-width:760px){.lanes{grid-template-columns:repeat(3,86%);gap:12px;padding:10px 14px 16px;scroll-padding:0 14px}}
 /* 数字卡（#240）：今天、今天 Token、本周 Token、额度；今天的两张点进当天详情 */
 .kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:12px}
 .kpi{border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:flex;flex-direction:column;gap:2px;min-width:0;color:inherit;text-decoration:none}
@@ -3501,6 +3544,8 @@ async function markSeen(id, force){
 }
 let boardStats = null, boardStatsAt = 0, showAllRecent = false;
 let recentTab = (() => { try { return localStorage.getItem("ccim.recentTab") || "chats"; } catch { return "chats"; } })();
+let boardLayout = (() => { try { return localStorage.getItem("ccim.boardLayout") === "lanes" ? "lanes" : "list"; } catch { return "list"; } })();
+function setBoardLayout(k){ boardLayout = k; try { localStorage.setItem("ccim.boardLayout", k); } catch {} renderBoard(true); }
 function setRecentTab(t){ recentTab = t; showAllRecent = false; try { localStorage.setItem("ccim.recentTab", t); } catch {} renderBoard(true); }
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
@@ -3526,8 +3571,7 @@ function withRecent(){                // 整体状态里的对话加上任务面
 }
 const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
-function boardRow(c, kind){
-  // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
+function rowBits(c, kind){      // 列表的一行和泳道的一张卡共用：谁、说了什么、进度
   // 群聊：头像和名字用在干活的、或最后回答的那个成员（#192）
   const crew = c.crew || [], byCrew = kind === "work" && !c.busy && crew.length;
   const a = byCrew ? agentOf(crew[0].agent) || agentOf(c.agent)
@@ -3540,21 +3584,42 @@ function boardRow(c, kind){
   const prog = kind === "work" && c.stall ? `<span class="working stuck">${stallText(c.stall, true)}</span>`
     : kind === "work" ? `<span class="working"><span class="spin"></span>${esc(many > 1 ? `等 ${many} 人在干活` : doing ? "正在" + doing : "干活中")}</span>`
     : esc(c.brief || (said !== c.title ? c.title : ""));
-  const r = REASON[c.attention];
-  const replying = boardReply && boardReply.id === c.id;
+  const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
+  const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
+  return {a, who, said, prog, soft, dot, r: REASON[c.attention], replying: !!(boardReply && boardReply.id === c.id)};
+}
+function replyBox(a){
+  return `<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"
+      oninput="boardReply.text=this.value" onkeydown="if(sendKey(event)){event.preventDefault();sendBoardReply()}else if(event.key==='Escape')closeBoardReply()">${esc(boardReply.text)}</textarea>
+    <div class="acts"><button class="btn" onclick="closeBoardReply()">取消</button><button class="btn primary" id="br-send" onclick="sendBoardReply()">发送</button></div></div>`;
+}
+function boardRow(c, kind){
+  // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
+  const {a, who, said, prog, soft, dot, r, replying} = rowBits(c, kind);
   const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
     : "";
   const more = kind !== "work" && !replying ? `<button class="bmore-btn" aria-label="更多操作" title="更多操作" onclick="boardMenu(event,${q(c.id)},${kind === "wait"})">${ICON.more}</button>` : "";
-  const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
-  const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
   const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
     <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.star ? `<span class="bstar" title="星标">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
     <span class="bside"><span class="btopr"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span>${more}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
-  if (!replying) return row;
-  return `<div class="bitem">${row}<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"
-      oninput="boardReply.text=this.value" onkeydown="if(sendKey(event)){event.preventDefault();sendBoardReply()}else if(event.key==='Escape')closeBoardReply()">${esc(boardReply.text)}</textarea>
-    <div class="acts"><button class="btn" onclick="closeBoardReply()">取消</button><button class="btn primary" id="br-send" onclick="sendBoardReply()">发送</button></div></div></div>`;
+  return replying ? `<div class="bitem">${row}${replyBox(a)}</div>` : row;
+}
+// 泳道视图的卡片（#292）：标题可以两行，进度单独一行，底下是谁在哪台电脑和操作
+function laneCard(c, kind){
+  const {a, who, said, prog, soft, dot, r, replying} = rowBits(c, kind);
+  const go = `event.preventDefault();event.stopPropagation();`;
+  const btns = kind === "work" ? (c.stall ? `<button class="btn" onclick="${go}skipStep(${q(c.id)},${q(ownerOf(c.id) || "")})">结束这一步</button>` : "")
+    : c.attention === "ask" ? `<button class="btn primary" onclick="${go}location.hash=${q(boardHref(c))}">去批准</button>`
+    : kind === "wait" && !replying ? `<button class="btn" onclick="${go}dismissTask(${q(c.id)})">知道了</button><button class="btn primary" onclick="${go}openBoardReply(${q(c.id)})">回复</button>`
+    : "";
+  const foot = [a ? a.name : "", who].filter(Boolean).join(" · ");
+  const recent = kind === "recent";
+  const card = `<a class="lcard ${recent ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}
+    <span class="lc-top"><span class="bico">${iconOf(c, a, recent ? "sm" : "")}${dot}</span><span class="lc-title" title="${esc(said)}">${c.star ? `<span class="bstar">${ICON.star}</span>` : ""}${esc(said)}</span>${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : recent ? `<span class="bwhen">${when(c.last_active)}</span>` : ""}</span>
+    ${recent ? `<span class="lc-sub">${esc([foot, c.brief].filter(Boolean).join(" · ") || " ")}</span>`
+      : `${prog ? `<span class="lc-prog">${prog}</span>` : ""}<span class="lc-foot"><span class="lc-who" title="${esc(foot)}">${esc(foot)}</span>${btns ? `<span class="lc-btns">${btns}</span>` : `<span class="bwhen">${when(c.last_active)}</span>`}</span>`}</a>`;
+  return replying ? `<div class="bitem">${card}${replyBox(a)}</div>` : card;
 }
 let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
 function boardMenu(e, id, wait){     // 右上角的三点：知道了、快捷回复（#273）
@@ -3872,27 +3937,41 @@ async function renderBoard(quick){
   if (boardReply && !wait.some(c => c.id === boardReply.id)) boardReply = null;     // 那件事已经不在等你了
   const ta = $("#br-text"), focused = ta && document.activeElement === ta, sel = ta && [ta.selectionStart, ta.selectionEnd];
   const top = $(".board") ? $(".board").scrollTop : 0;
-  $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
+  // 对话：临时对话；Agent：和 Agent 的对话，都是一个对话一行（#119）
+  const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
+  const rlist = recentTab === "agents" ? withAgent : temps;
+  const rtabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
+  const rempty = `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;
+  const layTabs = `<span class="rtabs blay" role="tablist" aria-label="面板样式">${[["list", "列表"], ["lanes", "泳道"]].map(([k, t]) => `<button role="tab" aria-selected="${boardLayout === k}" class="${boardLayout === k ? "on" : ""}" onclick="setBoardLayout('${k}')">${t}</button>`).join("")}</span>`;
+  const head = `<div class="bhead"><h1>任务面板</h1>${layTabs}</div>`;
+  if (boardLayout === "lanes") {      // 泳道（#292）：三件事各一列，每列自己滚动
+    const keep = [...document.querySelectorAll(".lane-body")].map(e => e.scrollTop);
+    const lane = (title, color, n, body, extra = "") => `<section class="lane"><h2><i style="background:${color}"></i>${title}${n === "" ? "" : `<span class="n">${n}</span>`}${extra}</h2><div class="lane-body">${body}</div></section>`;
+    $("#main").innerHTML = `<div class="board lanes-on">${head}<div class="lanes">
+      ${lane("等你处理", "var(--zhu)", wait.length, wait.length ? wait.map(c => laneCard(c, "wait")).join("") : `<p class="bempty">没有在等你的事。</p>`)}
+      ${lane("正在干活", "var(--warn)", work.length, work.length ? work.map(c => laneCard(c, "work")).join("") : `<p class="bempty">现在没有在干活的。</p>`)}
+      ${lane("最近在跟", "var(--faint)", "", rlist.length ? `<div class="lc-list">${rlist.map(c => laneCard(c, "recent")).join("")}</div>` : rempty, rtabs)}
+    </div></div>`;
+    document.querySelectorAll(".lane-body").forEach((e, i) => { if (keep[i]) e.scrollTop = keep[i]; });
+  } else {
+  $("#main").innerHTML = `<div class="board">${head}
     <div class="bgrid"><div class="bleft">
       ${kpiHtml(st)}
       ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting")}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
       ${(() => {
-        // 对话：临时对话；Agent：和 Agent 的对话，都是一个对话一行（#119）
-        const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
-        const list = recentTab === "agents" ? withAgent : temps;
-        const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
-        const few = Math.max(recentTab === "agents" ? 10 : 5, list.filter(c => c.star).length);   // 星标的不折叠
-        const body = list.length ? (showAllRecent ? list : list.slice(0, few)).map(c => boardRow(c, "recent")).join("")
-            + (list.length > few && !showAllRecent ? `<button class="bmore" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - few} 件</button>` : "")
-          : `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;
-        return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
+        const few = Math.max(recentTab === "agents" ? 10 : 5, rlist.filter(c => c.star).length);   // 星标的不折叠
+        const body = rlist.length ? (showAllRecent ? rlist : rlist.slice(0, few)).map(c => boardRow(c, "recent")).join("")
+            + (rlist.length > few && !showAllRecent ? `<button class="bmore" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${rlist.length - few} 件</button>` : "")
+          : rempty;
+        return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${rtabs}</h2>${body}</div>`;
       })()}
     </div><div class="bright">
       <div class="bcard"><h2>活跃度<span class="sp"></span><small>点一天查看</small></h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
       <div class="bcard"><h2>本周各 Agent<span class="sp"></span><span class="rtabs" role="tablist">${[["turns", "条数"], ["tokens", "Token"]].map(([k, t]) => `<button role="tab" aria-selected="${agTab === k}" class="${agTab === k ? "on" : ""}" onclick="setAgTab('${k}')">${t}</button>`).join("")}</span></h2>
         ${ags.length ? ags.map(([id, v]) => { const a = agentOf(id), n = v[agTab] || 0; return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(n / maxT * 100)}%"></i></span><span class="acnt">${agTab === "tokens" ? fmtTok(n) : n + " 条"}</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
     </div></div></div>`;
+  }
   if (top) $(".board").scrollTop = top;
   const nt = $("#br-text");
   if (nt && (focused || boardReply.focus)) {

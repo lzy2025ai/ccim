@@ -955,6 +955,23 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .pane{padding:22px 32px 40px;max-width:900px}
 .sect{margin-bottom:28px}
 .sect h3{font:600 15px var(--song);margin:0 0 10px}
+.perf-wrap{overflow-x:auto}
+table.perf{border-collapse:collapse;width:100%;font-size:13px}
+table.perf th{font-weight:500;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.perf td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+table.perf th:first-child,table.perf td.nm{text-align:left}
+table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.perf-h{font:600 13.5px var(--song);margin:18px 0 8px}
+.perf-spots{list-style:none;margin:0;padding:0;font-size:12.5px}
+.perf-spots li{display:flex;gap:10px;align-items:baseline;padding:3px 0}
+.perf-spots .muted{white-space:nowrap}
+.perf-spots code{white-space:normal;word-break:break-all}
+.perf-slow{border-bottom:1px solid var(--line);font-size:13px}
+.perf-slow summary{display:flex;gap:10px;align-items:baseline;padding:7px 0;cursor:pointer;list-style:none}
+.perf-slow summary::-webkit-details-marker{display:none}
+.perf-slow summary .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.perf-ctx{padding:0 0 10px 12px;font-size:12.5px;word-break:break-all}
+.perf-ctx pre{margin:4px 0 0;font-size:12px;white-space:pre-wrap;background:var(--sunk);padding:8px;border-radius:8px}
 .channel{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
 .channel .ci{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 13px var(--sans)}
 .channel .ci.feishu{background:#E4ECF7;color:#2F5A93} .channel .ci.weixin{background:#E3F1E7;color:#2E6E45}
@@ -1552,11 +1569,29 @@ async function api(path, body, machine){
   try { return await api0(path, body, machine); }
   finally { busyBar(-1); if (btn) { btn.classList.remove("pending"); btn.removeAttribute("aria-busy"); } }
 }
+// 性能数据（#286）：打开网页、取整体状态、打开对话每次都记；单个请求慢了（PERF_SLOW）才记，带上后台花了多久，好分出网络和后台。
+// 攒着每 30 秒报给开发版那台（没有就本机），开发页里看
+const PERF_SLOW = 1000, PERFQ = [];
+function perfMark(k, n, ms, extra){ if (PERFQ.length < 300) PERFQ.push({k, n, ms: Math.round(ms), ...(extra || {})}); }
+function perfFlush(){
+  if (!PERFQ.length || typeof S === "undefined" || !S) return;
+  const to = devMachine() || (S.hub ? null : S.me);
+  if (!to && S.hub) { PERFQ.length = 0; return; }
+  const items = PERFQ.splice(0);
+  fetch("/api/perf", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(to)},
+                      body: JSON.stringify({items, machine: S.me})}).catch(() => {});
+}
+setInterval(perfFlush, 30000);
+const serverMs = r => { const m = /dur=([\d.]+)/.exec(r.headers.get("Server-Timing") || ""); return m ? +m[1] : undefined; };
 async function api0(path, body, machine){
-  const to = targetOf(path, body, machine);
+  const to = targetOf(path, body, machine), t0 = performance.now();
   const r = await fetch(path, {method: body === undefined ? "GET" : "POST",
                                headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(to)},
                                body: body === undefined ? undefined : JSON.stringify(body)});
+  const took = performance.now() - t0;
+  if (took >= PERF_SLOW && path !== "/api/perf")
+    perfMark("api", `${body === undefined ? "GET" : "POST"} ${path.split("?")[0]}`, took,
+             {server: serverMs(r), ctx: {status: r.status, to: to ? ((machineOf(to) || {}).name || to) : "", hub: S && S.hub ? 1 : 0}});
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && S.hub) { location.reload(); throw new Error(d.error || "登录过期了"); }   // 服务器上：登录过期回到登录页
   // 别的电脑还没升级到有这个接口的版本（#74）
@@ -1793,7 +1828,9 @@ function loadState(){
   return stateAgain;
 }
 async function fetchState(){
+  const t0 = performance.now();
   S = await api("/api/state");
+  perfMark("state", S.hub ? "取整体状态（经总控）" : "取整体状态", performance.now() - t0);
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
     if (on !== SKC.on) { SKC.on = on; drawSkChat(); }
@@ -2297,7 +2334,7 @@ function renderChatEmpty(){
 // ================= 对话页 =================
 let quietOpen = null;
 async function openChat(id){
-  const quiet = quietOpen === id; quietOpen = null;
+  const quiet = quietOpen === id, t0 = performance.now(); quietOpen = null;
   if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
   if (!detail || detail.id !== id) { chatRcpt = []; chatRefs = []; }
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
@@ -2315,6 +2352,7 @@ async function openChat(id){
     renderList();
   }
   drawChat(); doJump(); markSeen(id);
+  if (!quiet) perfMark("chat", "打开对话", performance.now() - t0, {ctx: {chat: id, machine: (machineOf(ctxMachine) || {}).name || "", msgs: (detail.log || []).length}});
 }
 async function openOn(id){            // 列表里没有它（更早的、别的电脑上的，#268）：这台找不到就挨台电脑再找
   const path = `/api/chat?id=${encodeURIComponent(id)}`;
@@ -5206,9 +5244,54 @@ function drawDev(){
       ${(d.shipped || []).length ? `<div class="sect"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">已上线</h3>
         <label class="search dev-q" style="flex:1;min-width:160px;max-width:280px">${ICON.search}<input placeholder="编号或标题" aria-label="搜索已上线的需求" value="${esc(shippedQ)}" oninput="shippedQ=this.value;shippedN=20;drawShipped()"></label></div>
         <div id="dev-shipped"></div></div>` : ""}
+      <div class="sect" id="dev-perf"></div>
     </div></div>`;
-  drawShipped();
+  drawShipped(); drawPerf();
   if (typing) { const i = $(".dev-q input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+// 性能（#286）：开发版那台电脑记下的接口耗时、网页报回来的耗时；慢的几次带现场（参数、同时几个、卡在哪段代码）
+let PERF = {hours: 24, data: null, all: false, loading: false};
+const msTxt = ms => ms >= 1000 ? `${+(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)} 秒` : `${Math.round(ms)} 毫秒`;
+const PERF_KEYS = {q: "参数", keys: "提交的字段", ids: "提交的编号", st: "状态码", status: "状态码", size: "返回大小", via: "来源", to: "转给",
+  server: "其中后台", from: "网页所在电脑", hub: "经总控", chat: "对话", machine: "电脑", msgs: "消息条数"};
+const perfAt = sec => { const d = new Date(sec * 1000), t = d.toTimeString().slice(0, 8);
+  return d.toDateString() === new Date().toDateString() ? t : `${whenTs(sec)} ${t.slice(0, 5)}`; };
+const perfName = g => g.k === "api" ? g.n : g.k === "web.api" ? `网页请求 ${g.n}` : g.n;
+async function loadPerf(h){
+  if (h) PERF.hours = h;
+  PERF.loading = true; drawPerf();
+  try { PERF.data = await api(`/api/perf?hours=${PERF.hours}`, undefined, devMachine()); PERF.error = null; }
+  catch (e) { PERF.error = e.message; }
+  PERF.loading = false; drawPerf();
+}
+function drawPerf(){
+  const box = $("#dev-perf");
+  if (!box) return;
+  if (!PERF.data && !PERF.loading && !PERF.error) return loadPerf();
+  const d = PERF.data, seg = [[1, "1 小时"], [24, "24 小时"], [168, "7 天"]]
+    .map(([h, t]) => `<button class="${PERF.hours === h ? "on" : ""}" onclick="loadPerf(${h})">${t}</button>`).join("");
+  const head = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px"><h3 style="margin:0">性能</h3>
+    <span class="seg mini">${seg}</span>${PERF.loading ? `<span class="spin"></span>` : ""}</div>`;
+  if (PERF.error) { box.innerHTML = head + `<p class="muted">${esc(PERF.error)}</p>`; return; }
+  if (!d) { box.innerHTML = head; return; }
+  if (!d.total) { box.innerHTML = head + `<p class="muted">这段时间还没有数据。</p>`; return; }
+  const gs = PERF.all ? d.groups : d.groups.slice(0, 12);
+  const slowCell = g => g.slow ? `<span style="color:var(--stuck-ink)">${g.slow}</span>` : "0";
+  const table = `<div class="perf-wrap"><table class="perf"><thead><tr><th>做什么</th><th>次数</th><th>一般</th><th>九成在</th><th>最长</th><th>超过 ${msTxt(d.slow_ms)}</th></tr></thead><tbody>
+    ${gs.map(g => `<tr><td class="nm" title="${esc(perfName(g))}">${esc(perfName(g))}${g.errors ? ` <span class="muted">出错 ${g.errors}</span>` : ""}</td><td>${g.count}</td><td>${msTxt(g.p50)}${g.server_p50 !== undefined ? `<span class="muted">（后台 ${msTxt(g.server_p50)}）</span>` : ""}</td><td>${msTxt(g.p90)}</td><td>${msTxt(g.max)}</td><td>${slowCell(g)}</td></tr>`).join("")}
+    </tbody></table></div>${d.groups.length > 12 ? `<button class="lnk" onclick="PERF.all=!PERF.all;drawPerf()">${PERF.all ? "收起" : `全部 ${d.groups.length} 项`}</button>` : ""}`;
+  const spots = (d.hotspots || []).length ? `<h4 class="perf-h">慢的时候卡在哪</h4><ul class="perf-spots">${d.hotspots.map(h => `<li><code>${esc(h.at)}</code><span class="muted">${h.n} 次</span></li>`).join("")}</ul>` : "";
+  const detail = r => {
+    const val = (k, v) => k === "server" ? msTxt(v) : k === "size" ? `${Math.round(v / 1024)} KB` : k === "via" ? "别的电脑转来的" : k === "hub" ? (v ? "是" : "否")
+      : typeof v === "string" ? v : JSON.stringify(v);
+    const kv = Object.entries(r).filter(([k]) => !["at", "k", "n", "ms", "id", "stacks", "busy"].includes(k))
+      .map(([k, v]) => `<div><span class="muted">${esc(PERF_KEYS[k] || k)}</span> ${esc(val(k, v))}</div>`).join("");
+    const st = (r.stacks || []).map(x => `<div class="muted" style="margin-top:6px">第 ${x.at} 秒时在：</div><pre>${esc((x.stack || []).join("\n") || "（没抓到）")}</pre>`).join("");
+    return `<details class="perf-slow"><summary><span class="muted">${esc(perfAt(r.at))}</span><b>${msTxt(r.ms)}</b><span class="nm">${esc(perfName(r))}</span>${r.busy ? `<span class="muted">同时 ${r.busy} 个</span>` : ""}</summary>
+      <div class="perf-ctx">${r.id ? `<div><span class="muted">编号</span> ${esc(r.id)}（日志里搜它）</div>` : ""}${kv}${st}</div></details>`;
+  };
+  const slow = (d.slowest || []).length ? `<h4 class="perf-h">最慢的几次</h4>${d.slowest.map(detail).join("")}` : "";
+  box.innerHTML = head + table + spots + slow;
 }
 let shippedQ = "", shippedN = 20;       // 已上线的需求（#201）：筛选、显示几条
 function drawShipped(){
@@ -7508,6 +7591,7 @@ addEventListener("resize", () => listTip());
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
   if (!location.hash) history.replaceState(null, "", "#/chats/new");
   route();
+  perfMark("load", S.hub ? "打开网页（经总控）" : "打开网页", performance.now());
 })();
 </script>
 </body>

@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import devices, docs, filesend, share, tokens, workspace
+from . import devices, docs, filesend, perf, share, tokens, workspace
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
@@ -1981,8 +1981,11 @@ def _handler(pf):
 
         def _send(self, code, body, ctype="application/json; charset=utf-8", extra=None):
             data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+            self._st, self._sz = code, len(data)
             self.send_response(code)
             self.send_header("Content-Type", ctype)
+            if getattr(self, "_pt", None):
+                self.send_header("Server-Timing", f"app;dur={self._pt.took():.1f}")   # 网页拿它分出网络和后台各花了多久
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             for k, v in (extra or {}).items():
@@ -2061,7 +2064,27 @@ def _handler(pf):
             self._send(status, data, ctype)
             return True
 
+        def _timed(self, fn):
+            """接口耗时记进性能数据（#286）：经总控转来的、要转给别的电脑的都记上来处、去处。"""
+            u = urlparse(self.path)
+            self._st = self._sz = None
+            if not u.path.startswith("/api/") or u.path in ("/api/events", "/api/perf"):
+                self._pt = None
+                return fn()
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            to = self.headers.get("X-Machine") or q.get("machine")
+            with perf.Track("api", f"{self.command} {u.path}", via="peer" if self.headers.get("X-From-Peer") else None,
+                            to=to if to and to != pf.peers.me["id"] else None, **perf.ctx_of(q)) as t:
+                self._pt = t
+                try:
+                    return fn()
+                finally:
+                    t.status, t.size = getattr(self, "_st", None), getattr(self, "_sz", None)
+
         def do_GET(self):
+            self._timed(self._get)
+
+        def _get(self):
             filesend.unname(self)
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -2130,6 +2153,7 @@ def _handler(pf):
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
+                "/api/perf": lambda: perf.summary(q.get("hours") or 24),
             }
             if u.path in ("/api/state", "/api/agent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
@@ -2140,7 +2164,7 @@ def _handler(pf):
 
         def do_POST(self):
             try:
-                self._post()
+                self._timed(self._post)
             finally:
                 pf.shared.changed()           # 做完一次改动：之后来要整体状态的都重新算（#258）
 
@@ -2160,6 +2184,8 @@ def _handler(pf):
                 body = {}
             if not isinstance(body, dict):
                 body = {}
+            if getattr(self, "_pt", None):
+                self._pt.ctx.update(perf.ctx_of(body=body))
             acct, denied = self._guest("POST", u.path, {}, body)
             if denied:
                 return
@@ -2248,6 +2274,7 @@ def _handler(pf):
                 "/api/global": lambda: save_global(body),
                 "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
                 "/api/dev/check": lambda: pf._dev().check(b("prs") or []),
+                "/api/perf": lambda: perf.web(b("items"), b("machine")) or {},
                 "/api/dev/ship": lambda: pf._dev().ship(b("prs") or [], b("caller")),
                 "/api/dev/update": lambda: pf._dev().update(),
                 "/api/pick": lambda: {"path": console.pick_folder()},

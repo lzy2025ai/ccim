@@ -570,8 +570,9 @@ def _handler(hub):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            hdrs = {"Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
-                    "X-Content-Type-Options": "nosniff", **(extra or {})}
+            hdrs = {"Cache-Control": "no-store",
+                    "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'",   # 右下角的助理把对话页嵌在同一个网页里（#294）
+                    "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", **(extra or {})}
             for k, v in hdrs.items():
                 self.send_header(k, v)
             self.end_headers()
@@ -644,7 +645,8 @@ def _handler(hub):
                 if hub.peers.guest_of(mid, self.acct) and not self._guest_ready(mid):
                     return self._send(409, {"error": "那台电脑上的 ccim 版本较旧，请电脑的主人先升级。"})
                 from .filesend import serve_peer
-                return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                return serve_peer(self, hub.peers, mid, {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'",
+                                                         "Referrer-Policy": "no-referrer",
                                                          "X-Content-Type-Options": "nosniff"},
                                   hub.peers.guest_headers(self.acct, mid) if hub.peers.guest_of(mid, self.acct) else None)
             return self._forward(b"", q)

@@ -3,6 +3,7 @@
 范围是这个 Agent 的：网页里它的对话（私聊、它当主 Agent 的群聊、它是成员的群聊、定时任务），
 别的电脑上的群聊里它被 @ 的子对话，飞书、微信里的对话，工作目录下终端、桌面端的 Claude Code 对话。
 访客（#154）只有它自己账号的网页对话；飞书、微信、终端的对话属于电脑主人，不给。
+助理（没选 Agent 的对话、右下角的助理，#294）：aid 是 None，范围是所有助理对话（也是它当主角的群聊），没有飞书、微信、终端。
 第一版只按关键词找（几个词都要出现在同一条消息里），不建索引。
 """
 import os, time
@@ -44,7 +45,7 @@ def sources(pf, aid, acct):
     out = {}
     pick = []
     for cid, m in chats.items():
-        if owners.get(cid) != acct or m.get("helper"):
+        if owners.get(cid) != acct or m.get("helper") or m.get("side_of"):
             continue
         outer = m.get("mention_of")
         if m.get("agent") == aid and outer and outer in chats:
@@ -70,7 +71,7 @@ def sources(pf, aid, acct):
         else:
             note = ""
         out[cid] = (title, where, (lambda cid=cid: pf.channel.logs.read(cid)), owner_name, note, m.get("last_active") or "")
-    if share.of_agent(a) != acct:             # 飞书、微信、终端里的对话是电脑主人的
+    if not aid or share.of_agent(a) != acct:  # 飞书、微信、终端里的对话是电脑主人的；助理没有
         return out
     cwd = agents.cwd(a)
     for r in pf.external_chats(aid):          # 飞书、微信（网页里接着聊过的已经去掉）
@@ -99,11 +100,11 @@ def _speaker(r, owner, pf, aid):
         who = r.get("agent")
     else:
         return "你" if owner is ME else owner
-    return "你" if who == aid else pf.mentions._agent_name(who) if who else "用户"
+    return "你" if who and who == aid else pf.mentions._agent_name(who) if who else "用户"
 
 
 def _me(aid):
-    return "Agent「%s」" % ((agents.get(aid) or {}).get("name") or "")
+    return "Agent「%s」" % ((agents.get(aid) or {}).get("name") or "") if aid else "助理"
 
 
 def _when(at):

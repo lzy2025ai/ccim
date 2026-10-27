@@ -25,6 +25,23 @@ class WorkspaceTest(unittest.TestCase):
         with self.assertRaises(w.Problem):
             w.trash(self.root, "")
 
+    def test_paths_in_reply(self):   # 回复里写到的路径（#296）
+        os.makedirs(os.path.join(self.root, "交付"))
+        open(os.path.join(self.root, "交付", "包.zip"), "w").close()
+        os.symlink("/etc/hosts", os.path.join(self.root, "lnk"))
+        got = w.paths(self.root, ["交付/包.zip", os.path.join(self.root, "交付"), "没有.md", "../x", "/etc/hosts", "lnk", ""])["paths"]
+        self.assertEqual(set(got), {"交付/包.zip", os.path.join(self.root, "交付")})
+        self.assertEqual(got["交付/包.zip"], {"path": os.path.join(self.root, "交付", "包.zip"), "dir": False})
+        self.assertTrue(got[os.path.join(self.root, "交付")]["dir"])
+        with mock.patch.object(w.subprocess, "run") as run:
+            w.reveal(self.root, "交付/包.zip")
+            run.assert_called_once()
+            self.assertEqual(run.call_args[0][0], ["open", "-R", os.path.join(self.root, "交付", "包.zip")])
+            for bad in ("没有.md", "/etc/hosts", "lnk"):
+                with self.assertRaises(w.Problem):
+                    w.reveal(self.root, bad)
+            run.assert_called_once()
+
     def test_create_move_rename(self):
         f = w.create(self.root, "", "笔记.md")["path"]
         self.assertTrue(open(f).read().startswith("# 笔记"))

@@ -1190,6 +1190,8 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .answer hr{border:0;border-top:1px solid var(--line);margin:12px 0}
 .answer blockquote{margin:0 0 10px;padding:2px 12px;border-left:3px solid var(--line-strong);color:var(--muted)}
 .answer a{color:var(--qing)}
+.answer code.fp.on{cursor:pointer;color:var(--qing);text-decoration:underline dotted;text-underline-offset:3px}
+.answer code.fp.on:hover{text-decoration-style:solid}
 .answer img{max-width:100%;border-radius:8px}
 .note{max-width:760px;margin:-8px auto 18px;padding:0 22px;font-size:13px;color:var(--muted)}
 .note .answer{line-height:1.6}
@@ -1677,11 +1679,69 @@ function chatIcon(c, size = ""){
 }
 const iconOf = (c, a, size = "", dot = false) => a ? seal(a, size, dot) : chatIcon(c, size);
 
+// ---- 回复里写到的文件路径（#296）：在对话工作目录里、确实存在的，点了能打开、在访达中显示、下载 ----
+const unesc = s => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+function fpLooks(t){   // 像不像路径：带 / 或者有扩展名；命令、代码片段不算。行号（a.py:12）去掉
+  t = t.trim().replace(/:\d+(?::\d+)?$/, "");
+  if (t.length < 3 || t.length > 300 || /[\n<>|*$`"';=(){}\[\]]|:\/\/|^-|\s-/.test(t)) return "";
+  return /\//.test(t) || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(t) ? t : "";
+}
+const FP = new Map();   // "电脑|对话|路径" → {path, dir}；null：不存在或不在工作目录里；"wait"：正在查
+let fpTimer = 0;
+function fpCtx(el){
+  if (el.closest("#sidepane")) return SIDE && SIDE.id ? {chat: SIDE.id, mid: SIDE.mid || ctxMachine} : null;
+  return el.closest("#main") && detail && detail.id && detail.id !== "new" ? {chat: detail.id, mid: ctxMachine} : null;
+}
+function fpScan(){
+  clearTimeout(fpTimer);
+  fpTimer = setTimeout(() => {
+    const ask = new Map();
+    document.querySelectorAll("code.fp:not([data-ck])").forEach(el => {
+      const c = fpCtx(el); if (!c) return;
+      const k = `${c.mid || ""}|${c.chat}|${el.dataset.fp}`, v = FP.get(k);
+      if (v === "wait") return;
+      el.dataset.ck = "1";
+      if (v !== undefined) return fpMark(el, v, c);
+      const g = `${c.mid || ""}|${c.chat}`;
+      if (!ask.has(g)) ask.set(g, {c, paths: new Set()});
+      ask.get(g).paths.add(el.dataset.fp); FP.set(k, "wait"); delete el.dataset.ck;
+    });
+    for (const [g, {c, paths}] of ask) {
+      const ps = [...paths];
+      api("/api/ws/paths", {chat: c.chat, paths: ps}, c.mid)
+        .then(d => ps.forEach(p => FP.set(`${g}|${p}`, (d.paths || {})[p] || null)))
+        .catch(() => ps.forEach(p => FP.set(`${g}|${p}`, null)))
+        .finally(fpScan);
+    }
+  }, 120);
+}
+function fpMark(el, v, c){
+  if (!v || v.dir && isRemote(c.mid)) return;   // 文件夹只能在访达里打开，别的电脑上就不给点
+  el.classList.add("on"); el.tabIndex = 0; el.setAttribute("role", "button");
+  el.onclick = e => fpMenu(e, el, v, c);
+  el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fpMenu(e, el, v, c); } };
+}
+function fpMenu(e, el, v, c){
+  const b = (js, label) => `<button onclick="closePop();${esc(js)}">${label}</button>`;
+  const P = JSON.stringify(v.path), C = JSON.stringify(c.chat), M = JSON.stringify(c.mid || "");
+  pop({stopPropagation(){ e.stopPropagation(); }, currentTarget: el}, [
+    v.dir ? "" : b(`openDoc(${P},null,${C})`, "打开"),
+    isRemote(c.mid) ? "" : b(`act(()=>api("/api/ws/reveal",{chat:${C},path:${P}},${M}||null))`, "在访达中显示"),
+    v.dir ? "" : b(`fpDownload(${C},${M},${P})`, "下载"),
+  ].join(""));
+}
+function fpDownload(chat, mid, p){
+  const a = document.createElement("a");
+  a.href = fileUrl(chat, p) + (isRemote(mid) ? `&machine=${encodeURIComponent(mid)}` : ""); a.download = p.split("/").pop();
+  document.body.append(a); a.click(); a.remove();
+}
+new MutationObserver(() => { if (document.querySelector("code.fp:not([data-ck])")) fpScan(); }).observe(document.body, {childList: true, subtree: true});
+
 // ---- Markdown（只认常见写法，先转义再排版） ----
 function md(src){
   const lines = String(src || "").replace(/\r/g, "").split("\n"), out = [];
   const inline = s => esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/`([^`]+)`/g, (_, c) => { const f = fpLooks(unesc(c)); return f ? `<code class="fp" data-fp="${esc(f)}">${c}</code>` : `<code>${c}</code>`; })
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')

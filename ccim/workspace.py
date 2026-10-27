@@ -4,7 +4,7 @@
 AI 这一轮改了哪些文件：编辑工具写的（会话里记下的）加上目录里修改时间晚于这一轮开始的（命令行、Codex 改的也算），
 扫描有数量和时间上限，主目录这种太大的目录不扫。
 """
-import os, shutil, time
+import os, shutil, subprocess, time
 
 HOME = os.path.realpath(os.path.expanduser("~"))
 SKIP = {".git", "node_modules", ".venv", "venv", "__pycache__", ".DS_Store", ".idea", ".next", ".cache", ".pytest_cache",
@@ -179,6 +179,30 @@ def put(root, uploads, key, rel, name):
     q = _unique(d, _name_ok(name or os.path.basename(k)))
     shutil.move(k, q)
     return {"path": q}
+
+
+def paths(root, items):
+    """回复里写到的路径（#296）：哪些在工作目录里、确实存在。返回 {原样写的: {path, dir}}，不在的不返回。"""
+    root = os.path.realpath(root)
+    out = {}
+    for rel in list(items or [])[:200]:
+        if not isinstance(rel, str) or not rel.strip() or rel in out:
+            continue
+        try:
+            p = resolve(root, os.path.expanduser(rel))
+        except (Problem, OSError, ValueError):
+            continue
+        if p != root and os.path.exists(p):
+            out[rel] = {"path": p, "dir": os.path.isdir(p)}
+    return {"paths": out}
+
+
+def reveal(root, rel):
+    """在访达里选中它（#296）。只在这台电脑上的网页能用。"""
+    p = resolve(root, os.path.expanduser(rel or ""))
+    if not os.path.exists(p):
+        raise Problem("找不到这个文件了。")
+    subprocess.run(["open", "-R", p], capture_output=True)
 
 
 def changed_since(root, t0, known=(), skip=None, created=()):

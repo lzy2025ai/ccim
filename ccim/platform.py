@@ -2273,6 +2273,7 @@ def _handler(pf):
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
                 "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
+                "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
@@ -2287,7 +2288,7 @@ def _handler(pf):
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
             }
-            if u.path in ("/api/state", "/api/agent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
+            if u.path in ("/api/state", "/api/agent", "/api/agent/recent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
                 return self._api(lambda: _snapshot(fn))
             if u.path in routes:
@@ -2651,6 +2652,34 @@ def agent_view(pf, aid, detail=False):
             pf.external_chats(aid, terminal=True)
         view["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
     return view
+
+
+def agent_recent(pf, aid, acct=None, n=5):
+    """头像卡片（#298、#307）：这个 Agent 最近的任务。它自己的对话、它在的群聊、在别的对话里被 @ 时做的那份，
+    再加飞书、微信里的；不含归档。{rows, total}，被 @ 的那份带 of（在哪个对话里）。"""
+    if not agents.get(aid):
+        raise Problem("找不到这个 Agent。")
+    ok, chats, picks = share.chat_filter(pf, acct), pf.chats(), []
+    for cid, m in chats.items():
+        if m.get("archived") or not ok(cid, m.get("agent")):
+            continue
+        if m.get("agent") == aid and m.get("mention_of"):
+            picks.append((m.get("last_active") or "", cid, m["mention_of"]))
+        elif board_mod.top_level(m, cid) and (m.get("agent") == aid or aid in (m.get("members") or [])):
+            picks.append((m.get("last_active") or "", cid, None))
+    ext = [r for r in pf.external_chats(aid) if ok(r["id"], aid) and not r.get("archived")]
+    picks += [(r.get("last_active") or "", r["id"], r) for r in ext]
+    picks.sort(key=lambda t: t[0], reverse=True)
+    rows = []
+    for _, cid, x in picks[:n]:
+        if isinstance(x, dict):
+            rows.append(x)
+            continue
+        r = pf.chat_view(cid)
+        if x:
+            r["of"] = {"id": x, "title": (chats.get(x) or {}).get("title") or "对话"}
+        rows.append(r)
+    return {"rows": rows, "total": len(picks)}
 
 
 def state(pf, acct=None):

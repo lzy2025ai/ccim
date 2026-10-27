@@ -2435,10 +2435,10 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
       <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
-  // @ 过其他 Agent 的对话：标题处换成正在干活的、或最后回答的那个 Agent（#302）；主 Agent 在干活时还是标题
-  const by = a ? null : (c.crew || []).length ? agentOf(c.crew[0].agent) : !c.busy && c.last_by ? agentOf(c.last_by) : null;
+  // @ 过其他 Agent 的对话：干完活后标题处换成最后回答的那个 Agent（#302）；干活时第二行已经写了是谁，还是标题
+  const by = !a && !working(c) && c.last_by ? agentOf(c.last_by) : null;
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
-    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length || by && crewIds(c).length === 1 ? "干活中" : esc(crewText(c))}</span>`
+    : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>`
     : (c.bg || []).length ? `<span class="working"><span class="spin"></span>后台 ${c.bg.length} 个任务在跑</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">

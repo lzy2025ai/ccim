@@ -3446,7 +3446,9 @@ function mentionActs(i, r, live){
   return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
 function mentionGroup(mid){
-  const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && r.msg === mid);
+  // 补充进成员正在做的那一轮的 @（#304）：回答放在最后一句补充下面
+  const under = r => (r.joined || []).filter(x => detail.log.some(u => u.type === "user" && u.id === x)).pop() || r.msg;
+  const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && under(r) === mid);
   if (!rs.length) return "";
   const one = ([r, i]) => {
     const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
@@ -6975,7 +6977,7 @@ function pocketBaseMenu(e){
 function pocketEvent(ev){
   if (EMBED || !POCKET.id || ev.chat !== POCKET.id) return;
   if (ev.type === "progress") POCKET.busy = ev.state === "working";
-  else if (ev.type === "mention" && ev.id) {           // @ 出去的活：做完之前挂件一直显示在干活
+  else if (ev.type === "mention" && ev.id && ev.state) {   // @ 出去的活：做完之前挂件一直显示在干活（只改了 joined 的不算）
     if (ev.state === "queued") POCKET.subs.add(ev.id);
     else { POCKET.subs.delete(ev.id); if (!POCKET.open) POCKET.unread = true; }
   } else if (["answer", "card", "secret"].includes(ev.type)) { if (!POCKET.open) POCKET.unread = true; }

@@ -2273,7 +2273,7 @@ def _handler(pf):
             u = urlparse(self.path)
             if self._remote():
                 return
-            if self.headers.get("X-From-Peer") and u.path in ("/api/pick", "/api/reveal"):
+            if self.headers.get("X-From-Peer") and u.path in ("/api/pick", "/api/reveal", "/api/ws/reveal"):
                 return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
                 if self._guest("POST", u.path, {}, None)[1]:
@@ -2330,6 +2330,8 @@ def _handler(pf):
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
+                "/api/ws/paths": lambda: pf.ws_call(b("chat"), workspace.paths, b("paths") or []),
+                "/api/ws/reveal": lambda: pf.ws_call(b("chat"), workspace.reveal, b("path") or ""),
                 "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),
                 "/api/ws/rename": lambda: pf.ws_call(b("chat"), workspace.rename, b("path") or "", b("name")),
                 "/api/ws/move": lambda: pf.ws_call(b("chat"), workspace.move, b("path") or "", b("to") or ""),

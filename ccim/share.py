@@ -36,7 +36,7 @@ GUEST_POST = {
     "/api/chat/continue",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
     "/api/chat/side",
-    "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
+    "/api/ws/paths", "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
 }
 
 

@@ -413,6 +413,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .msg-acts button{display:flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted)}
 .msg-acts button:hover{background:var(--sunk);color:var(--ink)}
 .msg-acts svg{width:14px;height:14px}
+.msg-time{display:flex;align-items:center;height:26px;padding:0 7px;font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 /* 分叉出来的对话：从上面那个对话的印章下面引一条线，每个分支一个拐角，最后一个到拐角为止 */
 .kids{margin:-2px 0 2px 26px}
 .kids>.node{position:relative;padding-left:16px}
@@ -1988,6 +1989,7 @@ function saveFile(ev, a){
 
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
+const STATUS_EVENTS = new Set(["bg", "brief"]);   // 对话的状态，不是记录，下面另外处理
 const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
 let esFails = 0;                  // 推送连续连不上几次了：重连间隔 5、10、20…秒，最长 1 分钟
 function connectEvents(again){
@@ -2041,7 +2043,7 @@ function connectEvents(again){
         drawThread(); drawComposerState(); wsProgress(ev);
       } else if (ev.type === "ctx"){
         detail.ctx = ev.ctx; drawCtxRing(detail); redrawGroup();
-      } else {
+      } else if (!STATUS_EVENTS.has(ev.type)) {   // 状态推送混进记录会让之后的下标和后台对不上，分叉就找不到那条（#288）
         if (ev.type === "mention" && rec.ctx && rec.agent) { detail.member_ctx = {...detail.member_ctx, [rec.agent]: rec.ctx}; redrawGroup(); }
         const i = ["card", "mention", "secret", "edit"].includes(ev.type) && ev.id ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
@@ -2403,8 +2405,16 @@ function msgActs(src, i, r){
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
-  return `<div class="msg-acts">${btns.join("")}</div>`;
+  return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;
 }
+// 消息的发送时间（#288）：今天的只写时:分，更早的带日期，不是今年的带年份
+function msgTime(ts){
+  if (!ts) return "";
+  const d = new Date(ts * 1000), now = new Date();
+  const day = d.toDateString() === now.toDateString() ? "" : `${d.getFullYear() === now.getFullYear() ? "" : d.getFullYear() + "年"}${d.getMonth() + 1}月${d.getDate()}日 `;
+  return `<span class="msg-time">${day}${hm(ts)}</span>`;
+}
+const timeActs = r => r.at && !r.sending ? `<div class="msg-acts">${msgTime(r.at)}</div>` : "";
 let rewindFiles = true;
 let rewindHas = false;
 async function rewindAt(i){
@@ -2419,7 +2429,7 @@ async function rewindAt(i){
   $("#rw-ok").focus();
   if (!info.files) return;
   let files = [];
-  try { files = (await api("/api/chat/rewind_preview", {id, index: i})).files || []; } catch {}
+  try { files = (await api("/api/chat/rewind_preview", {id, index: i, at: r.at})).files || []; } catch {}
   const box = $("#rw-files");
   if (!box || !detail || detail.id !== id) return;
   rewindHas = files.length > 0;
@@ -2430,7 +2440,7 @@ async function doRewind(i){
   const b = $("#rw-ok"); b.disabled = true; b.textContent = "正在退回…";
   let r;
   const files = rewindFiles && rewindHas;
-  try { r = await act(() => api("/api/chat/rewind", {id: detail.id, index: i, files})); }
+  try { r = await act(() => api("/api/chat/rewind", {id: detail.id, index: i, at: (detail.log[i] || {}).at, files})); }
   catch { b.disabled = false; b.textContent = "退回"; return; }
   closeDialog();
   toast(files ? "已退回，文件也恢复了" : "已退回");
@@ -2450,7 +2460,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "user" && r.by){           // 对话里的助手自己 @ 的人；assistant：没选 Agent 的对话里的（#179）
     const a = r.by === "assistant" ? null : agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
     return `<div class="msg">${a ? `<div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b></div>` : fromRow()}
-      <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div></div>${src === "log" ? mentionGroup(r.id) : ""}`;
+      <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div>${timeActs(r)}</div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "user"){
     const from = r.from_chat && chatById(r.from_chat);
@@ -2463,7 +2473,7 @@ function recHtml(r, i, src = "log"){
           : f.path && docKind(f.name) ? `<button class="file doc" onclick="openDoc(${q(f.path)})">${ICON.file}${esc(f.name)}</button>`
           : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
       }).join("")}</div>` : ""}
-      ${r.text ? msgActs(src, i, r) : ""}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
+      ${r.text ? msgActs(src, i, r) : timeActs(r)}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "mention") return "";
   if (r.type === "secret") return secretHtml(r);
@@ -2483,13 +2493,13 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
-      : fileChip(src, r.name)}</div>`;
+      : fileChip(src, r.name)}${timeActs(r)}</div>`;
   }
   if (r.type === "chatlog"){
     const items = r.items || [];
     return `<div class="msg"><button class="chatlog" onclick="openChatlog(${i})"><div class="t">${esc(r.title)}</div>
       ${items.slice(0, 4).map(x => `<div class="ln">${esc(x.sender)}：${esc(clLine(x))}</div>`).join("")}
-      <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button></div>`;
+      <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button>${timeActs(r)}</div>`;
   }
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
@@ -3255,7 +3265,7 @@ function mentionActs(i, r, live){
   if (r.text) btns.push(`<button onclick="copyMsg(this,'log',${i})" title="复制">${ICON.copy}复制</button>`,
                         `<button onclick="quoteMsg(this,'log',${i})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
-  return `<div class="msg-acts">${btns.join("")}</div>`;
+  return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
 function mentionGroup(mid){
   const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && r.msg === mid);
@@ -3287,7 +3297,8 @@ function quoteMsg(btn, src, i){
   addQuote(text);
 }
 async function forkAt(i, src = "log"){
-  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, src}), "已分叉，在新对话里接着聊");
+  const r = (src === "earlier" ? detail.earlier : detail.log)[i] || {};
+  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
 function saveAsAgent(){

@@ -586,6 +586,14 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .answer p{margin:0 0 10px}
 .answer code{font:12.5px var(--mono);background:var(--sunk);padding:1px 5px;border-radius:4px}
 .answer pre{font:12.5px/1.6 var(--mono);background:#1F242C;color:#E4E7EB;padding:12px 14px;border-radius:8px;overflow:auto}
+.code-blk{position:relative}
+.code-blk pre{padding-right:72px}
+.code-copy{position:absolute;top:6px;right:6px;display:flex;align-items:center;gap:4px;height:26px;padding:0 8px;border-radius:6px;font-size:12px;color:#C9CED6;background:rgba(255,255,255,.08);opacity:0;transition:opacity .15s}
+.code-copy svg{width:13px;height:13px}
+.code-copy:hover{background:rgba(255,255,255,.16);color:#fff}
+.code-blk:hover .code-copy,.code-copy:focus-visible{opacity:1}
+@media (hover:none){.code-copy{opacity:1}}
+.approve .code-copy{color:var(--muted);background:rgba(0,0,0,.05)}
 .steps{border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;font-size:13px}
 .steps>button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;color:var(--ink-2)}
 .steps>button .chev{margin-left:auto;transition:transform .15s}
@@ -1753,7 +1761,7 @@ function md(src){
     if (/^```/.test(l)){
       const buf = []; i++;
       while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
-      i++; out.push(`<pre>${esc(buf.join("\n"))}</pre>`); continue;
+      i++; out.push(`<div class="code-blk"><pre>${esc(buf.join("\n"))}</pre><button class="code-copy" onclick="copyCode(this)" title="复制">${ICON.copy}复制</button></div>`); continue;
     }
     if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1])){
       const row = s => s.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
@@ -3365,6 +3373,16 @@ async function copyMsg(btn, src, i){
   }
   const old = btn.innerHTML; btn.innerHTML = `${ICON.check}已复制`;
   setTimeout(() => { btn.innerHTML = old; }, 1500);
+}
+async function copyCode(btn){   // 消息里代码块右上角的「复制」（#299）
+  const text = btn.previousElementSibling.textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+  btn.innerHTML = `${ICON.check}已复制`;
+  setTimeout(() => { btn.innerHTML = `${ICON.copy}复制`; }, 1500);
 }
 function quoteMsg(btn, src, i){
   const box = btn.closest(".msg"), sel = getSelection();

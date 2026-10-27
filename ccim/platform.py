@@ -976,6 +976,37 @@ class Platform:
         self.store.write(chats)
         return cid
 
+    def pocket_chat(self, account=None, fresh=False, base=None):
+        """右下角的助理（#294）：每个账号接着用最近那个；fresh 或换了底座（会话不通用）就新开一个，老的照常留在助理列表里。
+        新开的用设置里的默认底座、模型、思考深度；换成别的底座时模型、思考深度跟随全局默认。"""
+        g = pocket_settings()
+        mine = [(m.get("created") or "", cid) for cid, m in self.chats().items()
+                if m.get("pocket") and not m.get("archived") and (m.get("account") or None) == account]
+        cur = max(mine)[1] if mine else None
+        base = base if base in ("claude", "codex") else None
+        if cur and not fresh and (not base or (self.meta(cur).get("temp") or {}).get("base") == base):
+            return cur
+        empty = bool(cur) and not self.channel.logs.read(cur) and not self.meta(cur).get("busy")
+        if empty and (not base or (self.meta(cur).get("temp") or {}).get("base") == base):
+            return cur                        # 还没开口：就用它，不另开
+        base = base or g["base"]
+        same = base == g["base"]
+        if empty:
+            self.store.deleted.add(cur)           # 还没开口的那个不留着，免得列表里一串空对话
+            chats = self.chats()
+            chats.pop(cur, None)
+            self.store.write(chats)
+            self.bridges.pop("temp:" + cur, None)
+        root = share.root(account) if account else None
+        cid = self.new_chat(temp={"base": base, "dir": root, "model": g["model"] if same else None,
+                                  "effort": g["effort"] if same else None}, account=account)
+        chats = self.chats()
+        chats[cid]["pocket"] = True
+        if not root:
+            chats[cid]["temp"]["scratch"] = "pocket"   # 几个助理对话共用一个临时目录，前面做出来的文件后面还找得到
+        self.store.write(chats)
+        return cid
+
     async def side_chat(self, cid, fresh=False):
         """侧边对话（#196）：这个对话的侧边对话，一个对话一个，不进对话列表；没有或 fresh 就从主对话最后一条回答处分一个新的。"""
         m = self.meta(cid)
@@ -1308,7 +1339,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "review": m.get("review"), "review_name": m.get("review_name"),
+                "listed": listed(cid, m), "pocket": bool(m.get("pocket")), "review": m.get("review"), "review_name": m.get("review_name"),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -2295,6 +2326,8 @@ def _handler(pf):
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs")),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
+                "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
+                "/api/pocket/settings": lambda: set_pocket(body),
                 "/api/chat/side": lambda: {"id": pf.run(pf.side_chat(b("id"), bool(b("fresh"))))},
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
@@ -2760,6 +2793,32 @@ def set_workspace(on):
     """工作区（#245）：在设置里打开后才能用，每台电脑各存一份。"""
     registry.set_global(workspace="on" if on else None)
     return {"workspace": on}
+
+
+POCKET = {"on": True, "base": "claude", "model": None, "effort": None}
+
+
+def pocket_settings():
+    """右下角助理的设置（#294）：开不开、新开对话时默认的底座、模型、思考深度（空 = 跟随全局默认）。"""
+    g = registry.global_config().get("pocket") or {}
+    return {**POCKET, **{k: g[k] for k in POCKET if k in g}}
+
+
+def set_pocket(body):
+    s = pocket_settings()
+    if "on" in body:
+        s["on"] = bool(body["on"])
+    if "base" in body:
+        if body["base"] not in ("claude", "codex"):
+            raise Problem("没有这个底座。")
+        if body["base"] != s["base"]:
+            s.update(model=None, effort=None)  # 两个底座的模型名和档位不一样
+        s["base"] = body["base"]
+    for k in ("model", "effort"):
+        if k in body:
+            s[k] = str(body[k] or "").strip()[:60] or None
+    registry.set_global(pocket=s)
+    return {"pocket": s}
 
 
 def set_archive_days(v):

@@ -904,6 +904,31 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .skc-box textarea{flex:1;resize:none;border:0;outline:0;padding:5px 0;font:inherit;font-size:14px;line-height:1.55;background:none;color:var(--ink);max-height:220px}
 .skc-box .send{margin:0;flex:none}
 .skc-box .send.stop{background:var(--ink)}
+/* 右下角的助理（#294）：按钮 + 弹出的面板，面板里嵌的是窄屏的对话页（html.embed） */
+#pocket-fab{position:fixed;right:20px;bottom:20px;z-index:19;width:46px;height:46px;border-radius:50%;background:var(--qing);color:#fff;display:grid;place-items:center;
+  box-shadow:0 6px 18px rgba(43,76,111,.32);transition:transform .15s,box-shadow .15s}
+#pocket-fab:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(43,76,111,.4)}
+#pocket-fab svg{width:21px;height:21px}
+#pocket-fab .dot{position:absolute;top:1px;right:1px;width:12px;height:12px;border-radius:50%;border:2px solid var(--paper);display:none}
+#pocket-fab.busy .dot{display:block;background:var(--huang);animation:pkpulse 1.4s ease-in-out infinite}
+#pocket-fab.new .dot{display:block;background:var(--zhu,#B5402F)}
+#pocket-fab.on .dot{display:none}
+@keyframes pkpulse{50%{opacity:.35}}
+#pocket{position:fixed;right:20px;bottom:78px;z-index:19;width:420px;height:min(700px,calc(100vh - 100px));background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 18px 50px rgba(29,34,43,.22);display:flex;flex-direction:column;overflow:hidden}
+#pocket[hidden]{display:none}
+#pocket .skc-head{min-height:52px;padding:8px 8px 8px 14px;gap:8px}
+#pocket .skc-head .t span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pocket .pk-base{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--muted);padding:3px 7px;border-radius:6px;border:1px solid var(--line);flex:none}
+#pocket .pk-base:hover{color:var(--ink);border-color:var(--line-strong)} #pocket .pk-base svg{width:11px;height:11px}
+#pocket iframe{flex:1;border:0;width:100%;min-height:0;background:var(--panel)}
+#pocket .pk-wait{flex:1;display:grid;place-items:center;color:var(--muted);font-size:13px;text-align:center;padding:20px}
+body.pocket-off #pocket-fab,body.pocket-off #pocket{display:none}
+body.pocket-tight .composer{padding-right:max(22px,calc(84px - max(0px,(100% - 760px) / 2)))}
+html.embed .rail,html.embed .list,html.embed .resizer,html.embed .pback,html.embed .chat-head,html.embed .composer .hint,html.embed #ext-notice{display:none!important}
+html.embed .app{display:block;height:100vh;padding-top:0}
+html.embed .app .main{display:flex!important;height:100vh;padding-bottom:0!important}
+html.embed .composer{margin-bottom:10px}
 @media (max-width:760px){
   .sk-shell.chat-on .sk-chat{position:fixed;inset:0;width:auto;z-index:40;border:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 }
@@ -1488,7 +1513,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
   <nav class="rail" aria-label="主导航">
     <div class="brand">ccim</div>
     <button class="unfold" title="展开列表" onclick="toggleList(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/></svg>列表</button>
-    <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
+    <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>助理</a>
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
@@ -1516,6 +1541,7 @@ const CLAUDE_MODELS = [["opus","Opus","最强，复杂任务"],["sonnet","Sonnet
 const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
 const EFF_DESC = {minimal:"几乎不思考，最快", low:"快，适合简单的事", medium:"日常够用", high:"想得更周全", xhigh:"更深入", max:"最深入，最慢"};
 const ICON = {
+  pocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 0 1-11.2 6.5L4 20l1.1-4.3A7.5 7.5 0 1 1 20 12.5z"/><path d="M12.5 8.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor" stroke-width="1"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   clip:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg>',
@@ -2088,6 +2114,7 @@ function connectEvents(again){
       else refreshSoon();
       return;
     }
+    pocketEvent(ev);
     if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
     if (SIDE && ev.chat === SIDE.id) { sideEvent(ev); return; }   // 侧边对话（#196）
     if (SIDE && SIDE.log && ev.type === "progress" && String(ev.chat || "").startsWith(`m-${SIDE.id}-`)) {   // 侧边对话里被 @ 的（#290）
@@ -2210,6 +2237,10 @@ function phoneBack(){
   location.hash = to;
 }
 function route(){
+  if (EMBED && location.hash !== EMBED_HASH) {   // 面板里点到别处（单独聊、站内链接）：交给外面的页面打开
+    parent.postMessage({pocket: "go", hash: location.hash}, location.origin);
+    history.replaceState(null, "", EMBED_HASH); return;
+  }
   const parts = location.hash.slice(2).split("/");
   const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
@@ -2252,6 +2283,7 @@ function route(){
   else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
   else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
+  drawPocket();
 }
 // 回答里的站内链接（#284）：点过去的对话顶上有返回，回到点链接的地方（手机左上角的返回也一样），连着点几层就一层层回去；回去时滚动位置还原
 let linkTrail = [], linkNav = false;
@@ -2396,13 +2428,13 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
   const rows = chatFilter ? searchRows().filter(c => !c.agent) : allChats().filter(c => !c.agent);   // 和 Agent 的对话在 Agent 里
   $("#list").innerHTML = `
-    <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
+    <div class="list-head"><h1>助理</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="searchChats(this.value);this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.length ? chatFilter ? rows.map(c => chatItem(c, {}, false)).join("") : chatSections(rows)
       : `<p class="muted" style="padding:10px">${chatFilter ? "没有找到。" : "还没有对话。"}</p>`}</div>`;
@@ -3236,7 +3268,7 @@ function loadDraft(key, id = "input"){   // 换到 key 这个输入框；输入�
   return v;
 }
 document.addEventListener("input", e => { if (e.target && e.target.id in draftKeys) saveDraft(e.target.id); });
-let chatRcpt = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
+let chatRcpt = [], chatRefs = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
   el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("")
@@ -5111,7 +5143,7 @@ function renderSettingsList(){
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
-    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档的对话多久删除</span></span></a>
+    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档、工作区、右下角助理</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑${oldMachines().length ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${oldMachines().length ? `${oldMachines().length} 台版本较旧，去升级` : multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
     ${isOwner() ? `<a class="item ${onAccounts ? "on" : ""}" href="#/settings/accounts" style="text-decoration:none;color:inherit"><span class="t"><span class="title">账号</span><span class="sub">给别人开账号</span></span></a>` : ""}
@@ -5878,7 +5910,29 @@ function renderChatSettings(){
     </div><div class="sect"><h3>工作区</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">在对话旁边看文件、改文件<div class="muted" style="font-size:12.5px">打开后，对话的三点菜单里有「打开工作区」</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${wsOn === v}" class="${wsOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setWorkspace(${v})"`}>${l}</button>`).join("")}</div></div>
-    </div></div></div>`;
+    </div>${ro ? "" : pocketSettings()}</div></div>`;
+}
+function pocketSettings(){   // 右下角的助理（#294）：在 S.me 那台电脑上，设置也存在那台
+  const g = pocketCfg(), seg = (opts, cur, js) => `<div class="seg" role="radiogroup">${opts.map(([v, l, off]) =>
+    `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" ${off ? "disabled" : `onclick="${js(v)}"`}>${l}</button>`).join("")}</div>`;
+  const row = (t, sub, ctl) => `<div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:220px">${t}${sub ? `<div class="muted" style="font-size:12.5px">${sub}</div>` : ""}</div>${ctl}</div>`;
+  const mopts = modelOpts(g.base, "跟随默认", g.model || "", S.me), eopts = effortOpts(g.base, "跟随默认");
+  const lab = (opts, v) => esc(((opts.find(o => o[0] === (v || "")) || [])[1]) || v || "跟随默认");
+  return `<div class="sect"><h3>右下角助理</h3>
+    ${row("在页面右下角放一个助理", "电脑上显示，手机上不显示", seg([[false, "关"], [true, "开"]], g.on, v => `setPocket({on:${v}})`))}
+    ${g.on ? row("底座", "", seg([["claude", BASE.claude], ["codex", BASE.codex, !S.codex]], g.base, v => `setPocket({base:'${v}'})`))
+      + row("模型", "", `<button class="chip" onclick="pocketPick(event,'model')">${lab(mopts, g.model)}${ICON.down}</button>`)
+      + row("思考深度", "", `<button class="chip" onclick="pocketPick(event,'effort')">${lab(eopts, g.effort)}${ICON.down}</button>`) : ""}
+  </div>`;
+}
+function pocketPick(e, key){
+  const g = pocketCfg(), opts = key === "model" ? modelOpts(g.base, "跟随默认", g.model || "", S.me) : effortOpts(g.base, "跟随默认");
+  pop(e, `<div class="sec">${key === "model" ? "模型" : "思考深度"}</div>` + optList(opts, g[key] || "", v => `closePop();setPocket({${key}:${q(v)}})`), true);
+}
+async function setPocket(change){
+  const {pocket} = await act(() => api("/api/pocket/settings", change, S.me));
+  S.global = {...(S.global || {}), pocket};
+  renderChatSettings(); drawPocket();
 }
 async function setArchiveDays(v){
   const targets = multi() ? (S.machines || []).filter(m => m.online && !m.shared).map(m => m.id) : [S.me];   // 每台电脑各自清理，一起改
@@ -6771,6 +6825,121 @@ function sideEvent(ev){   // 推送：进度、记录
   } else return;
   drawSide();
 }
+
+// ---- 右下角的助理（#294）：哪个页面都能叫出来，临时问一句、交代件事、@ 别的 Agent，不用离开手头的页面 ----
+// 面板里嵌的就是这个对话的对话页（?embed=pocket，窄屏布局、去掉头部），输入框里的模型、思考深度、@、文件都和对话页一样
+const EMBED = new URLSearchParams(location.search).get("embed") === "pocket";
+const EMBED_HASH = EMBED ? location.hash : null;
+if (EMBED) document.documentElement.classList.add("embed");
+const POCKET = {open: false, id: null, src: null, busy: false, unread: false, subs: new Set(), synced: false};
+const POCKET_AV = `<span class="skc-av" style="background:var(--qing)">${ICON.pocket}</span>`;
+function pocketCfg(){ return {on: true, base: "claude", model: null, effort: null, ...((S.global || {}).pocket || {})}; }
+function pocketShown(){ return !EMBED && !narrow() && !!S.me && pocketCfg().on && current.view !== "skills"; }
+function pocketRow(){ return POCKET.id ? chatById(POCKET.id) : null; }
+function pocketSync(){   // 打开页面时：接着最近那个助理对话的状态（在干活、有没看过的回答）
+  if (POCKET.synced || !S.chats) return;
+  POCKET.synced = true;
+  const r = S.chats.filter(c => c.pocket && !c.archived && !c.agent).sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")))[0];
+  if (!r) return;
+  POCKET.id = r.id; POCKET.busy = !!r.busy; POCKET.unread = !!r.attention;
+}
+function drawPocket(){
+  if (EMBED) return;
+  const shown = pocketShown();
+  document.body.classList.toggle("pocket-off", !shown);
+  pocketRoom();
+  if (!shown && !$("#pocket-fab")) return;
+  pocketSync();
+  let fab = $("#pocket-fab");
+  if (!fab) {
+    fab = document.createElement("button"); fab.id = "pocket-fab"; fab.title = "助理"; fab.setAttribute("aria-label", "助理");
+    fab.onclick = () => POCKET.open ? pocketClose() : pocketOpen();
+    document.body.append(fab);
+  }
+  fab.className = POCKET.open ? "on" : POCKET.busy || POCKET.subs.size ? "busy" : POCKET.unread ? "new" : "";
+  fab.innerHTML = (POCKET.open ? ICON.x : ICON.pocket) + `<i class="dot"></i>`;
+  fab.setAttribute("aria-expanded", POCKET.open);
+  let p = $("#pocket");
+  if (!POCKET.open) { if (p) p.hidden = true; return; }
+  if (!p) {
+    p = document.createElement("section"); p.id = "pocket"; p.setAttribute("aria-label", "助理");
+    p.innerHTML = `<div class="skc-head" id="pk-head"></div><div class="pk-wait" id="pk-wait">…</div>`;
+    document.body.append(p);
+  }
+  p.hidden = false;
+  const r = pocketRow(), base = (r && r.base) || POCKET.base || pocketCfg().base;
+  $("#pk-head").innerHTML = `${POCKET_AV}<div class="t"><b>助理</b><span>${esc(r && r.title && r.title !== "新对话" ? r.title : "随时交代，@ 叫其他 Agent")}</span></div>
+    <button class="pk-base" onclick="pocketBaseMenu(event)" title="换底座会开一个新对话">${BASE[base]}${ICON.down}</button>
+    <button class="icon-btn" title="新对话" aria-label="新对话" onclick="pocketNew()">${ICON.plus}</button>
+    <button class="icon-btn" title="在完整页面打开" aria-label="在完整页面打开" ${POCKET.id ? "" : "disabled"} onclick="pocketExpand()">${ICON.expand}</button>
+    <button class="icon-btn" title="收起" aria-label="收起" onclick="pocketClose()">${ICON.x}</button>`;
+  if (POCKET.id && POCKET.src !== POCKET.id) pocketFrame();
+}
+function pocketFrame(){
+  const p = $("#pocket"); if (!p) return;
+  const u = new URLSearchParams(location.search); u.set("embed", "pocket"); u.set("c", POCKET.id);   // 只改 # 后面不会重新加载
+  let f = p.querySelector("iframe");
+  if (!f) { f = document.createElement("iframe"); f.title = "助理"; f.onload = () => pocketFocus(); p.append(f); }
+  $("#pk-wait")?.remove();
+  POCKET.src = POCKET.id;
+  f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(POCKET.id)}`;
+}
+function pocketFocus(){
+  try { const i = $("#pocket iframe")?.contentDocument?.querySelector("#input"); if (i) i.focus(); else setTimeout(pocketFocus, 200); } catch {}
+}
+async function pocketOpen(){
+  POCKET.open = true; POCKET.unread = false;
+  drawPocket();
+  if (!POCKET.id) await pocketLoad({});
+  else pocketFocus();
+}
+async function pocketLoad(body){
+  try {
+    const {id} = await api("/api/pocket", body, S.me);
+    if (id !== POCKET.id) { POCKET.id = id; POCKET.busy = false; POCKET.subs.clear(); }
+    if (body.base) POCKET.base = body.base;
+    if (!chatById(id)) loadState().then(drawPocket);
+    drawPocket(); pocketFocus();
+  } catch (e) { toast(e.message); }
+}
+function pocketClose(){ POCKET.open = false; closePop(); drawPocket(); }
+function pocketNew(){ pocketLoad({fresh: true, base: (pocketRow() || {}).base || POCKET.base}); }
+function pocketExpand(){ const id = POCKET.id; pocketClose(); if (id) location.hash = `#/chats/${encodeURIComponent(id)}`; }
+function pocketBaseMenu(e){
+  const cur = (pocketRow() || {}).base || POCKET.base || pocketCfg().base;
+  pop(e, `<div class="sec">底座</div>` + ["claude", "codex"].map(b => b === "codex" && !S.codex ? "" :
+    `<button role="option" aria-selected="${cur === b}" onclick="closePop();${cur === b ? "" : `pocketLoad({base:'${b}'})`}"><span><div>${BASE[b]}</div>${cur === b ? "" : `<div class="desc">开一个新对话</div>`}</span>${cur === b ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+}
+function pocketEvent(ev){
+  if (EMBED || !POCKET.id || ev.chat !== POCKET.id) return;
+  if (ev.type === "progress") POCKET.busy = ev.state === "working";
+  else if (ev.type === "mention" && ev.id) {           // @ 出去的活：做完之前挂件一直显示在干活
+    if (ev.state === "queued") POCKET.subs.add(ev.id);
+    else { POCKET.subs.delete(ev.id); if (!POCKET.open) POCKET.unread = true; }
+  } else if (["answer", "card", "secret"].includes(ev.type)) { if (!POCKET.open) POCKET.unread = true; }
+  else return;
+  drawPocket();
+}
+addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data || !e.data.pocket) return;
+  if (e.data.pocket === "close") pocketClose();
+  else if (e.data.pocket === "go") { pocketClose(); location.hash = e.data.hash; }
+});
+addEventListener("keydown", e => {
+  if (e.key !== "Escape" || e.isComposing || document.querySelector(".pop,.scrim")) return;
+  if (EMBED) parent.postMessage({pocket: "close"}, location.origin);
+  else if (POCKET.open) pocketClose();
+}, true);
+document.addEventListener("mousedown", e => {
+  if (POCKET.open && !e.target.closest("#pocket,#pocket-fab,.pop,.scrim")) pocketClose();
+});
+addEventListener("resize", () => drawPocket());
+function pocketRoom(){   // 窗口窄、输入框贴到右边时，输入框右边让出挂件的位置，不压住发送按钮
+  const m = $("#main"); if (!m || EMBED) return;
+  const r = m.getBoundingClientRect(), gap = (r.width - 760) / 2 + (innerWidth - r.right);
+  document.body.classList.toggle("pocket-tight", !document.body.classList.contains("pocket-off") && gap < 84);
+}
+if (!EMBED && window.ResizeObserver) new ResizeObserver(pocketRoom).observe(document.querySelector("#main"));
 
 let DOC = null;   // 打开的文档：{chat, machine, path, d（接口给的）, mode: view / edit, draft, dirty}
 async function openDoc(path, v, chat, inWs){

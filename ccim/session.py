@@ -1141,7 +1141,7 @@ class Chat:
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
-                tools += _search_tools(chat, pf)   # Agent 的对话：搜它参与过的所有对话（#180）
+                tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
         elif side and chat.b.entry.get("side_at") and pf and not (pf.chats().get(chat.chat_id) or {}).get("remote_project", True):
             tools.append(_start_work(chat, pf))   # 侧边对话里被 @ 的（#290）：要动手就新开自己的对话去做
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
@@ -1424,10 +1424,12 @@ def _start_work(chat, pf):
 
 
 def _searchable(chat):
-    """平台上 Agent 的对话（Skill 助手除外）：有 search_chats / open_chat（#180）。"""
+    """平台上的对话（Skill 助手、侧边对话除外）：有 search_chats / open_chat（#180）。
+    Agent 的对话搜它参与过的；没选 Agent 的（助理，#294）搜所有助理对话。"""
     pf = getattr(chat.b.channel, "platform", None)
-    m = (pf.chats().get(chat.chat_id) or {}) if pf else {}
-    return bool(m.get("agent") and not chat.b.entry.get("helper") and not chat.b.entry.get("side"))
+    m = pf.chats().get(chat.chat_id) if pf else None
+    return bool(m is not None and (m.get("agent") or not m.get("mention_of")) and not chat.b.entry.get("helper")
+                and not chat.b.entry.get("side"))
 
 
 def _search_tools(chat, pf):
@@ -1438,10 +1440,10 @@ def _search_tools(chat, pf):
         m = pf.chats().get(chat.chat_id) or {}
         return m.get("agent"), share.owner_map(pf).get(chat.chat_id), m.get("mention_of") or chat.chat_id
 
-    @tool("search_chats", "在你（这个 Agent）和用户以前的所有对话里按关键词找，或者列出这些对话：网页私聊、群聊、定时任务、飞书、微信、终端。"
+    @tool("search_chats", "在你和用户以前的所有对话里按关键词找，或者列出这些对话：网页私聊、群聊、定时任务、飞书、微信、终端。"
           "用户提到以前聊过、你又不记得的事时用。query 写一两个关键词，用空格分开，几个词都要出现在同一条消息里；"
           "query 留空就列出你参与的所有对话（在哪些群聊里、是主 Agent 还是成员、群里还有谁），用户问你在哪些群、有哪些对话时用。"
-          "比自己去翻会话记录文件准（只含你参与过的，不会混进别人的）。结果里「你」是你自己说的；"
+          "比自己去翻会话记录文件准（只含你参与过的，不会混进别的 Agent 的）。结果里「你」是你自己说的；"
           "给出对话编号和位置，再用 open_chat 读前后文。",
           {"type": "object", "properties": {"query": {"type": "string", "description": "关键词，留空就列出所有对话"}}})
     async def search_chats(args):

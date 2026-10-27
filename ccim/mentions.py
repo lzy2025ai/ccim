@@ -7,8 +7,9 @@
 对话有工作目录时被 @ 的 Agent 在这个目录里干活，没有就在它自己的工作区。
 群聊（#15）也走这里：被 @ 的不在群里就顺手拉进来；在别的电脑上的 Agent 交给那台电脑开子对话（/api/peer/task），
 各人上次看到哪（ctx_upto）记在主对话的 meta 里，本机、别的电脑一样。
+用户 @ 的 Agent 正在做这个对话交给它的活：补充进它这一轮（#304），和直接跟主 Agent 说话一样；开头写 /queue 照旧排队。
 """
-import asyncio, os, time, uuid
+import asyncio, os, re, time, uuid
 
 from . import agents, registry
 
@@ -37,6 +38,7 @@ class Mentions:
         self.where = {}                       # mention id → (群聊, 成员, 子对话)：列表、任务面板里显示群里谁在干活（#192）
         self.tasks = {}                       # mention id → (子对话, session.Task)
         self.waiters = {}                     # mention id → future，对话里的助手自己 @ 别人时等回答（ask_agent 工具）
+        self.joined = {}                      # mention id → [(补充那条消息, 成员, session.Task, 原话)]：补充进它这一轮的 @（#304）
 
     @staticmethod
     def sub(cid, aid):
@@ -122,6 +124,10 @@ class Mentions:
         elif m.get("agent"):                  # Agent 的对话：@ 到的不在群里就顺手拉进来，这个对话就成了群聊
             groups.set_members(self.pf, cid, add=[a for a in to if a not in groups.members(m)])
         view = self.pf.chat_view(cid)
+        from .bridge import QUEUE
+        head = re.match(r"(?:>[^\n]*\n)*\s*", text).end()   # 网页的引用拼在最前面，跳过它再认
+        q = None if by or side else QUEUE.match(text[head:])
+        plain = text[:head] + text[head + q.end():] if q else text
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         # 之前的内容在记下这条消息之前取，不把它自己算进去
@@ -133,6 +139,7 @@ class Mentions:
                                 **({"by": by} if by else {})})
         self.pf.channel._emit(cid, user)
         att = "".join(f"\n（附件：{f['key']}）" for f in files)
+        text = plain
         chats = self.pf.chats()
         if cid in chats:
             chats[cid]["last_active"] = registry.now()
@@ -145,6 +152,7 @@ class Mentions:
             chats[cid]["ctx_upto"] = dict(_upto(chats[cid]), **{aid: user["at"] for aid in to})
             self.pf.store.write(chats)
         main = self._main_ctx(cid, m, to) if side else {}
+        rids = []
         for aid in to:
             sub = self.sub(cid, aid)
             if side:
@@ -155,7 +163,13 @@ class Mentions:
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
                     f"[{self._who(cid, by)}在对话里 @ 了你] {text}{att}"
+            if not (by or side or q) and home[aid] == me:
+                into = await self._inject(cid, aid, mid, prompt, text, user["at"], depth)
+                if into:
+                    rids.append(into)
+                    continue
             rid = f"{mid}:{aid}"
+            rids.append(rid)
             self.running.add(rid)
             self.where[rid] = (cid, aid, sub)
             remote = home[aid] != me
@@ -171,7 +185,60 @@ class Mentions:
             t.add_done_callback(self.pf.background.discard)
             if by:
                 self.waiters[rid] = asyncio.get_running_loop().create_future()
-        return {"id": mid, "rids": [f"{mid}:{aid}" for aid in to]}
+        return {"id": mid, "rids": rids}
+
+    def _chat(self, sub):
+        for b in self.pf.bridges.values():
+            if sub in b.chats:
+                return b.chats[sub]
+        return None
+
+    async def _inject(self, cid, aid, mid, prompt, text, upto, depth):
+        """成员正在做这个对话交给它的活：这条补充进它这一轮（#304），回答合在那一条里。
+        补上了返回那条 mention 的 id；它没在做（或刚好做完）返回 None，照常排队。"""
+        sub = self.sub(cid, aid)
+        c = self._chat(sub)
+        rid = next((r for r, (s, t) in self.tasks.items() if s == sub and c and c.current and c.current[0] is t), None)
+        if not rid:
+            return None
+        from .progress import short
+        from .session import Task
+        task = Task(prompt)                   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记
+        task.depth = depth
+        if not await c.inject(task):
+            return None
+        if c.turn and c.turn.steps:           # 进度里写用户的原话，不写拼上去的之前的内容
+            c.turn.steps[-1] = "收到补充：" + short(text, 40)
+        self.joined.setdefault(rid, []).append((mid, aid, task, text))
+        chats = self.pf.chats()
+        if sub in chats:
+            chats[sub]["seen_upto"] = upto
+            self.pf.store.write(chats)
+        log = self.pf.channel.logs
+        self.pf.channel._emit(sub, log.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid}))
+        self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid, "joined": [j[0] for j in self.joined[rid]]}))
+        return rid
+
+    def _unjoin(self, cid, rid, sub):
+        """那一轮做完了：补充进去、却被单独排成一轮的，改成自己的一条回答。"""
+        left = self.joined.pop(rid, [])
+        c = self._chat(sub)
+        alone = [j for j in left if j[2].future.done() or c and (c.current and c.current[0] is j[2]
+                                                                  or any(i[0] is j[2] for i in c.queue._queue))]
+        if not alone:
+            return
+        log = self.pf.channel.logs
+        self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid,
+                                                    "joined": [j[0] for j in left if j not in alone]}))
+        for mid, aid, task, text in alone:
+            rid2 = f"{mid}:{aid}"
+            self.running.add(rid2)
+            self.where[rid2] = (cid, aid, sub)
+            self.pf.channel._emit(cid, log.append(cid, {"type": "mention", "id": rid2, "msg": mid, "agent": aid,
+                                                        "chat": sub, "state": "queued"}))
+            t = asyncio.create_task(self._run(cid, rid2, sub, None, None, text, task=task))
+            self.pf.background.add(t)
+            t.add_done_callback(self.pf.background.discard)
 
     def _main_ctx(self, cid, m, to):
         """侧边对话里 @ 人时带上的主对话内容（#290）：每人上次之后的（第一次带最近的），群聊连成员的回答一起；
@@ -246,23 +313,25 @@ class Mentions:
         elif f:
             self.waiters.pop(upd["id"], None)
 
-    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None):
+    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None, task=None):
+        """task：已经交给它的（补充进去后被单独排成一轮的，#304），只等结果。"""
         from .session import Task
         start = time.time()
         upd = {"type": "mention", "id": rid, **(extra or {})}
         try:
-            chats = self.pf.chats()
-            if sub in chats:
-                chats[sub]["seen_upto"] = upto
-                self.pf.store.write(chats)
-            b = self.pf._bridge(sub)
-            chat = b.chat(sub, "p2p")
-            # 它的对话里只显示用户说的那句，带过去的之前的内容不重复显示
-            self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid}))
-            task = Task(prompt)
-            task.depth = depth
+            if task is None:
+                chats = self.pf.chats()
+                if sub in chats:
+                    chats[sub]["seen_upto"] = upto
+                    self.pf.store.write(chats)
+                b = self.pf._bridge(sub)
+                chat = b.chat(sub, "p2p")
+                # 它的对话里只显示用户说的那句，带过去的之前的内容不重复显示
+                self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid}))
+                task = Task(prompt)
+                task.depth = depth
+                chat.submit(task)
             self.tasks[rid] = (sub, task)
-            chat.submit(task)
             state, answer = await task.future
             state = {"ok": "done"}.get(state, state)
             last = next((r for r in reversed(self.pf.channel.logs.read(sub))
@@ -277,6 +346,7 @@ class Mentions:
             self.running.discard(rid)
             self.tasks.pop(rid, None)
         self._settle(cid, upd)
+        self._unjoin(cid, rid, sub)
 
     async def _run_remote(self, cid, rid, sub, prompt, mid, aid, title, text, depth=0, side=False):
         import json

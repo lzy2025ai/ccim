@@ -194,6 +194,22 @@ class Mentions:
             self.pf.store.write(chats)
         return out
 
+    def report(self, cid, aid, prompt, extra):
+        """侧边对话里被 @ 的 Agent 派出去的活做完了（#290）：把结果作为新的一轮交回它在侧边对话里的会话，
+        由它自己在侧边栏里汇报（记录是一条 mention，report 标着，前面没有用户消息）。extra 合进这条记录（附上的文件）。在主循环里调。"""
+        sub = self.sub(cid, aid)
+        if cid not in self.pf.chats() or sub not in self.pf.chats():
+            return
+        rid = f"r-{uuid.uuid4().hex[:10]}:{aid}"
+        self.running.add(rid)
+        self.where[rid] = (cid, aid, sub)
+        rec = self.pf.channel.logs.append(cid, {"type": "mention", "id": rid, "msg": rid.split(":")[0], "agent": aid,
+                                                "chat": sub, "state": "queued", "report": True})
+        self.pf.channel._emit(cid, rec)
+        t = asyncio.create_task(self._run(cid, rid, sub, prompt, rec["at"], "（派出去的活有结果了）", 1, dict(extra, report=True)))
+        self.pf.background.add(t)
+        t.add_done_callback(self.pf.background.discard)
+
     def member_ctx(self, cid, m):
         """群里各成员的上下文占用（#183）：答完带回来的记在主对话 meta 的 member_ctx，没记过的看本机子对话。"""
         if not m.get("members"):
@@ -230,10 +246,10 @@ class Mentions:
         elif f:
             self.waiters.pop(upd["id"], None)
 
-    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0):
+    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None):
         from .session import Task
         start = time.time()
-        upd = {"type": "mention", "id": rid}
+        upd = {"type": "mention", "id": rid, **(extra or {})}
         try:
             chats = self.pf.chats()
             if sub in chats:

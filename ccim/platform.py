@@ -79,7 +79,7 @@ SIDE_AT_ROLE = ("\n\n## 在侧边对话里被 @\n"
                 "- 你在这里只能看、不能动：可以读文件、搜索、跑只看不改的命令；不删改文件、不装东西、不提交推送、不启动或停止进程。\n")
 SIDE_AT_WORK = ("- 需要动手的事（改代码、提 PR、跑长任务），或者用户让你去做（比如「去改吧」）：先在回答里用一句话说要新开对话去做，"
                 "再调用 start_work 新开一个你自己的对话去做。text 要写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里。"
-                "调用后这一轮简短收尾，做的过程和结果用户在侧边栏的卡片里看。\n- 回答简短。")
+                "调用后这一轮简短收尾；侧边栏里有卡片显示进度，那边做完后结果会作为一条新消息交给你，由你在这里向用户汇报。\n- 回答简短。")
 SIDE_AT_FAR = ("- 需要动手的事（改代码、提 PR、跑长任务）：在这里做不了，请用户直接和你开一个对话去做，可以把要交代的话写好给用户。\n"
                "- 回答简短。")
 SIDE_CTX = 6000                                                    # 每次带上的主对话新进展，最多这么多字
@@ -1099,12 +1099,23 @@ class Platform:
                 state, answer = "error", str(e)
             rows = [r for r in self.channel.logs.read(cid) if r.get("at", 0) >= start]
             last = next((r for r in reversed(rows) if r.get("type") == "answer"), {})
-            files = [{"name": r["name"], "path": r["path"], "size": r.get("size")} for r in rows if r.get("type") == "file"]
-            upd = dict(card, state={"ok": "done"}.get(state, state), text=answer or last.get("text") or "",
-                       files=files[-10:], done_at=time.time())
+            files = [{"name": r["name"], "path": r["path"], "size": r.get("size")} for r in rows if r.get("type") == "file"][-10:]
+            state = {"ok": "done"}.get(state, state)
+            text = answer or last.get("text") or ""
             self.works.discard(wid)
-            if side in self.chats():
-                self.channel._emit(side, self.channel.logs.append(side, upd))
+            if side not in self.chats():
+                return
+            self.channel._emit(side, self.channel.logs.append(side, dict(card, state=state, done_at=time.time())))
+            # 卡片只管进度；结果由它自己回侧边栏汇报，之后接着问也接得上
+            how = {"done": "做完了", "error": "出错了", "stopped": "被停下了"}.get(state, "没做完")
+            att = "".join(f"\n- {f['name']}（{f['path']}）" for f in files)
+            self.mentions.report(side, aid, (
+                f"[你在侧边对话里新开的对话「{title}」{how}。下面是那边最后的回答" + ("和发出的文件" if files else "") +
+                "。请在侧边对话里用你的口吻向用户汇报：结果是什么、改了什么、PR 或文件在哪、要用户做什么（验收、拍板）。"
+                + ("这些文件会附在你这条消息下面，不用再发。" if files else "") +
+                "简短，不用复述全文；用户想看细节可以点卡片进那个对话。]\n\n"
+                + (text[:8000] or "（没有回答）") + (f"\n\n发出的文件：{att}" if files else "")),
+                {"files": files, "files_chat": cid} if files else {})
         t = asyncio.ensure_future(wait())
         self.background.add(t)
         t.add_done_callback(self.background.discard)

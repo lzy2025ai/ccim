@@ -1402,7 +1402,7 @@ def _start_work(chat, pf):
     """侧边对话里被 @ 的 Agent 新开自己的对话去动手（#290）。"""
     @tool("start_work", "新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。这里只能看不能改，需要动手、或用户让你去做时用。"
           "先在回答里用一句话说要新开对话去做，再调用。text 写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里；"
-          "title 是新对话的标题，十几个字。侧边栏里会有一张卡片，用户点进去能看进度，做完结果自动发回侧边栏。",
+          "title 是新对话的标题，十几个字。侧边栏里会有一张卡片，用户点进去能看进度；做完后结果会作为一条新消息交给你，由你在侧边栏里向用户汇报。",
           {"type": "object", "properties": {"text": {"type": "string", "description": "交代给新对话的话"},
                                              "title": {"type": "string", "description": "新对话的标题"}},
            "required": ["text"]})
@@ -1419,7 +1419,7 @@ def _start_work(chat, pf):
             return _err(str(e))
         if t:
             t.works = getattr(t, "works", 0) + 1
-        return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在侧边栏的卡片里能看到。这一轮用一两句话收尾就好。"}]}
+        return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在侧边栏的卡片里能看到进度。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
     return start_work
 
 

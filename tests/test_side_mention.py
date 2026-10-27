@@ -122,9 +122,29 @@ class SideMentionTests(unittest.TestCase):
                 break
             asyncio.run(asyncio.sleep(0.02))
         self.assertEqual(card[-1]["state"], "done")
-        self.assertEqual(card[-1]["text"], "改好了，开头缩到两句")
-        self.assertEqual([f["name"] for f in card[-1]["files"]], ["a.md"])
-        self.assertNotIn("work", [r["type"] for r in pf.channel.logs.read(main)])
+        self.assertNotIn("text", card[-1])                                     # 卡片只管进度
+        # 结果交回它在侧边对话里的会话，由它自己汇报
+        for _ in range(50):
+            back = [t for c, t in self.tasks if c == sub]
+            if back:
+                break
+            asyncio.run(asyncio.sleep(0.02))
+        self.assertIn("改好了，开头缩到两句", str(back[0]))
+        self.assertIn("a.md", str(back[0]))
+        pf.loop.call_soon_threadsafe(back[0].finish, "ok", "开头改成两句了，附上改好的稿子，你看一下")
+        for _ in range(50):
+            rep = [r for r in pf.channel.logs.read(side) if r["type"] == "mention" and r.get("report")]
+            if rep and rep[-1]["state"] != "queued":
+                break
+            asyncio.run(asyncio.sleep(0.02))
+        self.assertEqual(rep[-1]["state"], "done")
+        self.assertEqual(rep[-1]["text"], "开头改成两句了，附上改好的稿子，你看一下")
+        self.assertEqual([f["name"] for f in rep[-1]["files"]], ["a.md"])
+        self.assertEqual(rep[-1]["files_chat"], cid)
+        main_types = [r["type"] for r in pf.channel.logs.read(main)]
+        self.assertNotIn("work", main_types)
+        self.assertEqual(main_types.count("mention"), 1)                       # 主对话里只有原来那条成员回答
+        self.assertNotIn("开头改成两句了", pf.mentions.unseen(main))
 
     async def _work(self, sub, text):
         return self.pf.side_work(sub, text)

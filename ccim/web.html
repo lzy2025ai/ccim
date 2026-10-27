@@ -6551,18 +6551,16 @@ function sideRec(r, i){
       : `<div class="msg-acts">${r.text ? `<button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
           <button onclick="sideQuote(${i})" title="引用到主对话的输入框">${ICON.quote}引用到主对话</button>` : ""}
           <button onclick="sideAsk(${q(r.agent)})">接着问它</button></div>`;
+    const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
     return `<div class="skc-msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b>${r.machine && r.machine !== (SIDE.mid || S.me) ? whereTag(r.agent, SIDE.mid || S.me) : ""}${stateLabel(r, live)}</div>
-      ${replyBody(r, live)}${acts}</div>`;
+      ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
   }
   if (r.type === "work") {      // 被 @ 的 Agent 新开对话去做（#290）
     const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
     const st = {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
                 error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"}[r.state] || "";
-    const files = (r.files || []).map(f => { const src = fileUrl(r.chat, f.path);
-      return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : fileChip(src, f.name); }).join("");
     return `<div class="skc-msg"><a class="work-card" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(SIDE.mid || S.me)}">
-        ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a>
-      ${r.state !== "working" && (r.text || files) ? `<div class="work-out">${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>` : ""}${files}</div>` : ""}</div>`;
+        ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a></div>`;
   }
   if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>
     ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
@@ -6574,6 +6572,10 @@ function sideRec(r, i){
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='sideAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
   return "";
+}
+function workFiles(fs, chat){
+  return (fs || []).map(f => { const src = fileUrl(chat, f.path);
+    return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : fileChip(src, f.name); }).join("");
 }
 async function sideCopy(btn, i){
   try { await navigator.clipboard.writeText(SIDE.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }

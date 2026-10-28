@@ -7026,17 +7026,6 @@ async function openDoc(path, v, chat, inWs){
   DOC = {...DOC, d, draft: d.text || "", dirty: false, mode: d.kind === "text" ? "edit" : mode};
   if (DOC.ws && WS) WS.docs[path] = DOC;
   drawDoc();
-  if (d.kind === "pdf") pdfLoad(DOC);
-}
-// PDF（#311）：取下来换成 blob: 地址再放进 iframe。服务器总控上的文件地址不许被嵌进框里，blob: 地址不受这个限制
-async function pdfLoad(D){
-  const d = D.d, url = docFileUrl();
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error();
-    d.blob = URL.createObjectURL(await r.blob());
-  } catch { d.error = "这个文件打不开"; }
-  if (DOC === D) drawDocBody();
 }
 async function closeDoc(force){
   if (!DOC) return;
@@ -7049,8 +7038,7 @@ function docBody(){
   if (!d) return `<div class="doc-loading">…</div>`;
   if (d.kind === "img") return `<div class="ws-img"><img src="${esc(docFileUrl())}" alt="${esc(d.name)}"></div>`;
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
-  if (d.kind === "pdf") return d.blob ? `<iframe class="pdf" src="${esc(d.blob)}" title="${esc(d.name)}"></iframe>`
-    : d.error ? `<div class="ws-other"><b>${esc(d.name)}</b><p>${esc(d.error)}</p></div>` : `<div class="doc-loading">…</div>`;
+  if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);

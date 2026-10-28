@@ -16,6 +16,10 @@ FIRST = 256 << 10                   # 第一段
 AHEAD = 2                           # 跨电脑预取几段
 
 
+# 系统自带的类型表里，几种音频给的是浏览器不认的写法，<audio> 会放不了（#316）
+AUDIO = {".m4a": "audio/mp4", ".aac": "audio/aac", ".wav": "audio/wav", ".flac": "audio/flac"}
+
+
 class Gone(Exception):
     """文件不在了，或者传到一半被改了。"""
 
@@ -24,7 +28,7 @@ def meta(path):
     st = os.stat(path)
     return {"size": st.st_size, "mtime": st.st_mtime,
             "etag": f'"{st.st_size:x}-{st.st_mtime_ns:x}"',
-            "ctype": mimetypes.guess_type(path)[0] or "application/octet-stream",
+            "ctype": AUDIO.get(os.path.splitext(path)[1].lower()) or mimetypes.guess_type(path)[0] or "application/octet-stream",
             "name": os.path.basename(path)}
 
 

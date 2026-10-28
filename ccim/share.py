@@ -30,7 +30,7 @@ GUEST_POST = {
     "/api/chat/fork", "/api/chat/rewind_preview", "/api/chat/rewind", "/api/chat/members", "/api/chat/note",
     "/api/chat/mention", "/api/chat/mention/stop", "/api/doc/save",
     "/api/kb/lib/save", "/api/kb/lib/delete", "/api/kb/entry/save", "/api/kb/entry/delete", "/api/kb/entry/move",
-    "/api/agent/save", "/api/agent/delete", "/api/agent/pin",
+    "/api/agent/save", "/api/agent/delete", "/api/agent/pin", "/api/agent/draft",
     "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
     "/api/chat/continue",
@@ -301,7 +301,7 @@ def check(pf, acct, method, path, q, body):
     elif path == "/api/chat/kbs":
         for lib in b.get("kbs") or []:
             _mine_lib(acct, lib)
-    elif path == "/api/doc/save" or path.startswith("/api/ws/"):
+    elif path in ("/api/doc/save", "/api/agent/draft") or path.startswith("/api/ws/"):
         _mine_chat(pf, acct, b.get("chat"))
     elif path in ("/api/kb/lib/save", "/api/kb/lib/delete"):
         if b.get("id"):
@@ -325,6 +325,8 @@ def check(pf, acct, method, path, q, body):
                 f["dir"] = guest_dir(acct, f.get("dir") or "")
                 os.makedirs(f["dir"], exist_ok=True)      # 网页上默认填的「共享文件夹/名字」还没建
             f["chrome"] = False
+            if f.get("from_chat"):
+                _mine_chat(pf, acct, f["from_chat"])
             _base_ok(acct, base=f.get("base"))
             if not b.get("id"):
                 f["account"] = acct

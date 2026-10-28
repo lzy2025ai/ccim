@@ -3596,9 +3596,25 @@ async function forkAt(i, src = "log"){
   const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
   await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
 }
-function saveAsAgent(){
-  agentDraftFrom = {base: detail.base, dir: detail.dir || "", model: detail.model_custom ? detail.model : null, effort: detail.effort_custom ? detail.effort : null};
+function saveAsAgent(){   // 建好后这个对话归到它名下（#318）；名字和角色说明按对话内容起草
+  if (detail.busy) { toast("它还在干活，等这一轮做完再保存"); return; }
+  const from = detail.id;
+  agentDraftFrom = {base: detail.base, dir: detail.dir || "", model: detail.model_custom ? detail.model : null, effort: detail.effort_custom ? detail.effort : null,
+                    from_chat: from, from_title: detail.title, machine: ctxMachine, _drafting: true};
   location.hash = "#/agents/new";
+  api("/api/agent/draft", {chat: from}, ctxMachine).then(r => applyDraft(from, r)).catch(() => applyDraft(from, {}));
+}
+function applyDraft(from, r){
+  if (typeof fd === "undefined" || !fd || fd.from_chat !== from) return;   // 已经离开这个表单
+  fd._drafting = false;
+  if (!fd.name.trim() && r.name) { fd.name = r.name; if (!fd._sealSet) fd.seal = autoSeal(r.name); }
+  if (!(fd.role || "").trim() && r.role) fd.role = r.role;
+  const n = $("#f-name"), t = $("#f-role");   // 只换内容，不重画，正在输入的不受影响
+  if (!n || !t) return;
+  n.value = fd.name; n.placeholder = "比如：前端开发、周报助手";
+  t.value = fd.role || ""; t.placeholder = "它是谁、负责什么、有什么习惯和要求。";
+  if ($("#f-seal")) $("#f-seal").value = fd.seal || "";
+  drawSeal();
 }
 
 // ---- 附件 ----
@@ -5247,6 +5263,7 @@ function autoDir(){   // 共享文件夹/Agent 名字；名字还没填就先是
 function formHtml(a){
   fd = a ? {...a, dir: a.dir || ""} : {name: "", seal: "", color: "qing", base: "claude", model: "", effort: "", role: "", dir: "", avatar: freeAvatar(), ...(agentDraftFrom || {})};
   agentDraftFrom = null;
+  if (fd.from_chat && fd._hadDir === undefined) fd._hadDir = !!fd.dir;
   fd.machine = (a && ownerOf(a.id)) || fd.machine || ctxMachine || S.me;
   ctxMachine = fd.machine;
   fd._autoDir = !a && sharedM(fd.machine) && !fd._dirSet;   // 共享给我的电脑：默认在共享文件夹里给它建一个同名的
@@ -5263,16 +5280,16 @@ function formHtml(a){
       <div class="avatar-grid" aria-label="选择图片头像" ${fd.avatar ? "" : "hidden"}>${AVATARS.map(([id, name]) => `<button class="avatar-choice ${fd.avatar === id ? "on" : ""}" data-avatar="${id}" aria-label="${name}" aria-pressed="${fd.avatar === id}" onclick="chooseAvatar('${id}')"><img src="/avatars/${id}.webp" alt="" width="48" height="48" decoding="async"><span>${name}</span></button>`).join("")}</div>
       <div class="avatar-text" ${fd.avatar ? "hidden" : ""}><div class="swatches">${Object.entries(COLORS).map(([k, v]) => `<button aria-label="${{qing:'青',lu:'绿',zhe:'褐',huang:'黄',zhu:'朱',dai:'黛'}[k]}色" data-c="${k}" class="${fd.color === k ? "on" : ""}" style="--c:${v}" onclick="fd.color='${k}';drawSeal()"></button>`).join("")}</div>
         <div class="help">印章上的字默认取名字的前两个字，也可以自己改：<input id="f-seal" class="input" aria-label="印章文字" style="width:70px;padding:3px 8px" maxlength="2" value="${esc(fd.seal)}" oninput="fd.seal=this.value;fd._sealSet=!!this.value;drawSeal()"></div></div></div>
-    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="比如：前端开发、周报助手" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};if(fd._autoDir){fd.dir=autoDir();$('#f-dir').value=tilde(fd.dir)};drawSeal()">
-    <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
+    <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="${fd._drafting ? "正在按对话起草…" : "比如：前端开发、周报助手"}" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};if(fd._autoDir){fd.dir=autoDir();$('#f-dir').value=tilde(fd.dir)};drawSeal()">
+    <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="${fd._drafting ? "正在按对话起草…" : "它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。"}" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
-    <label>底座</label><div class="seg">${(noCodex(fd.machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
+    <label>底座</label><div class="seg">${(fd.from_chat ? [fd.base || "claude"] : noCodex(fd.machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
     <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
     <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
     ${(fd.base || "claude") === "claude" ? `${sharedM(fd.machine) ? "" : `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
       <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>`}
       <label>平台 Skill</label><div>${skillRows()}</div>` : ""}
-    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="不填也行" oninput="fd.dir=this.value;fd._dirSet=true;fd._autoDir=false"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; fd._dirSet = true; fd._autoDir = false; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
+    <label for="f-dir">工作目录</label><div><div class="row"><input id="f-dir" class="input" style="flex:1" value="${esc(tilde(fd.dir))}" placeholder="${fd.from_chat && !fd._hadDir ? "不填就用这个对话的文件夹，里面的文件都在" : "不填也行"}" oninput="fd.dir=this.value;fd._dirSet=true;fd._autoDir=false"><button class="btn" onclick="chooseFolder(p => {fd.dir = p; fd._dirSet = true; fd._autoDir = false; $('#f-dir').value = tilde(p);}, fd.machine)">${ICON.folder}选择…</button></div>
       <div class="help">它在这个目录里读写文件、跑命令。${sharedM(fd.machine) ? "" : "不填的话，它有一个自己的工作区，适合写作、调研这类不碰代码的活。"}</div></div>
     <span></span><div class="row" style="margin-top:6px">
       <button class="btn primary" onclick="saveAgent(${a ? `${q(a.id)}` : "null"})">${a ? "保存" : "新建 Agent"}</button>
@@ -5298,16 +5315,16 @@ async function saveAgent(id){
   if (!fd.name.trim()) { toast("先给它起个名字"); $("#f-name").focus(); return; }
   const fields = {name: fd.name.trim(), seal: fd.seal || autoSeal(fd.name), color: fd.color, avatar: fd.avatar || null, base: fd.base || "claude",
                   model: fd.model || null, effort: fd.effort || null, role: fd.role || "", dir: (fd.dir || "").trim() || null, chrome: (fd.base || "claude") === "claude" && !!fd.chrome,
-                  skills_off: fd.skills_off || []};
+                  skills_off: fd.skills_off || [], ...(id || !fd.from_chat ? {} : {from_chat: fd.from_chat})};
   const where = id ? ownerOf(id) || ctxMachine : fd.machine;
   let r = await act(() => api("/api/agent/save", {id, fields}, where));
   if (r.confirm === "home") {            // 工作目录是用户主目录：说明影响，确认后再存
     if (!await confirmBox("用整个主目录当工作目录？", "它能读写主目录下的所有文件（桌面、文档、各个项目和配置）；找文件、搜内容会比较慢；在终端里从主目录开的对话也会算到它名下。只是写作、调研的话，工作目录留空更合适。", "仍然使用主目录")) return;
     r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
   }
-  toast(id ? "已保存" : "已新建");
+  toast(id ? "已保存" : r.chat ? "已保存为 Agent，这个对话归到它名下了" : "已新建");
   agentTab = "overview"; await loadState();
-  if (id) renderAgent(id); else location.hash = `#/agents/${encodeURIComponent(r.id)}`;
+  if (id) renderAgent(id); else location.hash = `#/agents/${encodeURIComponent(r.id)}` + (r.chat ? `/${encodeURIComponent(r.chat)}` : "");
 }
 async function deleteAgent(id, name){
   if (!await confirmBox(`删除「${name}」？`, "它接的飞书、微信会一起断开；它的工作目录和工作区里的文件不会删。", "删除")) return;
@@ -5315,7 +5332,10 @@ async function deleteAgent(id, name){
   if (current.id === id) location.hash = "#/agents"; else route();
 }
 function renderAgentForm(){
-  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>新建 Agent</h2><div class="role">给它起个名字、写清楚它负责什么。建好后可以直接对话，也可以接到飞书、微信。</div></div></div>
+  const from = agentDraftFrom && agentDraftFrom.from_chat ? agentDraftFrom : null;
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow">${from
+      ? `<h2>保存为 Agent</h2><div class="role">保存后，「${esc(from.from_title || "这个对话")}」归到它名下，可以接着聊。</div>`
+      : `<h2>新建 Agent</h2><div class="role">给它起个名字、写清楚它负责什么。建好后可以直接对话，也可以接到飞书、微信。</div>`}</div></div>
     <div class="pane">${formHtml(null)}</div></div>`;
   $("#f-name").focus();
 }

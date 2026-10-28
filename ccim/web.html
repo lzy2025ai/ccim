@@ -939,8 +939,8 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 #pocket iframe{flex:1;border:0;width:100%;min-height:0;background:var(--panel)}
 #pocket .pk-wait{flex:1;display:grid;place-items:center;color:var(--muted);font-size:13px;text-align:center;padding:20px}
 body.pocket-off #pocket-fab,body.pocket-off #pocket{display:none}
-body.doc-open #pocket-fab,body.doc-open #pocket{display:none}   /* 右侧面板（侧边对话、文档）开着时会挡住它，先藏起来（#313） */
-body.pocket-tight:not(.doc-open) .composer{padding-right:max(22px,calc(84px - max(0px,(100% - 760px) / 2)))}
+body.side-open #pocket-fab,body.side-open #pocket{display:none}   /* 侧边对话开着时会挡住它的输入框，先藏起来（#313） */
+body.pocket-tight:not(.side-open) .composer{padding-right:max(22px,calc(84px - max(0px,(100% - 760px) / 2)))}
 html.embed .rail,html.embed .list,html.embed .resizer,html.embed .pback,html.embed .chat-head,html.embed .composer .hint,html.embed #ext-notice{display:none!important}
 html.embed .app{display:block;height:100vh;padding-top:0}
 html.embed .app .main{display:flex!important;height:100vh;padding-bottom:0!important}

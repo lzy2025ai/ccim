@@ -82,12 +82,19 @@ def _plan(handler, m):
     return 200, 0, size - 1
 
 
+def framing(extra, ctype):
+    """PDF 要嵌在网页的面板里给浏览器自带的阅读器显示（#311）：不许被嵌的放宽到只许本站嵌，别的类型原样。"""
+    if (ctype or "").split(";")[0].strip() != "application/pdf" or "X-Frame-Options" not in (extra or {}):
+        return extra
+    return {**extra, "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'"}
+
+
 def _common(handler, m, extra):
     handler.send_header("ETag", m["etag"])
     handler.send_header("Last-Modified", formatdate(m["mtime"], usegmt=True))
     handler.send_header("Cache-Control", "private, no-cache")
     handler.send_header("Accept-Ranges", "bytes")
-    for k, v in (extra or {}).items():
+    for k, v in (framing(extra, m["ctype"]) or {}).items():
         handler.send_header(k, v)
 
 
@@ -217,7 +224,7 @@ def serve_peer(handler, peers, mid, extra=None, headers=None):
             status, ctype, data = peers.forward(mid, "GET", handler.path, b"", headers or {})
         except Offline:
             return _offline(handler, peers, mid)
-        handler._send(status, data, ctype)
+        handler._send(status, data, ctype, framing(extra, ctype))
     except Offline:
         _offline(handler, peers, mid)
     except Exception as e:

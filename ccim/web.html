@@ -1036,7 +1036,7 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .working{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#7A6216;margin-top:2px}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;z-index:40}
 
-/* 文档预览（#34）：对话里发来的 Markdown、网页、Word 在右侧打开，能看能改 */
+/* 文档预览（#34）：对话里发来的 Markdown、网页、Word、PDF 在右侧打开，能看能改 */
 .docfile{display:inline-flex;align-items:center;gap:10px;padding:9px 14px 9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-align:left;max-width:100%}
 .docfile:hover{border-color:var(--line-strong)}
 .docfile .di{width:30px;height:30px;border-radius:7px;background:var(--qing-soft);color:var(--qing);display:grid;place-items:center;flex:none}
@@ -1590,6 +1590,7 @@ const ICON = {
   shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   expand:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
   clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>`,
+  ext:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   x:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
@@ -6599,8 +6600,8 @@ async function trySchedule(){
 }
 
 // ================= 文档预览和编辑（#34） =================
-const DOC_KIND = {md: "md", markdown: "md", html: "html", htm: "html", docx: "docx"};
-const DOC_LABEL = {md: "Markdown 文档", html: "网页", docx: "Word 文档"};
+const DOC_KIND = {md: "md", markdown: "md", html: "html", htm: "html", docx: "docx", pdf: "pdf"};
+const DOC_LABEL = {md: "Markdown 文档", html: "网页", docx: "Word 文档", pdf: "PDF 文档"};
 function docKind(name){ const m = /\.([a-z]+)$/i.exec(name || ""); return m ? DOC_KIND[m[1].toLowerCase()] || null : null; }
 
 // 文档用的 Markdown：比聊天里的全（各级标题、图片、嵌套列表、任务、对齐的表格）。
@@ -7037,6 +7038,7 @@ function docBody(){
   if (!d) return `<div class="doc-loading">…</div>`;
   if (d.kind === "img") return `<div class="ws-img"><img src="${esc(docFileUrl())}" alt="${esc(d.name)}"></div>`;
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
+  if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
@@ -7087,6 +7089,7 @@ function drawWsDoc(){                    // 工作区：文档画在中间的编
       <div class="nm" title="${esc(rel)}"><span class="pre">${esc(rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "")}</span><b>${esc(name)}</b>${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${DOC.savedAt ? `<span class="saved">已保存</span>` : ""}
       ${modes.length ? `<span class="seg mini">${modes.map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
+      ${d && d.kind === "pdf" ? pdfTab() : ""}
       ${d && !["img", "video", "other"].includes(d.kind) ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
     </div>
     <div class="doc-body">${docBody()}</div>
@@ -7110,6 +7113,7 @@ function drawDoc(){
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
       ${d && (d.kind === "md" || d.editable && d.latest) ? `<span class="seg mini">${[["view", "预览"], ...(d.kind === "md" ? [["wx", "公众号"]] : []), ...(d.editable && d.latest ? [["edit", "编辑"]] : [])]
         .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
+      ${d && d.kind === "pdf" ? pdfTab() : ""}
       ${d ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
       ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
     </div>
@@ -7119,6 +7123,8 @@ function drawDoc(){
   if (DOC.mode === "wx") wxImgTools();
   codeSync();
 }
+// 手机浏览器里嵌着的 PDF 可能只显示第一页，新标签页里能完整翻。主屏幕图标打开的网页新标签页没登录，不给这个按钮
+const pdfTab = () => STANDALONE ? "" : `<a class="icon-btn" aria-label="在新标签页打开" title="在新标签页打开" href="${esc(docFileUrl())}" target="_blank" rel="noopener">${ICON.ext}</a>`;
 function docFileUrl(){   // 正在看的这一版：最新的是原文件，旧版本是留底
   return `/api/file/-/${encodeURIComponent(String(DOC.path).split("/").pop() || "file")}?chat=${encodeURIComponent(DOC.chat)}&path=${encodeURIComponent(DOC.d.file || DOC.path)}`
     + (isRemote(DOC.machine) ? `&machine=${encodeURIComponent(DOC.machine)}` : "");

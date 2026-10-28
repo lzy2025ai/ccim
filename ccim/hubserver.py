@@ -570,11 +570,9 @@ def _handler(hub):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            for k, v in (extra or {}).items():
+            hdrs = {"Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                    "X-Content-Type-Options": "nosniff", **(extra or {})}
+            for k, v in hdrs.items():
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)

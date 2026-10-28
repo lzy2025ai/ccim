@@ -1,4 +1,4 @@
-"""对话里的文档预览和编辑（#34）：Markdown、HTML 能看能改，Word 只能看。
+"""对话里的文档预览和编辑（#34）：Markdown、HTML 能看能改，Word、PDF（#311）只能看。
 
 Agent 每发一次文档存一份副本（snaps/<对话>/），面板里能切换看各版本；最新的一版读原文件。
 文档里用相对路径引用的图片（HTML 还有样式表、脚本）读出来打包成 data: 地址一起交给网页，
@@ -7,7 +7,7 @@ Agent 每发一次文档存一份副本（snaps/<对话>/），面板里能切�
 import base64, html as htmllib, mimetypes, os, re, shutil, time, uuid, zipfile
 import xml.etree.ElementTree as ET
 
-KINDS = {".md": "md", ".markdown": "md", ".html": "html", ".htm": "html", ".docx": "docx"}
+KINDS = {".md": "md", ".markdown": "md", ".html": "html", ".htm": "html", ".docx": "docx", ".pdf": "pdf"}
 # 工作区（#206）里能直接看、直接改的纯文本和代码
 TEXT_EXT = {".txt", ".text", ".log", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
             ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte", ".css", ".scss", ".less", ".sh", ".zsh", ".bash",
@@ -163,6 +163,11 @@ def view(path, base=None):
     k = kind(path)
     if not k:
         raise Problem("这种文件不能预览。")
+    if k == "pdf":      # 网页拿原文件交给浏览器自带的阅读器，这里不读内容
+        try:
+            return {"kind": k, "mtime": os.path.getmtime(path), "editable": False}
+        except OSError:
+            raise Problem("文件已经不在了。")
     base = base or os.path.dirname(path)
     data = _read(path)
     out = {"kind": k, "mtime": os.path.getmtime(path), "editable": k in EDITABLE}

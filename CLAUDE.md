@@ -11,7 +11,7 @@
 | 会话.md | `session.py` 一个对话一个 Claude 会话（worker、中途补充、/stop、卡住提醒、后台任务那一轮）；`codex.py`；ccim 工具经 `toolsock.py` / `mcpstdio.py` 给任意底座；审批、斜杠命令、模型列表、/usage |
 | 渠道.md | `cli.py` 主循环；`bridge.py` 消息分流；`registry.py` 登记表和状态；`daemon.py` 后台和常驻；`channels/` 飞书、微信；`weixin_hub.py` 一个微信号管多个项目；ccim-setup skill |
 | 转接与派任务.md | `handoff.py` / `hook.py` 终端和飞书之间转接、网页对话转到微信 / 飞书；`asks.py` 的 `ccim ask` |
-| 平台.md | 智能体平台（`ccim web`）：`agents.py`、`platform.py`、`web.py`、`web.html`、`history.py`；对话列表、分叉、退回、章节、归档、侧边对话、任务面板 `board.py`、管理员权限 `admin.py` |
+| 平台.md | 智能体平台（`ccim web`）：`agents.py`、`platform.py`、`web.py`、`web.html`、`history.py`；对话列表、分叉、退回、章节、归档、侧边对话、任务面板 `board.py`、管理员权限 `admin.py`、应用 `apps.py` |
 | 协作.md | 群聊 `groups.py`、@ 其他 Agent `mentions.py`（含 ask_agent）、老的项目 `projects.py`、搜对话 `search.py`、对话之间转交 send_to_chat |
 | 定时任务.md | `schedules.py` 和 `ccim schedule` |
 | 知识库与Skill.md | `kb.py`、`skills.py`（平台 Skill、Agent 本地 Skill、Skill 助手、市场） |

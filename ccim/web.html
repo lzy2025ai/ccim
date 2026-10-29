@@ -489,6 +489,15 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .app.cards,.app.cards.list-off{grid-template-columns:76px 1fr}
 .app.cards .list{display:none!important}
 .overview{display:flex;flex-direction:column;min-height:0;height:100%}
+.app-ic{flex:none;width:40px;height:40px;border-radius:10px;background:var(--sunk);border:1px solid var(--line);display:grid;place-items:center;font-size:20px;line-height:1}
+.app-ic.sm{width:28px;height:28px;border-radius:8px;font-size:15px}
+.app-view{display:flex;flex-direction:column;height:100%;min-height:0}
+.app-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.app-bar .back{display:flex;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:13px;margin-right:4px}
+.app-bar .back svg{width:16px;height:16px}
+.app-bar b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-frame{flex:1;width:100%;border:0;background:#fff;min-height:0}
+@media (max-width:760px){.app-bar .back span{display:none}.app-bar{padding:8px 10px}}
 .ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
 .ov-head h1{font:600 24px/1.2 var(--song);margin:0}
 .ov-head .grow{flex:1}
@@ -1596,6 +1605,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/apps" data-nav="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
@@ -2360,7 +2370,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board");
+    || current.view === "skills" || current.view === "board" || current.view === "apps");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -2387,6 +2397,7 @@ function route(){
     else openAgentLatest(current.id);
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
+  else if (current.view === "apps") current.id ? openApp(current.id, current.sub) : renderApps();
   else if (current.view === "board") renderBoard();
   else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
@@ -2425,7 +2436,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board" || current.view === "skills") return;
+  if (current.view === "board" || current.view === "skills" || current.view === "apps") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -3869,6 +3880,117 @@ async function startAgent(aid){
   location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
+
+// ================= 应用（#103） =================
+// 应用页面放进隔离的 iframe（不同源，碰不到平台的接口和登录），只能通过 window.ccim 发消息给这里，由这里调这个应用自己的接口
+let APP = null;     // 打开的应用：{id, mid, page, frame, sig, timer}
+const appKey = (id, mid) => `#/apps/${encodeURIComponent(id)}${mid && mid !== S.me ? "/" + encodeURIComponent(mid) : ""}`;
+async function renderApps(){
+  closeApp();
+  const ms = chatMachines();
+  const got = await Promise.all(ms.map(m => api0("/api/apps", undefined, m.id).then(d => d.apps.map(a => ({...a, mid: m.id}))).catch(() => [])));
+  if (current.view !== "apps" || current.id) return;
+  const list = got.flat().sort((a, b) => b.updated - a.updated);
+  const icon = a => `<span class="app-ic">${esc(a.icon || [...a.name][0] || "应")}</span>`;
+  const body = list.length ? `<div class="cgrid">${list.map(a => `<a class="ccard" href="${appKey(a.id, a.mid)}">
+      <div class="top">${icon(a)}<div class="t"><div class="nm">${esc(a.name)}</div></div>${a.ready ? "" : `<span class="tag">还在做</span>`}</div>
+      <div class="role">${esc(a.desc)}</div>
+      <div class="foot"><span class="grow">${multi() ? esc((machineOf(a.mid) || {}).name || "") : ""}</span><span>${when(stamp(a.updated))}</span></div></a>`).join("")}
+      <button class="ccard add" onclick="newApp()">${ICON.plus}做一个应用</button></div>`
+    : `<div class="empty" style="margin-top:40px"><h2>还没有应用</h2><p>想反复用的小工具、要攒起来看的东西，让 Agent 做成应用，以后在这里打开。</p>
+      <button class="btn primary" onclick="newApp()">${ICON.plus}做一个应用</button></div>`;
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>应用</h1><span class="grow"></span>
+      <button class="btn primary" onclick="newApp()">${ICON.plus}做一个应用</button></div><div class="ov-body">${body}</div></div>`;
+}
+function newApp(){
+  draft = {...draft, machine: S.me, dir: "", model: "", effort: ""};
+  draftText = "做一个应用："; location.hash = "#/chats/new";
+}
+function closeApp(){
+  if (!APP) return;
+  clearInterval(APP.timer); APP = null;
+}
+const APP_BRIDGE = `<script>(()=>{let n=0;const w=new Map(),subs=[];
+addEventListener("message",e=>{if(e.source!==parent)return;const d=e.data||{};
+if(d.ccimEvent==="change"){subs.forEach(f=>{try{f()}catch(x){console.error(x)}});return}
+const p=w.get(d.ccimId);if(!p)return;w.delete(d.ccimId);d.ok?p[0](d.value):p[1](new Error(d.error))});
+const call=(op,...args)=>new Promise((ok,no)=>{const id=++n;w.set(id,[ok,no]);parent.postMessage({ccimId:id,op,args},"*")});
+window.ccim={list:d=>call("list",d||""),read:p=>call("read",p),write:(p,t)=>call("write",p,String(t)),remove:p=>call("remove",p),
+readJSON:async(p,f=null)=>{const t=await call("read",p);if(t==null)return f;try{return JSON.parse(t)}catch{return f}},
+writeJSON:(p,v)=>call("write",p,JSON.stringify(v,null,2)),copy:(t,h)=>call("copy",String(t),h==null?null:String(h)),
+chat:t=>call("chat",String(t||"")),onChange:f=>{subs.push(f)}};})();<\/script>`;
+async function openApp(id, mid){
+  mid = mid || S.me;
+  if (APP && APP.id === id && APP.mid === mid && document.contains(APP.frame)) return;
+  closeApp();
+  let p;
+  try { p = await api0(`/api/app?id=${encodeURIComponent(id)}`, undefined, mid); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个应用</h2><p>${esc(e.message)}</p><a class="btn" href="#/apps">所有应用</a></div>`; return; }
+  if (current.view !== "apps" || current.id !== id) return;
+  $("#main").innerHTML = `<div class="app-view"><div class="app-bar"><a class="back" href="#/apps">${ICON.left}<span>应用</span></a>
+      <span class="app-ic sm">${esc(p.icon || [...p.name][0] || "应")}</span><b class="grow">${esc(p.name)}</b>
+      <button class="btn" onclick="appReload()" title="重新载入">刷新</button>
+      <button class="btn" onclick="appChat('改一下这个应用：')">让 Agent 改</button></div>
+    <iframe class="app-frame" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" title="${esc(p.name)}"></iframe></div>`;
+  const frame = $("#main .app-frame");
+  APP = {id, mid, page: p, frame, sig: p.sig};
+  const html = p.html || "";
+  frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + APP_BRIDGE) : APP_BRIDGE + html;
+  APP.timer = setInterval(appPoll, 4000);
+}
+function appReload(){ if (!APP) return; const {id, mid} = APP; APP = null; openApp(id, mid); }
+async function appPoll(){
+  const a = APP; if (!a) return;
+  if (current.view !== "apps" || current.id !== a.id || !document.contains(a.frame)) return closeApp();
+  if (document.hidden) return;
+  let d; try { d = await api0(`/api/app/sig?id=${encodeURIComponent(a.id)}`, undefined, a.mid); } catch { return; }
+  if (APP !== a || d.sig === a.sig) return;
+  a.sig = d.sig;
+  a.frame.contentWindow.postMessage({ccimEvent: "change"}, "*");
+}
+async function appChat(text){
+  const a = APP; if (!a) return;
+  const where = `应用「${a.page.name}」（~/.ccim/apps/${a.id}）`;
+  const t = `${where}\n${text || ""}`;
+  if (a.page.agent && agentOf(a.page.agent)) { prefill = t; return startAgent(a.page.agent); }
+  draft = {...draft, machine: a.mid, dir: "", model: "", effort: ""};
+  draftText = t; location.hash = "#/chats/new";
+}
+async function appCopy(text, html){
+  try {
+    await navigator.clipboard.write([new ClipboardItem(html ? {"text/html": new Blob([html], {type: "text/html"}), "text/plain": new Blob([text], {type: "text/plain"})}
+                                                             : {"text/plain": new Blob([text], {type: "text/plain"})})]);
+  } catch {
+    const tmp = document.createElement("div");
+    tmp.style.cssText = "position:fixed;left:-9999px;top:0;white-space:pre-wrap";
+    if (html) tmp.innerHTML = html; else tmp.textContent = text;
+    document.body.append(tmp);
+    const r = document.createRange(); r.selectNodeContents(tmp);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    const ok = document.execCommand("copy"); s.removeAllRanges(); tmp.remove();
+    if (!ok) throw new Error("复制没成功，再试一次");
+  }
+  toast("已复制");
+}
+addEventListener("message", async e => {
+  const a = APP, d = e.data || {};
+  if (!a || e.source !== a.frame.contentWindow || typeof d.ccimId !== "number") return;
+  const [x, y] = d.args || [], enc = encodeURIComponent, id = enc(a.id);
+  const reply = m => { try { e.source.postMessage({ccimId: d.ccimId, ...m}, "*"); } catch {} };
+  try {
+    let v = null;
+    if (d.op === "list") v = (await api0(`/api/app/list?id=${id}&dir=${enc(x || "")}`, undefined, a.mid)).files;
+    else if (d.op === "read") v = (await api0(`/api/app/read?id=${id}&path=${enc(x || "")}`, undefined, a.mid)).text;
+    else if (d.op === "write" || d.op === "remove") {
+      const r = await api0(`/api/app/${d.op}`, {id: a.id, path: x, text: y}, a.mid);
+      if (APP === a) a.sig = r.sig;          // 自己写的不再当成「数据变了」通知回去
+    }
+    else if (d.op === "copy") await appCopy(x, y);
+    else if (d.op === "chat") appChat(x);
+    else throw new Error("不支持的操作");
+    reply({ok: true, value: v});
+  } catch (err) { reply({ok: false, error: err.message || "出错了"}); }
+});
 
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.side_of && !c.project && (!c.schedule || c.listed) && !c.external;

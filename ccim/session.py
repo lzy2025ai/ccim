@@ -54,6 +54,10 @@ SCHEDULE = """
 - 用户要你到点或每隔一段时间做某件事（比如每 30 分钟查一次、每天早上汇总）时，用命令 `ccim schedule add` 建定时任务
   （用法看 `ccim schedule add --help`），到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。
   不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
+APPS = """
+- 用户要长期反复用的小工具、要一点点攒起来看的东西（比如竞品记录、文章库），可以做成「应用」：网页左侧「应用」里打开，
+  页面和数据在 ~/.ccim/apps/ 下，做法先读 ~/.ccim/apps/README.md。往已有的应用里加东西前先读它的 AGENT.md。
+  一次性的事直接做，不用做成应用。"""
 GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
 GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
 PR_MERGE = __import__("re").compile(r"\bgh\s+pr\s+merge\b")   # 合并 ccim 的 PR 改用 ccim ship（#230）
@@ -613,7 +617,7 @@ class Chat:
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:

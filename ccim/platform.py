@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from . import agents, registry
 from .peers import Server
 from . import devices, docs, filesend, perf, share, tokens, workspace
+from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
@@ -2133,6 +2134,10 @@ class Platform:
             raise RuntimeError(f"端口 {port}～{port + 19} 都被占用了")
         server.daemon_threads = True
         registry.write_state(self.home, port=server.server_address[1])
+        try:
+            apps_mod.ensure()             # Agent 做应用前要读这里的 README（#103）
+        except OSError:
+            log.exception("应用目录建不了")
         threading.Thread(target=server.serve_forever, name="web", daemon=True).start()
         log.info("网页：http://127.0.0.1:%d/", server.server_address[1])
         return server
@@ -2340,6 +2345,11 @@ def _handler(pf):
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
+                "/api/apps": lambda: {"apps": apps_mod.listing()},
+                "/api/app": lambda: apps_mod.page(q.get("id", "")),
+                "/api/app/sig": lambda: {"sig": apps_mod.data_sig(q.get("id", ""))},
+                "/api/app/list": lambda: apps_mod.data_list(q.get("id", ""), q.get("dir", "")),
+                "/api/app/read": lambda: apps_mod.data_read(q.get("id", ""), q.get("path", "")),
                 "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
                 "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
                 "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct),
@@ -2435,6 +2445,8 @@ def _handler(pf):
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
+                "/api/app/write": lambda: apps_mod.data_write(b("id"), b("path"), b("text")),
+                "/api/app/remove": lambda: apps_mod.data_remove(b("id"), b("path")),
                 "/api/ws/paths": lambda: pf.ws_call(b("chat"), workspace.paths, b("paths") or []),
                 "/api/ws/reveal": lambda: pf.ws_call(b("chat"), workspace.reveal, b("path") or ""),
                 "/api/ws/new": lambda: pf.ws_call(b("chat"), workspace.create, b("path") or "", b("name"), bool(b("dir"))),

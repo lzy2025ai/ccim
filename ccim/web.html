@@ -1343,6 +1343,10 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .vid .zoom{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center}
 .vid .zoom:hover{background:rgba(0,0,0,.75)}
 .vid .zoom svg{width:14px;height:14px}
+.aud{display:inline-flex;flex-direction:column;gap:6px;max-width:100%;margin:2px 0 10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);vertical-align:top}
+.aud .nm{display:flex;text-decoration:none;align-items:center;gap:6px;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aud .nm svg{width:14px;height:14px;flex:none}
+.aud audio{display:block;width:300px;max-width:100%;height:36px}
 .lightbox .close{position:fixed;top:14px;right:14px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center}
 .lightbox .close:hover{background:rgba(255,255,255,.26)}
 .lightbox .close svg{width:16px;height:16px}
@@ -1951,6 +1955,10 @@ function showImage(src, alt){
 // 视频：对话里直接放，右上角按钮在大图层里放
 function videoHtml(src, name){
   return `<span class="vid"><video src="${src}" data-k="${esc(src)}" controls playsinline preload="metadata" title="${esc(name)}"></video><button type="button" class="zoom" aria-label="放大" title="放大" onclick="showVideo(this)">${ICON.expand}</button></span>`;
+}
+// 音频（#316）：文件名（点了下载）+ 播放条
+function audioHtml(src, name){
+  return `<span class="aud"><a class="nm" href="${src}" download="${esc(name)}" title="下载">${ICON.file}${esc(name)}</a><audio src="${src}" controls preload="metadata"></audio></span>`;
 }
 function showVideo(btn){
   const v = btn.parentNode.querySelector("video"), t = v.currentTime;
@@ -2736,6 +2744,7 @@ function recHtml(r, i, src = "log"){
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
           : src && isVideo(f.name) ? videoHtml(src, f.name)
+          : src && isAudio(f.name) ? audioHtml(src, f.name)
           : f.path && docKind(f.name) ? `<button class="file doc" onclick="openDoc(${q(f.path)})">${ICON.file}${esc(f.name)}</button>`
           : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
       }).join("")}</div>` : ""}
@@ -2758,6 +2767,7 @@ function recHtml(r, i, src = "log"){
     const img = isImg(r.name), dk = docKind(r.name);
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
+      : isAudio(r.name) ? audioHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
       : fileChip(src, r.name)}${timeActs(r)}</div>`;
   }
@@ -3628,6 +3638,7 @@ async function thumbOf(file){
 }
 const isImg = name => /\.(png|jpe?g|gif|webp|svg)$/i.test(name || "");
 const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
+const isAudio = name => /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i.test(name || "");
 // Android 的浏览器：不限类型的选择框直接进文件管理器，只收图片视频才打开相册，所以先问选哪个（#234）
 function embedAdd(e){   // 右下角助理里（#294）：文件和知识库收在一个 + 里
   const kb = !detail.readonly && detail.base !== "codex";
@@ -6880,7 +6891,7 @@ function sideRec(r, i){
 }
 function workFiles(fs, chat){
   return (fs || []).map(f => { const src = fileUrl(chat, f.path);
-    return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : fileChip(src, f.name); }).join("");
+    return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : isAudio(f.name) ? audioHtml(src, f.name) : fileChip(src, f.name); }).join("");
 }
 async function sideCopy(btn, i){
   try { await navigator.clipboard.writeText(SIDE.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
@@ -7178,6 +7189,7 @@ function docBody(){
   if (!d) return `<div class="doc-loading">…</div>`;
   if (d.kind === "img") return `<div class="ws-img"><img src="${esc(docFileUrl())}" alt="${esc(d.name)}"></div>`;
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
+  if (d.kind === "audio") return `<div class="ws-img"><audio src="${esc(docFileUrl())}" controls></audio></div>`;
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
@@ -7230,7 +7242,7 @@ function drawWsDoc(){                    // 工作区：文档画在中间的编
       ${DOC.savedAt ? `<span class="saved">已保存</span>` : ""}
       ${modes.length ? `<span class="seg mini">${modes.map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
-      ${d && !["img", "video", "other"].includes(d.kind) ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
+      ${d && !["img", "video", "audio", "other"].includes(d.kind) ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
     </div>
     <div class="doc-body">${docBody()}</div>
     <button class="ws-ask" onclick="WS.ctx=true;WS.phoneCtx=true;wsGo('chat')">${ICON.chat}问 AI</button>`;
@@ -7561,6 +7573,7 @@ const WS_TEXT_NAMES = new Set(["Makefile", "Dockerfile", "LICENSE", "README", ".
 function wsKind(name){
   if (isImg(name)) return "img";
   if (isVideo(name)) return "video";
+  if (isAudio(name)) return "audio";
   return docKind(name) || (WS_TEXT.test(name || "") || WS_TEXT_NAMES.has(name) ? "text" : "other");
 }
 const wsName = p => (p || "").split("/").pop();
@@ -7802,7 +7815,7 @@ function wsActivate(p){
   WS.cur = p; wsStore();
   const k = wsKind(wsName(p));
   if (WS.docs[p]) { DOC = WS.docs[p]; drawDoc(); return; }
-  if (k === "img" || k === "video" || k === "other") {
+  if (k === "img" || k === "video" || k === "audio" || k === "other") {
     DOC = {chat: WS.chat, machine: WS.machine, path: p, ws: true, mode: "view", draft: "", dirty: false,
            d: {kind: k, name: wsName(p), versions: [], latest: true, v: 0}};
     WS.docs[p] = DOC; drawDoc(); return;
@@ -8003,7 +8016,7 @@ function wsAnswer(rec){
 // AI 改了打开着的文件：没改过的直接换成新的；自己正在改的先不动，提示一下
 function wsRefreshDoc(p){
   const d = DOC && DOC.path === p ? DOC : WS.docs[p];
-  if (!d || !d.d || ["img", "video", "other"].includes(d.d.kind)) return;
+  if (!d || !d.d || ["img", "video", "audio", "other"].includes(d.d.kind)) return;
   if (d.dirty) { if (DOC === d) toast("AI 也改了这个文件，你的改动保存时会提示"); return; }
   if (DOC === d && wsEdShown()) { DOC = null; delete WS.docs[p]; openDoc(p, null, WS.chat, true); }
   else delete WS.docs[p];

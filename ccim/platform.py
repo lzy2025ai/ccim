@@ -521,6 +521,10 @@ class Platform:
             self._split_old_subs()
         except Exception:
             log.exception("子对话另开成独立对话出错")
+        try:
+            self._stars_to_pins()
+        except Exception:
+            log.exception("星标转成置顶出错")
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
@@ -737,6 +741,27 @@ class Platform:
                     changed = True
             if changed:
                 registry.write_state(self.home, marks=marks)
+
+    def _stars_to_pins(self):
+        """置顶和星标合成一个（#347）：以前只加了星标的转成置顶，排在原来置顶的后面。"""
+        chats = self.chats()
+        low = max([m["pin"] for m in chats.values() if m.get("pin") is not None] + [0])
+        moved = 0
+        for m in chats.values():
+            if m.pop("star", None) is not None:
+                moved += 1
+                if m.get("pin") is None and not m.get("archived"):
+                    low += 1
+                    m["pin"] = low
+        if moved:
+            self.store.write(chats)
+        marks = registry.read_state(self.home).get("marks") or {}
+        if any("star" in m for m in marks.values()):
+            for m in marks.values():
+                if m.pop("star", None) and m.get("pin") is None and not m.get("archived"):
+                    low += 1
+                    m["pin"] = low
+            registry.write_state(self.home, marks=marks)
 
     def _warm(self):
         """先把终端对话读一遍（认分叉要读对话记录，第一次慢），打开 Agent 页时就快了。"""
@@ -1531,7 +1556,7 @@ class Platform:
     def _hot(self, t):
         """一直带在整体状态里的：置顶、星标、在干活 / 卡住 / 群里有人在干活、等你处理、没看过的回答。"""
         m = t[2] if t[2] is not None else t[3]
-        if m.get("pin") is not None or m.get("star") or m.get("busy"):
+        if m.get("pin") is not None or m.get("busy"):
             return True
         if t[2] is None:
             return False
@@ -1607,6 +1632,9 @@ class Platform:
             changes["title"] = " ".join((changes["title"] or "").split())[:60] or None
             changes["title_set"] = bool(changes["title"])      # 手动改过名，不再自动起标题（#67）
             changes["title_auto"] = None
+        if "star" in changes:                 # 老网页还会发星标：就是置顶（#347）
+            star = changes.pop("star")
+            changes.setdefault("pin", True if star else None)
         if changes.get("pin") is True:
             changes["pin"] = -time.time()         # 新置顶的排在最上面
         if "archived" in changes:

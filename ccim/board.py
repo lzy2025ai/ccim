@@ -170,14 +170,14 @@ def stats(pf, keep=None, everything=True):
 
 
 def recent(pf, chats, keep=None):
-    """任务面板「最近在跟」（#268）：没归档、不在等你、没在干活的顶层对话里，星标的和最近 7 天聊过的。
+    """任务面板「最近在跟」（#268）：没归档、不在等你、没在干活的顶层对话里，置顶的和最近 7 天聊过的。
     整体状态里只带了最近一部分对话，这一栏要的自己给。"""
     since = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     rows = []
     for cid, m in chats.items():
         if not top_level(m, cid) or not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
             continue
-        if not (m.get("star") or (m.get("last_active") or "") >= since):
+        if not (m.get("pin") is not None or (m.get("last_active") or "") >= since):
             continue
         v = pf.chat_view(cid)
         if not v.get("attention") and not v.get("crew"):

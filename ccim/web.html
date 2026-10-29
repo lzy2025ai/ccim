@@ -178,7 +178,7 @@ body{overflow:hidden}
 /* 点了「知道了」、还没打开看过：最近在跟里比别的稍重一点（#65） */
 .udot.soft{background:none;box-shadow:inset 0 0 0 1.5px var(--qing);margin-right:0}
 .brow.quiet.unread .btitle{font-weight:600;color:var(--ink)}
-/* 星标的对话（#194）：标题后一颗星，整行垫一层淡淡的金色 */
+/* 置顶的对话（#194、#347）：标题后一颗星，整行垫一层淡淡的金色 */
 .bstar{display:inline-flex;flex:none;color:var(--huang)} .bstar svg{width:13px;height:13px}
 .brow.starred{background:rgba(184,144,42,.07);border-color:rgba(184,144,42,.28)}
 .brow.quiet.starred{border-radius:10px;border-bottom-color:transparent;margin-bottom:4px}
@@ -2504,7 +2504,7 @@ const MARK_ICONS = {
   bookmark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12v18l-6-4-6 4z"/></svg>',
 };
 function markOf(c){
-  const star = c.star ? `<span class="mk star" title="星标">${ICON.star}</span>` : "";
+  const star = c.pin != null ? `<span class="mk star" title="置顶">${ICON.star}</span>` : "";   // 置顶就是星标（#347）
   if (!c.icon && !c.color) return star;
   const col = MARK_COLORS[c.color] || "var(--muted)";
   return star + (c.icon ? `<span class="mk" style="color:${col}">${MARK_ICONS[c.icon] || ""}</span>` : `<span class="mk dot" style="background:${col}"></span>`);
@@ -2554,7 +2554,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
@@ -3068,7 +3068,7 @@ function drawChat(){
     <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source)}${forkFrom(c)}${splitFrom(c)}
+        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${wsHead(c)}
       ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
@@ -3339,7 +3339,6 @@ function itemMenu(e, id, below){
     c.pin != null ? b(`markChat(${q(id)},{pin:null})`, "取消置顶") : b(`markChat(${q(id)},{pin:true,archived:null})`, "置顶"),
     i > 0 ? b(`moveChat(${q(id)},-1)`, "上移") : "",
     i >= 0 && i < pinned.length - 1 ? b(`moveChat(${q(id)},1)`, "下移") : "",
-    c.star ? b(`markChat(${q(id)},{star:null})`, "取消星标") : b(`markChat(${q(id)},{star:true})`, "加星标"),
     `<div class="sec">标记</div><div class="marks">${Object.entries(MARK_ICONS).map(([k, svg]) =>
       `<button class="${c.icon === k ? "on" : ""}" aria-label="图标" style="color:${MARK_COLORS[c.color] || "var(--ink-2)"}" onclick="markChat(${q(id)},{icon:${c.icon === k ? "null" : q(k)}})">${svg}</button>`).join("")}</div>
      <div class="marks">${Object.entries(MARK_COLORS).map(([k, col]) =>
@@ -3502,7 +3501,7 @@ function refTyped(){
   if (old && old.dataset.v === m[0]) return;
   const on = old ? Math.min(+old.dataset.on || 0, hits.length - 1) : 0;
   const p = pop({currentTarget: $("#box"), stopPropagation(){}}, `<div class="sec">引用以前的对话</div>` + hits.map((c, k) =>
-    `<button class="${k === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="refPick(${q(c.id)}, ${m[2].length + 1})"><span><div>${esc(c.title)}</div><div class="desc">${esc(c.source || "网页")}${c.last_active ? " · " + esc(String(c.last_active).slice(5, 16)) : ""}</div></span></button>`).join(""));
+    `<button class="${k === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="refPick(${q(c.id)}, ${m[2].length + 1})"><span><div>${esc(c.title)}</div><div class="desc">${esc([c.source && c.source !== "网页" ? c.source : "", c.last_active ? String(c.last_active).slice(5, 16) : ""].filter(Boolean).join(" · "))}</div></span></button>`).join(""));
   p.classList.add("slash", "ref"); p.dataset.v = m[0]; p.dataset.on = on;
 }
 function refPick(id, typed){
@@ -4136,8 +4135,8 @@ function boardRow(c, kind){
   const more = kind !== "work" && !replying ? `<button class="bmore-btn" aria-label="更多操作" title="更多操作" onclick="boardMenu(event,${q(c.id)},${kind === "wait"})">${ICON.more}</button>` : "";
   const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
   const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
-  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.star ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
-    <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.star ? `<span class="bstar" title="星标">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.pin != null ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
+    <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.pin != null ? `<span class="bstar" title="置顶">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
     <span class="bside"><span class="btopr"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span>${more}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
   if (!replying) return row;
@@ -4448,12 +4447,12 @@ async function renderBoard(quick){
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
   const tops = withRecent().filter(c => isTop(c) && !c.archived);
-  const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
-  const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => !!b.star - !!a.star);
+  const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || (b.pin != null) - (a.pin != null) || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+  const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => (b.pin != null) - (a.pin != null));
   const weekAgo = new Date(Date.now() - 7 * 86400000);
-  // 星标的（#194）排最前，超过 7 天没聊也留着
-  const recent = tops.filter(c => !c.attention && !working(c) && (c.star || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
-    .sort((a, b) => !!b.star - !!a.star || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+  // 置顶的（#194、#347）排最前，超过 7 天没聊也留着
+  const recent = tops.filter(c => !c.attention && !working(c) && (c.pin != null || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
+    .sort((a, b) => (b.pin != null) - (a.pin != null) || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v[agTab]).sort((a, b) => b[1][agTab] - a[1][agTab]).slice(0, 6);
   const maxT = Math.max(1, ...ags.map(([, v]) => v[agTab]));
@@ -4471,7 +4470,7 @@ async function renderBoard(quick){
         const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
         const list = recentTab === "agents" ? withAgent : temps;
         const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
-        const few = Math.max(recentTab === "agents" ? 10 : 5, list.filter(c => c.star).length);   // 星标的不折叠
+        const few = Math.max(recentTab === "agents" ? 10 : 5, list.filter(c => c.pin != null).length);   // 置顶的不折叠
         const body = list.length ? (showAllRecent ? list : list.slice(0, few)).map(c => boardRow(c, "recent")).join("")
             + (list.length > few && !showAllRecent ? `<button class="bmore" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - few} 件</button>` : "")
           : `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;

@@ -138,6 +138,10 @@ def status():
         _shown[:] = [time.time(), info()]
     i = _shown[1]
     out = dict(i, job=job() or None)
+    if i["kind"] == "dev":                    # 开发机在试某个需求（ccim try）：跑的是那个分支，不算没更新（#341）
+        t = runtime.trying()
+        if t:
+            out["trying"] = t.get("label") or t.get("branch") or ""
     if i["kind"] == "release":
         lt = latest(i["url"])
         if lt:

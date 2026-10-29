@@ -5951,6 +5951,7 @@ function upgradeBox(m){
   const note = recent && j.state === "done" && j.to !== j.from ? `<span class="upg ok">已升级到 ${esc(j.to)}</span>`
     : recent && j.state === "done" && j.note && Date.now() / 1000 - j.at < 600 ? `<span class="upg ok">${esc(j.note)}</span>`
     : recent && (j.state === "failed" || j.state === "rolled_back") ? `<span class="upg err" title="${esc(j.error || "")}">${j.state === "rolled_back" ? "新版本没起来，已装回原来的版本" : "升级失败"}</span>` : "";
+  if (v.kind === "dev" && v.trying && !note) return `<a class="upg" href="#/settings/dev">正在试 ${esc(v.trying)}</a>`;
   if (v.kind === "dev" && latestOf() && v.commit && v.commit !== latestOf() && !note)
     return `<a class="upg new" href="#/settings/dev">还没用上最新版本，去开发页更新</a>`;
   if (v.kind !== "release") return note;

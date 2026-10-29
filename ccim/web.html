@@ -495,7 +495,10 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .app-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
 .app-bar .back{display:flex;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:13px;margin-right:4px}
 .app-bar .back svg{width:16px;height:16px}
-.app-bar b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-bar .grow{flex:1}
+.app-nm{border:0;background:none;padding:2px 6px;margin-left:-6px;border-radius:6px;font:600 14px var(--sans);color:var(--ink);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;min-width:0}
+.app-nm:hover{background:var(--sunk)}
+.docpane .app-frame{display:block;height:100%}
 .app-frame{flex:1;width:100%;border:0;background:#fff;min-height:0}
 @media (max-width:760px){.app-bar .back span{display:none}.app-bar{padding:8px 10px}}
 .ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
@@ -2213,7 +2216,7 @@ function saveFile(ev, a){
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
 const STATUS_EVENTS = new Set(["bg", "brief"]);   // 对话的状态，不是记录，下面另外处理
-const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
+const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "app", "drop", "dev", "skills", "kb"]);
 let esFails = 0;                  // 推送连续连不上几次了：重连间隔 5、10、20…秒，最长 1 分钟
 function connectEvents(again){
   const es = new EventSource("/api/events");
@@ -2294,6 +2297,7 @@ function onEvent(ev){
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
+        if (ev.type === "app") openAppPane(rec.app, ownerOf(ev.chat) || ctxMachine);
         if (ev.type === "answer") wsAnswer(rec);
       }
     }
@@ -2796,6 +2800,7 @@ function recHtml(r, i, src = "log"){
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
       : fileChip(src, r.name)}${timeActs(r)}</div>`;
   }
+  if (r.type === "app") return `<div class="msg">${appChip(r)}${timeActs(r)}</div>`;
   if (r.type === "chatlog"){
     const items = r.items || [];
     return `<div class="msg"><button class="chatlog" onclick="openChatlog(${i})"><div class="t">${esc(r.title)}</div>
@@ -3882,18 +3887,18 @@ async function startAgent(aid){
 function renderChatEmptyOr(){ renderChatEmpty(); }
 
 // ================= 应用（#103） =================
-// 应用页面放进隔离的 iframe（不同源，碰不到平台的接口和登录），只能通过 window.ccim 发消息给这里，由这里调这个应用自己的接口
-let APP = null;     // 打开的应用：{id, mid, page, frame, sig, timer}
+// 应用页面放进隔离的 iframe（不同源，碰不到平台的接口和登录），只能通过 window.ccim 发消息给这里，由这里调这个应用自己的接口。
+// 同一个应用可以整页打开（#/apps/编号），也可以在对话右侧打开（Agent 用 app_open，或点对话里那条）
+const MOUNTS = new Set();   // 正显示着的应用：{id, mid, page, frame, sig, psig}
 const appKey = (id, mid) => `#/apps/${encodeURIComponent(id)}${mid && mid !== S.me ? "/" + encodeURIComponent(mid) : ""}`;
+const appIcon = (p, sm) => `<span class="app-ic ${sm ? "sm" : ""}">${esc(p.icon || [...(p.name || "应")][0])}</span>`;
 async function renderApps(){
-  closeApp();
   const ms = chatMachines();
   const got = await Promise.all(ms.map(m => api0("/api/apps", undefined, m.id).then(d => d.apps.map(a => ({...a, mid: m.id}))).catch(() => [])));
   if (current.view !== "apps" || current.id) return;
   const list = got.flat().sort((a, b) => b.updated - a.updated);
-  const icon = a => `<span class="app-ic">${esc(a.icon || [...a.name][0] || "应")}</span>`;
   const body = list.length ? `<div class="cgrid">${list.map(a => `<a class="ccard" href="${appKey(a.id, a.mid)}">
-      <div class="top">${icon(a)}<div class="t"><div class="nm">${esc(a.name)}</div></div>${a.ready ? "" : `<span class="tag">还在做</span>`}</div>
+      <div class="top">${appIcon(a)}<div class="t"><div class="nm">${esc(a.name)}</div></div>${a.ready ? "" : `<span class="tag">还在做</span>`}</div>
       <div class="role">${esc(a.desc)}</div>
       <div class="foot"><span class="grow">${multi() ? esc((machineOf(a.mid) || {}).name || "") : ""}</span><span>${when(stamp(a.updated))}</span></div></a>`).join("")}
       <button class="ccard add" onclick="newApp()">${ICON.plus}做一个应用</button></div>`
@@ -3906,54 +3911,86 @@ function newApp(){
   draft = {...draft, machine: S.me, dir: "", model: "", effort: ""};
   draftText = "做一个应用："; location.hash = "#/chats/new";
 }
-function closeApp(){
-  if (!APP) return;
-  clearInterval(APP.timer); APP = null;
-}
 const APP_BRIDGE = `<script>(()=>{let n=0;const w=new Map(),subs=[];
 addEventListener("message",e=>{if(e.source!==parent)return;const d=e.data||{};
 if(d.ccimEvent==="change"){subs.forEach(f=>{try{f()}catch(x){console.error(x)}});return}
 const p=w.get(d.ccimId);if(!p)return;w.delete(d.ccimId);d.ok?p[0](d.value):p[1](new Error(d.error))});
 const call=(op,...args)=>new Promise((ok,no)=>{const id=++n;w.set(id,[ok,no]);parent.postMessage({ccimId:id,op,args},"*")});
-window.ccim={list:d=>call("list",d||""),read:p=>call("read",p),write:(p,t)=>call("write",p,String(t)),remove:p=>call("remove",p),
+window.ccim={query:(c,q)=>call("query",c,q||""),get:(c,id)=>call("get",c,id),save:(c,r)=>call("save",c,r),del:(c,id)=>call("del",c,id),
+list:d=>call("list",d||""),read:p=>call("read",p),write:(p,t)=>call("write",p,String(t)),remove:p=>call("remove",p),
 readJSON:async(p,f=null)=>{const t=await call("read",p);if(t==null)return f;try{return JSON.parse(t)}catch{return f}},
 writeJSON:(p,v)=>call("write",p,JSON.stringify(v,null,2)),copy:(t,h)=>call("copy",String(t),h==null?null:String(h)),
 chat:t=>call("chat",String(t||"")),onChange:f=>{subs.push(f)}};})();<\/script>`;
+async function appPage(id, mid){ return api0(`/api/app?id=${encodeURIComponent(id)}`, undefined, mid); }
+function appMount(frame, id, mid, p){   // 把页面放进 iframe，登记好，之后数据、页面变了都通知它
+  for (const m of [...MOUNTS]) if (m.frame === frame || !document.contains(m.frame)) MOUNTS.delete(m);
+  const m = {id, mid, page: p, frame, sig: p.sig, psig: p.psig};
+  const html = p.html || "";
+  frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, x => x + APP_BRIDGE) : APP_BRIDGE + html;
+  MOUNTS.add(m);
+  return m;
+}
 async function openApp(id, mid){
   mid = mid || S.me;
-  if (APP && APP.id === id && APP.mid === mid && document.contains(APP.frame)) return;
-  closeApp();
+  const cur = [...MOUNTS].find(m => m.full && document.contains(m.frame));
+  if (cur && cur.id === id && cur.mid === mid) return;
   let p;
-  try { p = await api0(`/api/app?id=${encodeURIComponent(id)}`, undefined, mid); }
+  try { p = await appPage(id, mid); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个应用</h2><p>${esc(e.message)}</p><a class="btn" href="#/apps">所有应用</a></div>`; return; }
   if (current.view !== "apps" || current.id !== id) return;
   $("#main").innerHTML = `<div class="app-view"><div class="app-bar"><a class="back" href="#/apps">${ICON.left}<span>应用</span></a>
-      <span class="app-ic sm">${esc(p.icon || [...p.name][0] || "应")}</span><b class="grow">${esc(p.name)}</b>
-      <button class="btn" onclick="appReload()" title="重新载入">刷新</button>
-      <button class="btn" onclick="appChat('改一下这个应用：')">让 Agent 改</button></div>
-    <iframe class="app-frame" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" title="${esc(p.name)}"></iframe></div>`;
-  const frame = $("#main .app-frame");
-  APP = {id, mid, page: p, frame, sig: p.sig};
-  const html = p.html || "";
-  frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + APP_BRIDGE) : APP_BRIDGE + html;
-  APP.timer = setInterval(appPoll, 4000);
+      ${appIcon(p, true)}<button class="app-nm grow" title="改名" onclick="appRename(this)">${esc(p.name)}</button>
+      <button class="btn" onclick="appChat(this,'改一下这个应用：')">让 Agent 改</button></div>
+    <iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(p.name)}"></iframe></div>`;
+  appMount($("#main .app-frame"), id, mid, p).full = true;
 }
-function appReload(){ if (!APP) return; const {id, mid} = APP; APP = null; openApp(id, mid); }
-async function appPoll(){
-  const a = APP; if (!a) return;
-  if (current.view !== "apps" || current.id !== a.id || !document.contains(a.frame)) return closeApp();
+const APP_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads";
+const mountOf = el => [...MOUNTS].find(m => m.frame === el.closest(".app-view, .docpane")?.querySelector("iframe"));
+// 对话右侧打开（和文档预览共用那个面板）
+async function openAppPane(id, mid){
+  if (SIDE) closeSide();
+  if (DOC && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  mid = mid || ctxMachine || S.me;
+  let p;
+  try { p = await appPage(id, mid); } catch (e) { toast(e.message); return; }
+  DOC = {chat: detail && detail.id, machine: mid, path: "app:" + id, app: {id, mid, page: p}, d: {kind: "app", name: p.name, versions: [], latest: true}, mode: "view"};
+  drawDoc();
+}
+function appPaneMount(){   // drawDoc 画完后把页面放进去
+  const f = $("#docpane .app-frame"); if (!f || !DOC || !DOC.app) return;
+  const old = [...MOUNTS].find(m => m.pane && m.id === DOC.app.id && m.mid === DOC.app.mid && m.frame === f);
+  if (!old) appMount(f, DOC.app.id, DOC.app.mid, DOC.app.page).pane = true;
+}
+setInterval(async () => {   // 每 4 秒看一次：数据变了通知页面，页面文件变了重新载入（Agent 在改它）
   if (document.hidden) return;
-  let d; try { d = await api0(`/api/app/sig?id=${encodeURIComponent(a.id)}`, undefined, a.mid); } catch { return; }
-  if (APP !== a || d.sig === a.sig) return;
-  a.sig = d.sig;
-  a.frame.contentWindow.postMessage({ccimEvent: "change"}, "*");
+  for (const m of [...MOUNTS]) {
+    if (!document.contains(m.frame)) { MOUNTS.delete(m); continue; }
+    let d; try { d = await api0(`/api/app/sig?id=${encodeURIComponent(m.id)}`, undefined, m.mid); } catch { continue; }
+    if (!MOUNTS.has(m)) continue;
+    if (d.psig && d.psig !== m.psig) {
+      try { const p = await appPage(m.id, m.mid); MOUNTS.delete(m); const n = appMount(m.frame, m.id, m.mid, p); n.full = m.full; n.pane = m.pane; appRetitle(n); } catch {}
+    } else if (d.sig !== m.sig) { m.sig = d.sig; m.frame.contentWindow.postMessage({ccimEvent: "change"}, "*"); }
+  }
+}, 4000);
+function appRetitle(m){   // 改了名（网页上或 Agent 改的）：标题跟着变
+  const nm = m.page.name;
+  if (m.full) { const b = $("#main .app-nm"); if (b) b.textContent = nm; }
+  if (m.pane && DOC && DOC.app && DOC.app.id === m.id) { DOC.app.page = m.page; DOC.d.name = nm; const b = $("#docpane .app-nm"); if (b) b.textContent = nm; }
 }
-async function appChat(text){
-  const a = APP; if (!a) return;
-  const where = `应用「${a.page.name}」（~/.ccim/apps/${a.id}）`;
-  const t = `${where}\n${text || ""}`;
-  if (a.page.agent && agentOf(a.page.agent)) { prefill = t; return startAgent(a.page.agent); }
-  draft = {...draft, machine: a.mid, dir: "", model: "", effort: ""};
+function appRename(btn){
+  const m = mountOf(btn); if (!m) return;
+  nameBox("改名", m.page.name, async v => {
+    if (v === m.page.name) return;
+    const r = await api("/api/app/rename", {id: m.id, name: v}, m.mid);
+    m.page.name = r.name; appRetitle(m); toast("改好了");
+  });
+}
+async function appChat(el, text){
+  const m = el && el.closest ? mountOf(el) : el; if (!m) return;
+  const t = `应用「${m.page.name}」：${text || ""}`;
+  if (m.pane && detail && !detail.readonly && $("#input")) { pocketFill(t); return; }   // 右侧开着：就在这个对话里说
+  if (m.page.agent && agentOf(m.page.agent)) { prefill = t; return startAgent(m.page.agent); }
+  draft = {...draft, machine: m.mid, dir: "", model: "", effort: ""};
   draftText = t; location.hash = "#/chats/new";
 }
 async function appCopy(text, html){
@@ -3973,24 +4010,30 @@ async function appCopy(text, html){
   toast("已复制");
 }
 addEventListener("message", async e => {
-  const a = APP, d = e.data || {};
-  if (!a || e.source !== a.frame.contentWindow || typeof d.ccimId !== "number") return;
+  const d = e.data || {};
+  const a = [...MOUNTS].find(m => m.frame.contentWindow === e.source);
+  if (!a || typeof d.ccimId !== "number") return;
   const [x, y] = d.args || [], enc = encodeURIComponent, id = enc(a.id);
   const reply = m => { try { e.source.postMessage({ccimId: d.ccimId, ...m}, "*"); } catch {} };
+  const mine = r => { if (r && r.sig) a.sig = r.sig; return r; };   // 自己写的不再当成「数据变了」通知回去
   try {
     let v = null;
-    if (d.op === "list") v = (await api0(`/api/app/list?id=${id}&dir=${enc(x || "")}`, undefined, a.mid)).files;
+    if (d.op === "query") v = (await api0(`/api/app/query?id=${id}&coll=${enc(x || "")}&q=${enc(y || "")}`, undefined, a.mid)).rows;
+    else if (d.op === "get") v = (await api0(`/api/app/query?id=${id}&coll=${enc(x || "")}&rid=${enc(y || "")}`, undefined, a.mid)).row;
+    else if (d.op === "save") v = mine(await api0("/api/app/save", {id: a.id, coll: x, rec: y}, a.mid)).row;
+    else if (d.op === "del") mine(await api0("/api/app/del", {id: a.id, coll: x, rid: y}, a.mid));
+    else if (d.op === "list") v = (await api0(`/api/app/list?id=${id}&dir=${enc(x || "")}`, undefined, a.mid)).files;
     else if (d.op === "read") v = (await api0(`/api/app/read?id=${id}&path=${enc(x || "")}`, undefined, a.mid)).text;
-    else if (d.op === "write" || d.op === "remove") {
-      const r = await api0(`/api/app/${d.op}`, {id: a.id, path: x, text: y}, a.mid);
-      if (APP === a) a.sig = r.sig;          // 自己写的不再当成「数据变了」通知回去
-    }
+    else if (d.op === "write" || d.op === "remove") mine(await api0(`/api/app/${d.op}`, {id: a.id, path: x, text: y}, a.mid));
     else if (d.op === "copy") await appCopy(x, y);
-    else if (d.op === "chat") appChat(x);
+    else if (d.op === "chat") appChat(a, x);
     else throw new Error("不支持的操作");
     reply({ok: true, value: v});
   } catch (err) { reply({ok: false, error: err.message || "出错了"}); }
 });
+function appChip(r){
+  return `<button class="docfile" onclick="openAppPane(${q(r.app)})"><span class="di">${esc(r.icon || "▦")}</span><span class="t"><b>${esc(r.name)}</b><small>应用</small></span></button>`;
+}
 
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.side_of && !c.project && (!c.schedule || c.listed) && !c.external;
@@ -7376,6 +7419,7 @@ function docBody(){
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
   if (d.kind === "audio") return `<div class="ws-img"><audio src="${esc(docFileUrl())}" controls></audio></div>`;
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
+  if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
@@ -7444,6 +7488,19 @@ function drawDoc(){
   document.body.classList.add("doc-open");
   const d = DOC.d, vs = d ? d.versions : [];
   const name = d ? d.name : DOC.path.split("/").pop();
+  if (d && d.kind === "app") {   // 应用（#103）：名字点了能改，右上角放大成整页
+    const keep = el.querySelector(".app-frame");
+    if (!(keep && el.dataset.app === DOC.path)) {
+      el.dataset.app = DOC.path;
+      el.innerHTML = `<div class="doc-top"><button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
+        ${appIcon(DOC.app.page, true)}<button class="app-nm" title="改名" onclick="appRename(this)">${esc(d.name)}</button><span class="sp" style="flex:1"></span>
+        <a class="icon-btn" aria-label="放大" title="放大" href="${appKey(DOC.app.id, DOC.app.mid)}" onclick="closeDoc(true)">${ICON.ext}</a></div>
+        <div class="doc-body">${docBody()}</div>`;
+      appPaneMount();
+    }
+    return;
+  }
+  delete el.dataset.app;
   el.innerHTML = `<div class="doc-top">
       <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>

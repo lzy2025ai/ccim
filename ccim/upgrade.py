@@ -138,6 +138,10 @@ def status():
         _shown[:] = [time.time(), info()]
     i = _shown[1]
     out = dict(i, job=job() or None)
+    if i["kind"] == "dev":                    # 开发机自己看落没落后于 main：服务器部署有几分钟延迟，拿它比会误报（#345）
+        r = runtime._git("rev-list", "--count", "HEAD..origin/main")
+        if r.returncode == 0 and r.stdout.strip().isdigit():
+            out["behind"] = int(r.stdout.strip())
     if i["kind"] == "dev":                    # 开发机在试某个需求（ccim try）：跑的是那个分支，不算没更新（#341）
         t = runtime.trying()
         if t:

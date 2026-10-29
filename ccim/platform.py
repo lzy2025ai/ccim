@@ -367,12 +367,16 @@ class WebChannel(Channel):
                 pass
         self._emit(chat_id, self.logs.append(chat_id, rec))
 
+    def outer(self, chat_id):
+        """被 @ 的 Agent 的子对话 → 用户看着的那个对话（在这台电脑上的话），不是子对话就是它自己（#337、#345）。"""
+        chats = self.platform.chats()
+        of = (chats.get(chat_id) or {}).get("mention_of")
+        return of if of in chats else chat_id
+
     async def send_app(self, chat_id, app):
         """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。
         被 @ 的 Agent 在子对话里干活，记到用户正看着的那个对话里（#337）。那个对话在别的电脑上的照旧记在子对话里。"""
-        chats = self.platform.chats()
-        of = (chats.get(chat_id) or {}).get("mention_of")
-        chat_id = of if of in chats else chat_id
+        chat_id = self.outer(chat_id)
         self._emit(chat_id, self.logs.append(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""}))
 
     async def send_chatlog(self, chat_id, log):

@@ -45,7 +45,7 @@ class ChatPageTests(unittest.TestCase):
         # 120 个临时对话，第 i 个是 i 分钟前聊的；另外一些特别的
         chats = {f"w-{i:03d}": {"title": f"对话{i}", "last_active": ts(i), "created": ts(i)} for i in range(120)}
         chats["w-090"]["pin"] = -1                                       # 置顶的：很早也要带
-        chats["w-095"]["star"] = True
+        chats["w-095"]["pin"] = -2                                     # 星标合进置顶后（#347）也是置顶
         chats["w-099"]["busy"] = True                                    # 在干活
         chats["w-010"]["parent"] = "w-100"                               # 分叉出来的：原对话也带上
         chats["w-111"]["title"] = "很早的周报草稿"
@@ -67,7 +67,7 @@ class ChatPageTests(unittest.TestCase):
         ids, more = self.head()
         recent = [f"w-{i:03d}" for i in range(52) if i != 5][:50]       # 没归档的最近 50 条
         self.assertTrue(set(recent) <= set(ids))
-        for cid in ("w-090", "w-095", "w-099", "w-100"):                  # 置顶、星标、在干活、分叉前的原对话
+        for cid in ("w-090", "w-095", "w-099", "w-100"):                  # 置顶、在干活、分叉前的原对话
             self.assertIn(cid, ids)
         self.assertNotIn("w-111", ids)
         self.assertNotIn("w-201", ids)                                    # 和 Agent 的对话（没在干活）不带
@@ -107,7 +107,7 @@ class ChatPageTests(unittest.TestCase):
     def test_board_recent_and_day_reviews(self):
         from ccim import board
         chats = registry.read_state(self.pf.home)["chats"]
-        chats["w-111"]["star"] = True                                     # 星标的：很早也在「最近在跟」
+        chats["w-111"]["pin"] = -3                                       # 置顶的：很早也在「最近在跟」
         chats["w-202"] = {"title": "10月25日 复盘", "agent": self.agent, "review": "2026-10-25", "last_active": ts(5000)}
         registry.write_state(self.pf.home, chats=chats)
         rec = {r["id"] for r in board.recent(self.pf, self.pf.chats())}

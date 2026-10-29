@@ -3490,7 +3490,7 @@ function chatAt(e){
     : S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
   if (!list.length) return toast("还没有建好的 Agent，先去 Agent 页建一个");
   const all = group && list.length > 1 ? `<button data-all="1"><span><div>所有人</div><div class="desc">${list.length} 个 Agent</div></span></button>` : "";
-  const pp = pop(e, `<div class="sec">${group ? "@ 群里的 Agent（可以多选）" : "让谁回答（可以多选）"}</div>` + all + list.map(a =>
+  const pp = pop(e, `<div class="sec">${group ? "@ 群里的 Agent" : "让谁回答"}${EMBED ? "" : "（可以多选）"}</div>` + all + list.map(a =>
     `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${ms.includes(a.id) ? "，群成员" : ""}${a.busy ? "，正在干活" : ""}</div></span>${chatRcpt.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
   const dropAt = () => { const i = $("#input"); if (i && /[@＠]$/.test(i.value)) { i.value = i.value.slice(0, -1); draftText = i.value; } };
   pp.querySelectorAll("[data-all]").forEach(b => b.onclick = () => { chatRcpt = list.map(a => a.id); dropAt(); closePop(); drawChatRcpt(); $("#input")?.focus(); });
@@ -3500,6 +3500,7 @@ function chatAt(e){
     const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
     const i = $("#input"); if (i && /[@＠]$/.test(i.value)) { i.value = i.value.slice(0, -1); draftText = i.value; }   // 打的 @ 换成上面的标签
     drawChatRcpt();
+    if (EMBED) { closePop(); i?.focus(); }   // 助理挂件地方小：选一个就关，要多个再打 @（#323）
   });
   const done = () => { removeEventListener("click", done); $("#input")?.focus(); };
   setTimeout(() => addEventListener("click", done, {once: true}), 0);

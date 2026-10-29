@@ -46,7 +46,7 @@ def static_file(path):
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
-MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden")          # 对话列表里用户加的标记（star：星标，#194）
+MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden", "expanded")   # 对话列表里用户加的标记（star：星标，#194；expanded：挂件对话点过放大，#326）
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 # 页面专用的助手（#116）

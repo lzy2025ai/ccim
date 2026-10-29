@@ -465,6 +465,7 @@ class Platform:
         self.store = Store(home)
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
         self.peer_results = {}                # 别的电脑派来的活：编号 → 结果（还没做完是 None）
+        self.peer_runs = {}                   # 编号 → (子对话, 开始时刻)：问结果时带上这期间打开的应用（#337）
         self.background = set()
         self.works = set()                    # 侧边对话里派出去、还在做的（work 卡片的 id，#290）
         from .projects import Projects
@@ -2079,6 +2080,7 @@ class Platform:
         chat.submit(task)
         token = uuid.uuid4().hex
         self.peer_results[token] = None       # 活可能做很久：先回个编号，那边隔一会儿来问结果
+        self.peer_runs[token] = (cid, start)
 
         async def wait():
             try:
@@ -2100,9 +2102,14 @@ class Platform:
         if token not in self.peer_results:
             raise Problem("unknown")
         r = self.peer_results[token]
+        cid, start = self.peer_runs.get(token) or (None, 0)
         if r is not None:
             self.peer_results.pop(token, None)
-        return r or {"done": False}
+            self.peer_runs.pop(token, None)
+        # 被 @ 的 Agent 打开了这台电脑上的应用：交给那边，在用户看着的对话里打开（#337）
+        apps = [{"app": x.get("app"), "name": x.get("name"), "icon": x.get("icon") or "", "at": x.get("at")}
+                for x in (self.channel.logs.read(cid) if cid else []) if x.get("type") == "app" and x.get("at", 0) >= start]
+        return dict(r or {"done": False}, apps=apps)
 
     def run(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)

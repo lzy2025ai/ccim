@@ -2297,7 +2297,7 @@ function onEvent(ev){
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
-        if (ev.type === "app") openAppPane(rec.app, ownerOf(ev.chat) || ctxMachine);
+        if (ev.type === "app") openAppPane(rec.app, rec.mid || ownerOf(ev.chat) || ctxMachine);
         if (ev.type === "answer") wsAnswer(rec);
       }
     }
@@ -4032,7 +4032,7 @@ addEventListener("message", async e => {
   } catch (err) { reply({ok: false, error: err.message || "出错了"}); }
 });
 function appChip(r){
-  return `<button class="docfile" onclick="openAppPane(${q(r.app)})"><span class="di">${esc(r.icon || "▦")}</span><span class="t"><b>${esc(r.name)}</b><small>应用</small></span></button>`;
+  return `<button class="docfile" onclick="openAppPane(${q(r.app)}${r.mid ? "," + q(r.mid) : ""})"><span class="di">${esc(r.icon || "▦")}</span><span class="t"><b>${esc(r.name)}</b><small>应用</small></span></button>`;
 }
 
 // ================= 任务面板（#48） =================

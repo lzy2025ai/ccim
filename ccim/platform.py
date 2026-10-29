@@ -52,6 +52,19 @@ COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 # 页面专用的助手（#116）
 GUEST_HELPER = ("\n- 这个用户用的是别人共享给他的电脑：你装、改、删的是他自己的那一份 Skill，只有他自己的 Agent 能用，不会同步到别的电脑。"
                 "skill_list 里标了 shared 的是电脑主人的，只能看、能用，不能改也不能删。只能从 GitHub 地址安装。")
+DRAFT_PROMPT = """下面是用户和 AI 助手的一段对话。用户想把这个助手保存成一个长期使用的 Agent，以后专门干这类活。
+请给它起个名字，再写一段角色说明（以后每次和它对话都会带上这段话）：
+- 名字：不超过 8 个字，说清楚它干什么，比如「前端开发」「周报助手」
+- 角色说明：它负责什么；从对话里看出来的用户要求、习惯、偏好、约定（具体写，比如用什么技术、交付什么格式、哪些事不能做）；
+  不写这次对话的具体进度和一次性的事。用「你」称呼它，3 到 8 句，不用标题和列表符号
+
+对话：
+{talk}
+
+按这个格式输出，不要别的：
+名字：……
+角色说明：……"""
+
 HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "你是 ccim 平台的 Skill 助手，在 Skill 页面右侧和用户对话，帮他管理「平台 Skill」：装在平台上、同步到所有电脑、"
     "所有 Agent 在 ccim 里对话时都能用的 Skill。\n"
@@ -596,6 +609,62 @@ class Platform:
             if key == aid or key.startswith(aid + "@"):
                 for c in b.chats.values():
                     c.reconnect = True
+
+    # ----- 临时对话保存为 Agent（#318） -----
+
+    def adoptable(self, cid):
+        """能不能归到新 Agent 名下；能的话返回 (底座, 它现在的目录, 用户有没有选过目录)。"""
+        m = self.chats().get(cid)
+        if not m or not m.get("temp") or m.get("agent"):
+            raise Problem("只有临时对话能保存为 Agent。")
+        if m.get("helper") or m.get("side_of"):
+            raise Problem("这个对话不能保存为 Agent。")
+        if m.get("busy"):
+            raise Problem("它还在干活，等这一轮做完再保存。")
+        t = m["temp"]
+        return t.get("base") or "claude", self.chat_dir(cid), bool(t.get("dir"))
+
+    async def adopt_chat(self, cid, aid):
+        """对话归到 Agent 名下：会话编号存在对话状态里，不动；目录和 Agent 的不一样就记在对话上，接着在原目录聊，会话才接得上。"""
+        a = agents.get(aid)
+        path = self.chat_dir(cid)
+        b = self.bridges.pop("temp:" + cid, None)
+        c = b and b.chats.pop(cid, None)
+        if c:
+            await c.stop()
+            if c.worker:
+                c.worker.cancel()
+        chats = self.chats()
+        m = chats[cid]
+        m.pop("temp", None)
+        m["agent"] = aid
+        if os.path.realpath(path) != os.path.realpath(agents.cwd(a)):
+            m["cwd"] = path
+        self.store.write(chats)
+
+    async def draft_agent(self, cid):
+        """按对话内容起草 Agent 的名字和角色说明。"""
+        from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
+        from .session import CLI
+        rows = [r for r in self.channel.logs.read(cid) if r.get("type") in ("user", "answer") and r.get("text")]
+        lines = [("用户：" if r["type"] == "user" else "助手：") + r["text"].strip()[:1500] for r in rows]
+        talk = "\n\n".join(lines)
+        if len(talk) > 12000:
+            talk = talk[:4000] + "\n\n……\n\n" + talk[-8000:]
+        if not talk:
+            return {"name": "", "role": ""}
+        opts = ClaudeAgentOptions(model="sonnet", max_turns=1, allowed_tools=[], setting_sources=[],
+                                  cwd=os.path.expanduser("~"), cli_path=CLI, permission_mode="default",
+                                  extra_args={"no-session-persistence": None})
+        text = ""
+        async for msg in query(prompt=DRAFT_PROMPT.format(talk=talk), options=opts):
+            if isinstance(msg, AssistantMessage):
+                text += "".join(b.text for b in msg.content if isinstance(b, TextBlock))
+        name, _, role = text.strip().partition("\n")
+        name = name.partition("：")[2] if name.startswith("名字") else name
+        role = role.strip()
+        role = role.partition("：")[2].strip() if role.startswith("角色说明") else role
+        return {"name": " ".join(name.split()).strip("「」\"'“”")[:20], "role": role[:2000]}
 
     def set_kbs(self, cid, ids):
         from . import kb
@@ -2403,6 +2472,7 @@ def _handler(pf):
                 "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
+                "/api/agent/draft": lambda: pf.run(pf.draft_agent(b("chat")), timeout=120),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
                 "/api/chat/handoff": lambda: handoff_chat(pf, b("id"), b("channel"), b("fresh")),
                 "/api/channel/start": lambda: console.start(b("proc")),
@@ -2703,6 +2773,14 @@ def state(pf, acct=None):
 def save_agent(pf, aid, fields, acct=None):
     if not acct:                              # 账号只在访客新建时由 share.check 定
         fields.pop("account", None)
+    src = None if aid else fields.pop("from_chat", None)
+    fields.pop("from_chat", None)
+    if src:                                   # 临时对话保存为 Agent（#318）：底座跟对话一致，否则会话接不上
+        base, path, chosen = pf.call(pf.adoptable, src)
+        fields["base"] = base
+        if not fields.get("dir") and not chosen:
+            fields["dir"] = path              # 没选过目录：它的临时目录就是 Agent 的工作目录，做出来的文件都在
+            os.makedirs(path, exist_ok=True)
     if fields.get("base") == "codex":
         from . import web as console
         if not console._codex():
@@ -2722,7 +2800,9 @@ def save_agent(pf, aid, fields, acct=None):
             pf.call(pf.relaunch_agent, aid)
     else:
         a = agents.create(**fields)
-    return {"id": a["id"]}
+        if src:
+            pf.run(pf.adopt_chat(src, a["id"]))
+    return {"id": a["id"], "chat": src}
 
 
 def delete_agent(pf, aid):

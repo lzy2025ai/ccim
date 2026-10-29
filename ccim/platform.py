@@ -368,7 +368,9 @@ class WebChannel(Channel):
         self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def send_app(self, chat_id, app):
-        """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。"""
+        """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。
+        被 @ 的 Agent 在子对话里干活，记到用户正看着的那个对话里（#337）。"""
+        chat_id = (self.platform.chats().get(chat_id) or {}).get("mention_of") or chat_id
         self._emit(chat_id, self.logs.append(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""}))
 
     async def send_chatlog(self, chat_id, log):

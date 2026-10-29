@@ -155,14 +155,17 @@ class Mentions:
         rids = []
         for aid in to:
             sub = self.sub(cid, aid)
+            also = [self._agent_name(a) for a in to if a != aid]   # 同时 @ 了别人（#331）：话里分了工的只做自己那份
+            also = (f"（这条同时 @ 了{'、'.join(also)}：话里给各人分了工的，只做点到你的那份；没分工的，各自完整回答）"
+                    if also else "")
             if side:
                 prompt = main[aid] + (f"（侧边对话里之前的内容，每段开头写的是谁说的，都不是你；你自己说过的在你的记忆里）\n{ctx[aid]}\n\n"
-                                      if ctx[aid] else "") + f"[用户在侧边对话里 @ 了你] {text}{att}"
+                                      if ctx[aid] else "") + f"[用户在侧边对话里 @ 了你]{also} {text}{att}"
             else:
                 prompt = groups.note_prefix(self.pf, cid, aid) + \
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                    f"[{self._who(cid, by)}在对话里 @ 了你] {text}{att}"
+                    f"[{self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
             if not (by or side or q) and home[aid] == me:
                 into = await self._inject(cid, aid, mid, prompt, text, user["at"], depth)
                 if into:

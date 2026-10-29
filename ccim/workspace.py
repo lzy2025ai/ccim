@@ -6,6 +6,8 @@ AI 这一轮改了哪些文件：编辑工具写的（会话里记下的）加�
 """
 import os, shutil, subprocess, time
 
+from . import docs
+
 HOME = os.path.realpath(os.path.expanduser("~"))
 SKIP = {".git", "node_modules", ".venv", "venv", "__pycache__", ".DS_Store", ".idea", ".next", ".cache", ".pytest_cache",
         ".mypy_cache", ".ruff_cache", "dist", ".turbo"}
@@ -182,7 +184,7 @@ def put(root, uploads, key, rel, name):
 
 
 def paths(root, items):
-    """回复里写到的路径（#296）：哪些在工作目录里、确实存在。返回 {原样写的: {path, dir}}，不在的不返回。"""
+    """回复里写到的路径（#296）：哪些在工作目录里、确实存在。返回 {原样写的: {path, dir, view}}（view：网页里能预览），不在的不返回。"""
     root = os.path.realpath(root)
     out = {}
     for rel in list(items or [])[:200]:
@@ -193,7 +195,8 @@ def paths(root, items):
         except (Problem, OSError, ValueError):
             continue
         if p != root and os.path.exists(p):
-            out[rel] = {"path": p, "dir": os.path.isdir(p)}
+            d = os.path.isdir(p)
+            out[rel] = {"path": p, "dir": d, "view": not d and bool(docs.kind(p))}
     return {"paths": out}
 
 

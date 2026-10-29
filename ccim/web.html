@@ -726,6 +726,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .acts-row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .compare .col{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.mg-view{display:flex;justify-content:flex-end;margin-bottom:6px}
+.mg-one + .mg-one{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .compare .col.chosen{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
 .branch{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--ink-2);margin-bottom:8px}
 .proj-body{flex:1;min-height:0;display:flex}
@@ -3587,7 +3589,18 @@ function mentionGroup(mid){
       ${replyBody(r, live)}${mentionActs(i, r, live)}`;
   };
   if (rs.length === 1) return `<div class="msg">${one(rs[0])}</div>`;
-  return `<div class="msg wide"><div class="compare">${rs.map(x => `<div class="col">${one(x)}</div>`).join("")}</div></div>`;
+  // 几个人的回答（#331）：默认上下排，宽屏上可以切成并排对比，记住每组的选择；挂件、手机上一直上下排
+  const side = !EMBED && !narrow() && sideBySide().includes(mid);
+  const sw = EMBED || narrow() ? "" : `<div class="mg-view"><span class="seg mini"><button class="${side ? "" : "on"}" onclick="setSideBySide(this,${q(mid)},false)">上下</button><button class="${side ? "on" : ""}" onclick="setSideBySide(this,${q(mid)},true)">并排</button></span></div>`;
+  return side ? `<div class="msg wide">${sw}<div class="compare">${rs.map(x => `<div class="col">${one(x)}</div>`).join("")}</div></div>`
+    : `<div class="msg">${sw}${rs.map(x => `<div class="mg-one">${one(x)}</div>`).join("")}</div>`;
+}
+const SBS = "ccim.sideBySide";
+function sideBySide(){ try { return JSON.parse(localStorage.getItem(SBS) || "[]"); } catch { return []; } }
+function setSideBySide(btn, mid, on){   // 只换这一组，不重画整个对话（滚动位置不动）
+  const l = sideBySide().filter(x => x !== mid);
+  try { localStorage.setItem(SBS, JSON.stringify(on ? [...l, mid].slice(-300) : l)); } catch {}
+  const el = btn.closest(".msg"); if (el) el.outerHTML = mentionGroup(mid);
 }
 async function stopMention(rid){ await act(() => api("/api/chat/mention/stop", {rid}), "正在停下"); }
 function msgText(src, i){ return ((src === "earlier" ? detail.earlier : src === "elsewhere" ? detail.elsewhere : detail.log)[i] || {}).text || ""; }

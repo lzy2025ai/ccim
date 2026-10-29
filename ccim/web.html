@@ -1837,7 +1837,7 @@ function fpScan(){
   }, 120);
 }
 function fpMark(el, v, c){
-  if (!v || v.dir && isRemote(c.mid)) return;   // 文件夹只能在访达里打开，别的电脑上就不给点
+  if (!v || v.dir && !canReveal(c.mid)) return;   // 文件夹只能在访达里打开，打不开访达的就不给点
   el.classList.add("on"); el.tabIndex = 0; el.setAttribute("role", "button");
   el.onclick = e => fpMenu(e, el, v, c);
   el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fpMenu(e, el, v, c); } };
@@ -1847,9 +1847,19 @@ function fpMenu(e, el, v, c){
   const P = JSON.stringify(v.path), C = JSON.stringify(c.chat), M = JSON.stringify(c.mid || "");
   pop({stopPropagation(){ e.stopPropagation(); }, currentTarget: el}, [
     v.view === false || v.dir ? "" : b(`openDoc(${P},null,${C})`, "打开"),
-    isRemote(c.mid) ? "" : b(`act(()=>api("/api/ws/reveal",{chat:${C},path:${P}},${M}||null))`, "在访达中显示"),
+    canReveal(c.mid) ? b(`fpReveal(${C},${M},${P})`, "在访达中显示") : "",
     v.dir ? "" : b(`fpDownload(${C},${M},${P})`, "下载"),
   ].join(""));
+}
+// 在放文件的那台电脑上打开访达（#322）：服务器、别人共享给我的电脑上不行；网页不在那台电脑上时说一声开在哪了
+function canReveal(mid){
+  if (!isRemote(mid)) return true;
+  const m = machineOf(mid);
+  return !!m && !m.shared && !m.hub;
+}
+async function fpReveal(chat, mid, p){
+  await act(() => api("/api/ws/reveal", {chat, path: p}, mid || null));
+  if (isRemote(mid)) toast(`已在「${(machineOf(mid) || {}).name || "那台电脑"}」的访达里选中`);
 }
 function fpDownload(chat, mid, p){
   const a = document.createElement("a");

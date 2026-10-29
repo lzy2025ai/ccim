@@ -2374,7 +2374,9 @@ def _handler(pf):
             u = urlparse(self.path)
             if self._remote():
                 return
-            if self.headers.get("X-From-Peer") and u.path in ("/api/pick", "/api/reveal", "/api/ws/reveal"):
+            # 别的电脑转来的：/api/ws/reveal 只给这台电脑的主人（#322），访客不行
+            if self.headers.get("X-From-Peer") and (u.path in ("/api/pick", "/api/reveal")
+                                                     or u.path == "/api/ws/reveal" and share.account_of(self.headers)):
                 return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
                 if self._guest("POST", u.path, {}, None)[1]:

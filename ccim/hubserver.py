@@ -679,7 +679,7 @@ def _handler(hub):
                     if mid not in {m["id"] for m in hub.peers.machines(self.acct, own=True)}:
                         raise ValueError("没有这台电脑。")
                     return self._send(200, hub.peers.remove(mid))
-                if u.path in ("/api/peers/leave", "/api/pick", "/api/reveal", "/api/ws/reveal") or u.path == "/api/global" and not self.headers.get("X-Machine"):
+                if u.path in ("/api/peers/leave", "/api/pick", "/api/reveal") or u.path in ("/api/global", "/api/ws/reveal") and not self.headers.get("X-Machine"):
                     return self._send(400, {"error": "在服务器上不能这样做。"})
             except ValueError as e:
                 return self._send(400, {"error": str(e)})

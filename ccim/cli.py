@@ -35,7 +35,7 @@ async def _after_restart(path, channel, log):
         notes = await asyncio.to_thread(runtime.after_restart_note, path)
         for cid, text in notes:
             try:
-                await channel.send_text(cid, text)
+                await channel.send_text(getattr(channel, "outer", lambda c: c)(cid), text)
             except Exception:
                 log.warning("重启后的说明没发出去（%s）", cid, exc_info=True)
     except Exception:

@@ -2564,7 +2564,8 @@ let quietOpen = null;
 async function openChat(id){
   const quiet = quietOpen === id, t0 = performance.now(); quietOpen = null;
   if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
-  if (!detail || detail.id !== id) { chatRcpt = []; chatRefs = []; }
+  const fresh = !detail || detail.id !== id;
+  if (fresh) { chatRcpt = []; chatRefs = []; }
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await openOn(id); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
@@ -2579,6 +2580,7 @@ async function openChat(id){
     }
     renderList();
   }
+  if (fresh) chatRcpt = stickyAt();
   drawChat(); doJump(); markSeen(id);
   if (!quiet) perfMark("chat", "打开对话", performance.now() - t0, {ctx: {chat: id, machine: (machineOf(ctxMachine) || {}).name || "", msgs: (detail.log || []).length}});
 }
@@ -3228,7 +3230,7 @@ async function sendChat(){
   if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt, src = detail;
-    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = []; drawPending(); drawChatRcpt(); drawComposerState();
+    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = stickyAt(); drawPending(); drawChatRcpt(); drawComposerState();
     try {
       const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -3446,9 +3448,22 @@ function loadDraft(key, id = "input"){   // 换到 key 这个输入框；输入�
 }
 document.addEventListener("input", e => { if (e.target && e.target.id in draftKeys) saveDraft(e.target.id); });
 let chatRcpt = [], chatRefs = [], draftText = "", prefill = "";   // prefill：打开对话时先写进输入框的（设备管理里「让 Agent 处理」）
+// 第一句就 @ 了 Agent 的对话（#327）：之后输入框一直带着这些 @；点掉其中一个就不再带（记在这个浏览器里）
+const AT_OFF = "ccim.atOff";
+function atOff(){ try { return JSON.parse(localStorage.getItem(AT_OFF) || "[]"); } catch { return []; } }
+function stickyAt(){
+  if (!detail || detail.agent || detail.readonly || atOff().includes(detail.id)) return [];
+  const first = (detail.log || []).find(r => r.type === "user");
+  return ((first && first.to) || []).filter(agentOf);
+}
+function atDrop(r){
+  chatRcpt = chatRcpt.filter(x => x !== r);
+  if (detail && stickyAt().includes(r)) { try { localStorage.setItem(AT_OFF, JSON.stringify([...atOff(), detail.id].slice(-500))); } catch {} }
+  drawChatRcpt();
+}
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
-  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="chatRcpt=chatRcpt.filter(x=>x!==${q(r)});drawChatRcpt()">${ICON.x}</button></span>`).join("")
+  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`).join("")
     + chatRefs.map(r => `<span class="at">#${esc(r.title)}<button aria-label="去掉" onclick="chatRefs=chatRefs.filter(x=>x.id!==${q(r.id)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
 }
 // 引用这个 Agent 以前的对话（#199）：输入框打 #，或者列表三点菜单里「引用」

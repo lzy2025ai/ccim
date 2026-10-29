@@ -19,7 +19,7 @@ import json, os, re, time
 from . import agents, registry
 
 GUEST_GET = {
-    "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/schedule", "/api/schedule/list",
+    "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/agent/recent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/board/day", "/api/dirs", "/api/file", "/api/file/part",
     "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls",
@@ -251,7 +251,7 @@ def check(pf, acct, method, path, q, body):
             _mine_chat(pf, acct, q.get("id"))
         elif path in ("/api/doc", "/api/file", "/api/file/part", "/api/ws/ls"):
             _mine_chat(pf, acct, q.get("chat"))
-        elif path in ("/api/agent", "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file"):
+        elif path in ("/api/agent", "/api/agent/recent", "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file"):
             _usable_agent(acct, q.get("id"))
         elif path == "/api/schedule":
             if of_schedule(pf, pf.schedules.all().get(q.get("id") or "")) != acct:

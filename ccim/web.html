@@ -543,6 +543,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .off-note{color:var(--faint);font-size:12.5px}
 /* 进入 Agent / 项目后左边那一列 */
 .back{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:13px;text-decoration:none}
+.back{min-width:0}.back svg{flex:none}.back-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .back:hover{color:var(--ink)}
 .back svg{width:15px;height:15px}
 .side-card{margin:2px 12px 10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);display:flex;gap:10px;align-items:center}
@@ -2373,12 +2374,12 @@ function route(){
 // 回答里的站内链接（#284）：点过去的对话顶上有返回，回到点链接的地方（手机左上角的返回也一样），连着点几层就一层层回去；回去时滚动位置还原
 let linkTrail = [], linkNav = false;
 document.addEventListener("click", e => {
-  const a = e.target.closest && e.target.closest(".answer a[href^='#/'], .rv-body a[href^='#/']");
+  const a = e.target.closest && e.target.closest(".answer a[href^='#/'], .rv-body a[href^='#/'], .av-card a[href^='#/']");
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.getAttribute("href") === location.hash) return;
   let box = a.parentElement;
   while (box && box !== document.body && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
   const sel = box && box !== document.body ? (box.id ? "#" + box.id : box.classList.length ? "." + [...box.classList].join(".") : null) : null;
-  linkTrail.push({hash: location.hash || "#/", sel, top: sel ? box.scrollTop : 0}); linkNav = true;
+  linkTrail.push({hash: location.hash || "#/", sel, top: sel ? box.scrollTop : 0, title: detail && detail.id === (current.sub || current.id) ? detail.title : null}); linkNav = true;
 });
 function linkBack(){
   const t = linkTrail.pop(); linkNav = true; location.hash = t.hash;
@@ -2597,29 +2598,42 @@ function liveText(p){
 }
 // ---- 头像上停一下：这个 Agent 最近的任务（#298）。点一条跳过去；触屏上点头像打开 ----
 const avHov = (a, html) => a && a.id && agentOf(a.id) ? `<span class="av-hov" data-agent="${esc(a.id)}" tabindex="0" role="button" aria-label="${esc(a.name)}最近的任务">${html}</span>` : html;
-let avTimer = 0, avHide = 0;
-function agentTasks(aid){
-  return (S.chats || []).filter(c => (c.agent === aid || (c.members || []).includes(aid)) && !c.archived)
-    .sort((x, y) => String(y.last_active || "").localeCompare(String(x.last_active || "")));
-}
+let avTimer = 0, avHide = 0, avSeq = 0;
+const avGot = {};                 // Agent → 上次取到的 {rows, total}：再停上去先显示它，取到新的再换（#307）
 function avCard(aid){
-  const a = agentOf(aid), cs = agentTasks(aid);
+  const a = agentOf(aid), got = avGot[aid], cs = got ? got.rows : null;
+  const ds = c => [c.of ? (c.of.title === c.title ? "被 @" : `在「${c.of.title}」里被 @`) : "", c.brief || ""].filter(Boolean).join(" · ");
   return `<div class="av-card-h">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span></div>`
-    + (cs.length ? cs.slice(0, 5).map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span><span class="when">${when(c.last_active)}</span></span>${c.brief ? `<span class="ds">${esc(c.brief)}</span>` : ""}</a>`).join("")
+    + (!cs ? `<p class="muted av-empty">正在取…</p>` : cs.length ? cs.map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span><span class="when">${when(c.last_active)}</span></span>${ds(c) ? `<span class="ds">${esc(ds(c))}</span>` : ""}</a>`).join("")
       : `<p class="muted av-empty">还没有任务</p>`)
-    + `<a class="av-all" href="#/agents/${encodeURIComponent(aid)}" onclick="avClose()">查看全部${cs.length > 5 ? ` ${cs.length} 条` : ""}</a>`;
+    + `<a class="av-all" href="#/agents/${encodeURIComponent(aid)}" onclick="avClose()">查看全部${got && got.total > cs.length ? ` ${got.total} 条` : ""}</a>`;
+}
+function avPlace(p, el){
+  const r = el.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+  p.style.left = Math.max(10, Math.min(r.left, innerWidth - w - 10)) + "px";
+  p.style.top = (r.bottom + 6 + h > innerHeight - 10 && r.top - 6 - h > 10 ? r.top - 6 - h : r.bottom + 6) + "px";
 }
 function avOpen(el){
   avClose();
   const aid = el.dataset.agent; if (!agentOf(aid) || !document.contains(el)) return;
   const p = document.createElement("div"); p.className = "av-card"; p.innerHTML = avCard(aid); document.body.append(p);
-  const r = el.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
-  p.style.left = Math.max(10, Math.min(r.left, innerWidth - w - 10)) + "px";
-  p.style.top = (r.bottom + 6 + h > innerHeight - 10 && r.top - 6 - h > 10 ? r.top - 6 - h : r.bottom + 6) + "px";
+  avPlace(p, el);
   p.onmouseenter = () => clearTimeout(avHide);
   p.onmouseleave = avLater;
+  const seq = ++avSeq;
+  api0(`/api/agent/recent?id=${encodeURIComponent(aid)}`).catch(() => {     // 那台还是老版本：用手上的对话列表
+    const cs = (S.chats || []).filter(c => (c.agent === aid || (c.members || []).includes(aid)) && !c.archived)
+      .sort((x, y) => String(y.last_active || "").localeCompare(String(x.last_active || "")));
+    return {rows: cs.slice(0, 5), total: cs.length};
+  }).then(got => {
+    avGot[aid] = got;
+    if (seq !== avSeq || !document.contains(p)) return;
+    const f = p.contains(document.activeElement);
+    p.innerHTML = avCard(aid); avPlace(p, el);
+    if (f) p.querySelector("a")?.focus();
+  });
 }
-function avClose(){ clearTimeout(avTimer); clearTimeout(avHide); document.querySelectorAll(".av-card").forEach(p => p.remove()); }
+function avClose(){ avSeq++; clearTimeout(avTimer); clearTimeout(avHide); document.querySelectorAll(".av-card").forEach(p => p.remove()); }
 function avLater(){ clearTimeout(avTimer); clearTimeout(avHide); avHide = setTimeout(avClose, 250); }
 document.addEventListener("mouseover", e => {
   const el = e.target.closest?.(".av-hov");
@@ -5059,6 +5073,12 @@ async function fetchAgentSide(id){
   catch (e) { agentSide = {id, error: e.message, chats: []}; }
   if (current.view === "agents" && current.id === id) renderAgentSide();
 }
+// 从别的对话点过来的（头像卡片、回答里的链接）：左上角回到那个对话（#307）
+function backLink(){
+  const t = linkTrail[linkTrail.length - 1];
+  return t ? `<a class="back" href="${esc(t.hash)}" onclick="event.preventDefault();linkBack()" title="${esc(t.title || "返回")}">${ICON.left}<span class="back-t">${t.title ? esc(t.title) : "返回"}</span></a>`
+    : `<a class="back" href="#/agents">${ICON.left}所有 Agent</a>`;
+}
 function renderAgentSide(){
   const id = current.id;
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
@@ -5067,7 +5087,7 @@ function renderAgentSide(){
   const rows = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));   // 群聊里被 @ 的那份也列出来（#78）
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
-    <div class="list-head"><a class="back" href="#/agents">${ICON.left}所有 Agent</a><button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
+    <div class="list-head">${backLink()}<button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
     <div class="side-card">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div>
       <div class="sub">${[BASE[a.base || "claude"], ...ch, multi() && m ? m.name : ""].filter(Boolean).join(" · ")}</div></div>
       ${a.shared ? "" : `<button class="icon-btn" aria-label="更多操作" title="更多操作" onclick="agentMenu(event,${q(id)})">${ICON.more}</button>`}</div>

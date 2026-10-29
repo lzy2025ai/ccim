@@ -1846,7 +1846,7 @@ function fpMenu(e, el, v, c){
   const b = (js, label) => `<button onclick="closePop();${esc(js)}">${label}</button>`;
   const P = JSON.stringify(v.path), C = JSON.stringify(c.chat), M = JSON.stringify(c.mid || "");
   pop({stopPropagation(){ e.stopPropagation(); }, currentTarget: el}, [
-    v.dir ? "" : b(`openDoc(${P},null,${C})`, "打开"),
+    v.view === false || v.dir ? "" : b(`openDoc(${P},null,${C})`, "打开"),
     isRemote(c.mid) ? "" : b(`act(()=>api("/api/ws/reveal",{chat:${C},path:${P}},${M}||null))`, "在访达中显示"),
     v.dir ? "" : b(`fpDownload(${C},${M},${P})`, "下载"),
   ].join(""));

@@ -489,6 +489,18 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .app.cards,.app.cards.list-off{grid-template-columns:76px 1fr}
 .app.cards .list{display:none!important}
 .overview{display:flex;flex-direction:column;min-height:0;height:100%}
+.app-ic{flex:none;width:40px;height:40px;border-radius:10px;background:var(--sunk);border:1px solid var(--line);display:grid;place-items:center;font-size:20px;line-height:1}
+.app-ic.sm{width:28px;height:28px;border-radius:8px;font-size:15px}
+.app-view{display:flex;flex-direction:column;height:100%;min-height:0}
+.app-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.app-bar .back{display:flex;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:13px;margin-right:4px}
+.app-bar .back svg{width:16px;height:16px}
+.app-bar .grow{flex:1}
+.app-nm{border:0;background:none;padding:2px 6px;margin-left:-6px;border-radius:6px;font:600 14px var(--sans);color:var(--ink);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;min-width:0}
+.app-nm:hover{background:var(--sunk)}
+.docpane .app-frame{display:block;height:100%}
+.app-frame{flex:1;width:100%;border:0;background:#fff;min-height:0}
+@media (max-width:760px){.app-bar .back span{display:none}.app-bar{padding:8px 10px}}
 .ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
 .ov-head h1{font:600 24px/1.2 var(--song);margin:0}
 .ov-head .grow{flex:1}
@@ -1596,6 +1608,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
     <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/apps" data-nav="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
@@ -2203,7 +2216,7 @@ function saveFile(ev, a){
 const stallSeen = new Set();
 // 这些推送只动对话里的内容、或者上面已经就地改好 / 各自会刷新，列表用不着整份重取（#256）
 const STATUS_EVENTS = new Set(["bg", "brief"]);   // 对话的状态，不是记录，下面另外处理
-const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "drop", "dev", "skills", "kb"]);
+const LOCAL_EVENTS = new Set(["bg", "ctx", "brief", "edit", "file", "app", "drop", "dev", "skills", "kb"]);
 let esFails = 0;                  // 推送连续连不上几次了：重连间隔 5、10、20…秒，最长 1 分钟
 function connectEvents(again){
   const es = new EventSource("/api/events");
@@ -2284,6 +2297,7 @@ function onEvent(ev){
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
         drawThread();
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
+        if (ev.type === "app") openAppPane(rec.app, ownerOf(ev.chat) || ctxMachine);
         if (ev.type === "answer") wsAnswer(rec);
       }
     }
@@ -2360,7 +2374,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board");
+    || current.view === "skills" || current.view === "board" || current.view === "apps");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -2387,6 +2401,7 @@ function route(){
     else openAgentLatest(current.id);
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
+  else if (current.view === "apps") current.id ? openApp(current.id, current.sub) : renderApps();
   else if (current.view === "board") renderBoard();
   else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
@@ -2425,7 +2440,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board" || current.view === "skills") return;
+  if (current.view === "board" || current.view === "skills" || current.view === "apps") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -2785,6 +2800,7 @@ function recHtml(r, i, src = "log"){
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
       : fileChip(src, r.name)}${timeActs(r)}</div>`;
   }
+  if (r.type === "app") return `<div class="msg">${appChip(r)}${timeActs(r)}</div>`;
   if (r.type === "chatlog"){
     const items = r.items || [];
     return `<div class="msg"><button class="chatlog" onclick="openChatlog(${i})"><div class="t">${esc(r.title)}</div>
@@ -3869,6 +3885,155 @@ async function startAgent(aid){
   location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
+
+// ================= 应用（#103） =================
+// 应用页面放进隔离的 iframe（不同源，碰不到平台的接口和登录），只能通过 window.ccim 发消息给这里，由这里调这个应用自己的接口。
+// 同一个应用可以整页打开（#/apps/编号），也可以在对话右侧打开（Agent 用 app_open，或点对话里那条）
+const MOUNTS = new Set();   // 正显示着的应用：{id, mid, page, frame, sig, psig}
+const appKey = (id, mid) => `#/apps/${encodeURIComponent(id)}${mid && mid !== S.me ? "/" + encodeURIComponent(mid) : ""}`;
+const appIcon = (p, sm) => `<span class="app-ic ${sm ? "sm" : ""}">${esc(p.icon || [...(p.name || "应")][0])}</span>`;
+async function renderApps(){
+  const ms = chatMachines();
+  const got = await Promise.all(ms.map(m => api0("/api/apps", undefined, m.id).then(d => d.apps.map(a => ({...a, mid: m.id}))).catch(() => [])));
+  if (current.view !== "apps" || current.id) return;
+  const list = got.flat().sort((a, b) => b.updated - a.updated);
+  const body = list.length ? `<div class="cgrid">${list.map(a => `<a class="ccard" href="${appKey(a.id, a.mid)}">
+      <div class="top">${appIcon(a)}<div class="t"><div class="nm">${esc(a.name)}</div></div>${a.ready ? "" : `<span class="tag">还在做</span>`}</div>
+      <div class="role">${esc(a.desc)}</div>
+      <div class="foot"><span class="grow">${multi() ? esc((machineOf(a.mid) || {}).name || "") : ""}</span><span>${when(stamp(a.updated))}</span></div></a>`).join("")}
+      <button class="ccard add" onclick="newApp()">${ICON.plus}做一个应用</button></div>`
+    : `<div class="empty" style="margin-top:40px"><h2>还没有应用</h2><p>想反复用的小工具、要攒起来看的东西，让 Agent 做成应用，以后在这里打开。</p>
+      <button class="btn primary" onclick="newApp()">${ICON.plus}做一个应用</button></div>`;
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>应用</h1><span class="grow"></span>
+      <button class="btn primary" onclick="newApp()">${ICON.plus}做一个应用</button></div><div class="ov-body">${body}</div></div>`;
+}
+function newApp(){
+  draft = {...draft, machine: S.me, dir: "", model: "", effort: ""};
+  draftText = "做一个应用："; location.hash = "#/chats/new";
+}
+const APP_BRIDGE = `<script>(()=>{let n=0;const w=new Map(),subs=[];
+addEventListener("message",e=>{if(e.source!==parent)return;const d=e.data||{};
+if(d.ccimEvent==="change"){subs.forEach(f=>{try{f()}catch(x){console.error(x)}});return}
+const p=w.get(d.ccimId);if(!p)return;w.delete(d.ccimId);d.ok?p[0](d.value):p[1](new Error(d.error))});
+const call=(op,...args)=>new Promise((ok,no)=>{const id=++n;w.set(id,[ok,no]);parent.postMessage({ccimId:id,op,args},"*")});
+window.ccim={query:(c,q)=>call("query",c,q||""),get:(c,id)=>call("get",c,id),save:(c,r)=>call("save",c,r),del:(c,id)=>call("del",c,id),
+list:d=>call("list",d||""),read:p=>call("read",p),write:(p,t)=>call("write",p,String(t)),remove:p=>call("remove",p),
+readJSON:async(p,f=null)=>{const t=await call("read",p);if(t==null)return f;try{return JSON.parse(t)}catch{return f}},
+writeJSON:(p,v)=>call("write",p,JSON.stringify(v,null,2)),copy:(t,h)=>call("copy",String(t),h==null?null:String(h)),
+chat:t=>call("chat",String(t||"")),onChange:f=>{subs.push(f)}};})();<\/script>`;
+async function appPage(id, mid){ return api0(`/api/app?id=${encodeURIComponent(id)}`, undefined, mid); }
+function appMount(frame, id, mid, p){   // 把页面放进 iframe，登记好，之后数据、页面变了都通知它
+  for (const m of [...MOUNTS]) if (m.frame === frame || !document.contains(m.frame)) MOUNTS.delete(m);
+  const m = {id, mid, page: p, frame, sig: p.sig, psig: p.psig};
+  const html = p.html || "";
+  frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, x => x + APP_BRIDGE) : APP_BRIDGE + html;
+  MOUNTS.add(m);
+  return m;
+}
+async function openApp(id, mid){
+  mid = mid || S.me;
+  const cur = [...MOUNTS].find(m => m.full && document.contains(m.frame));
+  if (cur && cur.id === id && cur.mid === mid) return;
+  let p;
+  try { p = await appPage(id, mid); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个应用</h2><p>${esc(e.message)}</p><a class="btn" href="#/apps">所有应用</a></div>`; return; }
+  if (current.view !== "apps" || current.id !== id) return;
+  $("#main").innerHTML = `<div class="app-view"><div class="app-bar"><a class="back" href="#/apps">${ICON.left}<span>应用</span></a>
+      ${appIcon(p, true)}<button class="app-nm grow" title="改名" onclick="appRename(this)">${esc(p.name)}</button>
+      <button class="btn" onclick="appChat(this,'改一下这个应用：')">让 Agent 改</button></div>
+    <iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(p.name)}"></iframe></div>`;
+  appMount($("#main .app-frame"), id, mid, p).full = true;
+}
+const APP_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads";
+const mountOf = el => [...MOUNTS].find(m => m.frame === el.closest(".app-view, .docpane")?.querySelector("iframe"));
+// 对话右侧打开（和文档预览共用那个面板）
+async function openAppPane(id, mid){
+  if (SIDE) closeSide();
+  if (DOC && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  mid = mid || ctxMachine || S.me;
+  let p;
+  try { p = await appPage(id, mid); } catch (e) { toast(e.message); return; }
+  DOC = {chat: detail && detail.id, machine: mid, path: "app:" + id, app: {id, mid, page: p}, d: {kind: "app", name: p.name, versions: [], latest: true}, mode: "view"};
+  drawDoc();
+}
+function appPaneMount(){   // drawDoc 画完后把页面放进去
+  const f = $("#docpane .app-frame"); if (!f || !DOC || !DOC.app) return;
+  const old = [...MOUNTS].find(m => m.pane && m.id === DOC.app.id && m.mid === DOC.app.mid && m.frame === f);
+  if (!old) appMount(f, DOC.app.id, DOC.app.mid, DOC.app.page).pane = true;
+}
+setInterval(async () => {   // 每 4 秒看一次：数据变了通知页面，页面文件变了重新载入（Agent 在改它）
+  if (document.hidden) return;
+  for (const m of [...MOUNTS]) {
+    if (!document.contains(m.frame)) { MOUNTS.delete(m); continue; }
+    let d; try { d = await api0(`/api/app/sig?id=${encodeURIComponent(m.id)}`, undefined, m.mid); } catch { continue; }
+    if (!MOUNTS.has(m)) continue;
+    if (d.psig && d.psig !== m.psig) {
+      try { const p = await appPage(m.id, m.mid); MOUNTS.delete(m); const n = appMount(m.frame, m.id, m.mid, p); n.full = m.full; n.pane = m.pane; appRetitle(n); } catch {}
+    } else if (d.sig !== m.sig) { m.sig = d.sig; m.frame.contentWindow.postMessage({ccimEvent: "change"}, "*"); }
+  }
+}, 4000);
+function appRetitle(m){   // 改了名（网页上或 Agent 改的）：标题跟着变
+  const nm = m.page.name;
+  if (m.full) { const b = $("#main .app-nm"); if (b) b.textContent = nm; }
+  if (m.pane && DOC && DOC.app && DOC.app.id === m.id) { DOC.app.page = m.page; DOC.d.name = nm; const b = $("#docpane .app-nm"); if (b) b.textContent = nm; }
+}
+function appRename(btn){
+  const m = mountOf(btn); if (!m) return;
+  nameBox("改名", m.page.name, async v => {
+    if (v === m.page.name) return;
+    const r = await api("/api/app/rename", {id: m.id, name: v}, m.mid);
+    m.page.name = r.name; appRetitle(m); toast("改好了");
+  });
+}
+async function appChat(el, text){
+  const m = el && el.closest ? mountOf(el) : el; if (!m) return;
+  const t = `应用「${m.page.name}」：${text || ""}`;
+  if (m.pane && detail && !detail.readonly && $("#input")) { pocketFill(t); return; }   // 右侧开着：就在这个对话里说
+  if (m.page.agent && agentOf(m.page.agent)) { prefill = t; return startAgent(m.page.agent); }
+  draft = {...draft, machine: m.mid, dir: "", model: "", effort: ""};
+  draftText = t; location.hash = "#/chats/new";
+}
+async function appCopy(text, html){
+  try {
+    await navigator.clipboard.write([new ClipboardItem(html ? {"text/html": new Blob([html], {type: "text/html"}), "text/plain": new Blob([text], {type: "text/plain"})}
+                                                             : {"text/plain": new Blob([text], {type: "text/plain"})})]);
+  } catch {
+    const tmp = document.createElement("div");
+    tmp.style.cssText = "position:fixed;left:-9999px;top:0;white-space:pre-wrap";
+    if (html) tmp.innerHTML = html; else tmp.textContent = text;
+    document.body.append(tmp);
+    const r = document.createRange(); r.selectNodeContents(tmp);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    const ok = document.execCommand("copy"); s.removeAllRanges(); tmp.remove();
+    if (!ok) throw new Error("复制没成功，再试一次");
+  }
+  toast("已复制");
+}
+addEventListener("message", async e => {
+  const d = e.data || {};
+  const a = [...MOUNTS].find(m => m.frame.contentWindow === e.source);
+  if (!a || typeof d.ccimId !== "number") return;
+  const [x, y] = d.args || [], enc = encodeURIComponent, id = enc(a.id);
+  const reply = m => { try { e.source.postMessage({ccimId: d.ccimId, ...m}, "*"); } catch {} };
+  const mine = r => { if (r && r.sig) a.sig = r.sig; return r; };   // 自己写的不再当成「数据变了」通知回去
+  try {
+    let v = null;
+    if (d.op === "query") v = (await api0(`/api/app/query?id=${id}&coll=${enc(x || "")}&q=${enc(y || "")}`, undefined, a.mid)).rows;
+    else if (d.op === "get") v = (await api0(`/api/app/query?id=${id}&coll=${enc(x || "")}&rid=${enc(y || "")}`, undefined, a.mid)).row;
+    else if (d.op === "save") v = mine(await api0("/api/app/save", {id: a.id, coll: x, rec: y}, a.mid)).row;
+    else if (d.op === "del") mine(await api0("/api/app/del", {id: a.id, coll: x, rid: y}, a.mid));
+    else if (d.op === "list") v = (await api0(`/api/app/list?id=${id}&dir=${enc(x || "")}`, undefined, a.mid)).files;
+    else if (d.op === "read") v = (await api0(`/api/app/read?id=${id}&path=${enc(x || "")}`, undefined, a.mid)).text;
+    else if (d.op === "write" || d.op === "remove") mine(await api0(`/api/app/${d.op}`, {id: a.id, path: x, text: y}, a.mid));
+    else if (d.op === "copy") await appCopy(x, y);
+    else if (d.op === "chat") appChat(a, x);
+    else throw new Error("不支持的操作");
+    reply({ok: true, value: v});
+  } catch (err) { reply({ok: false, error: err.message || "出错了"}); }
+});
+function appChip(r){
+  return `<button class="docfile" onclick="openAppPane(${q(r.app)})"><span class="di">${esc(r.icon || "▦")}</span><span class="t"><b>${esc(r.name)}</b><small>应用</small></span></button>`;
+}
 
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.side_of && !c.project && (!c.schedule || c.listed) && !c.external;
@@ -7254,6 +7419,7 @@ function docBody(){
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
   if (d.kind === "audio") return `<div class="ws-img"><audio src="${esc(docFileUrl())}" controls></audio></div>`;
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
+  if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
@@ -7322,6 +7488,19 @@ function drawDoc(){
   document.body.classList.add("doc-open");
   const d = DOC.d, vs = d ? d.versions : [];
   const name = d ? d.name : DOC.path.split("/").pop();
+  if (d && d.kind === "app") {   // 应用（#103）：名字点了能改，右上角放大成整页
+    const keep = el.querySelector(".app-frame");
+    if (!(keep && el.dataset.app === DOC.path)) {
+      el.dataset.app = DOC.path;
+      el.innerHTML = `<div class="doc-top"><button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
+        ${appIcon(DOC.app.page, true)}<button class="app-nm" title="改名" onclick="appRename(this)">${esc(d.name)}</button><span class="sp" style="flex:1"></span>
+        <a class="icon-btn" aria-label="放大" title="放大" href="${appKey(DOC.app.id, DOC.app.mid)}" onclick="closeDoc(true)">${ICON.ext}</a></div>
+        <div class="doc-body">${docBody()}</div>`;
+      appPaneMount();
+    }
+    return;
+  }
+  delete el.dataset.app;
   el.innerHTML = `<div class="doc-top">
       <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>

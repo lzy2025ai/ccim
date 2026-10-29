@@ -54,6 +54,10 @@ SCHEDULE = """
 - 用户要你到点或每隔一段时间做某件事（比如每 30 分钟查一次、每天早上汇总）时，用命令 `ccim schedule add` 建定时任务
   （用法看 `ccim schedule add --help`），到点后任务会发回这个对话交给你；查看、暂停、删除也用 `ccim schedule`。
   不要用 CronCreate 或 /loop，对话一断开它们就不跑了。跟用户说的时候不提命令：用户在网页的「定时」页能看、能改、能停，也可以直接让你停。"""
+APPS = """
+- 用户的「应用」（网页里的小工具，比如竞品记录）用 ccim 的 app_list、app_query、app_save、app_open 工具查、往里加数据、在对话右侧打开；
+  用户提到某个应用、或要看、要记的东西正好有对应的应用时先 app_list 找。用户要长期反复用、要一点点攒起来看的东西，
+  可以做成新的应用，做法先读 ~/.ccim/apps/README.md；一次性的事直接做，不用做成应用。"""
 GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
 GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
 PR_MERGE = __import__("re").compile(r"\bgh\s+pr\s+merge\b")   # 合并 ccim 的 PR 改用 ccim ship（#230）
@@ -608,12 +612,12 @@ class Chat:
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
-                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
+                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1142,6 +1146,8 @@ class Chat:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
                 tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
+                if not guest_of(chat.b) and not chat.b.entry.get("lent"):
+                    tools += _app_tools(chat, pf)      # 应用的数据接口、在对话右侧打开（#103）
         elif side and chat.b.entry.get("side_at") and pf and not (pf.chats().get(chat.chat_id) or {}).get("remote_project", True):
             tools.append(_start_work(chat, pf))   # 侧边对话里被 @ 的（#290）：要动手就新开自己的对话去做
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
@@ -1159,6 +1165,7 @@ class Chat:
 
 
 SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
+APP_TOOLS = [f"mcp__ccim__app_{n}" for n in ("list", "query", "save", "delete", "open")]   # 应用的数据有 git 记录，能退回
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__share_skill_to_platform"]
 
 
@@ -1463,6 +1470,93 @@ def _search_tools(chat, pf):
         return {"content": [{"type": "text", "text": text}]} if text else _err("没有这个对话，编号用 search_chats 给的。")
 
     return [search_chats, open_chat]
+
+
+def _app_tools(chat, pf):
+    """应用（#103）：按应用在 app.json 里声明的数据接口增删改查，在对话右侧打开应用。只管这台电脑上的应用。"""
+    from . import apps
+
+    def text(t):
+        return {"content": [{"type": "text", "text": t}]}
+
+    def pick(key):
+        a = apps.find(key)
+        if not a:
+            names = "、".join(f"{x['name']}（{x['id']}）" for x in apps.listing()) or "还没有应用"
+            raise apps.Problem(f"没找到应用「{key}」。现有的：{names}")
+        return a
+
+    def run(fn):
+        async def go(args):
+            try:
+                return text(await asyncio.to_thread(fn, args))
+            except apps.Problem as e:
+                return _err(str(e))
+        return go
+
+    def do_list(args):
+        rows = apps.listing()
+        if not rows:
+            return "还没有应用。要做的话先读 ~/.ccim/apps/README.md。"
+        out = []
+        for a in rows:
+            colls = "、".join(f"{k}（{(c or {}).get('name') or k}）" for k, c in apps.collections(a["id"]).items()) or "没有声明数据接口"
+            out.append(f"- {a['name']}（编号 {a['id']}）：{a['desc']}　数据：{colls}")
+        return "这台电脑上的应用（名字以这里为准，用户可能改过名）：\n" + "\n".join(out) + \
+            "\n\n用 app_query 不带 collection 看某个应用的接口说明。"
+
+    def do_query(args):
+        a = pick(args.get("app"))
+        coll = (args.get("collection") or "").strip()
+        if not coll:
+            return apps.describe(a["id"])
+        if args.get("id"):
+            r = apps.query(a["id"], coll, rid=args["id"])
+            return json.dumps(r, ensure_ascii=False, indent=1) if r else "没有这条。"
+        rows = apps.query(a["id"], coll, args.get("query") or "")
+        return f"{len(rows)} 条：\n" + json.dumps(rows, ensure_ascii=False, indent=1)
+
+    def do_save(args):
+        a = pick(args.get("app"))
+        rec = args.get("record")
+        if isinstance(rec, str):
+            try:
+                rec = json.loads(rec)
+            except ValueError:
+                raise apps.Problem("record 要是 JSON 对象。")
+        r = apps.save(a["id"], (args.get("collection") or "").strip(), rec)
+        return f"存好了（id {r['id']}）。用户打开着「{a['name']}」的话会自动刷新。"
+
+    def do_delete(args):
+        a = pick(args.get("app"))
+        apps.delete(a["id"], (args.get("collection") or "").strip(), args.get("id"))
+        return "删了。"
+
+    s = {"type": "string"}
+    t_list = tool("app_list", "列出用户的应用（网页里「应用」那些小工具，比如竞品记录、文章库）：名字、说明、有哪些数据。"
+                  "用户提到某个应用、要看或往里加数据时先用它找；名字以这里列出的为准。", {"type": "object", "properties": {}})(run(do_list))
+    t_query = tool("app_query", "查应用里的数据。只给 app：返回这个应用的数据接口（集合、字段、填写说明），往里加东西前先看；"
+                   "给 collection：列出这类数据的记录（query 是关键词，空格分开都要出现）；再给 id：读一条。",
+                   {"type": "object", "properties": {"app": {**s, "description": "应用的名字或编号"}, "collection": s,
+                                                      "query": s, "id": s}, "required": ["app"]})(run(do_query))
+    t_save = tool("app_save", "往应用里新建或更新一条数据（按应用声明的字段，平台会检查）。record 带 id 就是更新那一条，只改给了的字段；"
+                  "不带 id 是新建。已有同一个东西的记录时先 app_query 找到它的 id 再更新，不要重复建。",
+                  {"type": "object", "properties": {"app": s, "collection": s, "record": {"type": "object"}},
+                   "required": ["app", "collection", "record"]})(run(do_save))
+    t_del = tool("app_delete", "删掉应用里的一条数据。", {"type": "object", "properties": {"app": s, "collection": s, "id": s},
+                                                           "required": ["app", "collection", "id"]})(run(do_delete))
+
+    @tool("app_open", "在用户的对话右侧打开一个应用给他看。用户说「打开 / 看下某个应用」、或者你刚往应用里加了东西、做好改好了应用时用。",
+          {"type": "object", "properties": {"app": {**s, "description": "应用的名字或编号"}}, "required": ["app"]})
+    async def app_open(args):
+        try:
+            a = await asyncio.to_thread(pick, args.get("app"))
+        except apps.Problem as e:
+            return _err(str(e))
+        await chat.b.channel.send_app(chat.chat_id, a)
+        return text(f"已在用户的对话右侧打开「{a['name']}」。")
+
+    return [t_list, t_query, t_save, t_del, app_open]
 
 
 def _deliver_later(pf, cid, name, f):

@@ -3892,12 +3892,18 @@ function renderChatEmptyOr(){ renderChatEmpty(); }
 const MOUNTS = new Set();   // 正显示着的应用：{id, mid, page, frame, sig, psig}
 const appKey = (id, mid) => `#/apps/${encodeURIComponent(id)}${mid && mid !== S.me ? "/" + encodeURIComponent(mid) : ""}`;
 const appIcon = (p, sm) => `<span class="app-ic ${sm ? "sm" : ""}">${esc(p.icon || [...(p.name || "应")][0])}</span>`;
-async function renderApps(){
-  const ms = chatMachines();
-  const got = await Promise.all(ms.map(m => api0("/api/apps", undefined, m.id).then(d => d.apps.map(a => ({...a, mid: m.id}))).catch(() => [])));
+let appsRun = 0;
+async function renderApps(){   // 哪台电脑先回就先画它的，不等最慢的那台（#339）
+  const run = ++appsRun, ms = chatMachines(), got = [];
+  let left = ms.length;
+  drawApps(got, !left);
+  await Promise.all(ms.map(m => api0("/api/apps", undefined, m.id).then(d => d.apps.map(a => ({...a, mid: m.id}))).catch(() => [])
+    .then(l => { got.push(...l); left--; if (run === appsRun) drawApps(got, !left); })));
+}
+function drawApps(got, done){
   if (current.view !== "apps" || current.id) return;
-  const list = got.flat().sort((a, b) => b.updated - a.updated);
-  const body = list.length ? `<div class="cgrid">${list.map(a => `<a class="ccard" href="${appKey(a.id, a.mid)}">
+  const list = got.slice().sort((a, b) => b.updated - a.updated);
+  const body = !list.length && !done ? "" : list.length ?`<div class="cgrid">${list.map(a => `<a class="ccard" href="${appKey(a.id, a.mid)}">
       <div class="top">${appIcon(a)}<div class="t"><div class="nm">${esc(a.name)}</div></div>${a.ready ? "" : `<span class="tag">还在做</span>`}</div>
       <div class="role">${esc(a.desc)}</div>
       <div class="foot"><span class="grow">${multi() ? esc((machineOf(a.mid) || {}).name || "") : ""}</span><span>${when(stamp(a.updated))}</span></div></a>`).join("")}

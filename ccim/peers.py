@@ -32,6 +32,7 @@ PASS_HEADERS = ("X-Name", "Content-Type", "X-Account", "X-Account-Name", "X-Acco
 OWNER = "owner"                               # 服务器上的总控：主人的账号编号（hubserver.OWNER）
 STATE_TIMEOUT = 5
 STATE_REFRESH = 10                            # 别的电脑的 state 超过这么久，返回上次取的同时后台再取一次（有变化会推送过来，标记现取）
+DIRTY_WAIT = 1.0                              # 要现问、手上有上次取的：最多等这么久，过了先用上次的（#335）
 POOL_IDLE = 30                                # 和总控之间空着的连接放这么久就不用了（nginx 默认 75 秒断开空闲连接，#264）
 POOL_MAX = 4
 RETRY_SAFE = ("/peer/poll", "/peer/reply", "/peer/push")   # 复用的连接断了换一条重发：这几个重发没有副作用
@@ -487,18 +488,31 @@ class Peers:
         extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
                       "home": local.get("home"), "ccim": local.get("ccim"), "perms": local.get("perms"), "global": local.get("global") or {},
                       "chat_more": local.get("chat_more")}}     # 这台还有多少更早的、已归档的对话没带上（#268）
-        results = {}
+        results, late, lock = {}, set(), threading.Lock()
 
         def fetch(m):
+            ok = False
             try:
                 status, _, data = self.forward(m["id"], "GET", "/api/state?local=1", b"", hdr(m["id"]))
                 if status == 200:
                     s = json.loads(data)
                     if m["id"] in guest and not self.guest_ready(m["id"], s):
                         s = {}
-                    results[m["id"]] = s
+                    ok = True
+                    with lock:
+                        if m["id"] not in late:
+                            results[m["id"]] = s
+                            return
+                        k = key(m["id"])
+                        moved = self.cache.get(k) != s
+                        self.cache[k], self.cache_at[k] = s, time.time()
+                    if moved:                 # 这次先给了网页上次取的：有变化就推一下，网页再来取就是这份
+                        self._emit_machines()
             except Exception:
                 pass
+            finally:
+                if not ok and m["id"] in late:      # 晚到的也没取到：下次还要现问
+                    self.dirty.add(key(m["id"]))
 
         now = time.time()
         others = [m for m in machines if not m["me"] and m["online"]]
@@ -511,11 +525,15 @@ class Peers:
             if m["id"] in self.dirty:     # 那台电脑有了变化：访客那份也要重取（编号本身就是主人那份的键）
                 self.dirty.update(f"{m['id']}|{a}" for a in (self.nodes.get(m["id"]) or {}).get("shares") or {})
             self.dirty.discard(key(m["id"]))
-        threads = [threading.Thread(target=fetch, args=(m,)) for m in now_]
-        for t in threads:
+        threads = [(m, threading.Thread(target=fetch, args=(m,), daemon=True)) for m in now_]
+        for _, t in threads:
             t.start()
-        for t in threads:
-            t.join(STATE_TIMEOUT + 1)
+        # 没取过的只能等它；取过的那台慢（正忙、网络差）就不让网页干等，先用上次的，晚到的由 fetch 写进缓存（#335）
+        for m, t in threads:
+            t.join(max(0, now + (DIRTY_WAIT if key(m["id"]) in self.cache else STATE_TIMEOUT + 1) - time.time()))
+        with lock:
+            late.update(m["id"] for m, t in threads if m["id"] not in results and t.is_alive() and key(m["id"]) in self.cache)
+            got = dict(results)
         for m in later:
             self.refreshing.add(key(m["id"]))
 
@@ -532,14 +550,14 @@ class Peers:
                 finally:
                     self.refreshing.discard(k)
             threading.Thread(target=bg, daemon=True).start()
-        for mid in results:
+        for mid in got:
             self.cache_at[key(mid)] = time.time()
-        fresh = {m["id"] for m in others if m not in now_}       # 用的是缓存，也算在线
+        fresh = {m["id"] for m in others if m not in now_} | late   # 用的是缓存，也算在线
         changed = False
         for m in machines:
             if m["me"]:
                 continue
-            s = results.get(m["id"])
+            s = got.get(m["id"])
             if s:
                 self.cache[key(m["id"])] = s
                 changed = True

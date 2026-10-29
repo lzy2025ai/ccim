@@ -79,8 +79,8 @@ class PeerFasterTests(unittest.TestCase):
         self.assertEqual((b2, h2.get("X-Enc")), (b'{"ok": 1}', None))   # 小的不压
         self.assertEqual((gzip.decompress(b3), h3.get("X-Enc")), (BIG, "gzip"))
 
-    def merged(self, cache_age, dirty):
-        p = peers.Peers(fake_pf())
+    def merged(self, cache_age, dirty, delay=0.5, fail=False, p=None):
+        p = p or peers.Peers(fake_pf())
         p.me = {"id": "me", "name": "这台"}
         p.machines = lambda account=None: [{"id": "me", "me": True, "online": True}, {"id": "m2", "me": False, "online": True}]
         p.cache = {"m2": {"chats": [{"id": "old"}]}}
@@ -91,7 +91,9 @@ class PeerFasterTests(unittest.TestCase):
 
         def forward(mid, method, path, body=b"", headers=None):
             calls.append(threading.current_thread() is threading.main_thread())
-            time.sleep(0.5)
+            time.sleep(delay)
+            if fail:
+                raise peers.Offline()
             return 200, "application/json", json.dumps({"chats": [{"id": "new"}]}).encode()
         p.forward = forward
         t = time.time()
@@ -109,6 +111,35 @@ class PeerFasterTests(unittest.TestCase):
         secs, ids, calls = self.merged(cache_age=1, dirty=True)
         self.assertGreaterEqual(secs, 0.5)         # 刚改过：现取
         self.assertEqual(ids, ["new"])
+
+    def test_dirty_slow_uses_cache_then_pushes(self):
+        """刚改过但那台慢（#335）：最多等 DIRTY_WAIT 就先用上次的，晚到的写进缓存并推一下让网页重取。"""
+        p = peers.Peers(fake_pf())
+        sent = []
+        p.pf.channel.events.publish = sent.append
+        secs, ids, _ = self.merged(cache_age=1, dirty=True, delay=peers.DIRTY_WAIT + 0.5, p=p)
+        self.assertLess(secs, peers.DIRTY_WAIT + 0.3)
+        self.assertEqual(ids, ["old"])
+        time.sleep(0.8)
+        self.assertEqual(p.cache["m2"], {"chats": [{"id": "new"}]})
+        self.assertEqual(sent, [{"type": "machines"}])
+        self.assertNotIn("m2", p.dirty)
+
+    def test_dirty_slow_and_failed_asks_again(self):
+        p = peers.Peers(fake_pf())
+        secs, ids, _ = self.merged(cache_age=1, dirty=True, delay=peers.DIRTY_WAIT + 0.3, fail=True, p=p)
+        self.assertEqual(ids, ["old"])
+        time.sleep(0.6)
+        self.assertIn("m2", p.dirty)               # 没取到：下次还现问
+
+    def test_never_fetched_waits(self):
+        p = peers.Peers(fake_pf())
+        p.cache = {}
+        p.me = {"id": "me", "name": "这台"}
+        p.machines = lambda account=None: [{"id": "me", "me": True, "online": True}, {"id": "m2", "me": False, "online": True}]
+        p.forward = lambda *a, **k: (time.sleep(peers.DIRTY_WAIT + 0.3), (200, "application/json", b'{"chats": [{"id": "new"}]}'))[1]
+        out = p.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
+        self.assertEqual([c["id"] for c in out["chats"]], ["new"])
 
 
 if __name__ == "__main__":

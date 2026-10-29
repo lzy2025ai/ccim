@@ -2351,10 +2351,12 @@ def _handler(pf):
                 "/api/skills/manifest": lambda: skills_mod.manifest(),
                 "/api/chats": lambda: pf.chat_page(acct, q.get("before") or None, q.get("archived") == "1", (q.get("q") or "").strip(),
                                                    q.get("groups") == "1"),
-                "/api/board": lambda: pf.call(board_mod.stats, pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
-                "/api/board/day": lambda: {**pf.call(board_mod.day, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
-                                           **({"material": pf.call(board_mod.material, pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
-                                              if q.get("material") else {})},
+                # 只读：在请求线程里算，不占主循环（#335）；一个个对话取视图要反复读 state.json，快照里只读一遍
+                "/api/board": lambda: _snapshot(lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None)),
+                "/api/board/day": lambda: _snapshot(lambda: {
+                    **board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
+                    **({"material": board_mod.material(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
+                       if q.get("material") else {})}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),

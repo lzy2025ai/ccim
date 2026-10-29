@@ -919,32 +919,88 @@ button.nm:hover span{text-decoration:underline;text-underline-offset:3px}
 .skc-box textarea{flex:1;resize:none;border:0;outline:0;padding:5px 0;font:inherit;font-size:14px;line-height:1.55;background:none;color:var(--ink);max-height:220px}
 .skc-box .send{margin:0;flex:none}
 .skc-box .send.stop{background:var(--ink)}
-/* 右下角的助理（#294）：按钮 + 弹出的面板，面板里嵌的是窄屏的对话页（html.embed） */
-#pocket-fab{position:fixed;right:20px;bottom:20px;z-index:19;width:46px;height:46px;border-radius:50%;background:var(--qing);color:#fff;display:grid;place-items:center;
-  box-shadow:0 6px 18px rgba(43,76,111,.32);transition:transform .15s,box-shadow .15s}
-#pocket-fab:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(43,76,111,.4)}
-#pocket-fab svg{width:21px;height:21px}
-#pocket-fab .dot{position:absolute;top:1px;right:1px;width:12px;height:12px;border-radius:50%;border:2px solid var(--paper);display:none}
-#pocket-fab.busy .dot{display:block;background:var(--huang);animation:pkpulse 1.4s ease-in-out infinite}
-#pocket-fab.new .dot{display:block;background:var(--zhu,#B5402F)}
-#pocket-fab.on .dot{display:none}
-@keyframes pkpulse{50%{opacity:.35}}
-#pocket{position:fixed;right:20px;bottom:78px;z-index:19;width:420px;height:min(700px,calc(100vh - 100px));background:var(--panel);border:1px solid var(--line);
-  border-radius:14px;box-shadow:0 18px 50px rgba(29,34,43,.22);display:flex;flex-direction:column;overflow:hidden}
-#pocket[hidden]{display:none}
-#pocket .skc-head{min-height:52px;padding:8px 8px 8px 14px;gap:8px}
-#pocket .skc-head .t span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#pocket .pk-base{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--muted);padding:3px 7px;border-radius:6px;border:1px solid var(--line);flex:none}
-#pocket .pk-base:hover{color:var(--ink);border-color:var(--line-strong)} #pocket .pk-base svg{width:11px;height:11px}
-#pocket iframe{flex:1;border:0;width:100%;min-height:0;background:var(--panel)}
-#pocket .pk-wait{flex:1;display:grid;place-items:center;color:var(--muted);font-size:13px;text-align:center;padding:20px}
+/* 右下角的助理（#294）：按钮 + 浮在页面上的面板，面板里嵌的是这个对话的对话页（html.embed，按 400 宽重新排） */
+#pocket-fab{position:fixed;right:20px;bottom:20px;z-index:19;width:48px;height:48px;border-radius:15px;background:var(--qing);color:#fff;display:grid;place-items:center;
+  box-shadow:0 1px 2px rgba(43,76,111,.28),0 8px 20px -6px rgba(43,76,111,.5),inset 0 1px 0 rgba(255,255,255,.16);
+  transition:transform .15s,box-shadow .15s,opacity .12s}
+#pocket-fab:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(43,76,111,.3),0 12px 26px -6px rgba(43,76,111,.55),inset 0 1px 0 rgba(255,255,255,.16)}
+#pocket-fab:active{transform:scale(.96)}
+#pocket-fab svg{width:24px;height:24px}
+#pocket-fab .dot{position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 2.5px var(--paper);display:none}
+#pocket-fab.busy .dot{display:block;background:var(--huang)}
+#pocket-fab.busy .dot::after{content:"";position:absolute;inset:-2.5px;border-radius:50%;box-shadow:0 0 0 1px var(--huang);opacity:0;animation:pkring 1.8s ease-out infinite}
+#pocket-fab.new .dot{display:block;background:var(--zhu)}
+#pocket-fab.on{opacity:0;transform:scale(.85);pointer-events:none}
+@keyframes pkring{0%{opacity:.5;transform:scale(1)}100%{opacity:0;transform:scale(1.6)}}
+#pocket{position:fixed;right:20px;bottom:20px;z-index:19;width:400px;height:min(680px,calc(100vh - 40px));background:var(--panel);
+  border:1px solid #D3D7CF;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transform-origin:100% 100%;
+  box-shadow:0 0 0 1px rgba(29,34,43,.05),0 2px 6px rgba(29,34,43,.05),0 18px 40px -14px rgba(29,34,43,.24),0 44px 80px -36px rgba(43,76,111,.32);
+  opacity:0;visibility:hidden;pointer-events:none;transform:translateY(8px) scale(.94);
+  transition:opacity .15s ease-in,transform .15s ease-in,visibility 0s .15s}
+#pocket.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .18s cubic-bezier(.2,.8,.2,1),transform .18s cubic-bezier(.2,.8,.2,1)}
+html.ws-dark #pocket{border-color:#363C46;box-shadow:0 0 0 1px rgba(0,0,0,.5),0 18px 44px -12px rgba(0,0,0,.62),0 44px 90px -30px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05)}
+html.ws-dark #pocket-fab{box-shadow:0 1px 2px rgba(0,0,0,.5),0 10px 24px -6px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.16)}
+.pk-head{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;position:relative}
+.pk-head.scrolled::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.pk-av{width:28px;height:28px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+.pk-av svg{width:16px;height:16px}   /* 约为方块的 57%，四周的空白和 48px 按钮差不多 */
+.pk-title{flex:1;min-width:0;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
+.pk-btn svg{width:17px;height:17px}
+.pk-btn:hover{background:var(--sunk);color:var(--ink)}
+.pk-btn:disabled{opacity:.4;cursor:default;background:none}
+#pocket iframe{flex:1;border:0;width:100%;min-height:0;background:var(--panel);color-scheme:normal}
+@media (prefers-reduced-motion:reduce){#pocket,#pocket.open{transition:none}}
 body.pocket-off #pocket-fab,body.pocket-off #pocket{display:none}
-body.doc-open #pocket-fab,body.doc-open #pocket{display:none}   /* 右侧面板（侧边对话、文档）开着时会挡住它，先藏起来（#313） */
-body.pocket-tight:not(.doc-open) .composer{padding-right:max(22px,calc(84px - max(0px,(100% - 760px) / 2)))}
-html.embed .rail,html.embed .list,html.embed .resizer,html.embed .pback,html.embed .chat-head,html.embed .composer .hint,html.embed #ext-notice{display:none!important}
+body.side-open #pocket-fab,body.side-open #pocket{display:none}   /* 侧边对话开着时会挡住它的输入框，先藏起来（#313） */
+body.pocket-tight:not(.side-open) .composer{padding-right:max(22px,calc(84px - max(0px,(100% - 760px) / 2)))}
+/* 嵌在面板里的对话页 */
+html.embed,html.embed body{background:var(--panel)}
+html.embed .rail,html.embed .list,html.embed .resizer,html.embed .pback,html.embed .chat-head,html.embed .composer .hint,html.embed #ext-notice,html.embed #pocket-fab,html.embed #pocket{display:none!important}
 html.embed .app{display:block;height:100vh;padding-top:0}
-html.embed .app .main{display:flex!important;height:100vh;padding-bottom:0!important}
-html.embed .composer{margin-bottom:10px}
+html.embed .app .main{display:flex!important;height:100vh;padding-bottom:0!important;background:var(--panel)}
+html.embed .thread{display:flex;flex-direction:column;padding:14px 0 4px;font-size:13.5px}
+html.embed .thread::before{content:"";flex:1 0 0}              /* 不满一屏时贴着输入框往上排 */
+html.embed .thread>*{margin-left:0;margin-right:0;max-width:none}
+html.embed .thread>.show-more{align-self:center}
+html.embed .msg{padding:0 16px;margin-bottom:6px}
+html.embed .msg.wide{max-width:none}
+html.embed .msg.me>div{max-width:84%}
+html.embed .bubble{padding:8px 12px;border-radius:16px 16px 5px 16px;font-size:13.5px;line-height:1.6}
+html.embed .answer{font-size:13.5px;line-height:1.65}
+html.embed .answer p{margin-bottom:8px}
+html.embed .answer>:last-child{margin-bottom:0}
+html.embed .from-row.self{display:none}
+html.embed .from-row b{font:600 13px var(--sans)}
+html.embed .note{padding:0 16px}
+html.embed .compare{grid-template-columns:1fr!important}
+html.embed .composer{max-width:none;margin:6px 0 12px;padding:0 12px}
+html.embed .box textarea{padding:10px 12px 2px;min-height:44px;font-size:13.5px;line-height:1.6}
+html.embed .box .bar{gap:2px;padding:4px 6px 6px}
+html.embed .bar .icon-btn{width:28px;height:28px;border-radius:7px}
+html.embed .bar .icon-btn svg{width:16px;height:16px}
+html.embed .bar .at-btn{font-size:15px;color:var(--muted)}
+html.embed .mfx{display:inline-flex;align-items:center}
+html.embed .mfx .chip{padding:4px 7px;color:var(--muted)}
+html.embed .mfx .chip+.chip::before{content:"";width:1px;height:11px;background:var(--line-strong);margin:0 6px 0 -7px}
+html.embed .chip .dflt{display:none}
+html.ws-dark .bubble .at,html.pk-dark .bubble .at{background:var(--panel)}
+html.embed .from-row .tag{display:none}
+html.embed .steps{border:0;margin:0 0 4px}
+html.embed .steps>button{width:auto;padding:2px 0;font-size:12.5px;color:var(--muted)}
+html.embed .msg-acts{margin-top:2px}
+html.embed .msg-acts{flex-wrap:nowrap}
+html.embed .msg-acts button:has(svg){height:24px;width:26px;padding:0;justify-content:center;font-size:0;gap:0}   /* 窄：只留图标，名字在悬停提示里 */
+html.embed .msg-acts button svg{width:14px;height:14px}
+html.embed .msg-time{height:24px;font-size:11.5px}
+html.embed .send{width:30px;height:30px;border-radius:50%}
+.pk-empty{padding:0 24px 12px;flex:none}
+.pk-empty h3{font:600 19px/1.4 var(--song);margin:0 0 16px;color:var(--ink)}
+.pk-sugg{border-top:1px solid var(--line)}
+.pk-sugg button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:11px 2px;border-bottom:1px solid var(--line);font-size:13.5px;color:var(--ink-2)}
+.pk-sugg button span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk-sugg button svg{width:14px;height:14px;color:var(--faint);flex:none}
+.pk-sugg button:hover{color:var(--qing)} .pk-sugg button:hover svg{color:var(--qing)}
 @media (max-width:760px){
   .sk-shell.chat-on .sk-chat{position:fixed;inset:0;width:auto;z-index:40;border:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 }
@@ -1467,7 +1523,7 @@ html[data-vt=push]::view-transition-old(ws-head),html[data-vt=pop]::view-transit
   .ws-ask svg{width:16px;height:16px}
 }
 /* 工作区深色（#237）：换到工作区后整个界面换一套颜色（html.ws-dark，wsApply 里切），和对话模式一眼分开 */
-html.ws-dark{
+html.ws-dark,html.pk-dark{   /* pk-dark：嵌在助理面板里的对话页跟着外面的页面（#294） */
   --paper:#16191E; --panel:#1C2026; --sunk:#272C34; --line:#2C3139; --line-strong:#3A4049;
   --ink:#E4E7EB; --ink-2:#C3C8CF; --muted:#9097A0; --faint:#6A717A;
   --qing:#5A87BB; --qing-soft:#24364A; --zhe:#E0A375; --huang:#E2BE5C; --bad:#F0806E;
@@ -1557,7 +1613,12 @@ const CLAUDE_MODELS = [["opus","Opus","最强，复杂任务"],["sonnet","Sonnet
 const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
 const EFF_DESC = {minimal:"几乎不思考，最快", low:"快，适合简单的事", medium:"日常够用", high:"想得更周全", xhigh:"更深入", max:"最深入，最慢"};
 const ICON = {
-  pocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 0 1-11.2 6.5L4 20l1.1-4.3A7.5 7.5 0 1 1 20 12.5z"/><path d="M12.5 8.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor" stroke-width="1"/></svg>',
+  // 助理（#294）：气泡主体左右对称（3.5–20.5 × 4.5–17），尾巴小、在底边偏左；四角星对准主体的中心 (12, 10.75)，不是整个外框的中心
+  pocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.3Q12.55 10.2 15.45 10.75Q12.55 11.3 12 14.2Q11.45 11.3 8.55 10.75Q11.45 10.2 12 7.3z" fill="currentColor" stroke-width="1"/></svg>',
+  pocketSm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.6Q12.5 10.25 15.15 10.75Q12.5 11.25 12 13.9Q11.5 11.25 8.85 10.75Q11.5 10.25 12 7.6z" fill="currentColor" stroke-width="1.1"/></svg>',
+  compose:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5H7a2.5 2.5 0 0 0-2.5 2.5v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-5"/><path d="M17.6 3.9a1.8 1.8 0 0 1 2.5 2.5L13 13.5l-3.3.8.8-3.3z"/></svg>',
+  popout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5l-7 7"/><path d="M10 4.5H7A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-3"/></svg>',
+  collapse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   clip:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg>',
@@ -1953,8 +2014,13 @@ function loadState(){
 }
 async function fetchState(){
   const t0 = performance.now();
+  if (EMBED && parent.pkS) { await parent.loadState(); S = parent.pkS(); return afterState(); }   // 右下角助理里：用外面页面的（#294）
   S = await api("/api/state");
   perfMark("state", S.hub ? "取整体状态（经总控）" : "取整体状态", performance.now() - t0);
+  afterState();
+  try { pocketWin()?.pkState(); } catch {}
+}
+function afterState(){
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
     if (on !== SKC.on) { SKC.on = on; drawSkChat(); }
@@ -1968,7 +2034,7 @@ async function fetchState(){
   const c = detail && chatById(detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
 }
-function refreshSoon(){ clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }
+function refreshSoon(){ if (EMBED) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }   // 右下角助理里：外面的页面刷新后会交过来
 
 // ================= 对话分页（#268） =================
 // 整体状态里只带「对话」列表最近 50 条和常驻的（在干活、等你处理、置顶、星标……）。更早的、已归档的按需取来放在 MORE.rows，
@@ -2118,8 +2184,22 @@ let esFails = 0;                  // 推送连续连不上几次了：重连间�
 function connectEvents(again){
   const es = new EventSource("/api/events");
   let lost = !!again;
-  es.onmessage = e => {
-    const ev = JSON.parse(e.data);
+  es.onmessage = e => onEvent(JSON.parse(e.data));
+  es.onerror = () => {                   // 一般浏览器会自己重连；重启、部署时收到错误响应就彻底关了，要自己再连（#249）
+    lost = true;
+    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), Math.min(60000, 5000 * 2 ** esFails++)); }
+  };
+  es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
+    esFails = 0;
+    if (!lost) return;
+    lost = false;
+    refreshSoon();
+    if (detail && !starting && !(detail.log || []).some(r => r.sending)) reloadChat().catch(() => {});
+    pocketForward({type: "resync"});    // 右下角助理里嵌着的对话页也重新取一次（#294）
+  };
+}
+function onEvent(ev){
+    if (!EMBED) pocketForward(ev);
     if (ev.type === "idle") { refreshSoon(); return; }
     if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
     if (ev.type === "group") {            // 群成员、群聊说明改了（#15）
@@ -2196,18 +2276,6 @@ function connectEvents(again){
     if (ev.type === "kb" && current.view === "kb") { clearTimeout(window._kt); window._kt = setTimeout(() => { kbCache = null; route(); }, 400); }
     if (ev.type === "progress" && ev.state === "working") { const c = S.chats.find(x => x.id === ev.chat); if (c ? !c.busy : unlisted(ev.chat)) refreshSoon(); }
     else if (!LOCAL_EVENTS.has(ev.type)) refreshSoon();
-  };
-  es.onerror = () => {                   // 一般浏览器会自己重连；重启、部署时收到错误响应就彻底关了，要自己再连（#249）
-    lost = true;
-    if (es.readyState === EventSource.CLOSED) { clearTimeout(window._esT); window._esT = setTimeout(() => connectEvents(true), Math.min(60000, 5000 * 2 ** esFails++)); }
-  };
-  es.onopen = () => {                    // 断开期间错过的推送：重连后把列表和正开着的对话重新取一次（#98）
-    esFails = 0;
-    if (!lost) return;
-    lost = false;
-    refreshSoon();
-    if (detail && !starting && !(detail.log || []).some(r => r.sending)) reloadChat().catch(() => {});
-  };
 }
 
 // ================= 路由 =================
@@ -2255,8 +2323,8 @@ function phoneBack(){
 }
 function route(){
   if (EMBED && location.hash !== EMBED_HASH) {   // 面板里点到别处（单独聊、站内链接）：交给外面的页面打开
-    parent.postMessage({pocket: "go", hash: location.hash}, location.origin);
-    history.replaceState(null, "", EMBED_HASH); return;
+    const to = location.hash;
+    history.replaceState(null, "", EMBED_HASH); parent.pocketGo(to); return;
   }
   const parts = location.hash.slice(2).split("/");
   const prev = current;
@@ -2574,7 +2642,7 @@ addEventListener("hashchange", avClose);
 
 function fromRow(){
   const a = detail.agent ? agentOf(detail.agent) : null;
-  return `<div class="from-row">${avHov(a, iconOf(detail, a, "sm"))}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
+  return `<div class="from-row self">${avHov(a, iconOf(detail, a, "sm"))}<b>${esc(a ? a.name : BASE[detail.base])}</b></div>`;
 }
 function msgActs(src, i, r){
   if (r.sending) return "";
@@ -2756,7 +2824,9 @@ function drawThread(){
   for (const v of t.querySelectorAll("video[data-k]")){
     const old = vids.get(v.dataset.k); if (old){ v.replaceWith(old); vids.delete(v.dataset.k); }
   }
+  if (EMBED && !detail.log.length && !detail.progress && !(detail.earlier || []).length) t.innerHTML = pocketEmpty();
   if (near) t.scrollTop = t.scrollHeight;
+  if (EMBED) pkScrolled(t);
   drawToc();
 }
 const SHOW_RECENT = 60;
@@ -2965,13 +3035,17 @@ function drawChat(){
         <div id="quotes"></div>
         <div class="ta-wrap" id="ta-wrap"><textarea id="input" rows="2" aria-label="输入消息"></textarea>
           <button class="icon-btn" id="ta-size" hidden onclick="toggleInput()"></button></div>
-        <div class="bar"><div class="opts">
+        <div class="bar"><div class="opts">${EMBED ? `
+          <button class="icon-btn" aria-label="添加" title="添加" onclick="embedAdd(event)">${ICON.plus}</button>
+          <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
+          ${c.readonly || (c.members || []).length ? "" : `<button class="icon-btn at-btn" id="chip-at" aria-label="@ Agent" title="@ Agent" onclick="chatAt(event)">@</button>`}
+          <span class="mfx"><button class="chip" id="chip-model" onclick="chatModel(event)"></button><button class="chip" id="chip-effort" onclick="chatEffort(event)"></button></span>` : `
           <button class="icon-btn" aria-label="添加图片或文件" onclick="pickFiles(event)">${ICON.clip}</button>
           <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
           <button class="chip" id="chip-model" onclick="chatModel(event)"></button>
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
           ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
-          ${c.readonly || c.base === "codex" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}</div>
+          ${c.readonly || c.base === "codex" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
           <button class="ctx-ring" id="ctx-ring" hidden onclick="ctxPop(event)"></button>
           <button class="send" id="send"></button>
         </div>
@@ -2998,11 +3072,12 @@ function drawChat(){
 }
 function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
-  $("#input").placeholder = c.readonly ? "在这里接着聊" : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
+  $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : "交代件事")
+    : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
     : (c.members || []).length ? `给 ${c.agent_name} 发消息，@ 叫群里其他 Agent` : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
-  $("#chip-model").innerHTML = `${esc(modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
-  $("#chip-effort").innerHTML = `思考 ${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
+  $("#chip-model").innerHTML = `${esc(EMBED && !c.model ? "默认模型" : modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${EMBED ? "" : ICON.down}`;
+  $("#chip-effort").innerHTML = `${EMBED ? "" : "思考 "}${esc(c.effort || "默认")}${c.effort_custom ? "" : "<span class='dflt'>默认</span>"}${ICON.down}`;
   drawCtxRing(c);
   const s = $("#send");
   s.className = "send" + (c.busy ? " stop" : "");
@@ -3536,6 +3611,14 @@ async function thumbOf(file){
 const isImg = name => /\.(png|jpe?g|gif|webp|svg)$/i.test(name || "");
 const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
 // Android 的浏览器：不限类型的选择框直接进文件管理器，只收图片视频才打开相册，所以先问选哪个（#234）
+function embedAdd(e){   // 右下角助理里（#294）：文件和知识库收在一个 + 里
+  const kb = !detail.readonly && detail.base !== "codex";
+  if (!kb) return pickFiles(e);
+  const pp = pop(e, `<button data-k="file">${ICON.clip}图片或文件</button><button data-k="kb">${ICON.kb}知识库</button>`);
+  const at = {currentTarget: e.currentTarget, stopPropagation(){}};
+  pp.querySelector('[data-k="file"]').onclick = () => { closePop(); pickFiles(at); };
+  pp.querySelector('[data-k="kb"]').onclick = () => { closePop(); pickKbs(at); };
+}
 function pickFiles(e){
   const inp = $("#fileinput");
   if (!/Android/i.test(navigator.userAgent)) { inp.removeAttribute("accept"); return inp.click(); }
@@ -6893,12 +6976,13 @@ function sideEvent(ev){   // 推送：进度、记录
 }
 
 // ---- 右下角的助理（#294）：哪个页面都能叫出来，临时问一句、交代件事、@ 别的 Agent，不用离开手头的页面 ----
-// 面板里嵌的就是这个对话的对话页（?embed=pocket，窄屏布局、去掉头部），输入框里的模型、思考深度、@、文件都和对话页一样
-const EMBED = new URLSearchParams(location.search).get("embed") === "pocket";
-const EMBED_HASH = EMBED ? location.hash : null;
+// 面板里嵌的就是这个对话的对话页（?embed=pocket，html.embed 按 400 宽重新排、去掉头部），@、模型、文件、审批都和对话页同一套。
+// 嵌着的页面不另连推送、不另取整体状态（同一个域名的连接数有限，开几个标签页就会占满）：外层收到的推送转给它（pkEvent），
+// 整体状态直接用外层的 S（同源，pkState）。页面空闲时就把面板建好，收起只是藏起来；换对话只改它的 #（pkGo），不重新加载。
+const EMBED = new URLSearchParams(location.search).get("embed") === "pocket" && window.parent !== window;
+let EMBED_HASH = EMBED ? location.hash : null;
 if (EMBED) document.documentElement.classList.add("embed");
-const POCKET = {open: false, id: null, src: null, busy: false, unread: false, subs: new Set(), synced: false};
-const POCKET_AV = `<span class="skc-av" style="background:var(--qing)">${ICON.pocket}</span>`;
+const POCKET = {open: false, id: null, src: null, busy: false, unread: false, subs: new Set(), synced: false, idle: false};
 function pocketCfg(){ return {on: true, base: "claude", model: null, effort: null, ...((S.global || {}).pocket || {})}; }
 function pocketShown(){ return !EMBED && !narrow() && !!S.me && pocketCfg().on && current.view !== "skills"; }
 function pocketRow(){ return POCKET.id ? chatById(POCKET.id) : null; }
@@ -6908,6 +6992,9 @@ function pocketSync(){   // 打开页面时：接着最近那个助理对话的�
   const r = S.chats.filter(c => c.pocket && !c.archived && !c.agent).sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")))[0];
   if (!r) return;
   POCKET.id = r.id; POCKET.busy = !!r.busy; POCKET.unread = !!r.attention;
+}
+function pocketWin(){   // 嵌着的对话页（启动完了才算）
+  try { const w = $("#pocket iframe")?.contentWindow; return w && w.pkReady ? w : null; } catch { return null; }
 }
 function drawPocket(){
   if (EMBED) return;
@@ -6919,40 +7006,45 @@ function drawPocket(){
   let fab = $("#pocket-fab");
   if (!fab) {
     fab = document.createElement("button"); fab.id = "pocket-fab"; fab.title = "助理"; fab.setAttribute("aria-label", "助理");
+    fab.innerHTML = ICON.pocket + `<i class="dot"></i>`;
     fab.onclick = () => POCKET.open ? pocketClose() : pocketOpen();
     document.body.append(fab);
   }
-  fab.className = POCKET.open ? "on" : POCKET.busy || POCKET.subs.size ? "busy" : POCKET.unread ? "new" : "";
-  fab.innerHTML = (POCKET.open ? ICON.x : ICON.pocket) + `<i class="dot"></i>`;
+  fab.className = [POCKET.open ? "on" : "", POCKET.busy || POCKET.subs.size ? "busy" : POCKET.unread ? "new" : ""].join(" ").trim();
   fab.setAttribute("aria-expanded", POCKET.open);
+  fab.tabIndex = POCKET.open ? -1 : 0;
   let p = $("#pocket");
-  if (!POCKET.open) { if (p) p.hidden = true; return; }
   if (!p) {
     p = document.createElement("section"); p.id = "pocket"; p.setAttribute("aria-label", "助理");
-    p.innerHTML = `<div class="skc-head" id="pk-head"></div><div class="pk-wait" id="pk-wait">…</div>`;
+    p.innerHTML = `<div class="pk-head" id="pk-head"></div>`;
     document.body.append(p);
   }
-  p.hidden = false;
-  const r = pocketRow(), base = (r && r.base) || POCKET.base || pocketCfg().base;
-  $("#pk-head").innerHTML = `${POCKET_AV}<div class="t"><b>助理</b><span>${esc(r && r.title && r.title !== "新对话" ? r.title : "随时交代，@ 叫其他 Agent")}</span></div>
-    <button class="pk-base" onclick="pocketBaseMenu(event)" title="换底座会开一个新对话">${BASE[base]}${ICON.down}</button>
-    <button class="icon-btn" title="新对话" aria-label="新对话" onclick="pocketNew()">${ICON.plus}</button>
-    <button class="icon-btn" title="在完整页面打开" aria-label="在完整页面打开" ${POCKET.id ? "" : "disabled"} onclick="pocketExpand()">${ICON.expand}</button>
-    <button class="icon-btn" title="收起" aria-label="收起" onclick="pocketClose()">${ICON.x}</button>`;
-  if (POCKET.id && POCKET.src !== POCKET.id) pocketFrame();
+  p.classList.toggle("open", POCKET.open);
+  p.inert = !POCKET.open;
+  const r = pocketRow(), title = r && r.title && r.title !== "新对话" ? r.title : "助理";
+  $("#pk-head").innerHTML = `<span class="pk-av" aria-hidden="true">${ICON.pocketSm}</span><div class="pk-title">${esc(title)}</div>
+    <button class="pk-btn" title="新对话" aria-label="新对话" onclick="pocketNewMenu(event)">${ICON.compose}</button>
+    <button class="pk-btn" title="在完整页面打开" aria-label="在完整页面打开" ${POCKET.id ? "" : "disabled"} onclick="pocketExpand()">${ICON.popout}</button>
+    <button class="pk-btn" title="收起" aria-label="收起" onclick="pocketClose()">${ICON.collapse}</button>`;
+  if (POCKET.id && POCKET.src !== POCKET.id) {
+    if (POCKET.open || POCKET.idle) pocketFrame();
+    else if (!POCKET.waiting) {             // 还没打开过：等页面空下来再在后台建好，点开就是现成的
+      POCKET.waiting = true;
+      (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { POCKET.idle = true; POCKET.waiting = false; drawPocket(); }, {timeout: 4000});
+    }
+  }
 }
 function pocketFrame(){
   const p = $("#pocket"); if (!p) return;
-  const u = new URLSearchParams(location.search); u.set("embed", "pocket"); u.set("c", POCKET.id);   // 只改 # 后面不会重新加载
-  let f = p.querySelector("iframe");
-  if (!f) { f = document.createElement("iframe"); f.title = "助理"; f.onload = () => pocketFocus(); p.append(f); }
-  $("#pk-wait")?.remove();
   POCKET.src = POCKET.id;
+  const w = pocketWin();
+  if (w) { w.pkGo(POCKET.id); return; }
+  let f = p.querySelector("iframe");
+  if (!f) { f = document.createElement("iframe"); f.title = "助理"; p.append(f); }
+  const u = new URLSearchParams(location.search); u.set("embed", "pocket");
   f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(POCKET.id)}`;
 }
-function pocketFocus(){
-  try { const i = $("#pocket iframe")?.contentDocument?.querySelector("#input"); if (i) i.focus(); else setTimeout(pocketFocus, 200); } catch {}
-}
+function pocketFocus(){ const w = pocketWin(); if (w) w.pkFocus(); else if (POCKET.open) setTimeout(pocketFocus, 150); }
 async function pocketOpen(){
   POCKET.open = true; POCKET.unread = false;
   drawPocket();
@@ -6968,14 +7060,20 @@ async function pocketLoad(body){
     drawPocket(); pocketFocus();
   } catch (e) { toast(e.message); }
 }
-function pocketClose(){ POCKET.open = false; closePop(); drawPocket(); }
-function pocketNew(){ pocketLoad({fresh: true, base: (pocketRow() || {}).base || POCKET.base}); }
-function pocketExpand(){ const id = POCKET.id; pocketClose(); if (id) location.hash = `#/chats/${encodeURIComponent(id)}`; }
-function pocketBaseMenu(e){
-  const cur = (pocketRow() || {}).base || POCKET.base || pocketCfg().base;
-  pop(e, `<div class="sec">底座</div>` + ["claude", "codex"].map(b => b === "codex" && !S.codex ? "" :
-    `<button role="option" aria-selected="${cur === b}" onclick="closePop();${cur === b ? "" : `pocketLoad({base:'${b}'})`}"><span><div>${BASE[b]}</div>${cur === b ? "" : `<div class="desc">开一个新对话</div>`}</span>${cur === b ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+function pocketClose(){
+  const inside = $("#pocket")?.contains(document.activeElement);
+  POCKET.open = false; closePop(); drawPocket();
+  if (inside) $("#pocket-fab")?.focus();
 }
+function pocketNewMenu(e){   // 装了 Codex 才要选底座，默认是这个对话现在的底座
+  const cur = (pocketRow() || {}).base || POCKET.base || pocketCfg().base;
+  if (!S.codex) return pocketLoad({fresh: true, base: cur});
+  pop(e, `<div class="sec">新对话</div>` + ["claude", "codex"].map(b =>
+    `<button role="option" onclick="closePop();pocketLoad({fresh:true,base:'${b}'})"><span><div>${BASE[b]}</div></span>${cur === b ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+}
+function pocketExpand(){ const id = POCKET.id; pocketClose(); if (id) location.hash = `#/chats/${encodeURIComponent(id)}`; }
+function pocketGo(hash){ pocketClose(); location.hash = hash; }
+function pocketForward(ev){ try { pocketWin()?.pkEvent(structuredClone(ev)); } catch {} }   // 嵌着的对话页没有自己的推送，所有推送都转给它
 function pocketEvent(ev){
   if (EMBED || !POCKET.id || ev.chat !== POCKET.id) return;
   if (ev.type === "progress") POCKET.busy = ev.state === "working";
@@ -6986,24 +7084,41 @@ function pocketEvent(ev){
   else return;
   drawPocket();
 }
-addEventListener("message", e => {
-  if (e.origin !== location.origin || !e.data || !e.data.pocket) return;
-  if (e.data.pocket === "close") pocketClose();
-  else if (e.data.pocket === "go") { pocketClose(); location.hash = e.data.hash; }
-});
+window.pkS = () => S;                      // let 声明的不在 window 上：嵌着的页面靠它拿外面的整体状态
+if (EMBED) {                                // 外层调这几个
+  window.pkEvent = ev => ev.type === "resync" ? (refreshSoon(), detail && reloadChat().catch(() => {})) : onEvent(ev);
+  window.pkState = () => { S = parent.pkS(); afterState(); };
+  window.pkGo = id => { EMBED_HASH = `#/chats/${encodeURIComponent(id)}`; location.hash = EMBED_HASH; };
+  window.pkFocus = () => $("#input")?.focus();
+  const dark = () => document.documentElement.classList.toggle("pk-dark", parent.document.documentElement.classList.contains("ws-dark"));
+  dark(); new MutationObserver(dark).observe(parent.document.documentElement, {attributes: true, attributeFilter: ["class"]});
+}
+function pocketSuggest(){   // 空对话：最近在助理里交代过的事，点了填进输入框
+  const seen = new Set();
+  return (S.chats || []).filter(c => c.pocket && c.id !== (detail || {}).id && c.ask && !c.ask.startsWith("/"))
+    .sort((a, b) => String(b.last_active || "").localeCompare(String(a.last_active || "")))
+    .filter(c => !seen.has(c.ask) && seen.add(c.ask)).slice(0, 3).map(c => c.ask);
+}
+function pocketEmpty(){
+  const list = pocketSuggest();
+  return `<div class="pk-empty"><h3>有什么要交代的</h3>${list.length ? `<div class="pk-sugg">${list.map(t =>
+    `<button onclick="pocketFill(${q(t)})"><span>${esc(t)}</span>${ICON.chev}</button>`).join("")}</div>` : ""}</div>`;
+}
+function pkScrolled(t){   // 右下角助理里：对话往上翻过，面板头部下面才出现分隔线
+  if (!t.pkOn) { t.pkOn = true; t.addEventListener("scroll", () => pkScrolled(t), {passive: true}); }
+  parent.document.getElementById("pk-head")?.classList.toggle("scrolled", t.scrollTop > 2);
+}
+function pocketFill(t){ const i = $("#input"); if (!i) return; i.value = t; i.focus(); i.dispatchEvent(new Event("input")); drawComposerState(); }
 addEventListener("keydown", e => {
   if (e.key !== "Escape" || e.isComposing || document.querySelector(".pop,.scrim")) return;
-  if (EMBED) parent.postMessage({pocket: "close"}, location.origin);
+  if (EMBED) parent.pocketClose();
   else if (POCKET.open) pocketClose();
 }, true);
-document.addEventListener("mousedown", e => {
-  if (POCKET.open && !e.target.closest("#pocket,#pocket-fab,.pop,.scrim")) pocketClose();
-});
 addEventListener("resize", () => drawPocket());
-function pocketRoom(){   // 窗口窄、输入框贴到右边时，输入框右边让出挂件的位置，不压住发送按钮
+function pocketRoom(){   // 窗口窄、输入框贴到右边时，输入框右边让出挂件的位置，不压住发送按钮；面板打开时按钮藏起来，不用让
   const m = $("#main"); if (!m || EMBED) return;
   const r = m.getBoundingClientRect(), gap = (r.width - 760) / 2 + (innerWidth - r.right);
-  document.body.classList.toggle("pocket-tight", !document.body.classList.contains("pocket-off") && gap < 84);
+  document.body.classList.toggle("pocket-tight", !document.body.classList.contains("pocket-off") && !POCKET.open && gap < 84);
 }
 if (!EMBED && window.ResizeObserver) new ResizeObserver(pocketRoom).observe(document.querySelector("#main"));
 
@@ -8000,10 +8115,13 @@ addEventListener("resize", () => listTip());
   watchListScroll();
   try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
   try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
-  connectEvents();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
+  if (!EMBED) {                          // 右下角助理里嵌着的对话页：推送由外面的页面转过来（#294）
+    connectEvents();
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
+  }
   if (!location.hash) history.replaceState(null, "", "#/chats/new");
   route();
+  if (EMBED) window.pkReady = true;
   perfMark("load", S.hub ? "打开网页（经总控）" : "打开网页", performance.now());
 })();
 </script>

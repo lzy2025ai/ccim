@@ -1590,9 +1590,9 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
   <nav class="rail" aria-label="主导航">
     <div class="brand">ccim</div>
     <button class="unfold" title="展开列表" onclick="toggleList(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/></svg>列表</button>
-    <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>助理</a>
+    <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
-    <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent</a>
+    <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>Agent 员工</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
@@ -1626,7 +1626,6 @@ const ICON = {
   pocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.3Q12.55 10.2 15.45 10.75Q12.55 11.3 12 14.2Q11.45 11.3 8.55 10.75Q11.45 10.2 12 7.3z" fill="currentColor" stroke-width="1"/></svg>',
   pocketSm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.6Q12.5 10.25 15.15 10.75Q12.5 11.25 12 13.9Q11.5 11.25 8.85 10.75Q11.5 10.25 12 7.6z" fill="currentColor" stroke-width="1.1"/></svg>',
   compose:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5H7a2.5 2.5 0 0 0-2.5 2.5v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-5"/><path d="M17.6 3.9a1.8 1.8 0 0 1 2.5 2.5L13 13.5l-3.3.8.8-3.3z"/></svg>',
-  popout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5l-7 7"/><path d="M10 4.5H7A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-3"/></svg>',
   collapse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -2542,9 +2541,10 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   return nest(c, me, kids, child, inAgent, depth);
 }
 function renderChatList(){
-  const rows = chatFilter ? searchRows().filter(c => !c.agent) : allChats().filter(c => !c.agent);   // 和 Agent 的对话在 Agent 里
+  const rows = chatFilter ? searchRows().filter(c => !c.agent)     // 和 Agent 的对话在 Agent 里
+    : allChats().filter(c => !c.agent && (!c.pocket || c.expanded || c.pin != null || c.id === current.id));   // 挂件里的：放大过的才列出（#326）
   $("#list").innerHTML = `
-    <div class="list-head"><h1>助理</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
+    <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="searchChats(this.value);this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
     <div class="scroll">${rows.length ? chatFilter ? rows.map(c => chatItem(c, {}, false)).join("") : chatSections(rows)
       : `<p class="muted" style="padding:10px">${chatFilter ? "没有找到。" : "还没有对话。"}</p>`}</div>`;
@@ -5039,7 +5039,7 @@ let cardFilter = "";
 function overviewHtml(title, items, body, newJs){
   return `<div class="overview"><div class="ov-head"><h1>${title}</h1><span class="grow"></span>
       <label class="search">${ICON.search}<input placeholder="搜索${title}" aria-label="搜索${title}" value="${esc(cardFilter)}" oninput="cardFilter=this.value.toLowerCase();route();const i=document.querySelector('.ov-head input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></label>
-      ${newJs ? `<button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title === "Agent" ? " Agent" : title}</button>` : ""}</div>
+      ${newJs ? `<button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title.startsWith("Agent") ? " Agent" : title}</button>` : ""}</div>
     ${machineTabs(items)}<div class="ov-body">${body}</div></div>`;
 }
 function agentCard(a){
@@ -5062,7 +5062,7 @@ function renderAgentCards(listOnly){
   const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
     : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p>
       ${addable.length ? `<div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">${addable.map(m => `<button class="btn primary" onclick="${newOnAgents(m.id)}">${ICON.plus}${multi() ? `在「${esc(m.name || "这台电脑")}」上新建 Agent` : "新建 Agent"}</button>`).join("")}</div>` : ""}</div>`;
-  $("#main").innerHTML = overviewHtml("Agent", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
+  $("#main").innerHTML = overviewHtml("Agent 员工", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
 }
 function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
 function newOn(view, mid){
@@ -7090,7 +7090,7 @@ function drawPocket(){
   const r = pocketRow(), title = r && r.title && r.title !== "新对话" ? r.title : "助理";
   $("#pk-head").innerHTML = `<span class="pk-av" aria-hidden="true">${ICON.pocketSm}</span><div class="pk-title">${esc(title)}</div>
     <button class="pk-btn" title="新对话" aria-label="新对话" onclick="pocketNewMenu(event)">${ICON.compose}</button>
-    <button class="pk-btn" title="在完整页面打开" aria-label="在完整页面打开" ${POCKET.id ? "" : "disabled"} onclick="pocketExpand()">${ICON.popout}</button>
+    <button class="pk-btn" title="放大" aria-label="放大" ${POCKET.id ? "" : "disabled"} onclick="pocketExpand()">${ICON.grow}</button>
     <button class="pk-btn" title="收起" aria-label="收起" onclick="pocketClose()">${ICON.collapse}</button>`;
   if (POCKET.id && POCKET.src !== POCKET.id) {
     if (POCKET.open || POCKET.idle) pocketFrame();
@@ -7137,7 +7137,11 @@ function pocketNewMenu(e){   // 装了 Codex 才要选底座，默认是这个�
   pop(e, `<div class="sec">新对话</div>` + ["claude", "codex"].map(b =>
     `<button role="option" onclick="closePop();pocketLoad({fresh:true,base:'${b}'})"><span><div>${BASE[b]}</div></span>${cur === b ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
 }
-function pocketExpand(){ const id = POCKET.id; pocketClose(); if (id) location.hash = `#/chats/${encodeURIComponent(id)}`; }
+async function pocketExpand(){   // 放大过的挂件对话才出现在对话列表里（#326）
+  const id = POCKET.id, c = pocketRow(); pocketClose(); if (!id) return;
+  if (c && !c.expanded) { c.expanded = true; try { await api("/api/chat/mark", {id, changes: {expanded: true}}, machineOfChat(c)); } catch {} }
+  location.hash = `#/chats/${encodeURIComponent(id)}`;
+}
 function pocketGo(hash){ pocketClose(); location.hash = hash; }
 function pocketForward(ev){ try { pocketWin()?.pkEvent(structuredClone(ev)); } catch {} }   // 嵌着的对话页没有自己的推送，所有推送都转给它
 function pocketEvent(ev){

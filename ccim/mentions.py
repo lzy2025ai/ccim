@@ -379,6 +379,7 @@ class Mentions:
                 token = r["token"]
             if token is None:
                 upd.update(state="stopped", text="")
+            opened = set()
             while token:
                 await asyncio.sleep(4)
                 try:
@@ -387,6 +388,11 @@ class Mentions:
                     continue
                 if status != 200:
                     raise RuntimeError("那台电脑重启过，没做完。")
+                for a in r.get("apps") or []:     # 它打开了那台电脑上的应用：在这个对话里打开（#337）
+                    if a.get("app") and (a["app"], a.get("at")) not in opened:
+                        opened.add((a["app"], a.get("at")))
+                        self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, {
+                            "type": "app", "app": a["app"], "name": a.get("name") or "", "icon": a.get("icon") or "", "mid": mid}))
                 if r.get("done"):
                     upd.update(state=r.get("state") or "done", text=r.get("text") or "", steps=r.get("steps") or [],
                                said=r.get("said"), elapsed=r.get("elapsed"), agent=aid, ctx=r.get("ctx"))

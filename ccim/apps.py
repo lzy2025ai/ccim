@@ -67,6 +67,7 @@ GUIDE = """\
 | `ccim.read(path)` / `ccim.write(path, text)` / `ccim.list(dir?)` / `ccim.remove(path)` | 不走接口、直接读写 data/ 下的文件 |
 | `ccim.copy(text, html?)` | 复制到剪贴板；给了 html 就带格式复制（贴到公众号编辑器等） |
 | `ccim.chat(text)` | 打开一个和做这个应用的 Agent 的新对话，输入框里先填好 text |
+| `ccim.dev()` | ccim 自己的需求（只读，只有开发版的电脑有，别的返回 null）：`{review, shipped, trying}`；review 是待上线的（pr、issue、title、url、checks、trying、updated），shipped 是已上线的（issue、pr、title、url、merged、rounds） |
 
 数据变了（Agent 写了新东西）会通知页面：`ccim.onChange(fn)`；页面文件改了，打开着的会自动重新载入。
 页面要配合平台的浅色界面：白底、深灰字、圆角、留白；手机上也要能用（宽度 360 起）。不要用浏览器原生的下拉框、alert、confirm。

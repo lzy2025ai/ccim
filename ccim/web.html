@@ -3926,7 +3926,7 @@ window.ccim={query:(c,q)=>call("query",c,q||""),get:(c,id)=>call("get",c,id),sav
 list:d=>call("list",d||""),read:p=>call("read",p),write:(p,t)=>call("write",p,String(t)),remove:p=>call("remove",p),
 readJSON:async(p,f=null)=>{const t=await call("read",p);if(t==null)return f;try{return JSON.parse(t)}catch{return f}},
 writeJSON:(p,v)=>call("write",p,JSON.stringify(v,null,2)),copy:(t,h)=>call("copy",String(t),h==null?null:String(h)),
-chat:t=>call("chat",String(t||"")),onChange:f=>{subs.push(f)}};})();<\/script>`;
+chat:t=>call("chat",String(t||"")),dev:()=>call("dev"),onChange:f=>{subs.push(f)}};})();<\/script>`;
 async function appPage(id, mid){ return api0(`/api/app?id=${encodeURIComponent(id)}`, undefined, mid); }
 function appMount(frame, id, mid, p){   // 把页面放进 iframe，登记好，之后数据、页面变了都通知它
   for (const m of [...MOUNTS]) if (m.frame === frame || !document.contains(m.frame)) MOUNTS.delete(m);
@@ -4033,10 +4033,20 @@ addEventListener("message", async e => {
     else if (d.op === "write" || d.op === "remove") mine(await api0(`/api/app/${d.op}`, {id: a.id, path: x, text: y}, a.mid));
     else if (d.op === "copy") await appCopy(x, y);
     else if (d.op === "chat") appChat(a, x);
+    else if (d.op === "dev") v = await appDev(a.mid);
     else throw new Error("不支持的操作");
     reply({ok: true, value: v});
   } catch (err) { reply({ok: false, error: err.message || "出错了"}); }
 });
+async function appDev(mid){   // 应用读 ccim 自己的需求（#343）：只给开发页里待上线、已上线这两份，只读
+  let d;
+  try { d = await api0("/api/dev", undefined, mid); } catch { return null; }
+  if (!d || d.error || !d.repo) return null;
+  const pick = (o, ks) => Object.fromEntries(ks.map(k => [k, o[k]]));
+  return {review: (d.review || []).map(p => pick(p, ["pr", "issue", "title", "url", "checks", "trying", "updated", "draft"])),
+          shipped: (d.shipped || []).map(p => pick(p, ["issue", "pr", "title", "url", "merged", "rounds"])),
+          trying: d.trying ? d.trying.label : null};
+}
 function appChip(r){
   return `<button class="docfile" onclick="openAppPane(${q(r.app)}${r.mid ? "," + q(r.mid) : ""})"><span class="di">${esc(r.icon || "▦")}</span><span class="t"><b>${esc(r.name)}</b><small>应用</small></span></button>`;
 }

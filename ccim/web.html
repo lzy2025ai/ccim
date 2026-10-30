@@ -632,8 +632,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .code-blk:hover .code-copy,.code-copy:focus-visible{opacity:1}
 @media (hover:none){.code-copy{opacity:1}}
 .approve .code-copy{color:var(--muted);background:rgba(0,0,0,.05)}
-.steps{border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;font-size:13px}
-.steps>button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;color:var(--ink-2)}
+.steps{border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;font-size:13px;min-width:0;overflow-wrap:anywhere}   /* 长链接在窄栏（并排对比）里也断行 */
+.steps>button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;color:var(--ink-2);text-align:left}
 .steps>button .chev{margin-left:auto;transition:transform .15s}
 .steps.open>button .chev{transform:rotate(90deg)}
 .steps ol{display:none;margin:0;padding:2px 12px 10px 34px;color:var(--muted)}

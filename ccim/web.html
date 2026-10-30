@@ -118,8 +118,18 @@ body{overflow:hidden}
 
 /* ---------- 对话 ---------- */
 .chat-head{display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--line)}
-.chat-head .name{font:600 16px/1.3 var(--song)}
-.chat-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.chat-head{container:chead / inline-size}
+.chat-head .name{font:600 16px/1.3 var(--song);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow:hidden;margin-top:2px;white-space:nowrap}
+.chat-head .meta > *{flex-shrink:0}
+.chat-head .meta > a.muted{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.chat-head > .btn,.chat-head > .icon-btn,.chat-head > .stack{flex-shrink:0}
+/* 对话那栏窄（旁边开着文档预览、窗口小）：只留标题和 Agent 名字，按钮只留图标（#349） */
+@container chead (max-width:640px){
+  .chat-head .meta .tag,.chat-head .meta .path,.chat-head .meta .fork-from,.chat-head .meta .muted:not(a),.chat-head .stack{display:none}
+  .chat-head .btn .t{display:none}
+}
+@container chead (max-width:420px){ .chat-head > .seal,.chat-head > .chaticon{display:none} }
 .chat-head .grow{flex:1;min-width:0}
 .notice{margin:12px 22px 0;padding:9px 12px;border-radius:8px;background:#F4F1E6;color:#6B5A27;font-size:13px}
 .notice.warn{background:#FBE9E4;color:#9A3412}
@@ -3001,7 +3011,7 @@ function groupHead(c){
   const ms = c.members || [];
   const stack = ms.length ? `<span class="stack" style="margin-right:2px">${[c.agent, ...ms].map(agentOf).filter(Boolean).slice(0, 5).map(x => seal(x, "sm", false)).join("")}</span>
     <button class="btn ${showGroup ? "on" : ""}" onclick="toggleGroup(!showGroup)">成员 ${ms.length + 1}</button>` : "";
-  return `${stack}<button class="btn" onclick="pullMenu(event)">${ICON.plus}拉人</button>`;
+  return `${stack}<button class="btn" title="拉人" aria-label="拉人" onclick="pullMenu(event)">${ICON.plus}<span class="t">拉人</span></button>`;
 }
 function groupPanel(c){
   const ms = c.members || [];
@@ -3066,7 +3076,7 @@ function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
   $("#main").innerHTML = `
     <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${a ? seal(a) : chatIcon(c)}
-      <div class="grow"><div class="name">${esc(c.title)}</div>
+      <div class="grow"><div class="name" title="${esc(c.title)}">${esc(c.title)}</div>
         <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>

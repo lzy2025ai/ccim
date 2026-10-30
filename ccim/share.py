@@ -14,7 +14,7 @@ X-Account-Share（主人给它的权限：agents 能用哪些主人的 Agent、o
 读写文件的工具用权限规则；主目录里只留共享文件夹、这个会话的工作目录（共享的 Agent 在它自己的目录干活）、平台 Skill、它自己的知识库。
 网络不限。这是防越界，不等于单独的系统用户。Codex 的沙箱只拦写不拦读，主人勾了才给用，用时强制 workspace-write。
 """
-import json, os, re, time
+import functools, json, os, re, subprocess, sys, time
 
 from . import agents, registry
 
@@ -434,8 +434,26 @@ def read_only(sandbox, cwd):
     sb = dict(sandbox or SANDBOX)
     fs = dict(sb.get("filesystem") or {})
     fs["denyWrite"] = list(fs.get("denyWrite") or []) + [os.path.realpath(os.path.expanduser("~")), os.path.realpath(cwd), "/Volumes"]
+    mds = _mds_dir()
+    if mds:                                   # macOS：读钥匙串要先在这里加锁，不放开的话靠钥匙串存登录的命令行工具都当没登录（#351）
+        fs["allowWrite"] = list(fs.get("allowWrite") or []) + [mds]
+        net = dict(sb.get("network") or {})     # 有的命令行工具校验 HTTPS 证书要找这个系统服务，不放开连不上网
+        net["allowMachLookup"] = list(net.get("allowMachLookup") or []) + ["com.apple.trustd.agent"]
+        sb["network"] = net
     sb["filesystem"] = fs
     return sb
+
+
+@functools.lru_cache(maxsize=1)
+def _mds_dir():
+    """钥匙串用的系统缓存目录（macOS 每个用户一个）；别的系统、取不到就不管。"""
+    if sys.platform != "darwin":
+        return None
+    try:
+        out = subprocess.run(["getconf", "DARWIN_USER_CACHE_DIR"], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return None
+    return os.path.join(os.path.realpath(out), "mds") if out else None
 
 
 def allowed_dirs(acct, cwd=None):

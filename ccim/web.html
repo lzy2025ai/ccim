@@ -7228,7 +7228,7 @@ function sideAt(e){
   const list = sideAgents(), here = SIDE.mid || S.me;
   if (!list.length) return toast("还没有别的 Agent，先去 Agent 页建一个");
   SIDE.to = SIDE.to || [];
-  const pp = pop(e, `<div class="sec">请谁看看（可以多选）</div>` + list.map(a =>
+  const pp = pop(e, `<div class="sec">请谁看看</div>` + list.map(a =>
     `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${SIDE.to.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
   pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
     const m = b.dataset.m;
@@ -7236,6 +7236,7 @@ function sideAt(e){
     const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
     const i = $("#side-in"); if (i && /[@＠]$/.test(i.value)) i.value = i.value.slice(0, -1);   // 打的 @ 换成上面的标签
     $("#side-rcpt").innerHTML = sideRcpt();
+    closePop(); i?.focus();   // 选一个就关，要多个再打 @，和主对话输入框一样（#323、#351）
   });
   const done = () => { removeEventListener("click", done); $("#side-in")?.focus(); };
   setTimeout(() => addEventListener("click", done, {once: true}), 0);

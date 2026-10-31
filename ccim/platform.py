@@ -356,8 +356,10 @@ class WebChannel(Channel):
         pass
 
     async def send_file(self, chat_id, path):
-        chat_id = self.outer(chat_id)         # 被 @ 的 Agent 发的：记到群里（#357）
+        sub, chat_id = chat_id, self.outer(chat_id)         # 被 @ 的 Agent 发的：记到群里（#357）
         rec = {"type": "file", "path": os.path.realpath(path), "name": os.path.basename(path), "size": os.path.getsize(path)}
+        if sub != chat_id:
+            rec["sub"] = sub                  # 记下是哪个被 @ 的 Agent 发的，网页里跟着它的回答排（#380）
         snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
         if snap:
             rec["snap"] = snap
@@ -382,12 +384,15 @@ class WebChannel(Channel):
     async def send_app(self, chat_id, app):
         """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。
         被 @ 的 Agent 在子对话里干活，记到用户正看着的那个对话里（#337）。那个对话在别的电脑上的照旧记在子对话里。"""
-        chat_id = self.outer(chat_id)
-        self._emit(chat_id, self.logs.append(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""}))
+        sub, chat_id = chat_id, self.outer(chat_id)
+        rec = {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""}
+        if sub != chat_id:
+            rec["sub"] = sub
+        self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def send_chatlog(self, chat_id, log):
         """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
-        chat_id = self.outer(chat_id)
+        sub, chat_id = chat_id, self.outer(chat_id)
         items = []
         for it in log["items"]:
             it = dict(it)
@@ -402,6 +407,8 @@ class WebChannel(Channel):
                     pass
             items.append(it)
         rec = {"type": "chatlog", "title": log["title"], "items": items, "text": chatlog_text(log)}
+        if sub != chat_id:
+            rec["sub"] = sub
         self._emit(chat_id, self.logs.append(chat_id, rec))
 
     async def download(self, message_id, kind, key, name, folder):

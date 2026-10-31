@@ -2445,8 +2445,11 @@ function route(){
 }
 // 回答里的站内链接（#284）：点过去的对话顶上有返回，回到点链接的地方（手机左上角的返回也一样），连着点几层就一层层回去；回去时滚动位置还原
 let linkTrail = [], linkNav = false;
+// 页面里直接打开某个对话的链接（群聊里的「单独聊」、任务面板等，#371）也记，Agent 页左上角回到来的地方
+const toChat = h => /^#\/(chats\/(?!new$)[^/]+|agents\/[^/]+\/(?!settings$)[^/]+)$/.test(h);
 document.addEventListener("click", e => {
-  const a = e.target.closest && e.target.closest(".answer a[href^='#/'], .av-card a[href^='#/']");
+  const m = e.target.closest?.("#main a[href^='#/']");
+  const a = e.target.closest?.(".answer a[href^='#/'], .av-card a[href^='#/']") || (m && toChat(m.getAttribute("href")) ? m : null);
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.getAttribute("href") === location.hash) return;
   let box = a.parentElement;
   while (box && box !== document.body && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
@@ -2574,7 +2577,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   const today = isToday(c.last_active) ? "today" : "";     // 今天聊过的：标题实一些，时间用主色（#52）
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
-    const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
+    const me = `<a class="item child ${today} ${(agentSide && agentSide.on || current.sub) === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
       <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">成员</span>` : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
@@ -2637,6 +2640,7 @@ async function openChat(id){
     }
     renderList();
   }
+  else if (current.view === "agents" && current.sub === id && agentSide && agentSide.id === current.id && !agentSide.chats.some(c => c.id === id)) renderList();   // 不在列表里的：有了对话详情才知道选中哪一行（#371）
   const rk = id + "|" + (current.view === "agents" ? current.id : "");   // 同一个群从不同 Agent 的列表打开，默认发给谁不一样（#359）
   if (fresh || rk !== rcptKey) { rcptKey = rk; toOff = null; chatRcpt = defaultRcpt(); }
   drawChat(); doJump(); markSeen(id);
@@ -5428,6 +5432,10 @@ function renderAgentSide(){
   const rows0 = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));
   const ids = new Set(rows0.map(c => c.id));
   const rows = rows0.map(c => !c.parent && c.dispatched_from && ids.has(c.dispatched_from.id) ? {...c, parent: c.dispatched_from.id} : c);
+  // 打开的对话不在列表里（#371）：群里它那份子对话选中所在的群；别的（刚开的、项目里的）先插在列表里
+  const d = current.sub && !ids.has(current.sub) && detail && detail.id === current.sub ? detail : null;
+  agentSide.on = d && d.mention_of && ids.has(d.mention_of) ? d.mention_of : current.sub;
+  if (d && agentSide.on === d.id && !d.side_of) rows.unshift({...d, log: undefined});
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head">${backLink()}<button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
@@ -5437,6 +5445,17 @@ function renderAgentSide(){
     <button class="side-new" onclick="startAgent(${q(id)})">${ICON.plus}和它开个新对话</button>
     <div class="scroll">${agentSide.error ? `<p class="muted" style="padding:10px">${esc(agentSide.error)}</p>` : rows.length ? chatSections(rows, id)
       : `<p class="muted" style="padding:10px">还没有对话。</p>`}</div>`;
+  showAgentOn();
+}
+function showAgentOn(){   // 换了打开的对话：列表滚到它（推送重画时不动）
+  const key = agentSide.id + "/" + agentSide.on, el = document.querySelector("#list .item.on"), box = document.querySelector("#list .scroll");
+  if (agentSide.shown === key) return;
+  if (!el && !showArchived && agentSide.chats.some(c => c.id === agentSide.on && c.archived)) { showArchived = true; return renderList(); }   // 在收起的「已完成」里
+  if (!el || !box) return;
+  agentSide.shown = key;
+  const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+  listScroll = {key: listKey(), top: box.scrollTop};
 }
 async function openAgentLatest(id){
   if (!agentSide || agentSide.id !== id || !agentSide.a || agentSide.stale) await fetchAgentSide(id);

@@ -705,6 +705,16 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .msg.me .refs a{text-decoration:none}
 .pop.slash b{font:600 13px var(--mono);min-width:110px}
 .pop.slash b .arg{font:400 12px var(--sans);color:var(--muted)}
+.pop.slash.wide{width:min(600px,100%)}
+.pop.slash.wide b{min-width:150px;flex:none}
+.pop.slash .desc{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop.slash .src{order:3;font-size:11.5px;color:var(--faint);flex:none}
+.pop.slash mark{background:none;color:var(--qing);text-decoration:underline;text-underline-offset:3px}
+.pop.slash hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
+.pop.slash .more{font-size:12.5px;color:var(--faint);padding:7px 10px}
+@media (max-width:760px){.pop.in-box.slash{bottom:calc(100% + 6px)!important;border-radius:12px;padding:6px;max-height:var(--room,50dvh)!important}   /* 别盖住正在打的字 */
+  .pop.slash.wide button{flex-wrap:wrap;gap:0 8px}.pop.slash.wide b{min-width:0}.pop.slash.wide .src{order:0}
+  .pop.slash.wide .desc{order:4;flex-basis:100%;white-space:normal}}
 .pop button:hover{background:var(--sunk)}
 .pop button .ck{margin-left:auto;color:var(--qing)}
 .pop .sec{font-size:12px;color:var(--faint);padding:6px 10px 2px}
@@ -1971,6 +1981,7 @@ function pop(e, html, below){
     const kb = vv && vv.height < innerHeight - 80;   // 键盘开着：可见区域只剩输入框上面那块，这时 b.top 不可靠
     const room = Math.max(120, (kb ? vv.height - b.height : b.top) - 24);
     if (p.offsetHeight > room) p.style.maxHeight = room + "px";
+    p.style.setProperty("--room", room + "px");   // 手机上的 / 列表按它限高（#381）
     p.querySelector("input")?.focus();
     return p;
   }
@@ -3642,28 +3653,60 @@ function chatAt(e){
 function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent，和 / 命令列表一样从输入框左边展开（#163）
   if (e.data === "@" || e.data === "＠") setTimeout(() => chatAt({currentTarget: $("#box"), stopPropagation(){}}), 0);
 }
-// 开头打 / ：列出能用的命令（#82）
+// 开头打 / ：列出能用的命令（#82），下面一组是这个对话能用的 Skill（#381）
 const SLASH = [
   ["/queue", "排在后面，手头这件做完再处理", "内容"],
-  ["/diary", "记一笔日记，不打断手头的事", "内容"],
+  ["/diary", "记一笔日记，不打断手头的事", "内容", "", true],
   ["/stop", "停下正在做的事"],
   ["/skip", "某一步卡住了：结束这一步，接着做"],
   ["/status", "当前状态"],
-  ["/usage", "额度和用量", "", "claude"],
+  ["/usage", "额度和用量", "", "claude", true],
   ["/model", "换模型", "名字"],
   ["/effort", "换思考深度", "等级"],
   ["/review", "复盘：写下复盘哪段时间、看什么", "要求", "", true],   // 第五项：新对话页也能用（#364）
 ];
-function slashTyped(){
-  const i = $("#input"), v = i.value.slice(0, i.selectionStart), m = /^\/(\S*)$/.exec(v);   // 光标前面是 /xxx 就提示，后面已有的文字留着
+const SKILLS = {};   // 电脑|目录|Agent → Skill 列表（取一次，刷新网页再取）
+function slashCtx(){
+  return detail ? {m: ownerOf(detail.id) || S.me, dir: detail.dir || "", agent: detail.agent || "", base: detail.base || "claude"}
+    : {m: draft.machine || S.me, dir: draft.dir || "", agent: "", base: draft.base || "claude"};
+}
+function slashSkills(){
+  const c = slashCtx(); if (c.base !== "claude") return [];
+  const k = [c.m, c.dir, c.agent].join("|");
+  if (!SKILLS[k]) {
+    SKILLS[k] = "loading";
+    api0(`/api/slash?dir=${encodeURIComponent(c.dir)}&agent=${encodeURIComponent(c.agent)}`, undefined, c.m)
+      .then(r => { SKILLS[k] = r.skills || []; slashTyped(true); }).catch(() => { delete SKILLS[k]; });
+  }
+  return Array.isArray(SKILLS[k]) ? SKILLS[k] : [];
+}
+function slashMark(name, w){   // 名字里对上的那段标出来
+  const i = w ? name.toLowerCase().indexOf(w) : -1;
+  return i < 0 ? esc(name) : esc(name.slice(0, i)) + `<mark>${esc(name.slice(i, i + w.length))}</mark>` + esc(name.slice(i + w.length));
+}
+function slashTyped(again){
+  const i = $("#input"); if (!i) return;
+  const v = i.value.slice(0, i.selectionStart), m = /^\/(\S*)$/.exec(v);   // 光标前面是 /xxx 就提示，后面已有的文字留着
   const old = document.querySelector(".pop.slash:not(.ref)");
-  const hits = m ? SLASH.filter(([k, , , only, fresh]) => k.startsWith("/" + m[1].toLowerCase()) && (detail ? !only || (detail.base || "claude") === only : fresh)) : [];
-  if (!hits.length || hits.length === 1 && hits[0][0] === v) { if (old) old.remove(); return; }
-  if (old && old.dataset.v === v) return;
-  const on = old ? Math.min(+old.dataset.on || 0, hits.length - 1) : 0;
-  const p = pop({currentTarget: $("#box"), stopPropagation(){}}, hits.map(([k, d, arg], i) =>
-    `<button class="${i === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="slashPick(${q(k)}, ${arg ? 1 : 0})"><b>${esc(k)}${arg ? ` <span class="arg">${esc(arg)}</span>` : ""}</b><span class="desc">${esc(d)}</span></button>`).join(""));
-  p.classList.add("slash"); p.dataset.v = v; p.dataset.on = on;
+  const w = m ? m[1].toLowerCase() : "", c = slashCtx();
+  const rank = n => (n.startsWith(w) ? 0 : 1);
+  const cmds = m ? SLASH.filter(([k, , , only, fresh]) => k.slice(1).includes(w) && (detail ? true : fresh) && (!only || c.base === only))
+    .sort((x, y) => rank(x[0].slice(1)) - rank(y[0].slice(1))) : [];
+  const sks = m ? slashSkills().filter(x => x.name.toLowerCase().includes(w)).sort((x, y) => rank(x.name.toLowerCase()) - rank(y.name.toLowerCase())) : [];
+  const all = cmds.length + sks.length;
+  if (!all || all === 1 && (cmds[0] ? cmds[0][0] : "/" + sks[0].name) === v) { if (old) old.remove(); return; }
+  if (old && old.dataset.v === v && again !== true) return;
+  const cap = w ? 8 : 6, shown = sks.slice(0, cap);
+  const on = old ? Math.min(+old.dataset.on || 0, cmds.length + shown.length - 1) : 0;
+  let n = 0;
+  const row = (k, d, arg, src) => `<button class="${n++ === on ? "on" : ""}" onmousedown="event.preventDefault()" onclick="slashPick(${q(k)}, ${arg ? 1 : 0})"><b>/${slashMark(k.slice(1), w)}${arg && arg !== 1 ? ` <span class="arg">${esc(arg)}</span>` : ""}</b>${src ? `<span class="src">${esc(src)}</span>` : ""}<span class="desc">${esc(d)}</span></button>`;
+  let h = "";
+  if (cmds.length && sks.length) h += `<div class="sec">命令</div>`;
+  h += cmds.map(([k, d, arg]) => row(k, d, arg)).join("");
+  if (sks.length) h += (cmds.length ? "<hr>" : "") + `<div class="sec">Skill</div>` + shown.map(x => row("/" + x.name, x.desc, 1, x.src)).join("");
+  if (sks.length > cap) h += `<div class="more">还有 ${sks.length - cap} 个，继续输入筛选</div>`;
+  const p = pop({currentTarget: $("#box"), stopPropagation(){}}, h);
+  p.classList.add("slash"); if (sks.length) p.classList.add("wide"); p.dataset.v = v; p.dataset.on = on;
 }
 function slashPick(k, arg){   // 回车、Tab、点选都只填进输入框，再按回车才发出（免得误触）
   const i = $("#input"), rest = i.value.slice(i.selectionStart).replace(/^\s+/, ""), head = k + (arg || rest ? " " : "");
@@ -3977,6 +4020,17 @@ async function startTemp(){
 }
 const isReview = v => /^\/review(\s|$)/.test(v);
 async function startTemp0(v, files){
+  const m0 = draft.machine || S.me;
+  if (DIARY.test(v)) {                   // 记日记、看额度：不用新建对话（#381）
+    if (files.length) return toast("日记只能记文字，先去掉附件");
+    if (await sendDiary("", v, [], m0, false)) { $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); drawComposerState(); }
+    return;
+  }
+  if (/^\/usage\s*$/i.test(v) && draft.base === "claude") {
+    const r = await act(() => api(`/api/usage?dir=${encodeURIComponent(draft.dir || "")}`, undefined, m0));
+    $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); drawComposerState();
+    return dialog("额度和用量", `<div class="answer">${md(r.text || "")}</div>`);
+  }
   if (isReview(v) && chatRcpt.length > 1) return toast("复盘交给一个 Agent 就好");
   if (isReview(v) && chatRcpt.length) return startReviewWith(chatRcpt[0], v, files);   // 选了 Agent：就是和它的对话（#364）
   const m = draft.machine || S.me;

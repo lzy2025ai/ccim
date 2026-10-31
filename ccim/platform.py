@@ -1138,6 +1138,8 @@ class Platform:
         content = diary_mod.parse(text) or ""
 
         def prep():
+            if not cid:                       # 新对话页里记的（#381）：不属于哪个对话
+                return "", "", False, None
             try:
                 v = self._external(cid) if (cid or "").startswith("x:") else self.chat_view(cid)
             except Problem:
@@ -2680,6 +2682,8 @@ def _handler(pf):
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
+                "/api/slash": lambda: {"skills": slash_skills(q, acct)},          # 输入 / 时列出的 Skill（#381）
+                "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or ""), timeout=90)},   # 新对话页的 /usage
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
                 "/api/diary/home": lambda: pf.diary_home_view(),         # 日记存在哪台电脑（#376）
                 "/api/diary/info": lambda: {"path": diary_mod.root(), "apps": diary_mod.apps()},   # 这台上的日记文件夹、能用什么打开
@@ -2951,6 +2955,18 @@ def diary_of(pf, cid, text, files, acct):
     if files:
         raise Problem("日记只能记文字。")
     return pf.diary(cid, text)
+
+
+def slash_skills(q, acct):
+    from . import slash
+    a = agents.get(q.get("agent")) if q.get("agent") else None
+    return slash.listing(os.path.expanduser(q.get("dir") or ""), a, acct or (a or {}).get("account"))
+
+
+async def usage_report(d):
+    from . import usage
+    d = os.path.expanduser(d)
+    return await usage.report(d if d and os.path.isdir(d) else os.path.expanduser("~"))
 
 
 def send(pf, cid, text, files, ctx=None, refs=None, acct=None):

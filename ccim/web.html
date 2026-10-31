@@ -273,6 +273,15 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .rv-item .nm{font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rv-item .sub{font-size:12px;color:var(--muted)} .rv-item .spin{flex:none}
 .lnk{color:var(--qing);font-size:12.5px} .lnk:hover{text-decoration:underline}
+/* 已完成（#369）：面板上近 7 / 30 天的数和近 14 天每天几个；当天详情里列出那天完成的 */
+.fin-nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.fin-nums div{display:flex;flex-direction:column;gap:1px}
+.fin-nums b{font:600 22px/1.2 var(--song);color:var(--ink)} .fin-nums span{font-size:12px;color:var(--muted)}
+.fin-bars{display:flex;align-items:flex-end;gap:4px;height:44px;cursor:pointer}
+.fin-bars i{flex:1;background:var(--ok);border-radius:2px 2px 0 0;opacity:.8;min-height:3px}
+.fin-bars i.z{background:var(--sunk);opacity:1} .fin-bars i:hover{opacity:1} .fin-bars i.today{outline:1.5px solid var(--ink-2);outline-offset:1px}
+.fin .rv-list{border-top:0;padding:0;margin:-4px -6px -6px}
+.fin .rv-item.gone .nm{color:var(--muted);font-weight:500}
 .pop .rv-more{color:var(--qing)} .pop .rv-more svg{width:13px;height:13px}
 .dialog.wide{width:min(860px,94vw)}
 .rve{display:grid;grid-template-columns:180px 1fr;gap:14px;min-height:380px}
@@ -301,7 +310,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .dtt{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ds{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dtag{font-size:11.5px;padding:0 6px;border-radius:5px;flex:none;line-height:18px}
-.dtag.run{background:#F6ECD3;color:#8A6A12} .dtag.wait{background:#F6DEDA;color:var(--bad)}
+.dtag.run{background:#F6ECD3;color:#8A6A12} .dtag.wait{background:#F6DEDA;color:var(--bad)} .dtag.fin{background:#E1EDE6;color:var(--ok)}
 .dside{display:flex;flex-direction:column;align-items:flex-end;font-size:12px;color:var(--muted);white-space:nowrap;line-height:22px}
 .dm{color:var(--faint)}
 .hours{display:flex;align-items:flex-end;gap:3px;height:64px}
@@ -2082,7 +2091,7 @@ function afterState(){
 function refreshSoon(){ if (EMBED) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }   // 右下角助理里：外面的页面刷新后会交过来
 
 // ================= 对话分页（#268） =================
-// 整体状态里只带「对话」列表最近 50 条和常驻的（在干活、等你处理、置顶、星标……）。更早的、已归档的按需取来放在 MORE.rows，
+// 整体状态里只带「对话」列表最近 50 条和常驻的（在干活、等你处理、置顶、星标……）。更早的、已完成的按需取来放在 MORE.rows，
 // 和整体状态里的合起来就是列表；搜到的、任务面板和复盘带来的放在 MORE.known，只用来按编号找。
 const MORE = {rows: {}, known: {}, next: {}, archNext: {}, archLoaded: false, loading: false, found: null, asked: {}};
 function chatMachines(){ return multi() ? (S.machines || []).filter(m => m.online !== false && !(S.hub && m.hub)) : [{id: S.me}]; }
@@ -2099,7 +2108,7 @@ function unlisted(id){                // 推送里的对话列表里没有（比
   MORE.asked[id] = now; return true;
 }
 const hasMore = (next, key) => chatMachines().some(m => m.id in next ? !!next[m.id] : !!(moreOf(m.id) || {})[key]);
-async function loadPage(kind){        // 每台还有的各取一页：older 更早的、arch 已归档的
+async function loadPage(kind){        // 每台还有的各取一页：older 更早的、arch 已完成的
   if (MORE.loading) return;
   MORE.loading = true; renderList();
   const next = kind === "arch" ? MORE.archNext : MORE.next;
@@ -2125,7 +2134,7 @@ function toggleArchived(){
   if (showArchived && !MORE.archLoaded) loadPage("arch"); else renderList();
 }
 let searchT = null;
-function searchChats(v){              // 先在已有的里找，停 250 毫秒再到每台电脑上搜（更早的、已归档的也搜得到）
+function searchChats(v){              // 先在已有的里找，停 250 毫秒再到每台电脑上搜（更早的、已完成的也搜得到）
   chatFilter = v.toLowerCase(); MORE.found = null; clearTimeout(searchT);
   renderChatList();
   const q = v.trim();
@@ -2460,7 +2469,7 @@ function renderList(){
 // ================= 对话列表 =================
 let chatFilter = "";
 function chatTree(rows){
-  // 分叉出来的对话挂在原来那个下面（置顶、归档的单独成组，不挂）；整棵树按里面最近一次聊的时间排
+  // 分叉出来的对话挂在原来那个下面（置顶、已完成的单独成组，不挂）；整棵树按里面最近一次聊的时间排
   const byId = Object.fromEntries(rows.map(c => [c.id, c])), kids = {};
   const secOf = (c, seen = new Set()) => {
     if (c._sec) return c._sec;
@@ -2497,9 +2506,9 @@ function chatSections(rows, inAgent){
   if (!inAgent && hasMore(MORE.next, "next"))
     html += `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('older')">${MORE.loading ? "正在加载…" : "加载更早的对话"}</button>`;
   const na = inAgent ? arch.length : archCount();
-  if (na) html += `<button class="group arch-toggle ${showArchived ? "open" : ""}" onclick="${inAgent ? "showArchived=!showArchived;renderList()" : "toggleArchived()"}">已归档 ${na}${ICON.chev}</button>` +
+  if (na) html += `<button class="group arch-toggle ${showArchived ? "open" : ""}" onclick="${inAgent ? "showArchived=!showArchived;renderList()" : "toggleArchived()"}">已完成 ${na}${ICON.chev}</button>` +
     (showArchived ? arch.map(item).join("") + (!inAgent && MORE.archLoaded && hasMore(MORE.archNext, "archived")
-      ? `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('arch')">${MORE.loading ? "正在加载…" : "加载更多已归档的"}</button>` : "") : "");
+      ? `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('arch')">${MORE.loading ? "正在加载…" : "加载更多已完成的"}</button>` : "") : "");
   return html;
 }
 const MARK_COLORS = {red: "var(--zhu)", orange: "var(--zhe)", yellow: "var(--huang)", green: "var(--lu)", blue: "var(--qing)", purple: "#7B5BA6"};
@@ -2523,10 +2532,10 @@ function nest(c, me, kids, child, inAgent, depth){
   const tree = ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true, inAgent, depth + 1)).join("")}</div>` : "";
   return child ? `<div class="node">${me}${tree}</div>` : me + tree;
 }
-function whenTag(c){   // 归档的对话最后一周显示还剩几天删除
+function whenTag(c){   // 已完成的对话最后一周显示还剩几天清理
   if (c.archived && c.delete_at) {
     const d = Math.ceil((c.delete_at * 1000 - Date.now()) / 86400000);
-    if (d <= 7) return `<span class="when left">${d <= 1 ? "明天删除" : `还有 ${d} 天删除`}</span>`;
+    if (d <= 7) return `<span class="when left">${d <= 1 ? "明天清理" : `还有 ${d} 天清理`}</span>`;
   }
   return `<span class="when">${when(c.last_active)}</span>`;
 }
@@ -3343,7 +3352,7 @@ async function setChat(key, value){
   const v = await act(() => api("/api/chat/set", {id: detail.id, key, value: value || null}), key === "model" ? "下一条消息开始换模型" : "下一条消息开始换思考深度");
   Object.assign(detail, v); drawComposerState();
 }
-// ---- 对话列表里每一项的操作：重命名、置顶、排序、标记、归档、删除 ----
+// ---- 对话列表里每一项的操作：重命名、置顶、排序、标记、已完成、删除 ----
 function listRows(){
   return current.view === "agents" ? (agentSide && agentSide.chats || []) : allChats().filter(c => !c.agent);
 }
@@ -3378,7 +3387,7 @@ function itemMenu(e, id, below){
      <div class="marks">${Object.entries(MARK_COLORS).map(([k, col]) =>
       `<button class="sw ${c.color === k ? "on" : ""}" aria-label="颜色" onclick="markChat(${q(id)},{color:${c.color === k ? "null" : q(k)}})"><i style="background:${col}"></i></button>`).join("")}</div>`,
     c.icon || c.color ? b(`markChat(${q(id)},{icon:null,color:null})`, "清除标记") : "",
-    c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消归档") : b(`markChat(${q(id)},{archived:true,pin:null})`, "归档"),
+    c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消已完成") : b(`markChat(${q(id)},{archived:true,pin:null})`, "标为已完成"),
     mem ? "" : b(`deleteChat(${q(id)})`, "删除", "danger"),
   ].join(""), below);
 }
@@ -3399,7 +3408,7 @@ async function markChat(id, changes){
   if (!c) return;
   await act(() => api("/api/chat/mark", {id, changes}, machineOfChat(c)));
   closePop();
-  if (changes.archived) toast("已归档");
+  if (changes.archived) toast("已标为完成");
   await refreshLists();
 }
 async function refreshLists(){
@@ -4160,9 +4169,10 @@ function setRecentTab(t){ recentTab = t; showAllRecent = false; try { localStora
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
   const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
-  const out = {heat: {}, turns_week: 0, done_week: 0, agents: {}, today: null, day: {chats: 0, agents: new Set(), msgs: 0}, tokens: null, quota: null};
+  const out = {heat: {}, done: {}, turns_week: 0, done_week: 0, agents: {}, today: null, day: {chats: 0, agents: new Set(), msgs: 0}, tokens: null, quota: null};
   for (const p of parts.filter(Boolean)) {
     for (const [d, n] of Object.entries(p.heat || {})) out.heat[d] = (out.heat[d] || 0) + n;
+    for (const [d, n] of Object.entries(p.done || {})) out.done[d] = (out.done[d] || 0) + n;   // 每天完成几个（#369）
     out.turns_week += p.turns_week || 0; out.done_week += p.done_week || 0; out.today = out.today || p.today;
     Object.assign(out.agents, p.agents || {});
     if (p.day) { out.day.chats += p.day.chats; out.day.msgs += p.day.msgs; p.day.agents.forEach(a => out.day.agents.add(a)); }
@@ -4246,7 +4256,7 @@ async function sendBoardReply(){
   markSeen(r.id);
   toast("已发出"); drawAttention(); renderBoard(true); refreshSoon();
 }
-function heatHtml(heat, today){
+function heatHtml(heat, today, done = {}){
   const end = today ? new Date(today + "T00:00:00") : new Date(); end.setHours(0, 0, 0, 0);
   const start = new Date(end); start.setDate(start.getDate() - 7 * 26 + 1 - ((end.getDay() + 6) % 7));   // 从 26 周前的周一开始
   const max = Math.max(1, ...Object.values(heat));
@@ -4257,7 +4267,7 @@ function heatHtml(heat, today){
     for (let i = 0; i < 7 && d <= end; i++, d.setDate(d.getDate() + 1)) {
       const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       if (d.getDate() <= 7 && i === 0) months.push([w, `${d.getMonth() + 1}月`]);
-      col.push(`<i class="l${lv(heat[k] || 0)}${k === today ? " today" : ""}" data-d="${k}" title="${k.slice(5).replace("-", "月")}日：${heat[k] || 0} 条"></i>`);
+      col.push(`<i class="l${lv(heat[k] || 0)}${k === today ? " today" : ""}" data-d="${k}" title="${k.slice(5).replace("-", "月")}日：${heat[k] || 0} 条${done[k] ? `，完成 ${done[k]} 个` : ""}"></i>`);
     }
     cols.push(`<span class="hcol">${col.join("")}</span>`);
   }
@@ -4319,10 +4329,20 @@ async function loadBoardDay(d){
   for (const p of parts.filter(Boolean)) {
     out.rows.push(...(p.chats || []).map(r => ({...r, machine: p.machine})));
     out.reviews = (out.reviews || []).concat(remember(p.reviews, p.machine));   // 那天的复盘对话（#268）
+    out.done = (out.done || []).concat((p.done || []).map(r => ({...r, machine: p.machine})));   // 那天完成的（#369）
     (p.hours || []).forEach((n, i) => out.hours[i] += n);
     if (p.tokens) { out.tokens = out.tokens || [0, 0]; out.tokens[0] += p.tokens[0]; out.tokens[1] += p.tokens[1]; }
   }
   dayData[d] = out;
+}
+function finDayHtml(fins){   // 那天标为已完成的对话（#369）：还在的点了打开，清理掉的只留标题
+  if (!fins.length) return "";
+  return `<div class="bcard fin"><h2>这一天完成的<span class="sp"></span><small>${fins.length} 个</small></h2><div class="rv-list">${fins.map(r => {
+    const c = chatById(r.id) || {id: r.id, agent: r.agent, title: r.title}, a = r.agent ? agentOf(r.agent) : null;
+    const sub = [a ? a.name : "", r.source && r.source !== "网页" ? r.source : "", hm(r.at), r.gone ? "已清理" : "", multi() ? (machineOf(r.machine) || {}).name : ""].filter(Boolean).join(" · ");
+    const inner = `${a ? seal(a, "sm", false) : chatIcon(c, "sm")}<span class="t"><span class="nm">${esc(c.title || r.title)}</span><span class="sub">${esc(sub)}</span></span>`;
+    return r.gone ? `<div class="rv-item gone">${inner}</div>` : `<a class="rv-item" href="${boardHref(c)}">${inner}</a>`;
+  }).join("")}</div></div>`;
 }
 function hm(ts){ const d = new Date(ts * 1000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function renderBoardDay(quick){
@@ -4340,15 +4360,17 @@ function renderBoardDay(quick){
   const top = named.slice().sort((a, b) => b.msgs - a.msgs)[0];
   const msgs = rows.reduce((n, r) => n + r.msgs, 0);
   const L = data ? null : "…";
+  const fins = data ? (data.done || []).slice().sort((x, y) => y.at - x.at) : [];
   const kpis = `<div class="kpis" style="--n:4">
-    <div class="kpi"><span class="lab">会话</span><span class="big">${L || rows.length}</span><span class="sub">${fresh ? `新开 ${fresh} 个` : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lab">会话</span><span class="big">${L || rows.length}</span><span class="sub">${[fresh ? `新开 ${fresh} 个` : "", fins.length ? `完成 ${fins.length} 个` : ""].filter(Boolean).join(" · ") || "&nbsp;"}</span></div>
     <div class="kpi"><span class="lab">Agent</span><span class="big">${L || named.length}</span><span class="sub">${top && named.length > 1 ? `${esc(agentOf(top.aid).name)} 聊得最多` : "&nbsp;"}</span></div>
     <div class="kpi"><span class="lab">你发的消息</span><span class="big">${L || msgs}</span><span class="sub">${waits ? `等你 ${waits} 件` : "&nbsp;"}</span></div>
     <div class="kpi"><span class="lab">Token</span><span class="big">${L || (data.tokens ? tokBig(data.tokens[0]) : "—")}</span><span class="sub">${data && data.tokens && data.tokens[1] ? `另有缓存读取 ${fmtTok(data.tokens[1])}` : "&nbsp;"}</span></div></div>`;
   const row = r => {
     const c = r.c || {id: r.id, agent: r.agent, title: r.title};
     const title = c.issue ? `#${c.issue.n} ${c.issue.title || c.title}` : c.title || r.title;
-    const st = r.c && working(r.c) ? `<span class="dtag run">进行中</span>` : r.c && r.c.attention ? `<span class="dtag wait">等你</span>` : "";
+    const st = r.c && working(r.c) ? `<span class="dtag run">进行中</span>` : r.c && r.c.attention ? `<span class="dtag wait">等你</span>`
+      : (r.c ? r.c.archived : r.archived) ? `<span class="dtag fin">已完成</span>` : "";
     const span = hm(r.first) === hm(r.last) ? hm(r.first) : `${hm(r.first)} – ${hm(r.last)}`;
     return `<a class="drow" href="${boardHref(c)}"><span class="dtm">${span}</span>
       <span class="dmid"><span class="dt"><span class="dtt">${esc(title)}</span>${st}</span><span class="ds">${esc((r.c && r.c.brief) || r.brief || "")}</span></span>
@@ -4366,7 +4388,7 @@ function renderBoardDay(quick){
   $("#main").innerHTML = `<div class="board"><div class="bhead dhead"><a class="crumb" href="#/board">任务面板</a><span class="crumb-sl">/</span><h1>${dayLabel(d)}</h1>
       <span class="dnav"><button class="iconbtn" title="前一天" onclick="location.hash='#/board/day/${dayAdd(d, -1)}'">${ICON.left}</button><button class="iconbtn" title="后一天" ${d >= today ? "disabled" : ""} onclick="location.hash='#/board/day/${dayAdd(d, 1)}'">${ICON.chev}</button></span></div>
     <div class="bgrid"><div class="bleft">${kpis}${list}</div>
-    <div class="bright"><div class="bcard"><h2>这一天的节奏<span class="sp"></span><small>按小时</small></h2>${hours}</div>${reviewHtml(d)}</div></div></div>`;
+    <div class="bright"><div class="bcard"><h2>这一天的节奏<span class="sp"></span><small>按小时</small></h2>${hours}</div>${finDayHtml(fins)}${reviewHtml(d)}</div></div></div>`;
   if (keep && quick) $(".board").scrollTop = keep;
 }
 // ----- 复盘（#241、#364）：「复盘」按钮把 /review 和选中的提示词模板（日期代入）填进新对话的输入框，用户改了再发 -----
@@ -4472,6 +4494,18 @@ async function saveReviewViews(){
   if (hit) localStorage.setItem("ccim.reviewTpl", hit.id);    // 刚改的、刚加的就是接下来要用的
   if (current.view === "board" && current.id === "day") renderBoardDay(true);
 }
+function finCard(st){   // 已完成（#369）：今天、近 7 天、近 30 天各完成几个，近 14 天每天几个，点一天进那天
+  const today = st.today || ymd(new Date()), done = st.done || {};
+  const sum = n => { let t = 0; for (let i = 0; i < n; i++) t += done[dayAdd(today, -i)] || 0; return t; };
+  const L = boardStats ? null : "…";
+  const days = Array.from({length: 14}, (_, i) => dayAdd(today, i - 13)), mx = Math.max(1, ...days.map(k => done[k] || 0));
+  const bars = days.map(k => { const n = done[k] || 0;
+    return `<i class="${n ? "" : "z"}${k === today ? " today" : ""}" data-d="${k}" style="height:${n ? Math.max(14, n / mx * 100) : 7}%" title="${dayLabel(k)}：完成 ${n} 个"></i>`; }).join("");
+  return `<div class="bcard"><h2>已完成<span class="sp"></span><small>近 14 天</small></h2>
+    <div class="fin-nums"><div><b>${L || done[today] || 0}</b><span>今天</span></div><div><b>${L || sum(7)}</b><span>近 7 天</span></div><div><b>${L || sum(30)}</b><span>近 30 天</span></div></div>
+    <div class="fin-bars" onclick="const d=event.target.dataset.d;if(d)location.hash='#/board/day/'+d">${bars}</div>
+    <div class="haxis"><span>${+days[0].slice(5, 7)}月${+days[0].slice(8)}日</span><span>今天</span></div></div>`;
+}
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
@@ -4507,7 +4541,8 @@ async function renderBoard(quick){
         return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
       })()}
     </div><div class="bright">
-      <div class="bcard"><h2>活跃度<span class="sp"></span><small>点一天查看</small></h2>${boardStats ? heatHtml(st.heat || {}, st.today) : `<p class="bempty">…</p>`}</div>
+      <div class="bcard"><h2>活跃度<span class="sp"></span><small>点一天查看</small></h2>${boardStats ? heatHtml(st.heat || {}, st.today, st.done || {}) : `<p class="bempty">…</p>`}</div>
+      ${finCard(st)}
       <div class="bcard"><h2>本周各 Agent<span class="sp"></span><span class="rtabs" role="tablist">${[["turns", "条数"], ["tokens", "Token"]].map(([k, t]) => `<button role="tab" aria-selected="${agTab === k}" class="${agTab === k ? "on" : ""}" onclick="setAgTab('${k}')">${t}</button>`).join("")}</span></h2>
         ${ags.length ? ags.map(([id, v]) => { const a = agentOf(id), n = v[agTab] || 0; return `<a class="arow" href="#/agents/${encodeURIComponent(id)}">${seal(a, "sm", false)}<span class="an">${esc(a.name)}</span><span class="abar"><i style="width:${Math.round(n / maxT * 100)}%"></i></span><span class="acnt">${agTab === "tokens" ? fmtTok(n) : n + " 条"}</span></a>`; }).join("") : `<p class="bempty">${boardStats ? "这周还没和 Agent 聊过。" : "…"}</p>`}</div>
     </div></div></div>`;
@@ -5600,7 +5635,7 @@ function renderSettingsList(){
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
-    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">归档、工作区、右下角助理</span></span></a>
+    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">已完成的对话、工作区、右下角助理</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑${oldMachines().length ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${oldMachines().length ? `${oldMachines().length} 台版本较旧，去升级` : multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
     ${isOwner() ? `<a class="item ${onAccounts ? "on" : ""}" href="#/settings/accounts" style="text-decoration:none;color:inherit"><span class="t"><span class="title">账号</span><span class="sub">给别人开账号</span></span></a>` : ""}
@@ -6359,12 +6394,12 @@ function renderChatSettings(){
   const ro = !own.length;                      // 只有别人共享给我的电脑：主人设的，只能看（#154）
   const shared = ro ? ((S.machine_info || {})[S.me] || {}).global || {} : {};
   const cur = (ro ? shared : S.global || {}).archive_days || "30";
-  const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不删除"]];
+  const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不清理"]];
   const wsOn = !!(ro ? shared : S.global || {}).workspace;
   const dyOn = (ro ? shared : S.global || {}).diary_cards !== "off";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
-    <div class="pane"><div class="sect"><h3>归档的对话</h3>
-      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">归档后多久没有新消息就删除<div class="muted" style="font-size:12.5px">存进知识库的内容会保留</div></div>
+    <div class="pane"><div class="sect"><h3>已完成的对话</h3>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">标为已完成后，多久没有新消息就清理<div class="muted" style="font-size:12.5px">存进知识库的内容、任务面板里的完成统计会保留</div></div>
         <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setArchiveDays('${v}')"`}>${l}</button>`).join("")}</div></div>
     </div><div class="sect"><h3>工作区</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">在对话旁边看文件、改文件<div class="muted" style="font-size:12.5px">打开后，对话的三点菜单里有「打开工作区」</div></div>

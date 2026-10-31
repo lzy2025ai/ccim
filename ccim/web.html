@@ -1333,6 +1333,15 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .diary-card .dh{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:4px}
 .diary-card .dh svg{width:14px;height:14px}
 .diary-card .dt{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14.5px}
+/* 日记样式（#378）：便签、横线纸 */
+.diary-card.ds-note{position:relative;background:#FFF1A6;border:0;border-radius:2px 2px 14px 2px;padding:16px 16px 12px;transform:rotate(-.4deg);box-shadow:0 1px 1px rgba(90,70,0,.08),0 8px 16px -8px rgba(90,70,0,.4)}
+.diary-card.ds-note::before{content:"";position:absolute;top:-9px;left:50%;width:70px;height:20px;margin-left:-35px;background:rgba(255,255,255,.55);border:1px solid rgba(0,0,0,.05);box-shadow:0 1px 2px rgba(0,0,0,.06);transform:rotate(2.5deg)}
+.diary-card.ds-note .dh{color:#8C7A2E}
+.diary-card.ds-paper{background:#FFFDF6;border:1px solid #E8E1CF;border-radius:4px;padding:10px 16px 12px 42px;box-shadow:0 2px 6px -3px rgba(60,50,20,.25);background-image:linear-gradient(90deg,transparent 30px,rgba(205,92,80,.45) 30px,rgba(205,92,80,.45) 31px,transparent 31px)}
+.diary-card.ds-paper .dh{color:#9A8F74}
+.diary-card.ds-paper .dt{font-family:var(--song);line-height:26px;background:repeating-linear-gradient(transparent 0 25px,#D9E3EC 25px 26px)}
+.msg.flash .diary-card.ds-note,.msg.flash .diary-card.ds-paper{animation:flashring 1.6s ease}
+@keyframes flashring{0%,40%{outline:3px solid var(--qing-soft);outline-offset:3px}100%{outline:3px solid transparent;outline-offset:3px}}
 .card-done{font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:4px 0 12px}
 .sentfile{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
   text-decoration:none;color:inherit;margin:2px 0 10px}
@@ -2857,7 +2866,7 @@ function recHtml(r, i, src = "log"){
       ${items.slice(0, 4).map(x => `<div class="ln">${esc(x.sender)}：${esc(clLine(x))}</div>`).join("")}
       <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button>${timeActs(r)}</div>`;
   }
-  if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card"><div class="dh">${ICON.kb}日记</div><div class="dt">${esc(r.text)}</div></div>${timeActs(r)}</div></div>` : "";
+  if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card${diaryCls()}"><div class="dh">${ICON.kb}日记</div><div class="dt">${esc(r.text)}</div></div>${timeActs(r)}</div></div>` : "";
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
@@ -3357,6 +3366,8 @@ async function sendChat(){
 // 记日记（#363）：/diary 内容。quiet：对话里会出现日记卡片，不用再提示
 const DIARY = /^\/(diary|日记)(?=\s|$)/i;
 const diaryShown = () => (S.global || {}).diary_cards !== "off";
+const DIARY_STYLES = [["", "卡片"], ["note", "便签"], ["paper", "横线纸"]];
+const diaryCls = () => { const v = (S.global || {}).diary_style; return DIARY_STYLES.some(x => x[0] && x[0] === v) ? " ds-" + v : ""; };
 async function sendDiary(id, typed, qs, mid, quiet){
   const body = typed.replace(DIARY, "").trim();
   if (!body && !qs.length) { toast("在 /diary 后面写上要记的内容"); return false; }
@@ -6447,6 +6458,7 @@ function renderChatSettings(){
   const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不清理"]];
   const wsOn = !!(ro ? shared : S.global || {}).workspace;
   const dyOn = (ro ? shared : S.global || {}).diary_cards !== "off";
+  const dyStyle = (ro ? shared : S.global || {}).diary_style || "";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
     <div class="pane"><div class="sect"><h3>已完成的对话</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">标为已完成后，多久没有新消息就清理<div class="muted" style="font-size:12.5px">存进知识库的内容、任务面板里的完成统计会保留</div></div>
@@ -6457,6 +6469,8 @@ function renderChatSettings(){
     </div><div class="sect"><h3>日记</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">聊天里显示日记<div class="muted" style="font-size:12.5px">在对话里发「/diary 内容」记一笔</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${dyOn === v}" class="${dyOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryCards(${v})"`}>${l}</button>`).join("")}</div></div>
+      ${dyOn ? `<div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:220px">日记样式</div>
+        <div class="seg" role="radiogroup">${DIARY_STYLES.map(([v, l]) => `<button role="radio" aria-checked="${dyStyle === v}" class="${dyStyle === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryStyle('${v}')"`}>${l}</button>`).join("")}</div></div>` : ""}
       ${ro ? "" : `<div id="diary-where">${diaryWhere()}</div>`}
     </div>${ro ? "" : pocketSettings()}</div></div>`;
   if (!ro) loadDiaryWhere();
@@ -6536,6 +6550,13 @@ async function setDiaryCards(on){
   let fail = 0;
   for (const mid of targets) { try { await api("/api/diary_cards", {on}, mid); } catch { fail++; } }
   toast(fail ? "有电脑没连上，那台下次再改" : on ? "已打开" : "已关闭，日记照常记");
+  await loadState(); renderChatSettings();
+}
+async function setDiaryStyle(v){
+  const targets = multi() ? (S.machines || []).filter(m => m.online && !m.shared).map(m => m.id) : [S.me];
+  let fail = 0;
+  for (const mid of targets) { try { await api("/api/diary_style", {value: v}, mid); } catch { fail++; } }
+  toast(fail ? "有电脑没连上，那台下次再改" : "已保存");
   await loadState(); renderChatSettings();
 }
 let gsMachine = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）

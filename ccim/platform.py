@@ -2752,6 +2752,7 @@ def _handler(pf):
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
                 "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
+                "/api/diary_style": lambda: set_diary_style(str(b("value") or "")),
                 # 日记存在哪台电脑（#376）：add / query 是飞书、微信的进程和别的电脑转来的（here），open 在这台上打开日记文件夹
                 "/api/diary/add": lambda: pf.diary_write(b("text") or "", b("where") or "", b("at"), b("link"), bool(b("here"))),
                 "/api/diary/query": lambda: pf.diary_query(b("op"), body, bool(b("here"))),
@@ -3278,6 +3279,16 @@ def set_diary_cards(on):
     """聊天里显示不显示日记卡片（#363），默认显示；只影响网页上的显示，日记照记。"""
     registry.set_global(diary_cards=None if on else "off")
     return {"diary_cards": on}
+
+
+DIARY_STYLES = ("note", "paper")   # 不在里面的都按默认的卡片（#378）
+
+
+def set_diary_style(v):
+    """聊天里日记卡片的样式（#378）：卡片（默认）、便签、横线纸。"""
+    v = v if v in DIARY_STYLES else None
+    registry.set_global(diary_style=v)
+    return {"diary_style": v}
 
 
 POCKET = {"on": True, "base": "claude", "model": None, "effort": None}

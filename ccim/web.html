@@ -7030,14 +7030,17 @@ function freqText(s){
   return `${s.date ? fmtDay(new Date(s.date + "T00:00")) : ""} ${s.time}，只跑一次`;
 }
 const groupOf = id => chatById(id) || (GROUPS || []).find(c => c.id === id);
+// 目标对话：网页里有就用网页里的，较早的对话不在分页里，用定时任务带来的（#385）
+const schedChat = s => groupOf(s.target.id) || s.target_chat
+  || ((S.schedules || []).find(x => x.target.kind === "chat" && x.target.id === s.target.id) || {}).target_chat || null;
 function schedMark(s){
-  if (s.target.kind === "chat") { const c = groupOf(s.target.id); return seal(c && c.agent ? agentOf(c.agent) : null, "", false); }
+  if (s.target.kind === "chat") { const c = schedChat(s), a = c && c.agent && agentOf(c.agent); return a ? seal(a, "", false) : chatIcon(c); }
   if (s.target.kind === "group") { const g = groupOf(s.target.id); return seal(g ? agentOf(g.agent) : null, "", false); }
   if (s.target.kind === "project") return pmark(projSummary(s.target.id) || {name: "项"});
   return seal(agentOf(s.target.id), "", false);
 }
 function schedTarget(s){
-  if (s.target.kind === "chat") { const c = groupOf(s.target.id); return `对话「${c ? c.title : "已删除"}」`; }
+  if (s.target.kind === "chat") { const c = schedChat(s); return `对话「${c ? c.title : "已删除"}」`; }
   if (s.target.kind === "group") {
     const g = groupOf(s.target.id);
     const who = s.target.agents.length ? s.target.agents : g ? [g.agent] : [];
@@ -7088,7 +7091,7 @@ function drawSchedule(){
       <button class="icon-btn" aria-label="更多" onclick="schedMenu(event)">${ICON.more}</button>
     </div>
     <div class="pane">
-      <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${s.target.kind === "chat" && groupOf(s.target.id) ? `<a class="link" href="#/chats/${encodeURIComponent(s.target.id)}">${esc(schedTarget(s))}</a>` : esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
+      <div class="sect"><h3>做什么</h3><dl class="kv"><dt>给谁</dt><dd>${s.target.kind === "chat" && schedChat(s) ? `<a class="link" href="#/chats/${encodeURIComponent(s.target.id)}">${esc(schedTarget(s))}</a>` : esc(schedTarget(s))}</dd><dt>任务</dt><dd>${esc(s.prompt)}</dd>
         <dt>结果</dt><dd>${esc(dl)}</dd>${s.target.kind === "agent" ? `<dt>对话</dt><dd>${s.session === "same" ? `<a class="link" href="#/chats/${encodeURIComponent(`s-${s.id}-${s.target.id}`)}">接着同一个对话</a>` : "每次开一个新对话"}</dd>` : ""}</dl></div>
       <div class="sect"><h3>运行记录</h3>${s.runs.length ? s.runs.map((r, i) => `<div class="run ${open.has(r.id) || (!open.size && i === 0) ? "open" : ""}" data-id="${esc(r.id)}">
         <button class="run-head" onclick="this.parentElement.classList.toggle('open')"><span class="when" style="width:120px">${esc(fmtTs(r.at))}</span>${runState(r)}${ICON.chev}</button>

@@ -212,13 +212,17 @@ class Schedules:
     # ----- 给网页的数据 -----
 
     def summary(self):
-        out = []
+        out, chats = [], self.pf.chats()
         for sid, s in self.all().items():
             runs = [r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run"]
             last = runs[-1]["state"] if runs else None
             if last == "working" and runs[-1]["id"] not in self.running:
                 last = "lost"
-            out.append(dict(s, id=sid, last_state=last, running=any(r.startswith(sid + ":") for r in self.running)))
+            row = dict(s, id=sid, last_state=last, running=any(r.startswith(sid + ":") for r in self.running))
+            if s["target"]["kind"] == "chat":     # 网页的对话列表分页了（#268），目标对话不一定在里面，头像、标题直接带上（#385）
+                c = chats.get(s["target"]["id"])
+                row["target_chat"] = {"agent": c.get("agent"), "title": c.get("title") or ""} if c else None
+            out.append(row)
         out.sort(key=lambda r: (not r.get("on"), r.get("next_run") or 9e18))
         return out
 

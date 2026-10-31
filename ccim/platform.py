@@ -1204,20 +1204,22 @@ class Platform:
             now += "\n正在写的回答：" + p["text"].strip()[-1500:]
         return now
 
-    def side_work(self, src, text, title=None):
-        """侧边对话里被 @ 的 Agent 要动手（#290）：新开一个它自己的对话去做（挂在主对话下面，如果是同一个 Agent），
-        侧边对话里记一张卡片（type=work），做完把回答和这一轮发的文件写回卡片。返回新对话。在主循环里调。"""
+    def work(self, src, text, title=None):
+        """被 @ 的 Agent 要动手：新开一个它自己的对话去做。侧边对话里被 @ 的（#290）、群聊里被 @ 的成员（#359）都走这里。
+        卡片（type=work）记在 @ 它的那个对话里（侧边对话 / 群聊），做完由它在那里汇报（Mentions.report），文件附在汇报下面。
+        新对话的 dispatched_from 指主对话（侧边对话的主对话 / 群聊本身），同一个 Agent 时挂在它下面。返回 (新对话, 标题)。在主循环里调。"""
         from .session import Task
         sm = self.meta(src)
-        side = sm.get("mention_of")
-        sd = self.chats().get(side) or {}
-        of = sd.get("side_of")
+        outer = sm.get("mention_of")          # @ 它的对话：卡片、汇报都在这里
+        od = self.chats().get(outer) or {}
         aid = sm.get("agent")
-        if not sm.get("side_at") or not of or not agents.get(aid):
+        side = bool(sm.get("side_at"))
+        of = od.get("side_of") if side else outer
+        if not outer or not od or not of or sm.get("remote_project") or not agents.get(aid) or (od.get("side_of") and not side):
             raise Problem("这里不能新开对话去做。")
         om = self.chats().get(of) or {}
         title = " ".join((title or text).split())[:30] or "新任务"
-        cid = self.new_chat(agent=aid, title=title, account=sd.get("account"),
+        cid = self.new_chat(agent=aid, title=title, account=od.get("account"),
                             parent=of if om.get("agent") == aid else None)
         chats = self.chats()
         chats[cid]["dispatched_from"] = of
@@ -1225,17 +1227,23 @@ class Platform:
             chats[cid]["cwd"] = sm["cwd"]
         self.store.write(chats)
         main = (self.chat_view(of).get("title") if of in self.chats() else None) or "另一个对话"
+        place = "侧边对话" if side else "群聊"
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
                                                                "files": [], "from_chat": of, "dispatch": True}))
         wid = "k-" + uuid.uuid4().hex[:10]
         card = {"type": "work", "id": wid, "chat": cid, "agent": aid, "title": title, "state": "working"}
-        self.channel._emit(side, self.channel.logs.append(side, card))
-        task = Task(f"[用户在对话「{main}」的侧边对话里请你动手做这件事，新开这个对话来做；"
-                    f"做完把结果写清楚（做了什么、怎么验收），会发回侧边对话] {text}")
+        self.channel._emit(outer, self.channel.logs.append(outer, card))
+        head = (f"[用户在对话「{main}」的侧边对话里请你动手做这件事" if side else f"[你在群聊「{main}」里被 @，要动手做这件事") + \
+            f"，新开这个对话来做；做完把结果写清楚（做了什么、怎么验收），会发回{place}] "
+        task = Task(head + text)
         task.depth = 1
         start = time.time()
         self._bridge(cid).chat(cid, "p2p").submit(task)
         self.works.add(wid)
+        chats = self.chats()
+        if outer in chats:
+            chats[outer]["last_active"] = registry.now()
+            self.store.write(chats)
 
         async def wait():
             try:
@@ -1248,15 +1256,15 @@ class Platform:
             state = {"ok": "done"}.get(state, state)
             text = answer or last.get("text") or ""
             self.works.discard(wid)
-            if side not in self.chats():
+            if outer not in self.chats():
                 return
-            self.channel._emit(side, self.channel.logs.append(side, dict(card, state=state, done_at=time.time())))
-            # 卡片只管进度；结果由它自己回侧边栏汇报，之后接着问也接得上
+            self.channel._emit(outer, self.channel.logs.append(outer, dict(card, state=state, done_at=time.time())))
+            # 卡片只管进度；结果由它自己回去汇报，之后接着问也接得上
             how = {"done": "做完了", "error": "出错了", "stopped": "被停下了"}.get(state, "没做完")
             att = "".join(f"\n- {f['name']}（{f['path']}）" for f in files)
-            self.mentions.report(side, aid, (
-                f"[你在侧边对话里新开的对话「{title}」{how}。下面是那边最后的回答" + ("和发出的文件" if files else "") +
-                "。请在侧边对话里用你的口吻向用户汇报：结果是什么、改了什么、PR 或文件在哪、要用户做什么（验收、拍板）。"
+            self.mentions.report(outer, aid, (
+                f"[你在{place}里新开的对话「{title}」{how}。下面是那边最后的回答" + ("和发出的文件" if files else "") +
+                f"。请在{place}里用你的口吻向用户汇报：结果是什么、改了什么、PR 或文件在哪、要用户做什么（验收、拍板）。"
                 + ("这些文件会附在你这条消息下面，不用再发。" if files else "") +
                 "简短，不用复述全文；用户想看细节可以点卡片进那个对话。]\n\n"
                 + (text[:8000] or "（没有回答）") + (f"\n\n发出的文件：{att}" if files else "")),
@@ -2792,10 +2800,30 @@ def agent_view(pf, aid, detail=False):
     view["last_active"] = max([c.get("last_active") or "" for c in pf.chats().values() if c.get("agent") == aid] +
                               [c.get("last_active") or "" for _, _, c in registry.all_chats(agents.cwd(a))] + [""]) or None
     if detail:
-        view["chats"] = [pf.chat_view(cid) for cid, c in pf.chats().items() if c.get("agent") == aid] + \
-            pf.external_chats(aid, terminal=True)
+        view["chats"] = _agent_chats(pf, aid) + pf.external_chats(aid, terminal=True)
         view["chats"].sort(key=lambda r: r.get("last_active") or "", reverse=True)
     return view
+
+
+def _agent_chats(pf, aid):
+    """Agent 页左边列表里它的网页对话（#359）：它参与的群聊列群聊本身（和会话页同一个对话），不列它在里面的子对话；
+    只是成员的标 member。侧边对话里被 @ 的那份不列；别的电脑上的群聊（本机没有外层）照旧列子对话。"""
+    chats, rows, seen = pf.chats(), [], set()
+    for cid, c in chats.items():
+        if c.get("agent") == aid and c.get("mention_of") and c["mention_of"] in chats:
+            cid = c["mention_of"]
+            if not board_mod.top_level(chats[cid], cid):
+                continue
+        elif c.get("agent") != aid and not (aid in (c.get("members") or []) and board_mod.top_level(c, cid)):
+            continue
+        if cid in seen:
+            continue
+        seen.add(cid)
+        v = pf.chat_view(cid)
+        if v.get("agent") != aid:
+            v["member"] = True
+        rows.append(v)
+    return rows
 
 
 def agent_recent(pf, aid, acct=None, n=5):

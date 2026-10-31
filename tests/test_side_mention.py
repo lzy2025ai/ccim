@@ -147,14 +147,84 @@ class SideMentionTests(unittest.TestCase):
         self.assertNotIn("开头改成两句了", pf.mentions.unseen(main))
 
     async def _work(self, sub, text):
-        return self.pf.side_work(sub, text)
+        return self.pf.work(sub, text)
 
-    def test_only_side_members_can_start_work(self):
+    def test_only_mentioned_can_start_work(self):
         pf = self.pf
         main = self.group()
         from ccim.platform import Problem
         with self.assertRaises(Problem):
             pf.run(self._work(main, "改一下"))
+        far = pf.mentions._ensure(main, self.helper, None, "写公众号")
+        chats = pf.chats()
+        chats[far]["remote_project"] = True                                    # 别的电脑派来的：先不做
+        pf.store.write(chats)
+        with self.assertRaises(Problem):
+            pf.run(self._work(far, "改一下"))
+
+    def test_group_member_start_work(self):
+        """群聊里被 @ 的成员（#359）：新开它自己的对话，卡片记在群里，做完回群里汇报、文件附在汇报下面。"""
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        cid, title = pf.run(self._work(sub, "出三张配图"))
+        m = pf.chats()[cid]
+        self.assertEqual(m["agent"], self.member)
+        self.assertEqual(m["dispatched_from"], main)
+        self.assertFalse(m.get("parent"))
+        card = [r for r in pf.channel.logs.read(main) if r["type"] == "work"]
+        self.assertEqual((card[-1]["state"], card[-1]["chat"]), ("working", cid))
+        task = [t for c, t in self.tasks if c == cid][0]
+        self.assertIn("群聊「写公众号」", str(task))
+        pf.channel.logs.append(cid, {"type": "file", "path": "/tmp/p.png", "name": "p.png", "size": 3})
+        pf.loop.call_soon_threadsafe(task.finish, "ok", "三张图做好了")
+        for _ in range(50):
+            back = [t for c, t in self.tasks if c == sub]
+            if back:
+                break
+            asyncio.run(asyncio.sleep(0.02))
+        self.assertIn("请在群聊里", str(back[0]))
+        pf.loop.call_soon_threadsafe(back[0].finish, "ok", "配图好了，见下面")
+        for _ in range(50):
+            rep = [r for r in pf.channel.logs.read(main) if r["type"] == "mention" and r.get("report")]
+            if rep and rep[-1]["state"] != "queued":
+                break
+            asyncio.run(asyncio.sleep(0.02))
+        self.assertEqual(rep[-1]["text"], "配图好了，见下面")
+        self.assertEqual(rep[-1]["files_chat"], cid)
+        self.assertEqual([r["state"] for r in pf.channel.logs.read(main) if r["type"] == "work"][-1], "done")
+        self.assertIn("配图好了", pf.mentions.unseen(main))                    # 主 Agent 下次能看到成员的汇报
+
+    def test_agent_list_shows_group_itself(self):
+        """Agent 页的列表（#359）：它在的群聊列群聊本身，只是成员的标 member；侧边对话里被 @ 的不列。"""
+        from ccim.platform import _agent_chats
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        side = pf.run(pf.side_chat(main))
+        pf.mentions._ensure(side, self.member, None, "写公众号", side=True)
+        rows = {r["id"]: r for r in _agent_chats(pf, self.member)}
+        self.assertIn(main, rows)
+        self.assertTrue(rows[main]["member"])
+        self.assertNotIn(sub, rows)
+        self.assertFalse(any(r.get("mention_of") for r in rows.values()))
+        own = {r["id"]: r for r in _agent_chats(pf, self.main_agent)}
+        self.assertIn(main, own)
+        self.assertFalse(own[main].get("member"))
+
+    def test_tools(self):
+        from ccim import session
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        side = pf.run(pf.side_chat(main))
+        sat = pf.mentions._ensure(side, self.helper, None, "写公众号", side=True)
+        def chat(cid):
+            return SimpleNamespace(chat_id=cid, b=SimpleNamespace(entry=self.real_bridge(cid).entry))
+        self.assertTrue(session._can_work(chat(sub), pf))
+        self.assertTrue(session._can_work(chat(sat), pf))
+        self.assertFalse(session._can_work(chat(main), pf))
+        self.assertFalse(session._can_work(chat(side), pf))
 
     def test_remote_agent_on_old_version(self):
         pf = self.pf

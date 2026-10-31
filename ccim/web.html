@@ -107,6 +107,7 @@ body{overflow:hidden}
 .tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:1px 7px;border-radius:5px;background:var(--sunk);color:var(--ink-2);white-space:nowrap}
 .tag.feishu{background:#E4ECF7;color:#2F5A93} .tag.weixin{background:#E3F1E7;color:#2E6E45} .tag.term{background:#ECE9E3;color:#5E5547}
 .tag.web{background:var(--qing-soft);color:var(--qing)}
+.tag.member{background:color-mix(in srgb,var(--zhe) 14%,transparent);color:var(--zhe)}
 .path{font:12px/1.4 var(--mono);color:var(--muted)}
 .muted{color:var(--muted)}
 .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
@@ -738,6 +739,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .item .stack{width:58px}
 .at{display:inline-flex;align-items:center;gap:3px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:0 6px;font-size:13px;white-space:nowrap}
 .at button{color:var(--qing);font-size:11px;opacity:.7}
+.at.to{gap:5px;padding:2px 6px 2px 3px}
+.at.to .seal{width:18px;height:18px;border-radius:5px;font-size:8px;padding:1px}
 .bubble .at{background:#fff}
 .meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
 .quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
@@ -1144,6 +1147,7 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .work-card .t span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .work-card>svg{width:14px;height:14px;color:var(--muted);flex:none}
 .work-out{margin-top:10px}
+.msg>.work-card{max-width:480px}
 .work-out .sentimg{max-width:100%}
 .sidepane .skc-msg.me .bubble .bq{font-size:13px}
 .docpane{position:fixed;top:0;right:0;bottom:0;width:var(--doc-w);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 34px rgba(29,34,43,.12);z-index:15;display:flex;flex-direction:column}
@@ -2300,7 +2304,7 @@ function onEvent(ev){
         detail.ctx = ev.ctx; drawCtxRing(detail); redrawGroup();
       } else if (!STATUS_EVENTS.has(ev.type)) {   // 状态推送混进记录会让之后的下标和后台对不上，分叉就找不到那条（#288）
         if (ev.type === "mention" && rec.ctx && rec.agent) { detail.member_ctx = {...detail.member_ctx, [rec.agent]: rec.ctx}; redrawGroup(); }
-        const i = ["card", "mention", "secret", "edit"].includes(ev.type) && ev.id ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
+        const i = ["card", "mention", "secret", "edit", "work"].includes(ev.type) && ev.id ? detail.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
         const own = ev.type === "user" ? detail.log.findIndex(r => r.sending && r.text === (ev.text || "")) : -1;
         if (ev.type === "note" && detail.progress?.guess) { detail.busy = false; detail.progress = null; drawComposerState(); }   // 斜杠命令只回一句，不会开始干活
         if (own >= 0) detail.log[own] = rec;
@@ -2551,7 +2555,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${today} ${current.sub === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">成员</span>` : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   // @ 过其他 Agent 的对话：干完活后标题处换成最后回答的那个 Agent（#302）；干活时第二行已经写了是谁，还是标题
@@ -2607,7 +2611,8 @@ async function openChat(id){
     }
     renderList();
   }
-  if (fresh) chatRcpt = stickyAt();
+  const rk = id + "|" + (current.view === "agents" ? current.id : "");   // 同一个群从不同 Agent 的列表打开，默认发给谁不一样（#359）
+  if (fresh || rk !== rcptKey) { rcptKey = rk; toOff = null; chatRcpt = defaultRcpt(); }
   drawChat(); doJump(); markSeen(id);
   if (!quiet) perfMark("chat", "打开对话", performance.now() - t0, {ctx: {chat: id, machine: (machineOf(ctxMachine) || {}).name || "", msgs: (detail.log || []).length}});
 }
@@ -2789,7 +2794,8 @@ function recHtml(r, i, src = "log"){
       }).join("")}</div>` : ""}
       ${r.text ? msgActs(src, i, r) : timeActs(r)}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
-  if (r.type === "mention") return "";
+  if (r.type === "mention") return r.report && src === "log" ? `<div class="msg">${mentionOne(r, i)}</div>` : "";   // 新开对话做完回来汇报的（#359），前面没有用户消息
+  if (r.type === "work") return workCard(r, "msg", ctxMachine || S.me);
   if (r.type === "secret") return secretHtml(r);
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
@@ -2858,7 +2864,7 @@ function threadOrder(log, from){
     const r = log[i];
     // 助手自己在这一轮里 @ 的人（ask_agent）和它们的回答：排在这一轮的回答前面
     if (r.by && (r.type === "user" || r.type === "mention")) { order.push(i); at = order.length; }
-    else if (r.type === "user" && r.to && r.to.length || r.type === "mention") order.push(i);
+    else if (r.type === "user" && r.to && r.to.length || r.type === "mention" || r.type === "work") order.push(i);   // 成员新开对话去做的卡片（#359）跟着它的回答排
     else if (r.type === "user") { order.push(i); at = order.length; }
     else order.splice(at++, 0, i);
   }
@@ -3141,6 +3147,7 @@ function drawChat(){
 function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
   $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : "交代件事")
+    : listTo() && chatRcpt.includes(listTo()) ? `给 ${agentOf(listTo()).name} 发消息`
     : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
     : (c.members || []).length ? `给 ${c.agent_name} 发消息，@ 叫群里其他 Agent` : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
@@ -3258,7 +3265,7 @@ async function sendChat(){
   if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
     const to = chatRcpt, src = detail;
-    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = stickyAt(); drawPending(); drawChatRcpt(); drawComposerState();
+    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = defaultRcpt(); drawPending(); drawChatRcpt(); drawComposerState();
     try {
       const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -3483,22 +3490,36 @@ function stickyAt(){
   const first = (detail.log || []).find(r => r.type === "user");
   return ((first && first.to) || []).filter(agentOf);
 }
+// 从某个 Agent 的列表打开它只是成员的群聊（#359）：输入框默认发给它，点掉就是正常发群里（这次打开期间不再带）
+let toOff = null, rcptKey = null;
+function listTo(){
+  if (!detail || current.view !== "agents" || current.sub !== detail.id || detail.readonly || !current.id || current.id === detail.agent) return null;
+  return (detail.members || []).includes(current.id) && agentOf(current.id) ? current.id : null;
+}
+function defaultRcpt(){
+  const t = listTo();
+  return t ? (toOff === detail.id ? [] : [t]) : stickyAt();
+}
 function atDrop(r){
   chatRcpt = chatRcpt.filter(x => x !== r);
+  if (r === listTo()) { toOff = detail.id; drawComposerState(); }
   if (detail && stickyAt().includes(r)) { try { localStorage.setItem(AT_OFF, JSON.stringify([...atOff(), detail.id].slice(-500))); } catch {} }
   drawChatRcpt();
 }
 function drawChatRcpt(){
   const el = $("#rcpt-chat"); if (!el) return;
-  el.innerHTML = chatRcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`).join("")
+  const to = listTo();
+  el.innerHTML = chatRcpt.map(r => r === to
+      ? `<span class="at to">发给${seal(agentOf(r), "sm", false)}${esc(agentOf(r).name)}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`
+      : `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`).join("")
     + chatRefs.map(r => `<span class="at">#${esc(r.title)}<button aria-label="去掉" onclick="chatRefs=chatRefs.filter(x=>x.id!==${q(r.id)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
 }
 // 引用这个 Agent 以前的对话（#199）：输入框打 #，或者列表三点菜单里「引用」
 function refCands(qs){
-  if (!detail || !detail.agent || detail.readonly || current.view !== "agents") return [];
+  if (!detail || !detail.agent || detail.readonly || current.view !== "agents" || current.id !== detail.agent) return [];
   const k = (qs || "").toLowerCase();
   const pinned = c => c.pin != null;   // 和左边列表一样：置顶的在前，其余按最近活跃
-  return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !c.side_of && !chatRefs.some(r => r.id === c.id)
+  return (agentSide && agentSide.chats || []).filter(c => c.id !== detail.id && !c.side_of && !c.member && !chatRefs.some(r => r.id === c.id)
     && (!k || (c.title || "").toLowerCase().includes(k)))
     .sort((a, b) => pinned(b) - pinned(a) || (pinned(a) ? a.pin - b.pin : 0) || String(b.last_active || "").localeCompare(String(a.last_active || "")))
     .slice(0, 50);
@@ -3603,16 +3624,18 @@ function mentionActs(i, r, live){
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
   return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
+function mentionOne(r, i){
+  const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
+  const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
+  return `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
+      ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${mentionActs(i, r, live)}`;
+}
 function mentionGroup(mid){
   // 补充进成员正在做的那一轮的 @（#304）：回答放在最后一句补充下面
   const under = r => (r.joined || []).filter(x => detail.log.some(u => u.type === "user" && u.id === x)).pop() || r.msg;
-  const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && under(r) === mid);
+  const rs = detail.log.map((r, i) => [r, i]).filter(([r]) => r.type === "mention" && !r.report && under(r) === mid);
   if (!rs.length) return "";
-  const one = ([r, i]) => {
-    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
-    return `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
-      ${replyBody(r, live)}${mentionActs(i, r, live)}`;
-  };
+  const one = ([r, i]) => mentionOne(r, i);
   if (rs.length === 1) return `<div class="msg">${one(rs[0])}</div>`;
   // 几个人的回答（#331）：默认上下排，宽屏上可以切成并排对比，记住每组的选择；挂件、手机上一直上下排
   const side = !EMBED && !narrow() && sideBySide().includes(mid);
@@ -5344,7 +5367,10 @@ function renderAgentSide(){
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
   const a = agentOf(id) || agentSide.a || {name: "", seal: "", base: "claude"};
   const m = machineOf(a.machine || ownerOf(id) || S.me);
-  const rows = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));   // 群聊里被 @ 的那份也列出来（#78）
+  // 它参与的群聊列的是群聊本身（#359）；它从群里新开去做的对话挂在那个群下面
+  const rows0 = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));
+  const ids = new Set(rows0.map(c => c.id));
+  const rows = rows0.map(c => !c.parent && c.dispatched_from && ids.has(c.dispatched_from.id) ? {...c, parent: c.dispatched_from.id} : c);
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head">${backLink()}<button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>
@@ -7121,13 +7147,7 @@ function sideRec(r, i){
     return `<div class="skc-msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b>${r.machine && r.machine !== (SIDE.mid || S.me) ? whereTag(r.agent, SIDE.mid || S.me) : ""}${stateLabel(r, live)}</div>
       ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
   }
-  if (r.type === "work") {      // 被 @ 的 Agent 新开对话去做（#290）
-    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
-    const st = {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
-                error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"}[r.state] || "";
-    return `<div class="skc-msg"><a class="work-card" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(SIDE.mid || S.me)}">
-        ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a></div>`;
-  }
+  if (r.type === "work") return workCard(r, "skc-msg", SIDE.mid || S.me);   // 被 @ 的 Agent 新开对话去做（#290）
   if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>
     ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
     ${r.text ? `<div class="msg-acts"><button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
@@ -7138,6 +7158,14 @@ function sideRec(r, i){
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='sideAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
   return "";
+}
+// 被 @ 的 Agent 新开对话去做的进度卡片：侧边对话（#290）、群聊（#359）共用
+function workCard(r, cls, mid){
+  const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
+  const st = {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
+              error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"}[r.state] || "";
+  return `<div class="${cls}"><a class="work-card" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(mid)}">
+      ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a></div>`;
 }
 function workFiles(fs, chat){
   return (fs || []).map(f => { const src = fileUrl(chat, f.path);

@@ -610,7 +610,7 @@ class Chat:
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
-                               "mcp__ccim__start_work",                             # 侧边栏里有卡片，用户看得到
+                               "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
                                "mcp__ccim__send_to_chat"] + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
@@ -1148,8 +1148,8 @@ class Chat:
                 tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
                 if not guest_of(chat.b) and not chat.b.entry.get("lent"):
                     tools += _app_tools(chat, pf)      # 应用的数据接口、在对话右侧打开（#103）
-        elif side and chat.b.entry.get("side_at") and pf and not (pf.chats().get(chat.chat_id) or {}).get("remote_project", True):
-            tools.append(_start_work(chat, pf))   # 侧边对话里被 @ 的（#290）：要动手就新开自己的对话去做
+        if _can_work(chat, pf):
+            tools.append(_start_work(chat, pf))   # 被 @ 的（侧边对话 #290、群聊 #359）：要动手就新开自己的对话去做
         lent = chat.b.entry.get("lent")      # 主人共享给访客的 Agent（#154）：不能借它看、往主人的对话里转
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             # 平台上 Agent 的对话用 search_chats / open_chat，范围更全，不再给 list_chats / read_chat（两套重叠，助手会挑错）
@@ -1405,11 +1405,26 @@ def _ask_agent(chat, pf):
     return [platform_agents, ask_agent]
 
 
+def _can_work(chat, pf):
+    """本机上被 @ 的子对话（侧边对话里的、群聊里的）能用 start_work；别的电脑派来的不行（卡片要跨电脑更新，先不做）。"""
+    if not pf or chat.b.entry.get("helper"):
+        return False
+    m = pf.chats().get(chat.chat_id) or {}
+    outer = pf.chats().get(m.get("mention_of")) if m.get("mention_of") else None
+    if not outer or m.get("remote_project") or not m.get("agent"):
+        return False
+    return bool(m.get("side_at")) == bool(outer.get("side_of")) and bool(m.get("side_at")) == bool(chat.b.entry.get("side_at"))
+
+
 def _start_work(chat, pf):
-    """侧边对话里被 @ 的 Agent 新开自己的对话去动手（#290）。"""
-    @tool("start_work", "新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。这里只能看不能改，需要动手、或用户让你去做时用。"
+    """被 @ 的 Agent 新开自己的对话去动手（侧边对话 #290、群聊 #359）。"""
+    side = bool(chat.b.entry.get("side_at"))
+    place = "侧边栏" if side else "群里"
+    when = ("这里只能看不能改，需要动手、或用户让你去做时用。" if side else
+            "要花时间动手的事（改代码、提 PR、跑长任务）用它，不占着群里；一两句能答完的直接在群里答。")
+    @tool("start_work", "新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。" + when +
           "先在回答里用一句话说要新开对话去做，再调用。text 写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里；"
-          "title 是新对话的标题，十几个字。侧边栏里会有一张卡片，用户点进去能看进度；做完后结果会作为一条新消息交给你，由你在侧边栏里向用户汇报。",
+          f"title 是新对话的标题，十几个字。{place}会有一张卡片，用户点进去能看进度；做完后结果会作为一条新消息交给你，由你在{place}向用户汇报。",
           {"type": "object", "properties": {"text": {"type": "string", "description": "交代给新对话的话"},
                                              "title": {"type": "string", "description": "新对话的标题"}},
            "required": ["text"]})
@@ -1421,12 +1436,12 @@ def _start_work(chat, pf):
         if t and getattr(t, "works", 0) >= 2:
             return _err("这一轮已经新开过对话了，先收尾。")
         try:
-            cid, title = pf.side_work(chat.chat_id, text, args.get("title"))
+            cid, title = pf.work(chat.chat_id, text, args.get("title"))
         except Exception as e:
             return _err(str(e))
         if t:
             t.works = getattr(t, "works", 0) + 1
-        return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在侧边栏的卡片里能看到进度。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
+        return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在{place}的卡片里能看到进度。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
     return start_work
 
 

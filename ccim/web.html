@@ -2376,11 +2376,28 @@ function phoneBack(){
     : `#/${v}`;
   location.hash = to;
 }
+// 会话页上次开着的对话（#372）：从别的页回到「对话」时接着打开它，刷新后也记得；点了「新对话」就不再记。
+// 手机上「对话」是列表，返回也回到列表，不跳
+let lastRestore = null;           // 这次是按记着的打开的：{id, back}，打不开（删了、清理了）就去 back
+let booted = false;               // 刚打开网页时没记着的话本来是新对话页（#/chats/new），打不开也回那里
+function lastChat(){ try { return JSON.parse(localStorage.getItem("ccim.lastChat") || "null"); } catch { return null; } }
+function setLastChat(v){ try { v ? localStorage.setItem("ccim.lastChat", JSON.stringify(v)) : localStorage.removeItem("ccim.lastChat"); } catch {} }
+function forgetChat(id){ const l = lastChat(); if (l && (!id || l.id === id)) setLastChat(null); }
+function restoreHash(){
+  const l = lastChat(), c = l && chatById(l.id);
+  if (!l || EMBED || narrow() || (c && c.agent)) return null;
+  lastRestore = {id: l.id, back: booted ? "#/chats" : "#/chats/new"};
+  if (!ownerOf(l.id) && l.machine && machineOf(l.machine)) ctxMachine = l.machine;   // 不在列表里的（更早的）：先到原来那台找
+  return `#/chats/${encodeURIComponent(l.id)}`;
+}
 function route(){
   if (EMBED && location.hash !== EMBED_HASH) {   // 面板里点到别处（单独聊、站内链接）：交给外面的页面打开
     const to = location.hash;
     history.replaceState(null, "", EMBED_HASH); parent.pocketGo(to); return;
   }
+  lastRestore = null;
+  if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
+  if (location.hash === "#/chats/new") forgetChat();
   const parts = location.hash.slice(2).split("/");
   const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
@@ -2602,7 +2619,13 @@ async function openChat(id){
   if (fresh) { chatRcpt = []; chatRefs = []; }
   if (DOC && DOC.chat !== id && !DOC.dirty) closeDoc(true);
   try { detail = await openOn(id); }
-  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return; }
+  catch (e) {
+    if (lastRestore && lastRestore.id === id && current.view === "chats" && current.id === id) {   // 记着的那个已经没了：照旧显示新对话页
+      forgetChat(id); history.replaceState(null, "", lastRestore.back); route(); return;
+    }
+    $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return;
+  }
+  if (current.view === "chats" && current.id === id && !EMBED) detail.agent ? forgetChat(id) : setLastChat({id, machine: ctxMachine});
   if (detail.agent && current.view === "chats") {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
     current = {view: "agents", id: detail.agent, sub: id};
@@ -3459,6 +3482,7 @@ async function deleteChat(id){
   } else if (!await confirmBox("删除这个对话？", ext ? `在${c.source || "原来的地方"}还能找到它。` : "对话记录会删掉，工作目录里的文件不受影响。", "删除")) return;
   await act(() => ext && !(term && withTerm) ? api("/api/chat/mark", {id, changes: {hidden: true}}, machineOfChat(c))
     : api("/api/chat/delete", {id}, machineOfChat(c)), "已删除");
+  forgetChat(id);
   const open = detail && detail.id === id || current.sub === id;
   if (open) {
     const back = current.view === "agents" ? `#/agents/${encodeURIComponent(current.id)}` : "#/chats";
@@ -8508,8 +8532,8 @@ addEventListener("resize", () => listTip());
     connectEvents();
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
   }
-  if (!location.hash) history.replaceState(null, "", "#/chats/new");
-  route();
+  if (!location.hash) history.replaceState(null, "", lastChat() && !narrow() ? "#/chats" : "#/chats/new");   // 上次开着的对话由 route 接着打开
+  route(); booted = true;
   if (EMBED) window.pkReady = true;
   perfMark("load", S.hub ? "打开网页（经总控）" : "打开网页", performance.now());
 })();

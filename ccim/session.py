@@ -1524,7 +1524,7 @@ def _review_tool(chat, pf):
     def collect(start, end):
         acct = share.owner_map(pf).get(chat.chat_id)
         with registry.snapshot():
-            parts = [board.material(pf, start, end, lambda cid: share.owner_map(pf).get(cid) == acct)]
+            parts = [board.material(pf, start, end, lambda cid: share.owner_map(pf).get(cid) == acct, acct=acct)]
         peers, missed = getattr(pf, "peers", None), []
         if peers and acct is None:            # 主人：别的电脑上的对话也拉（访客只看这台上自己的）
             from urllib.parse import quote
@@ -1549,7 +1549,8 @@ def _review_tool(chat, pf):
             head += f"（{'、'.join(missed)} 没连上，那边的对话不在里面）"
         return head + "：\n\n" + (body or "这段时间没有对话。")
 
-    @tool("review_material", "复盘用：按日期范围拉用户这段时间各个对话的材料：标题、哪个 Agent、什么时候聊的、一句话进度、"
+    @tool("review_material", "复盘用：按日期范围拉用户这段时间各个对话的材料：这段时间标为已完成的对话，各个对话的标题、哪个 Agent、"
+          "什么时候聊的、是否已完成、一句话进度、"
           "用户说的话、最后的回答，每个对话带链接和 open_chat 的编号（要看全过程再用 open_chat 打开）。"
           "用户让你复盘、总结某段时间的工作时用。start、end 写成 2026-01-31 这样，一天就两个都写同一天。",
           {"type": "object", "properties": {"start": {"type": "string", "description": "从哪天，含这天"},

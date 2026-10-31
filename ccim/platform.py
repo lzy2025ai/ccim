@@ -47,7 +47,7 @@ def static_file(path):
         return f.read(), STATIC[path]
 UPLOAD_LIMIT = 100 * 1024 * 1024
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
-MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden", "expanded")   # 对话列表里用户加的标记（star：星标，#194；expanded：挂件对话点过放大，#326）
+MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden", "expanded")   # 对话列表里用户加的标记（star：星标，#194；expanded：挂件对话点过放大，#326；archived：已完成，#369 以前叫归档）
 ICONS = ["star", "flag", "bolt", "bug", "heart", "bookmark"]
 COLORS = ["red", "orange", "yellow", "green", "blue", "purple"]
 # 页面专用的助手（#116）
@@ -704,7 +704,7 @@ class Platform:
             pass
         return {"kbs": ids}
 
-    # ----- 归档的对话到期删除（#26） -----
+    # ----- 已完成的对话到期清理（#26；#369 以前叫归档） -----
 
     async def _cleanup_loop(self):
         await asyncio.sleep(60)
@@ -712,30 +712,31 @@ class Platform:
             try:
                 await self.cleanup_archived()
             except Exception:
-                log.exception("清理归档的对话出错")
+                log.exception("清理已完成的对话出错")
             await asyncio.sleep(3600)
 
     async def cleanup_archived(self):
-        days = archive_days()
-        if not days:
-            return
         now = time.time()
-        chats = self.chats()                  # 以前归档的没记归档时间：从现在算起
+        chats = self.chats()                  # 以前标的没记时间：从现在算起
         if any(m.get("archived") and not m.get("archived_at") for m in chats.values()):
             for m in chats.values():
                 if m.get("archived") and not m.get("archived_at"):
                     m["archived_at"] = now
             self.store.write(chats)
-        for cid, m in list(self.chats().items()):
-            if m.get("archived") and not m.get("busy") and (delete_at(m, days) or now + 1) <= now:
-                log.info("归档的对话到期，删除：%s", m.get("title") or cid)
-                await self.delete_chat(cid)
         marks = registry.read_state(self.home).get("marks") or {}
         if any(mk.get("archived") and not mk.get("archived_at") for mk in marks.values()):
             for mk in marks.values():
                 if mk.get("archived") and not mk.get("archived_at"):
                     mk["archived_at"] = now
             registry.write_state(self.home, marks=marks)
+        self._done_backfill()                 # 先把完成记录记全，清理掉的对话统计和复盘里还在（#369）
+        days = archive_days()
+        if not days:
+            return
+        for cid, m in list(self.chats().items()):
+            if m.get("archived") and not m.get("busy") and (delete_at(m, days) or now + 1) <= now:
+                log.info("已完成的对话到期，清理：%s", m.get("title") or cid)
+                await self.delete_chat(cid)
         due = [cid for cid, mk in marks.items() if mk.get("archived") and not mk.get("hidden")]
         if due:
             rows = {r["id"]: r for r in self.external_chats(terminal=True)}
@@ -747,6 +748,70 @@ class Platform:
                     changed = True
             if changed:
                 registry.write_state(self.home, marks=marks)
+
+    # ----- 完成记录（#369）：标为已完成时记一条，取消就删；对话被清理掉后还留着 -----
+
+    def _done_write(self, recs):
+        import tempfile
+        path = board_mod.done_file(self)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".done.", suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(recs, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, path)
+
+    def _done_read(self):
+        try:
+            with open(board_mod.done_file(self), encoding="utf-8") as f:
+                recs = json.load(f)
+            return recs if isinstance(recs, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _done_entry(self, cid, at, row=None):
+        """完成记录里的一条：完成时间、当时的标题、Agent、来源；访客的对话记下是谁的（对话清理掉后还要按人分）。"""
+        if cid.startswith("x:"):
+            if row is None:
+                try:
+                    row = self._external(cid)
+                except Problem:
+                    row = {}
+            mk = (registry.read_state(self.home).get("marks") or {}).get(cid) or {}
+            return {"at": at, "title": mk.get("title") or row.get("title") or "别处的对话", "agent": row.get("agent"),
+                    "source": row.get("source")}
+        v = self.chat_view(cid)
+        return {"at": at, "title": v.get("title") or "新对话", "agent": v.get("agent"), "source": v.get("source"),
+                "account": share.chat_owner(self, cid)}
+
+    def _done_mark(self, cid, on, at=None):
+        recs = self._done_read()
+        if on:
+            try:
+                recs[cid] = self._done_entry(cid, at or time.time())
+            except Problem:
+                return
+        elif recs.pop(cid, None) is None:
+            return
+        self._done_write(recs)
+
+    def _done_backfill(self):
+        """以前就标了（那时叫归档）、还没进完成记录的，按标的时间补上。"""
+        recs = self._done_read()
+        chats = self.chats()
+        marks = registry.read_state(self.home).get("marks") or {}
+        miss = [cid for cid, m in chats.items() if m.get("archived") and m.get("archived_at") and cid not in recs]
+        xmiss = [cid for cid, mk in marks.items() if mk.get("archived") and mk.get("archived_at") and cid not in recs]
+        if not miss and not xmiss:
+            return
+        for cid in miss:
+            recs[cid] = self._done_entry(cid, chats[cid]["archived_at"])
+        if xmiss:
+            try:
+                rows = {r["id"]: r for r in self.external_chats(terminal=True)}
+            except Exception:
+                rows = {}
+            for cid in xmiss:
+                recs[cid] = self._done_entry(cid, marks[cid]["archived_at"], rows.get(cid) or {})
+        self._done_write(recs)
 
     def _stars_to_pins(self):
         """置顶和星标合成一个（#347）：以前只加了星标的转成置顶，排在原来置顶的后面。"""
@@ -1652,7 +1717,7 @@ class Platform:
         m = t[2]
         return " ".join([m.get("title") or self._fork_title(t[1], m) or "新对话", m.get("brief") or ""]).lower()
 
-    # ----- 列表里的标记：重命名、置顶、星标、归档、图标、颜色、从列表里去掉 -----
+    # ----- 列表里的标记：重命名、置顶、星标、已完成、图标、颜色、从列表里去掉 -----
 
     def mark_chat(self, cid, changes):
         changes = {k: v for k, v in (changes or {}).items() if k in MARKS}
@@ -1673,21 +1738,27 @@ class Platform:
             changes["archived_at"] = time.time() if changes["archived"] else None
         if cid.startswith("x:"):
             marks = registry.read_state(self.home).get("marks") or {}
+            was = bool(marks.get(cid, {}).get("archived"))
             m = {**marks.get(cid, {}), **changes}
             marks[cid] = {k: v for k, v in m.items() if v not in (None, False, "")}
             registry.write_state(self.home, marks=marks)
+            if "archived" in changes and bool(changes["archived"]) != was:
+                self._done_mark(cid, bool(changes["archived"]), changes.get("archived_at"))
             return {}
         if "hidden" in changes:
             raise Problem("网页里的对话直接删除。")
         chats = self.chats()
         if cid not in chats:
             raise Problem("找不到这个对话。")
+        was = bool(chats[cid].get("archived"))
         for k, v in changes.items():
             if v in (None, False, ""):
                 chats[cid].pop(k, None)
             else:
                 chats[cid][k] = v
         self.store.write(chats)
+        if "archived" in changes and bool(changes["archived"]) != was:     # 标为已完成、取消已完成（#369）
+            self._done_mark(cid, bool(changes["archived"]), changes.get("archived_at"))
         return self.chat_view(cid)
 
     def set_chapter(self, cid, key, name):
@@ -2416,11 +2487,11 @@ def _handler(pf):
                 "/api/chats": lambda: pf.chat_page(acct, q.get("before") or None, q.get("archived") == "1", (q.get("q") or "").strip(),
                                                    q.get("groups") == "1"),
                 # 只读：在请求线程里算，不占主循环（#335）；一个个对话取视图要反复读 state.json，快照里只读一遍
-                "/api/board": lambda: _snapshot(lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None)),
-                "/api/board/day": lambda: _snapshot(lambda: board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None)),
+                "/api/board": lambda: _snapshot(lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None, acct)),
+                "/api/board/day": lambda: _snapshot(lambda: board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None, acct)),
                 # 复盘的 Agent 在别的电脑上时，从这台拉这几天的材料（#364）
                 "/api/board/material": lambda: _snapshot(lambda: {"material": board_mod.material(
-                    pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False)}),
+                    pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False, acct=acct)}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
@@ -3018,13 +3089,13 @@ def kb_write(pf, fn, *args):
 
 
 def archive_days():
-    """归档的对话多少天没有新消息就删除；0 = 不删除。"""
+    """已完成的对话多少天没有新消息就清理；0 = 不清理。"""
     v = registry.global_config().get("archive_days") or "30"
     return 0 if v == "never" else int(v) if str(v).isdigit() else 30
 
 
 def delete_at(m, days):
-    """归档的对话什么时候删除（时间戳）：归档时、最后一条消息，取晚的那个，再过 days 天。没归档或不删除返回 None。"""
+    """已完成的对话什么时候清理（时间戳）：标完成时、最后一条消息，取晚的那个，再过 days 天。没标完成或不清理返回 None。"""
     if not days or not m.get("archived"):
         return None
     last = 0

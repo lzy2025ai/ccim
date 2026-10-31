@@ -7,7 +7,7 @@
 """
 import asyncio, datetime, logging, os, re, time, uuid
 
-from . import tokens, usage
+from . import registry, tokens, usage
 from .schedules import listed
 from urllib.parse import quote
 
@@ -109,8 +109,8 @@ def _counted(cid, m, keep):
     return not (m.get("project") or (m.get("schedule") and not listed(cid, m)) or keep and not keep(cid))
 
 
-def stats(pf, keep=None, everything=True):
-    """概览：近 26 周每天发了几条、本周对话轮数、本周完成（归档）几件、各 Agent 本周轮数 / Token 和最近活跃；
+def stats(pf, keep=None, everything=True, acct=None):
+    """概览：近 26 周每天发了几条、每天完成了几个对话、本周对话轮数、本周完成几件、各 Agent 本周轮数 / Token 和最近活跃；
     今天聊了几个对话、几个 Agent；最近两周每天的 Token（主人看整台电脑的，访客只算自己的对话）；额度。"""
     now = datetime.date.today()
     today = now.isoformat()
@@ -145,9 +145,6 @@ def stats(pf, keep=None, everything=True):
         if aid and m.get("last_active"):
             a = agents.setdefault(aid, {"turns": 0, "last": "", "tokens": 0})
             a["last"] = max(a["last"], m["last_active"])
-        at = m.get("archived_at")
-        if m.get("archived") and at and datetime.date.fromtimestamp(at).isoformat() >= week0:
-            done_week += 1
         sids = _sids(cid, m, s, own)
         if sids:
             used = tokens.of_sessions(sids)
@@ -160,7 +157,13 @@ def stats(pf, keep=None, everything=True):
                     t[0] += n
                     t[1] += r
     tk = tokens.days() if everything else mine
-    out = {"heat": heat, "turns_week": turns_week, "done_week": done_week, "agents": agents, "today": today,
+    done = {}
+    for rec in done_records(pf, keep, acct, chats).values():
+        d = _date(rec["at"])
+        if d >= since:
+            done[d] = done.get(d, 0) + 1
+    done_week = sum(n for d, n in done.items() if d >= week0)
+    out = {"heat": heat, "done": done, "turns_week": turns_week, "done_week": done_week, "agents": agents, "today": today,
            "day": {"chats": day_chats, "agents": sorted(day_agents), "msgs": day_msgs},
            "tokens": {d: v for d, v in tk.items() if d >= tsince} if tokens.ready() else None}
     if everything:
@@ -185,8 +188,9 @@ def recent(pf, chats, keep=None):
     return rows
 
 
-def day(pf, d, keep=None, everything=True):
-    """某一天（#240）：那天聊过的对话（几点到几点、发了几条、Token）、按小时的分布、这台电脑那天的 Token。"""
+def day(pf, d, keep=None, everything=True, acct=None):
+    """某一天（#240）：那天聊过的对话（几点到几点、发了几条、Token）、按小时的分布、这台电脑那天的 Token、
+    那天标为已完成的对话（#369）。"""
     rows, hours = [], [0] * 24
     chats = pf.chats()
     own = _sid_owners(pf, chats)
@@ -209,7 +213,61 @@ def day(pf, d, keep=None, everything=True):
         tk = tokens.days().get(d) or [0, 0] if everything else \
             [sum(r["tokens"][0] for r in rows), sum(r["tokens"][1] for r in rows)]
     reviews = [pf.chat_view(cid) for cid, m in chats.items() if covers(m, d) and _counted(cid, m, keep)]
-    return {"date": d, "chats": rows, "hours": hours, "tokens": tk, "reviews": reviews}   # 复盘到这一天的对话（#268、#364）
+    return {"date": d, "chats": rows, "hours": hours, "tokens": tk, "reviews": reviews,   # 复盘到这一天的对话（#268、#364）
+            "done": done_on(pf, d, d, keep, acct, chats)}
+
+
+# ----- 已完成（#369，以前叫归档） -----
+# 对话标为已完成时往完成记录里记一条（当时的标题、Agent、来源），取消就删；到期自动清理掉对话后记录还在，
+# 任务面板的统计和复盘照样算。内部字段还叫 archived / archived_at，老数据不用迁移。
+
+def done_file(pf):
+    return os.path.join(registry.pdir(pf.home), "done.json")
+
+
+def _date(ts):
+    return datetime.date.fromtimestamp(ts).isoformat()
+
+
+def done_records(pf, keep=None, acct=None, chats=None):
+    """对话编号 → {at, title, agent, source, account}。还没记进去的老的已完成对话，用 archived_at 补上。
+    keep 给了就只要这个账号的：还在的对话按 keep，已经清理掉的按记下的账号。"""
+    try:
+        recs = dict(registry.load_json(done_file(pf)))
+    except (OSError, ValueError, TypeError):
+        recs = {}
+    chats = pf.chats() if chats is None else chats
+    for cid, m in chats.items():
+        if m.get("archived") and m.get("archived_at") and cid not in recs:
+            recs[cid] = {"at": m["archived_at"], "title": m.get("title") or "新对话", "agent": m.get("agent"), "source": "网页"}
+    marks = registry.read_state(pf.home).get("marks") or {}
+    for cid, mk in marks.items():
+        if mk.get("archived") and mk.get("archived_at") and cid not in recs:
+            recs[cid] = {"at": mk["archived_at"], "title": mk.get("title") or "别处的对话", "agent": None, "source": None}
+    out = {}
+    for cid, r in recs.items():
+        if not isinstance(r, dict) or not isinstance(r.get("at"), (int, float)):
+            continue
+        if keep and not (keep(cid) if cid in chats else (r.get("account") or None) == acct):
+            continue
+        out[cid] = r
+    return out
+
+
+def done_on(pf, start, end, keep=None, acct=None, chats=None):
+    """start～end 这几天标为已完成的对话，按完成时间排。gone：对话已经清理掉了，打不开。"""
+    chats = pf.chats() if chats is None else chats
+    marks = registry.read_state(pf.home).get("marks") or {}
+    rows = []
+    for cid, r in done_records(pf, keep, acct, chats).items():
+        if not start <= _date(r["at"]) <= end:
+            continue
+        m = chats.get(cid)
+        gone = (marks.get(cid) or {}).get("hidden", False) if cid.startswith("x:") else m is None
+        rows.append({"id": cid, "at": r["at"], "title": (m or {}).get("title") or r.get("title") or "新对话",
+                     "agent": (m or {}).get("agent") or r.get("agent"), "source": r.get("source"), "gone": bool(gone)})
+    rows.sort(key=lambda x: x["at"])
+    return rows
 
 
 # ----- 复盘（#241、#364） -----
@@ -233,7 +291,8 @@ def note(now=None):
     t = datetime.date.fromtimestamp(now or time.time())
     return (f"（这是一次复盘，上面是用户的要求。今天是 {t.isoformat()}，星期{WEEKDAYS[t.weekday()]}。"
             "先从要求里判断要复盘哪段日期（没说就是今天；「这一周」从本周一算起，「上周」是上周一到上周日），"
-            "再用 review_material 按日期范围拉这段时间各个对话的材料（标题、进度、用户说的话、最后的回答），"
+            "再用 review_material 按日期范围拉这段时间各个对话的材料（这段时间标为已完成的对话、"
+            "各个对话的标题、是否已完成、进度、用户说的话、最后的回答），"
             "回答开头写一句复盘的是哪几天。）\n\n" + RULES + "\n\n" + LINK_NOTE)
 
 
@@ -274,10 +333,12 @@ def check_range(start, end):
 
 # 任务面板「复盘」按钮旁边的提示词模板（#263 的几套视角，#364 起是模板）：{date} 换成那一天
 VIEWS = [
-    {"id": "summary", "name": "工作总结", "desc": "做成了什么、卡在哪、明天先做什么",
+    {"id": "summary", "name": "工作总结", "desc": "完成了什么、还挂着什么、明天先做什么",
      "prompt": """复盘 {date} 这一天。用要点写，分三部分：
-## 今天做成了
-## 卡在我这里（要我决定、确认或提供什么）
+## 完成了什么
+标为已完成的对话，加上别的做成了的事。
+## 还挂着什么
+没标完成的事各到了哪一步；卡在我这里的（要我决定、确认或提供什么）放前面。
 ## 明天建议先做
 
 也可以看看前几天，连着几天没动的事要指出来。"""},
@@ -391,13 +452,41 @@ def _clock(ts, multi):
     return time.strftime("%m-%d %H:%M" if multi else "%H:%M", time.localtime(ts))
 
 
-def material(pf, start, end, keep=None, local=True):
-    """start～end 这几天的复盘材料（#364，以前只有一天）：每个对话的标题、谁、什么时候、一句话进度、这几天我说的话、最后的回答。
+def _href(cid, aid):
+    return f"#/agents/{quote(aid, safe='')}/{quote(cid, safe='')}" if aid else f"#/chats/{quote(cid, safe='')}"   # 和网页 boardHref 一样（#284）
+
+
+def done_material(pf, start, end, keep=None, acct=None, chats=None):
+    """复盘材料开头：这段时间标为已完成的对话（#369），已经清理掉的也列，标明打不开。"""
+    from .agents import get as agent_get
+    rows = done_on(pf, start, end, keep, acct, chats)
+    if not rows:
+        return ""
+    out = [f"这段时间标为已完成的对话（{len(rows)} 个）："]
+    for r in rows[:DONE_MAX]:
+        a = agent_get(r["agent"]) if r.get("agent") else None
+        who = "、".join(x for x in [a["name"] if a else "临时对话" if not r["id"].startswith("x:") else "",
+                                    r.get("source") if r.get("source") not in (None, "网页") else ""] if x)
+        line = f"- {_clock(r['at'], start != end)} 完成：{r['title']}" + (f"（{who}）" if who else "")
+        line += "，对话已清理，打不开" if r["gone"] else f"，链接：{_href(r['id'], r.get('agent'))}"
+        out.append(line)
+    if len(rows) > DONE_MAX:
+        out.append(f"（还有 {len(rows) - DONE_MAX} 个没列出来）")
+    return "\n".join(out)
+
+
+DONE_MAX = 80
+
+
+def material(pf, start, end, keep=None, local=True, acct=None):
+    """start～end 这几天的复盘材料（#364，以前只有一天）：这段时间完成了哪些对话（#369），
+    每个对话的标题、谁、什么时候、是否已完成、一句话进度、这几天我说的话、最后的回答。
     local：给这台电脑上的 Agent 用，带 open_chat 的编号（别的电脑上的对话它打不开）。"""
     from .agents import get as agent_get
     multi = start != end
     found = []
-    for cid, m in pf.chats().items():
+    chats = pf.chats()
+    for cid, m in chats.items():
         if not _counted(cid, m, keep) or m.get("mention_of") or m.get("review"):
             continue
         spans = summary(pf.channel.logs, cid).get("spans") or {}
@@ -416,8 +505,9 @@ def material(pf, start, end, keep=None, local=True):
             a = agent_get(m["agent"]) if m.get("agent") else None
             head = f"### {m.get('title') or '新对话'}（{a['name'] if a else '临时对话'}，{_clock(first, multi)}–{_clock(last, multi)}"
             head += f"，聊了 {n_days} 天）" if n_days > 1 else "）"
-            part = [head, "链接：" + (f"#/agents/{quote(m['agent'], safe='')}/{quote(cid, safe='')}" if m.get("agent")
-                                     else f"#/chats/{quote(cid, safe='')}")]   # 和网页 boardHref 一样（#284）
+            part = [head, "链接：" + _href(cid, m.get("agent")),
+                    f"状态：已完成（{_clock(m['archived_at'], True)} 标的）" if m.get("archived") and m.get("archived_at")
+                    else "状态：已完成" if m.get("archived") else "状态：还没标完成"]
             if local:
                 part.append(f"open_chat id={cid}")
             if m.get("brief"):
@@ -430,10 +520,12 @@ def material(pf, start, end, keep=None, local=True):
             out.append("\n".join(part))
         return out
 
+    done = done_material(pf, start, end, keep, acct, chats)
+    room = MATERIAL_MAX - len(done)
     parts = build(6, 200, 600)
-    if len("\n\n".join(parts)) > MATERIAL_MAX:          # 范围长、对话多：每个对话少带一点
+    if len("\n\n".join(parts)) > room:                 # 范围长、对话多：每个对话少带一点
         parts = build(3, 120, 300)
-    text, kept = "", 0
+    text, kept = done, 0
     for p in parts:
         if len(text) + len(p) + 2 > MATERIAL_MAX:
             break

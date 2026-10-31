@@ -410,6 +410,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .show-more{display:block;margin:0 auto 18px;padding:5px 14px;border-radius:8px;border:1px solid var(--line);color:var(--muted);font-size:13px}
 .show-more:hover{color:var(--ink);border-color:var(--line-strong)}
 .msg.flash{animation:flash 1.6s ease}
+.msg.flash .diary-card{animation:flash 1.6s ease}
 @keyframes flash{0%,40%{background:var(--qing-soft)}100%{background:transparent}}
 .chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
@@ -1907,7 +1908,7 @@ function md(src){
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/\[([^\]]+)\]\((#\/[\w\-.~%\/]+)\)/g, '<a href="$2">$1</a>')   // 站内链接（复盘里提到的对话，#284）：当前页打开
+    .replace(/\[([^\]]+)\]\((#\/[\w\-.~%\/]+(?:\?[\w\-.~%=&]+)?)\)/g, '<a href="$2">$1</a>')   // 站内链接（复盘里提到的对话，#284；日记回到那条，?m=记录，#363）：当前页打开
     .replace(/(^|[\s（(])(https?:\/\/[^\s<）)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   let i = 0;
   while (i < lines.length){
@@ -2398,9 +2399,12 @@ function route(){
   lastRestore = null;
   if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
   if (location.hash === "#/chats/new") forgetChat();
-  const parts = location.hash.slice(2).split("/");
+  const [hpath, hq] = location.hash.split("?");
+  const parts = hpath.slice(2).split("/");
   const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
+  const jm = hq && new URLSearchParams(hq).get("m");   // 带着某条记录（日记回到记它的地方，#363）：打开后滚到那条
+  if (jm) jumpTo = {chat: current.view === "agents" ? current.sub : current.id, rid: jm};
   const own = ownerOf(current.id && current.id.startsWith("edit-") ? current.id.slice(5) : current.id);
   if (own) ctxMachine = own;
   else if (!current.id || current.id === "new" || current.view === "settings") ctxMachine = S.me;   // 隐藏的子对话：沿用打开它的那台
@@ -5147,10 +5151,12 @@ function openSource(js){
   location.hash = s.agent ? `#/agents/${encodeURIComponent(s.agent)}/${encodeURIComponent(s.chat)}` : `#/chats/${encodeURIComponent(s.chat)}`;
 }
 let jumpTo = null;
-function doJump(){                     // 从知识库回到原对话：滚到存的那条，闪一下
+function doJump(){                     // 从知识库、日记回到原对话：滚到存的那条，闪一下（找不到就只打开对话）
   if (!jumpTo || !detail || detail.id !== jumpTo.chat) return;
-  const i = detail.log.findIndex(r => r.at === jumpTo.at);
+  const rid = jumpTo.rid, i = detail.log.findIndex(r => rid ? r.id === rid : r.at === jumpTo.at);
   jumpTo = null;
+  if (rid && location.hash.includes("?")) history.replaceState(null, "", location.hash.split("?")[0]);   // 再点同一个链接还能跳
+  if (i >= 0 && detail.log[i].type === "diary" && !diaryShown()) return;
   if (i >= 0) ensureShown(i);
   const el = i >= 0 && $("#rec-" + i);
   if (!el) return;

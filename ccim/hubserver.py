@@ -508,7 +508,7 @@ document.getElementById("f").onsubmit = async e => { e.preventDefault();
   const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
     body: JSON.stringify({name: nm.value, password: pw.value, code: code.value})});
   const d = await r.json().catch(() => ({}));
-  if (r.ok) { location.href = "/"; return; }
+  if (r.ok) { location.href = "/" + location.hash; return; }
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
   err.textContent = d.error || "出错了"; code.value = ""; };"""
 

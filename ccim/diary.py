@@ -2,12 +2,15 @@
 
 按天一个文件（YYYY-MM-DD.md，和 Obsidian 日记插件默认的文件名一样），放在「文稿 / 文档」下的 ccim-日记，
 整个文件夹可以直接当 Obsidian 库打开。每条是「## 时间 · 记在哪」加正文，用户在 Obsidian 里改了也照样能读、能搜。
+网页里记的，「记在哪」写成 Markdown 链接，指向记它的那个对话里的那张日记卡片（完整网址，Obsidian 里点了用浏览器打开）；
+以前没带链接的照常读。
 助手用 diary_read / diary_search 两个工具查（session.py 的 _diary_tools）。
 """
 import datetime, os, re
 
 CMD = re.compile(r"^/(diary|日记)(?=\s|$)\s*", re.I)
 HEAD = re.compile(r"^## (\d{1,2}:\d{2})(?: · (.*))?$")
+LINKED = re.compile(r"^\[(.*)\]\((https?://\S+)\)$")     # 「记在哪」带链接的写法
 READ_DAYS = 62            # diary_read 一次最多读几天
 READ_MAX = 40000          # 一次最多给助手多少字
 SEARCH_MAX = 40           # 搜索最多给几条
@@ -24,8 +27,8 @@ def parse(text):
     return (text or "").lstrip()[m.end():].strip() if m else None
 
 
-def add(text, where, now=None):
-    """记一条，返回 {date, time, where, path}。"""
+def add(text, where, now=None, link=None):
+    """记一条，返回 {date, time, where, path}。link：回到记它的地方的完整网址（网页里记的才有）。"""
     text = (text or "").strip()
     if not text:
         raise ValueError("在 /diary 后面写上要记的内容。")
@@ -34,29 +37,34 @@ def add(text, where, now=None):
     os.makedirs(root(), exist_ok=True)
     f = os.path.join(root(), d + ".md")
     where = " ".join((where or "").split())
+    label = f" · [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · {where}" if where else ""
     new = not os.path.exists(f) or os.path.getsize(f) == 0
     with open(f, "a", encoding="utf-8") as fh:
-        fh.write(("" if new else "\n") + f"## {t}" + (f" · {where}" if where else "") + f"\n\n{text}\n")
+        fh.write(("" if new else "\n") + f"## {t}{label}\n\n{text}\n")
     return {"date": d, "time": t, "where": where, "path": f}
 
 
 def _entries(d):
-    """某一天的日记：[{time, where, text}]。开头不在任何「## 时间」下面的内容算一条没有时间的。"""
+    """某一天的日记：[{time, where, link, text}]。开头不在任何「## 时间」下面的内容算一条没有时间的。"""
     try:
         with open(os.path.join(root(), d + ".md"), encoding="utf-8") as fh:
             lines = fh.read().splitlines()
     except OSError:
         return []
-    out, cur = [], {"time": "", "where": "", "lines": []}
+    out, cur = [], {"time": "", "where": "", "link": "", "lines": []}
     for ln in lines:
         m = HEAD.match(ln)
         if m:
             out.append(cur)
-            cur = {"time": m.group(1), "where": m.group(2) or "", "lines": []}
+            where, link = (m.group(2) or "").strip(), ""
+            lk = LINKED.match(where)
+            if lk:
+                where, link = lk.group(1), lk.group(2)
+            cur = {"time": m.group(1), "where": where, "link": link, "lines": []}
         else:
             cur["lines"].append(ln)
     out.append(cur)
-    return [{"time": e["time"], "where": e["where"], "text": "\n".join(e["lines"]).strip()}
+    return [{"time": e["time"], "where": e["where"], "link": e["link"], "text": "\n".join(e["lines"]).strip()}
             for e in out if "\n".join(e["lines"]).strip()]
 
 
@@ -77,8 +85,16 @@ def _date(s, default):
         raise ValueError(f"日期 {s} 不对，要写成 2026-01-31 这样。")
 
 
+def site_link(link):
+    """完整网址 → 站内链接（#/ 开头那段），网页里点了在当前页打开；不是平台的网址返回空。"""
+    i = (link or "").find("#/")
+    return link[i:] if i >= 0 else ""
+
+
 def _fmt(d, e):
-    head = " · ".join(x for x in (d + (" " + e["time"] if e["time"] else ""), e["where"]) if x)
+    site = site_link(e.get("link"))
+    where = f"[{e['where'] or '原对话'}]({site})" if site else e["where"]
+    head = " · ".join(x for x in (d + (" " + e["time"] if e["time"] else ""), where) if x)
     return f"### {head}\n{e['text']}"
 
 

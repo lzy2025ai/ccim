@@ -17,6 +17,7 @@ HELP = """\
 /stop　停下正在做的事
 /skip　某一步卡住了：结束这一步，接着做
 /queue 内容　排在后面：手头这件做完再处理（不加的话，干活时发的消息会直接补充进去）
+/diary 内容　记一笔日记，不打断手头的事
 /restart　重启这个机器人（升级到新代码时用）
 /status　当前状态
 /usage　额度和用量：5 小时、每周还剩多少
@@ -33,6 +34,7 @@ CODEX_HELP = """\
 
 /new　开始新对话
 /stop　停下正在做的事
+/diary 内容　记一笔日记，不打断手头的事
 /restart　重启这个机器人
 /status　当前状态
 /model 名字　换模型；/model 默认 回到默认
@@ -108,6 +110,22 @@ async def handle(bridge, chat, text, reply_to, sender=None):
     cmd, _, arg = text.partition(" ")
     cmd, arg = cmd.lower(), arg.strip()
     say = lambda s: bridge.channel.send_text(chat.chat_id, s, reply_to)
+
+    from . import diary
+    note = diary.parse(text)
+    if note is not None:                      # /diary（#363）：记进日记，不交给助手
+        if sender != bridge.owner():
+            await say("只有主人能记日记。")
+            return True
+        try:
+            r = diary.add(note, f"{bridge.channel.label or '聊天'} · {bridge.name}")
+        except ValueError as err:
+            await say(str(err))
+        except OSError:
+            await say("日记没记上：文稿文件夹写不进去。")
+        else:
+            await say(f"已记到 {r['date']} 的日记（{r['time']}）。")
+        return True
 
     codex = getattr(chat, "agent", None) == "codex"
     if codex and cmd in ("/resume", "/usage"):

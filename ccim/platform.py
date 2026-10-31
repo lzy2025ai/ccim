@@ -1047,6 +1047,26 @@ class Platform:
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
 
+    def diary(self, cid, text):
+        """/diary 内容（#363）：记进本机的日记，对话里留一张日记卡片（type=diary），不交给助手、不进它的上下文。"""
+        from . import diary as diary_mod
+        content = diary_mod.parse(text) or ""
+        try:
+            v = self._external(cid) if (cid or "").startswith("x:") else self.chat_view(cid)
+        except Problem:
+            v = {}
+        title = v.get("title") or ""
+        where = f"{v['agent_name']}「{title}」" if v.get("agent_name") and title else f"「{title}」" if title else ""
+        try:
+            diary_mod.add(content, where)
+        except ValueError as e:
+            raise Problem(str(e))
+        except OSError:
+            raise Problem("日记没记上：文稿文件夹写不进去。")
+        if cid in self.chats():
+            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": "d-" + uuid.uuid4().hex[:10], "text": content}))
+        return {"ok": True, "diary": True, "chat": cid}
+
     def review(self, d, aid, mat, view=None):
         """复盘某一天（#241）：交给选的 Agent，复盘是它的一个普通对话（meta 的 review 记日期，review_view 记用的哪套视角）。
         每次都开一个新对话（#263）：几套视角、同一套跑几次都互不影响，在当天详情里作为几个版本切换着看。
@@ -2471,7 +2491,7 @@ def _handler(pf):
             b = body.get
             routes = {
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
-                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs")),
+                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
                 "/api/pocket/settings": lambda: set_pocket(body),
@@ -2506,6 +2526,7 @@ def _handler(pf):
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
+                "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
                 "/api/board/review": lambda: pf.call(pf.review, b("date") or "", b("agent") or "", b("material") or "", b("view")),
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
@@ -2535,7 +2556,7 @@ def _handler(pf):
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
                 "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
-                "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or []),
+                "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or [], acct),
                 "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
                 "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run"), bool(self.headers.get("X-From-Peer"))),
                 "/api/peers/code": lambda: pf.peers.new_code(),
@@ -2683,8 +2704,23 @@ def check_message(pf, text, files):
             raise Problem("文件没传上来，再试一次。")
 
 
-def send(pf, cid, text, files, ctx=None, refs=None):
+def diary_of(pf, cid, text, files, acct):
+    """/diary 开头的（#363）：记日记，不发给助手。不是的返回 None。"""
+    from . import diary as diary_mod
+    if diary_mod.parse(text) is None:
+        return None
+    if acct:
+        raise Problem("共享的电脑上不能记日记。")
+    if files:
+        raise Problem("日记只能记文字。")
+    return pf.call(pf.diary, cid, text)
+
+
+def send(pf, cid, text, files, ctx=None, refs=None, acct=None):
     check_message(pf, text, files)
+    d = diary_of(pf, cid, text, files, acct)
+    if d:
+        return d
     if pf.meta(cid).get("mention_of"):       # 在群成员的子对话里开口：另开独立对话（#150），网页跳过去
         cid = pf.call(pf.split_sub, cid)
     pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx, refs=refs))
@@ -2759,8 +2795,11 @@ def leave_hub(pf):
     return {}
 
 
-def mention(pf, cid, text, to, files):
+def mention(pf, cid, text, to, files, acct=None):
     check_message(pf, text, files)
+    d = diary_of(pf, cid, text, files, acct)
+    if d:
+        return d
     if pf.meta(cid).get("mention_of"):
         cid = pf.call(pf.split_sub, cid)
     return dict(pf.run(pf.mentions.send(cid, (text or "").strip(), to, files)), chat=cid)
@@ -3004,6 +3043,12 @@ def set_workspace(on):
     """工作区（#245）：在设置里打开后才能用，每台电脑各存一份。"""
     registry.set_global(workspace="on" if on else None)
     return {"workspace": on}
+
+
+def set_diary_cards(on):
+    """聊天里显示不显示日记卡片（#363），默认显示；只影响网页上的显示，日记照记。"""
+    registry.set_global(diary_cards=None if on else "off")
+    return {"diary_cards": on}
 
 
 POCKET = {"on": True, "base": "claude", "model": None, "effort": None}

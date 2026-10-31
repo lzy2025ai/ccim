@@ -36,6 +36,17 @@ def is_quiet(text):
     return (text or "").strip().strip("。.").strip() == QUIET
 
 
+def _chaptered(s):
+    """发到已有对话、群聊的每次运行标成章节（#355），好按日期找；每隔几分钟跑的不加，免得目录被刷满。"""
+    return s.get("freq") != "every"
+
+
+def _chapter_name(s, at, shared):
+    """任务自己的对话里只有它，写日期时间就行；和别的消息混在一起的对话里带上任务名。"""
+    day = time.strftime("%m-%d", time.localtime(at))
+    return f"{s['name']} · {day}" if shared else time.strftime("%m-%d %H:%M", time.localtime(at))
+
+
 class Problem(Exception):
     """给用户看的错误。"""
 
@@ -278,7 +289,7 @@ class Schedules:
         prompt = f"[定时任务「{s['name']}」] {s['prompt']}" + (QUIET_NOTE if s.get("quiet") and s["target"]["kind"] != "project" else "")
         try:
             if s["target"]["kind"] == "chat":
-                upd.update(await self._run_chat(s["target"]["id"], s, prompt, sid))
+                upd.update(await self._run_chat(s["target"]["id"], s, prompt, sid, chapter=_chaptered(s)))
             elif s["target"]["kind"] == "group":
                 upd.update(await self._run_group(s, prompt))
             elif s["target"]["kind"] == "project":
@@ -348,6 +359,10 @@ class Schedules:
         cid = t["id"]
         if t.get("agents"):
             r = await self.pf.mentions.send(cid, prompt, t["agents"])
+            if _chaptered(s):
+                rec = next((x for x in self.pf.channel.logs.read(cid) if x.get("id") == r["id"]), None)
+                if rec:
+                    self.pf.set_chapter(cid, f"user:{rec['at']}", _chapter_name(s, rec["at"], shared=True))
             while time.time() - start < PROJECT_WAIT:
                 await asyncio.sleep(5)
                 rs = [x for x in self.pf.channel.logs.read(cid) if x.get("type") == "mention" and x.get("msg") == r["id"]]
@@ -356,7 +371,7 @@ class Schedules:
                     text = "\n\n".join(f"**{self.pf.mentions._agent_name(x['agent'])}**：{x.get('text') or ''}" for x in rs)
                     return {"state": "done" if ok else "error", "text": text, "chat": cid, "elapsed": round(time.time() - start, 1)}
             return {"state": "error", "text": "等了太久还没做完，去群聊里看看。", "chat": cid}
-        return await self._run_chat(cid, s, prompt)
+        return await self._run_chat(cid, s, prompt, chapter=_chaptered(s))
 
     async def _run_chat(self, cid, s, prompt, sid=None, chapter=False):
         """在这个网页对话（单聊或群聊的主 Agent）里跑，接着它的上下文。对话里记一条任务（sched），不出声的那次再去掉。"""
@@ -373,7 +388,7 @@ class Schedules:
         self.pf.channel._emit(cid, rec)
         key = f"user:{rec['at']}"
         if chapter:                               # 目录里按日期跳到某一次
-            self.pf.set_chapter(cid, key, time.strftime("%m-%d %H:%M", time.localtime(rec["at"])))
+            self.pf.set_chapter(cid, key, _chapter_name(s, rec["at"], shared=not cid.startswith("s-")))
         head = groups.note_prefix(self.pf, cid, groups.MAIN) + self.pf.mentions.unseen(cid) if c.get("members") else ""
         task = Task(head + prompt)
         chat.submit(task)

@@ -3346,7 +3346,8 @@ function itemMenu(e, id, below){
   const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
   const ref = detail && detail.agent && !detail.readonly && c.agent === detail.agent && id !== detail.id && current.view === "agents";
   const ag = c.agent && agentOf(c.agent);
-  const away = current.view === "agents" && ag && !ag.shared && !String(id).startsWith("x:");   // 网页里和 Agent 的对话：能转到微信、飞书接着聊（#212）
+  const mem = current.view === "agents" && c.member;   // Agent 列表里它只是成员的群：删、转走都轮不到从这里做（#359）
+  const away = current.view === "agents" && ag && !ag.shared && !mem && !String(id).startsWith("x:");   // 网页里和 Agent 的对话：能转到微信、飞书接着聊（#212）
   const wsOk = wsEnabled() && !c.readonly && !c.mention_of && !c.side_of && !String(id).startsWith("x:");
   pop(at, [
     wsOk ? b(`wsFromMenu(${q(id)})`, WS && WS.chat === id && WS.on && !narrow() ? "回到对话" : "打开工作区") : "",
@@ -3362,7 +3363,7 @@ function itemMenu(e, id, below){
       `<button class="sw ${c.color === k ? "on" : ""}" aria-label="颜色" onclick="markChat(${q(id)},{color:${c.color === k ? "null" : q(k)}})"><i style="background:${col}"></i></button>`).join("")}</div>`,
     c.icon || c.color ? b(`markChat(${q(id)},{icon:null,color:null})`, "清除标记") : "",
     c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消归档") : b(`markChat(${q(id)},{archived:true,pin:null})`, "归档"),
-    b(`deleteChat(${q(id)})`, "删除", "danger"),
+    mem ? "" : b(`deleteChat(${q(id)})`, "删除", "danger"),
   ].join(""), below);
 }
 async function handoffChat(id, kind){

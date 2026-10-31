@@ -721,6 +721,12 @@ class Chat:
                         if sid and sid != self.session_id:  # 一开始就记下，第一轮就被打断也能接上
                             self.session_id = sid
                             self.b.save(self.chat_id, **{self.SID_KEY: sid})
+                        try:                        # 这个目录能用的 Skill：输入 / 时列出来（#381）
+                            from . import slash
+                            info = await self.client.get_server_info() if self.client else None
+                            slash.remember(self.b.path, m.data, (info or {}).get("commands"))
+                        except Exception:
+                            log.debug("记 Skill 名单出错", exc_info=True)
                     if grace and not isinstance(m, RateLimitEvent):
                         grace, t.unseen = False, []   # Claude 接着处理补充了，读到下一轮结束
                         if t.drain == "wait":

@@ -1962,7 +1962,39 @@ class Platform:
         for r in self.external_chats(terminal=True):
             if r["sid"] == sid:
                 return r
+        r = self._old_terminal(sid)
+        if r:
+            self.__dict__.setdefault("_ext_seen", {})[cid] = (time.time(), dict(r))
+            return r
         raise Problem("找不到这个对话。")
+
+    def _old_terminal(self, sid):
+        """列表只列最近 15 个终端对话，更早的用链接打开时到各 Agent 的会话记录里找（#367）。"""
+        if not re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", sid or ""):
+            return None
+        if any(sid in (c.get("session_id"), c.get("codex_session_id")) for c in self.chats().values()):
+            return None                       # 网页里接着聊过的，列表里列的是那个网页对话
+        mk = (registry.read_state(self.home).get("marks") or {}).get("x:" + sid) or {}
+        if mk.get("hidden"):
+            return None
+        from claude_agent_sdk import get_session_info
+        for a_id, a in agents.all_agents().items():
+            if (a.get("base") or "claude") != "claude":
+                continue
+            try:
+                x = get_session_info(sid, directory=agents.cwd(dict(a, id=a_id)))
+            except Exception:
+                x = None
+            if not x:
+                continue
+            title = " ".join((x.custom_title or x.summary or x.first_prompt or "终端里的对话").split())[:30]
+            r = {"id": "x:" + sid, "sid": sid, "agent": a_id, "agent_name": a["name"], "source": "终端",
+                 "title": title, "base": "claude", "external": True, "busy": False,
+                 "last_active": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x.last_modified / 1000)),
+                 "dir": a.get("dir")}
+            r.update({k: v for k, v in mk.items() if k not in ("hidden", "chapters")})
+            return r
+        return None
 
     def external_detail(self, cid):
         from . import history

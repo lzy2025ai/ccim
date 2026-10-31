@@ -6,9 +6,18 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from ccim import agents, board, registry, share
+from ccim import agents, board, registry, search, share
+
+
+class FakeBridge:
+    def __init__(self):
+        self.chats, self.got = {}, []
+
+    async def on_message(self, inc):
+        self.got.append(inc)
 
 
 class ReviewTests(unittest.TestCase):
@@ -41,11 +50,8 @@ class ReviewTests(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
         self.port = self.server.server_address[1]
         self.aid = agents.create(name="复盘助手")["id"]
-        self.sent = []
-
-        async def fake_send(cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None):
-            self.sent.append((cid, text, hidden, mark))
-        pf.send = fake_send
+        self.bridge = FakeBridge()
+        pf._bridge = lambda cid: self.bridge
 
     def req(self, method, path, body=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
@@ -56,52 +62,102 @@ class ReviewTests(unittest.TestCase):
         c.close()
         return out
 
-    def seed(self, d):
+    def seed(self, d, title="写周报", ask="帮我写这周的周报", answer="周报写好了，等你看", agent=None):
         at = time.mktime(time.strptime(d + " 10:00", "%Y-%m-%d %H:%M"))
-        cid = self.pf.call(self.pf.new_chat, agent=self.aid, title="写周报")
+        cid = self.pf.call(self.pf.new_chat, agent=agent or self.aid, title=title)
         logs = self.pf.channel.logs
-        logs.append(cid, {"type": "user", "id": "u1", "text": "帮我写这周的周报", "at": at})
-        logs.append(cid, {"type": "answer", "text": "周报写好了，等你看", "at": at + 60, "done_at": at + 60})
+        logs.append(cid, {"type": "user", "id": "u1", "text": ask, "at": at})
+        logs.append(cid, {"type": "answer", "text": answer, "at": at + 60, "done_at": at + 60})
         return cid
 
-    def test_review_flow(self):
-        d = "2026-10-20"
-        self.seed(d)
-        st, r = self.req("GET", f"/api/board/day?d={d}&material=1")
-        self.assertEqual(st, 200, r)
-        self.assertEqual([c["title"] for c in r["chats"]], ["写周报"])
-        self.assertIn("我说：帮我写这周的周报", r["material"])
-        self.assertIn("最后的回答：周报写好了", r["material"])
-
-        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": r["material"]})
-        self.assertEqual(st, 200, r)
-        cid = r["chat"]
-        time.sleep(0.3)
+    def test_review_command(self):
+        cid = self.pf.call(self.pf.new_chat, agent=self.aid)
+        self.pf.run(self.pf.send(cid, "/review 复盘这一周的工作任务"))
         m = self.pf.meta(cid)
-        self.assertEqual((m["review"], m["review_view"], m["agent"], m["title"]), (d, "summary", self.aid, "10月20日 复盘·工作总结"))
-        self.assertEqual(self.sent[-1][1], "复盘这一天：工作总结")
-        self.assertIn("帮我复盘 2026-10-20 这一天", self.sent[-1][2])
-        self.assertIn("周报写好了", self.sent[-1][2])
-        self.assertEqual(self.sent[-1][3], {"review": d})
+        self.assertIs(m["review"], True)
+        self.assertEqual(m["title"], "复盘这一周的工作任务")
+        # 记录里是用户的原话，交给助手的去掉命令、接上说明（Claude Code 自己的 /review 是审代码）
+        rec = [r for r in self.pf.channel.logs.read(cid) if r.get("type") == "user"][-1]
+        self.assertEqual(rec["text"], "/review 复盘这一周的工作任务")
+        text = self.bridge.got[-1].text
+        self.assertTrue(text.startswith("复盘这一周的工作任务"), text)
+        self.assertIn("review_material", text)
+        self.assertIn(time.strftime("%Y-%m-%d"), text)
         v = self.pf.chat_view(cid)
-        self.assertEqual((v["review"], v["review_name"]), (d, "工作总结"))
+        self.assertEqual((v["review"], v["review_span"]), (True, None))
 
-        # 复盘对话本身不算进那天的对话
-        st, r = self.req("GET", f"/api/board/day?d={d}")
-        self.assertEqual(len(r["chats"]), 1)
+        # 已经有内容的对话里发 /review：照样复盘，但不把这个对话改成复盘对话
+        other = self.seed("2026-10-20")
+        self.pf.run(self.pf.send(other, "/review"))
+        self.assertFalse(self.pf.meta(other).get("review"))
+        self.assertTrue(self.bridge.got[-1].text.startswith("复盘今天的工作。"))
+        # /reviewer 不是复盘命令
+        self.pf.run(self.pf.send(other, "/reviewer 看看"))
+        self.assertEqual(self.bridge.got[-1].text, "/reviewer 看看")
 
-        # 换一套视角、同一套再来一次：都是新的独立对话（#263）
-        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "rethink"})
-        c2 = r["chat"]
-        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "rethink"})
-        c3 = r["chat"]
-        time.sleep(0.3)
-        self.assertEqual(len({cid, c2, c3}), 3)
-        self.assertEqual(self.pf.meta(c3)["title"], "10月20日 复盘·换个角度看看")
-        self.assertIn("旁观者", self.sent[-1][2])
-        self.assertEqual(self.sent[-1][1], "复盘这一天：换个角度看看")
-        st, r = self.req("POST", "/api/board/review", {"date": d, "agent": self.aid, "material": "x", "view": "nope"})
+    def test_material_range(self):
+        a = self.seed("2026-10-20")
+        b = self.seed("2026-10-22", title="修登录", ask="登录页报错了", answer="修好了")
+        self.seed("2026-10-25", title="别的事")
+        st, r = self.req("GET", "/api/board/material?from=2026-10-19&to=2026-10-23")
+        self.assertEqual(st, 200, r)
+        mat = r["material"]
+        self.assertIn("### 写周报", mat)
+        self.assertIn("我说：登录页报错了", mat)
+        self.assertIn("最后的回答：修好了", mat)
+        self.assertNotIn("别的事", mat)
+        self.assertNotIn("open_chat", mat)               # 别的电脑来拉的：打不开，不给编号
+        self.assertLess(mat.index("写周报"), mat.index("修登录"))   # 按时间先后
+        local = board.material(self.pf, "2026-10-20", "2026-10-20")
+        self.assertIn(f"open_chat id={a}", local)
+        self.assertNotIn(b, local)
+        st, r = self.req("GET", "/api/board/material?from=2026-01-01&to=2026-12-31")
         self.assertEqual(st, 400)
+        st, r = self.req("GET", "/api/board/material?from=yesterday")
+        self.assertEqual(st, 400)
+
+    def test_tool_and_day_listing(self):
+        from ccim import session
+        self.seed("2026-10-20")
+        self.seed("2026-10-22", title="修登录")
+        cid = self.pf.call(self.pf.new_chat, agent=self.aid)
+        self.pf.run(self.pf.send(cid, "/review 复盘上周"))
+        chat = SimpleNamespace(chat_id=cid)
+        tool = session._review_tool(chat, self.pf)
+        out = self.pf.run(tool.handler({"start": "2026-10-22", "end": "2026-10-19"}))
+        text = out["content"][0]["text"]
+        self.assertTrue(text.startswith("2026-10-19 到 2026-10-22 的对话材料"), text)
+        self.assertIn("写周报", text)
+        self.assertIn("修登录", text)
+        self.assertEqual(self.pf.meta(cid)["review"], ["2026-10-19", "2026-10-22"])
+        self.pf.run(tool.handler({"start": "2026-10-24", "end": "2026-10-24"}))
+        self.assertEqual(self.pf.meta(cid)["review"], ["2026-10-19", "2026-10-24"])
+        out = self.pf.run(tool.handler({"start": "x", "end": "y"}))
+        self.assertTrue(out.get("is_error"))
+
+        # 以前按天的老复盘
+        old = self.pf.call(self.pf.new_chat, agent=self.aid, title="10月20日 复盘·工作总结")
+        chats = self.pf.chats()
+        chats[old].update(review="2026-10-20", review_view="summary", review_name="工作总结")
+        self.pf.store.write(chats)
+
+        st, r = self.req("GET", "/api/board/day?d=2026-10-20")
+        self.assertEqual({c["id"] for c in r["reviews"]}, {cid, old})
+        self.assertEqual([c["title"] for c in r["chats"]], ["写周报"])     # 复盘对话不算进那天的对话
+        st, r = self.req("GET", "/api/board/day?d=2026-10-23")
+        self.assertEqual([c["id"] for c in r["reviews"]], [cid])
+        self.assertEqual(r["reviews"][0]["review_span"], ["2026-10-19", "2026-10-24"])
+        st, r = self.req("GET", "/api/board/day?d=2026-10-25")
+        self.assertEqual(r["reviews"], [])
+        # 复盘对话不进材料
+        self.assertNotIn("复盘上周", board.material(self.pf, "2026-10-01", "2026-10-31"))
+
+    def test_open_any_chat(self):
+        other = agents.create(name="写代码的")["id"]
+        cid = self.seed("2026-10-20", title="修登录", ask="登录页报错了", agent=other)
+        text = search.open_chat(self.pf, self.aid, None, cid)
+        self.assertIn("登录页报错了", text)
+        self.assertIsNone(search.open_chat(self.pf, self.aid, None, "nope"))
 
     def test_views(self):
         st, r = self.req("GET", "/api/board/review_views")
@@ -118,15 +174,9 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(got["旁观者"]["prompt"], board.VIEWS[1]["prompt"])
         new = got["情绪"]
         self.assertTrue(new["id"].startswith("v-") and not new["builtin"])
-        # 没改的自带视角不存，以后默认的更新了能跟上
+        # 没改的自带模板不存，以后默认的更新了能跟上
         saved = registry.global_config()["review_views"]
         self.assertEqual(saved[2], {"id": "time"})
-        st, r = self.req("POST", "/api/board/review", {"date": "2026-10-21", "agent": self.aid, "material": "x", "view": new["id"]})
-        time.sleep(0.3)
-        self.assertTrue(self.sent[-1][2].startswith("看看 2026-10-21 我的状态"))
-        st, r = self.req("POST", "/api/board/review", {"date": "2026-10-21", "agent": self.aid, "material": "x"})
-        time.sleep(0.3)
-        self.assertTrue(self.sent[-1][2].startswith("只写三句话：2026-10-21"))
         # 不合规的不存
         for bad in ([], [{"name": "", "prompt": "x"}], [{"name": "a", "prompt": "x"}, {"name": "a", "prompt": "y"}], [{"name": "空的"}]):
             st, r = self.req("POST", "/api/board/review_views", {"views": bad})
@@ -137,12 +187,6 @@ class ReviewTests(unittest.TestCase):
         st, r = self.req("GET", "/api/board/review_views")
         self.assertEqual(r["views"][0]["prompt"], "以前改过的：{date}")
         self.assertEqual(len(r["views"]), 5)
-
-    def test_bad_input(self):
-        st, r = self.req("POST", "/api/board/review", {"date": "昨天", "agent": self.aid})
-        self.assertEqual(st, 400)
-        st, r = self.req("POST", "/api/board/review", {"date": "2026-10-20", "agent": "nobody"})
-        self.assertEqual(st, 400)
 
 
 if __name__ == "__main__":

@@ -611,7 +611,7 @@ class Chat:
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
-                               "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
+                               "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material",   # 只读
                                "mcp__ccim__send_to_chat"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
@@ -1146,6 +1146,7 @@ class Chat:
             tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
                 tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
+                tools.append(_review_tool(chat, pf))   # 复盘：按日期范围拉所有对话的材料（#364）
                 if not guest_of(chat.b) and not chat.b.entry.get("lent"):
                     tools += _app_tools(chat, pf)      # 应用的数据接口、在对话右侧打开（#103）
         if _can_work(chat, pf):
@@ -1513,6 +1514,57 @@ def _search_tools(chat, pf):
         return {"content": [{"type": "text", "text": text}]} if text else _err("没有这个对话，编号用 search_chats 给的。")
 
     return [search_chats, open_chat]
+
+
+def _review_tool(chat, pf):
+    """复盘（#364）：按日期范围拉用户这几天各个对话的材料（和以前按天复盘的一样），各台电脑上的都拉。
+    拉过的范围记进这个对话（是 /review 开的复盘对话时），任务面板那几天里列出它。"""
+    from . import board, share
+
+    def collect(start, end):
+        acct = share.owner_map(pf).get(chat.chat_id)
+        with registry.snapshot():
+            parts = [board.material(pf, start, end, lambda cid: share.owner_map(pf).get(cid) == acct)]
+        peers, missed = getattr(pf, "peers", None), []
+        if peers and acct is None:            # 主人：别的电脑上的对话也拉（访客只看这台上自己的）
+            from urllib.parse import quote
+            for m in peers.machines():
+                if m["me"] or m.get("shared") or m.get("hub") and peers.hub and peers.hub.get("server"):
+                    continue
+                if not m.get("online"):
+                    missed.append(m["name"])
+                    continue
+                try:
+                    st, _, data = peers.forward(m["id"], "GET", f"/api/board/material?from={quote(start)}&to={quote(end)}", b"", {})
+                    text = json.loads(data).get("material") if st == 200 else None
+                except Exception:
+                    text = None
+                if text is None:
+                    missed.append(m["name"])
+                elif text:
+                    parts.append(f"## 「{m['name']}」上的对话（打不开，以这里的材料为准）\n\n{text}")
+        body = "\n\n".join(p for p in parts if p)
+        head = f"{start}" + (f" 到 {end}" if end != start else "") + " 的对话材料"
+        if missed:
+            head += f"（{'、'.join(missed)} 没连上，那边的对话不在里面）"
+        return head + "：\n\n" + (body or "这段时间没有对话。")
+
+    @tool("review_material", "复盘用：按日期范围拉用户这段时间各个对话的材料：标题、哪个 Agent、什么时候聊的、一句话进度、"
+          "用户说的话、最后的回答，每个对话带链接和 open_chat 的编号（要看全过程再用 open_chat 打开）。"
+          "用户让你复盘、总结某段时间的工作时用。start、end 写成 2026-01-31 这样，一天就两个都写同一天。",
+          {"type": "object", "properties": {"start": {"type": "string", "description": "从哪天，含这天"},
+                                             "end": {"type": "string", "description": "到哪天，含这天"}},
+           "required": ["start", "end"]})
+    async def review_material(args):
+        try:
+            start, end = board.check_range(args.get("start"), args.get("end"))
+        except ValueError as e:
+            return _err(str(e))
+        text = await asyncio.to_thread(collect, start, end)
+        pf.review_range(chat.chat_id, start, end)
+        return {"content": [{"type": "text", "text": text}]}
+
+    return review_material
 
 
 def _app_tools(chat, pf):

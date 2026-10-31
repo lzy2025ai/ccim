@@ -5,7 +5,7 @@
   任务面板里点「知道了」记 dismissed_at：不再等你处理，但没打开过的仍算未读（#65）。
 - 一句话进度：每轮回答完（网页对话，不含 @ 的子对话、项目、定时任务）用小模型总结，存在 meta 的 brief。
 """
-import asyncio, datetime, logging, os, time, uuid
+import asyncio, datetime, logging, os, re, time, uuid
 
 from . import tokens, usage
 from .schedules import listed
@@ -208,30 +208,81 @@ def day(pf, d, keep=None, everything=True):
     if tokens.ready():
         tk = tokens.days().get(d) or [0, 0] if everything else \
             [sum(r["tokens"][0] for r in rows), sum(r["tokens"][1] for r in rows)]
-    reviews = [pf.chat_view(cid) for cid, m in chats.items() if m.get("review") == d and _counted(cid, m, keep)]
-    return {"date": d, "chats": rows, "hours": hours, "tokens": tk, "reviews": reviews}   # 那天的复盘对话（#268）
+    reviews = [pf.chat_view(cid) for cid, m in chats.items() if covers(m, d) and _counted(cid, m, keep)]
+    return {"date": d, "chats": rows, "hours": hours, "tokens": tk, "reviews": reviews}   # 复盘到这一天的对话（#268、#364）
 
 
-# ----- 复盘（#241） -----
+# ----- 复盘（#241、#364） -----
+# 复盘是一个普通对话：用户发 `/review 要求`（任务面板某一天的「复盘」按钮会把模板填进输入框），
+# Agent 自己从要求里判断日期范围，用 review_material 按范围拉材料（各台电脑上的），要细看再 open_chat。
+# meta 的 review 记它复盘过的日期范围（Agent 每次拉材料时合进去）；以前按天的老复盘 review 是那一天的日期。
+
+DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+COMMAND = re.compile(r"/review(?=\s|$)\s*")
+RANGE_MAX = 92                                # 一次最多拉这么多天
 
 RULES = """写法：先结论后证据，每个判断点名是哪个对话；没发现就说没有，不为了凑格式硬写；每部分最多 3–5 条。
-材料不够时用 search_chats / open_chat 去看那个对话；查不到就写「不确定」，不要猜。"""
+材料不够时用 open_chat 打开那个对话看全过程；查不到就写「不确定」，不要猜。"""
+# 材料里每个对话有链接，提到时写成能点的（#284）
+LINK_NOTE = "材料里每个对话都带了链接。提到某个对话时，把它写成 [对话标题](链接)，点了就能打开那个对话。"
+WEEKDAYS = "一二三四五六日"
 
-# 复盘的几套视角（#263）：各回答一个问题，互不重叠；每次复盘是一个新的独立对话
+
+def note(now=None):
+    """接在 /review 要求后面交给 Agent、不进记录的说明：今天几号、怎么拉材料、怎么写。"""
+    t = datetime.date.fromtimestamp(now or time.time())
+    return (f"（这是一次复盘，上面是用户的要求。今天是 {t.isoformat()}，星期{WEEKDAYS[t.weekday()]}。"
+            "先从要求里判断要复盘哪段日期（没说就是今天；「这一周」从本周一算起，「上周」是上周一到上周日），"
+            "再用 review_material 按日期范围拉这段时间各个对话的材料（标题、进度、用户说的话、最后的回答），"
+            "回答开头写一句复盘的是哪几天。）\n\n" + RULES + "\n\n" + LINK_NOTE)
+
+
+def span(m):
+    """这个复盘对话覆盖的日期范围 (起, 止)；不是复盘、或者还没拉过材料的返回 None。"""
+    r = m.get("review")
+    if isinstance(r, str) and DAY.fullmatch(r):
+        return r, r
+    if isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) and DAY.fullmatch(x) for x in r):
+        return r[0], r[1]
+    return None
+
+
+def covers(m, d):
+    s = span(m)
+    return bool(s and s[0] <= d <= s[1])
+
+
+def merged(m, start, end):
+    """拉了一次 start～end 的材料后，这个复盘对话覆盖的范围（和以前的合起来）。"""
+    s = span(m)
+    return [min(start, s[0]), max(end, s[1])] if s else [start, end]
+
+
+def check_range(start, end):
+    """检查日期范围，返回 (起, 止)；不对抛 ValueError。"""
+    start, end = (start or "").strip(), (end or start or "").strip()
+    try:
+        a, b = datetime.date.fromisoformat(start), datetime.date.fromisoformat(end)
+    except ValueError:
+        raise ValueError("日期写成 2026-01-31 这样。")
+    if a > b:
+        a, b = b, a
+    if (b - a).days >= RANGE_MAX:
+        raise ValueError(f"一次最多拉 {RANGE_MAX} 天，分几段拉。")
+    return a.isoformat(), b.isoformat()
+
+
+# 任务面板「复盘」按钮旁边的提示词模板（#263 的几套视角，#364 起是模板）：{date} 换成那一天
 VIEWS = [
     {"id": "summary", "name": "工作总结", "desc": "做成了什么、卡在哪、明天先做什么",
-     "prompt": f"""帮我复盘 {{date}} 这一天。后面附了这一天各个对话的材料：我说了什么、一句话进度、最后的回答。
-
-用要点写，分三部分：
+     "prompt": """复盘 {date} 这一天。用要点写，分三部分：
 ## 今天做成了
 ## 卡在我这里（要我决定、确认或提供什么）
 ## 明天建议先做
 
-也可以搜你以前的复盘，连着几天没动的事要指出来。
-
-{RULES}"""},
+也可以看看前几天，连着几天没动的事要指出来。"""},
     {"id": "rethink", "name": "换个角度看看", "desc": "跳出原来的思路，看方向本身还对不对",
-     "prompt": f"""复盘 {{date}} 这一天。你是没参与过这些对话的旁观者：不要顺着对话里原来的思路往下想，只看事实。后面附了这一天各个对话的材料。
+     "prompt": """复盘 {date} 这一天。你是没参与过这些对话的旁观者：不要顺着对话里原来的思路往下想，只看事实。
 
 ## 可能该退一步的事
 哪些事在原方案上反复打补丁、越修越多？
@@ -242,11 +293,9 @@ VIEWS = [
 ## 如果从零开始
 今天重做这件事，还会这么选吗？继续原方向和换方向，各要付出什么？
 
-只挑真正值得重新审视的一两件事，不用每件都审。
-
-{RULES}"""},
+只挑真正值得重新审视的一两件事，不用每件都审。"""},
     {"id": "time", "name": "时间花在哪", "desc": "投入和产出对不对得上",
-     "prompt": f"""复盘 {{date}} 这一天的投入。后面附了这一天各个对话的材料，带着每个对话几点到几点。
+     "prompt": """复盘 {date} 这一天的投入，看每个对话几点到几点。
 
 ## 时间去哪了
 按事情粗分，标出哪些是主动推进、哪些是被动应付。
@@ -256,11 +305,9 @@ VIEWS = [
 有没有频繁切换、同时开太多、聊了很多却没有产出的？
 ## 明天怎么分配更好
 
-不评价人，只看投入和产出对不对得上。
-
-{RULES}"""},
+不评价人，只看投入和产出对不对得上。"""},
     {"id": "repeat", "name": "反复出现的问题", "desc": "跨几天看，哪些问题不是偶然",
-     "prompt": f"""复盘 {{date}} 这一天，但要跨几天看。先用 search_chats 搜最近 7 天的复盘和相关对话，再看后面附的这一天的材料。
+     "prompt": """复盘 {date} 和它前面 7 天，看哪些问题不是偶然。
 
 ## 重复出现的卡点
 同一类问题出现了几次，各在哪几天、哪几个对话。
@@ -271,11 +318,9 @@ VIEWS = [
 ## 建议固定下来的做法
 哪一条变成规则、清单或 Skill，以后就能避免。
 
-只写有两次以上证据的，一次的不算。
-
-{RULES}"""},
+只写有两次以上证据的，一次的不算。"""},
     {"id": "agent", "name": "我和 Agent 怎么配合", "desc": "怎么用 Agent 更省力",
-     "prompt": f"""复盘 {{date}} 这一天我和 Agent 的配合。后面附了这一天各个对话的材料：我说的话和它最后的回答。需要时打开对话看全过程，也可以搜近几天的对话。
+     "prompt": """复盘 {date} 这一天我和 Agent 的配合，看我说的话和它最后的回答，需要时打开对话看全过程。
 
 ## 说得不清楚的指令
 哪几次因为我没说清楚，它做偏了或者来回确认。
@@ -285,15 +330,13 @@ VIEWS = [
 ## 一条最值得马上改的
 给出可以直接粘贴的角色说明或 Skill 文本。
 
-对我和对它都要坦率，不客套。
-
-{RULES}"""},
+对我和对它都要坦率，不客套。"""},
 ]
 VIEW_MAX, NAME_MAX, PROMPT_MAX = 12, 20, 4000
 
 
 def views(cfg):
-    """复盘视角：自带的，叠上用户改过、新加的（全局设置 review_views，按顺序存）。
+    """复盘的提示词模板（#364 以前叫视角）：自带的，叠上用户改过、新加的（全局设置 review_views，按顺序存）。
     以前只有一套时存的 review_prompt，当作改过的「工作总结」。以后再加自带视角，没存过的接在后面。"""
     builtin = {v["id"]: v for v in VIEWS}
     saved = cfg.get("review_views")
@@ -314,20 +357,20 @@ def views(cfg):
 
 
 def clean_views(items):
-    """网页存回来的视角：检查一遍，自带的没改就不存（以后默认的更新了能跟上），新加的给个编号。"""
+    """网页存回来的模板：检查一遍，自带的没改就不存（以后默认的更新了能跟上），新加的给个编号。"""
     if not isinstance(items, list) or not items:
-        raise ValueError("至少要有一套复盘视角。")
+        raise ValueError("至少要有一个模板。")
     if len(items) > VIEW_MAX:
-        raise ValueError(f"复盘视角最多 {VIEW_MAX} 套。")
+        raise ValueError(f"模板最多 {VIEW_MAX} 个。")
     builtin = {v["id"]: v for v in VIEWS}
     out, names = [], set()
     for it in items:
         name = " ".join(str(it.get("name") or "").split())[:NAME_MAX]
         prompt = str(it.get("prompt") or "").strip()[:PROMPT_MAX]
         if not name:
-            raise ValueError("每套视角都要有名字。")
+            raise ValueError("每个模板都要有名字。")
         if name in names:
-            raise ValueError(f"有两套都叫「{name}」。")
+            raise ValueError(f"有两个模板都叫「{name}」。")
         names.add(name)
         b = builtin.get(it.get("id"))
         if not b and not prompt:
@@ -342,32 +385,62 @@ def clean_views(items):
 
 
 MATERIAL_MAX = 60000
-# 接在复盘视角后面（用户改过的视角也带上）：材料里每个对话有链接，提到时写成能点的（#284）
-LINK_NOTE = "材料里每个对话都带了链接。提到某个对话时，把它写成 [对话标题](链接)，点了就能打开那个对话。"
 
 
-def material(pf, d, keep=None):
-    """某一天的复盘材料：每个对话的标题、谁、几点、一句话进度、那天我说的话、最后的回答。"""
+def _clock(ts, multi):
+    return time.strftime("%m-%d %H:%M" if multi else "%H:%M", time.localtime(ts))
+
+
+def material(pf, start, end, keep=None, local=True):
+    """start～end 这几天的复盘材料（#364，以前只有一天）：每个对话的标题、谁、什么时候、一句话进度、这几天我说的话、最后的回答。
+    local：给这台电脑上的 Agent 用，带 open_chat 的编号（别的电脑上的对话它打不开）。"""
     from .agents import get as agent_get
-    out = []
-    for r in day(pf, d, keep)["chats"]:
-        rows = [x for x in pf.channel.logs.read(r["id"])
-                if time.strftime("%Y-%m-%d", time.localtime(x.get("at") or x.get("done_at") or 0)) == d]
-        asks = [ask_preview(x.get("text")) for x in rows if x.get("type") == "user" and not x.get("by") and x.get("text")]
-        ans = next((x.get("text") for x in reversed(rows) if x.get("type") == "answer" and x.get("text")), "")
-        a = agent_get(r["agent"]) if r.get("agent") else None
-        head = f"### {r['title']}（{a['name'] if a else '临时对话'}，{time.strftime('%H:%M', time.localtime(r['first']))}"
-        head += f"–{time.strftime('%H:%M', time.localtime(r['last']))}）"
-        part = [head, "链接：" + (f"#/agents/{quote(r['agent'], safe='')}/{quote(r['id'], safe='')}" if r.get("agent")
-                                 else f"#/chats/{quote(r['id'], safe='')}")]   # 和网页 boardHref 一样（#284）
-        if r.get("brief"):
-            part.append(f"进度：{r['brief']}")
-        part += [f"我说：{t[:200]}" for t in asks[-6:]]
-        if ans:
-            part.append("最后的回答：" + " ".join(ans.split())[:600])
-        out.append("\n".join(part))
-    text = "\n\n".join(out)
-    return text[:MATERIAL_MAX]
+    multi = start != end
+    found = []
+    for cid, m in pf.chats().items():
+        if not _counted(cid, m, keep) or m.get("mention_of") or m.get("review"):
+            continue
+        spans = summary(pf.channel.logs, cid).get("spans") or {}
+        days = sorted(d for d in spans if start <= d <= end)
+        if days:
+            found.append((min(spans[d][0] for d in days), max(spans[d][1] for d in days), len(days), cid, m))
+    found.sort(key=lambda x: x[0])
+
+    def build(n_ask, ask_len, ans_len):
+        out = []
+        for first, last, n_days, cid, m in found:
+            rows = [x for x in pf.channel.logs.read(cid)
+                    if start <= time.strftime("%Y-%m-%d", time.localtime(x.get("at") or x.get("done_at") or 0)) <= end]
+            asks = [ask_preview(x.get("text")) for x in rows if x.get("type") == "user" and not x.get("by") and x.get("text")]
+            ans = next((x.get("text") for x in reversed(rows) if x.get("type") == "answer" and x.get("text")), "")
+            a = agent_get(m["agent"]) if m.get("agent") else None
+            head = f"### {m.get('title') or '新对话'}（{a['name'] if a else '临时对话'}，{_clock(first, multi)}–{_clock(last, multi)}"
+            head += f"，聊了 {n_days} 天）" if n_days > 1 else "）"
+            part = [head, "链接：" + (f"#/agents/{quote(m['agent'], safe='')}/{quote(cid, safe='')}" if m.get("agent")
+                                     else f"#/chats/{quote(cid, safe='')}")]   # 和网页 boardHref 一样（#284）
+            if local:
+                part.append(f"open_chat id={cid}")
+            if m.get("brief"):
+                part.append(f"进度：{m['brief']}")
+            if len(asks) > n_ask:
+                part.append(f"（这几天我说了 {len(asks)} 句，下面是最后 {n_ask} 句）" if multi else f"（我说了 {len(asks)} 句，下面是最后 {n_ask} 句）")
+            part += [f"我说：{t[:ask_len]}" for t in asks[-n_ask:]]
+            if ans:
+                part.append("最后的回答：" + " ".join(ans.split())[:ans_len])
+            out.append("\n".join(part))
+        return out
+
+    parts = build(6, 200, 600)
+    if len("\n\n".join(parts)) > MATERIAL_MAX:          # 范围长、对话多：每个对话少带一点
+        parts = build(3, 120, 300)
+    text, kept = "", 0
+    for p in parts:
+        if len(text) + len(p) + 2 > MATERIAL_MAX:
+            break
+        text, kept = text + ("\n\n" if text else "") + p, kept + 1
+    if kept < len(parts):
+        text += f"\n\n（太长了，后面还有 {len(parts) - kept} 个对话没列出来，把日期范围缩小分几次拉。）"
+    return text
 
 
 # ----- 一句话进度 -----

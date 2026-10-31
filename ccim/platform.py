@@ -25,6 +25,7 @@ from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
+from . import diary as diary_mod
 from .schedules import is_quiet as schedules_quiet, listed
 from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_path
 
@@ -548,6 +549,7 @@ class Platform:
             registry.write_state(self.home, board_seen_init=True)
         self.kb_wake = threading.Event()
         threading.Thread(target=self._kb_sync_loop, daemon=True).start()
+        threading.Thread(target=self._diary_flush_loop, daemon=True).start()   # 暂存的日记补写（#376）
         tokens.start()                        # 任务面板的 Token 用量（#240），第一次要读一会儿，放后台
         channel.events.tag = lambda ev: share.tag(self, ev)
 
@@ -1123,26 +1125,130 @@ class Platform:
         await b.on_message(inc)
 
     def diary(self, cid, text):
-        """/diary 内容（#363）：记进本机的日记，对话里留一张日记卡片（type=diary），不交给助手、不进它的上下文。"""
+        """/diary 内容（#363）：记进日记（存日记的那台电脑，#376），对话里留一张日记卡片（type=diary），不交给助手、不进它的上下文。
+        在请求线程里调：转给别的电脑要等，不占主循环。"""
         from . import diary as diary_mod
         content = diary_mod.parse(text) or ""
-        try:
-            v = self._external(cid) if (cid or "").startswith("x:") else self.chat_view(cid)
-        except Problem:
-            v = {}
-        title = v.get("title") or ""
-        where = f"{v['agent_name']}「{title}」" if v.get("agent_name") and title else f"「{title}」" if title else ""
-        rid = "d-" + uuid.uuid4().hex[:10]
-        logged = cid in self.chats()
-        try:
-            diary_mod.add(content, where, link=self.diary_link(cid, v, rid if logged else None))
-        except ValueError as e:
-            raise Problem(str(e))
-        except OSError:
-            raise Problem("日记没记上：文稿文件夹写不进去。")
+
+        def prep():
+            try:
+                v = self._external(cid) if (cid or "").startswith("x:") else self.chat_view(cid)
+            except Problem:
+                v = {}
+            title = v.get("title") or ""
+            where = f"{v['agent_name']}「{title}」" if v.get("agent_name") and title else f"「{title}」" if title else ""
+            rid = "d-" + uuid.uuid4().hex[:10]
+            logged = cid in self.chats()
+            return where, rid, logged, self.diary_link(cid, v, rid if logged else None)
+        where, rid, logged, link = self.call(prep)
+        r = self.diary_write(content, where, link=link)
         if logged:
-            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": rid, "text": content}))
-        return {"ok": True, "diary": True, "chat": cid}
+            self.call(lambda: self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": rid, "text": content})))
+        out = {"ok": True, "diary": True, "chat": cid}
+        if r.get("pending"):
+            out.update(pending=True, machine=r.get("machine"))
+        return out
+
+    def _machine_name(self, mid):
+        return next((m["name"] for m in self.peers.machines() if m["id"] == mid), "存日记的电脑")
+
+    def diary_write(self, text, where, at=None, link=None, here=False):
+        """记一条到存日记的那台电脑（#376）：是这台（或 here：别的电脑转来的）就写，否则转过去；
+        那台不在线先存在本机（diary.hold），连上后按原来的时间补写。返回 {date, time}，暂存的带 pending、machine。"""
+        from . import diary as diary_mod
+        from .peers import Offline
+        now = diary_mod.when(at)
+        home = self.peers.diary_home()
+        if here or home == self.peers.me["id"]:
+            if link and link.startswith("http://127.0.0.1:"):    # 别的电脑上的本机网址：换成这台的，在这台上点得开
+                link = self._web_root() + link[link.find("/", len("http://")):]
+            try:
+                r = diary_mod.add(text, where, now, link)
+            except ValueError as e:
+                raise Problem(str(e))
+            except OSError:
+                raise Problem("日记没记上：文稿文件夹写不进去。")
+            return {"date": r["date"], "time": r["time"]}
+        if not (text or "").strip():
+            raise Problem("在 /diary 后面写上要记的内容。")
+        item = {"text": text, "where": where, "at": now.isoformat(timespec="seconds"), "link": link}
+        try:
+            if not home:                          # 还不知道存在哪台（刚加入服务器上的总控）：先存着
+                raise Offline()
+            st, _, data = self.peers.forward(home, "POST", "/api/diary/add", json.dumps(dict(item, here=True)).encode(),
+                                             {"Content-Type": "application/json"})
+        except Offline:
+            st, data = 503, b"{}"
+        if st == 200:
+            return json.loads(data)
+        if st in (404, 502, 503):                 # 不在线、还没升级到能收日记的版本：先存着
+            diary_mod.hold(item)
+            return {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"), "pending": True,
+                    "machine": self._machine_name(home)}
+        try:
+            msg = json.loads(data).get("error")
+        except ValueError:
+            msg = None
+        raise Problem(msg or "日记没记上，再试一次。")
+
+    def diary_query(self, op, args, here=False):
+        """Agent 查日记（#376）：去存日记的那台查。那台不在线时说清楚查不到。"""
+        from . import diary as diary_mod
+        from .peers import Offline
+        home = self.peers.diary_home()
+        args = {k: args.get(k) for k in ("start", "end", "query")}
+        if here or home == self.peers.me["id"]:
+            return {"text": diary_mod.run_query(op, args)}
+        if not home:
+            raise Problem("还不知道日记存在哪台电脑，等这台电脑连上总控再查。")
+        name = self._machine_name(home)
+        try:
+            st, _, data = self.peers.forward(home, "POST", "/api/diary/query", json.dumps(dict(args, op=op, here=True)).encode(),
+                                             {"Content-Type": "application/json"})
+        except Offline:
+            raise Problem(f"日记存在「{name}」上，它现在没连上，查不到。")
+        try:
+            r = json.loads(data)
+        except ValueError:
+            r = {}
+        if st == 200 and isinstance(r.get("text"), str):
+            return {"text": r["text"]}
+        if st == 404:
+            raise Problem(f"日记存在「{name}」上，那台的 ccim 版本较旧，先升级再查。")
+        raise Problem(r.get("error") or f"日记存在「{name}」上，现在查不到。")
+
+    def diary_home_view(self):
+        """设置页：日记存在哪台电脑，能选哪几台。"""
+        mid = self.peers.diary_home()
+        ms = [{"id": m["id"], "name": m["name"], "online": m.get("online", True)} for m in self.peers.machines() if not m.get("shared")]
+        return {"machine": mid, "machines": ms}
+
+    def _diary_flush_loop(self):
+        """暂存的日记（存日记的电脑当时不在线）：连上了就按原来的时间补写（#376）。"""
+        from . import diary as diary_mod
+        while True:
+            time.sleep(15)
+            try:
+                home = self.peers.diary_home()
+                if not home or not self.peers.online(home) or not os.path.exists(diary_mod._pending_file()):
+                    continue
+                for item in diary_mod.take_pending():
+                    try:
+                        r = self.diary_write(item.get("text") or "", item.get("where") or "", item.get("at"), item.get("link"))
+                    except Problem:
+                        log.warning("暂存的日记写不进去，丢掉：%s", item.get("at"))
+                        continue
+                    except Exception:
+                        log.warning("补写日记出错", exc_info=True)
+                        diary_mod.hold(item)
+                        continue
+                    if not r.get("pending"):
+                        log.info("补写了 %s 的日记", item.get("at"))
+            except Exception:
+                log.warning("补写日记出错", exc_info=True)
+
+    def _web_root(self):
+        return f"http://127.0.0.1:{registry.read_state(self.home).get('port') or self.entry.get('port') or PORT}"
 
     def diary_link(self, cid, v, rid):
         """日记里回到记它的地方的完整网址（#363）：打开那个对话、滚到那张日记卡片（rid，按记录 id 找，退回删掉了就只打开对话）。
@@ -1153,8 +1259,7 @@ class Platform:
         if m.get("side_of"):
             cid, rid, v = m["side_of"], None, {"agent": self.meta(m["side_of"]).get("agent")}
         hub = (getattr(getattr(self, "peers", None), "hub", None) or {}).get("url") or ""
-        root = hub if hub.startswith("https://") else \
-            f"http://127.0.0.1:{registry.read_state(self.home).get('port') or self.entry.get('port') or PORT}"
+        root = hub if hub.startswith("https://") else self._web_root()
         aid = v.get("agent")
         path = f"#/agents/{quote(aid, safe='')}/{quote(cid, safe='')}" if aid else f"#/chats/{quote(cid, safe='')}"
         return f"{root.rstrip('/')}/{path}" + (f"?m={rid}" if rid else "")
@@ -2569,6 +2674,8 @@ def _handler(pf):
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
+                "/api/diary/home": lambda: pf.diary_home_view(),         # 日记存在哪台电脑（#376）
+                "/api/diary/info": lambda: {"path": diary_mod.root(), "apps": diary_mod.apps()},   # 这台上的日记文件夹、能用什么打开
             }
             if u.path in ("/api/state", "/api/agent", "/api/agent/recent", "/api/chats"):     # 只读、又要把各个文件查很多遍的：一次请求里只读一遍
                 fn = routes[u.path]
@@ -2645,6 +2752,11 @@ def _handler(pf):
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
                 "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
+                # 日记存在哪台电脑（#376）：add / query 是飞书、微信的进程和别的电脑转来的（here），open 在这台上打开日记文件夹
+                "/api/diary/add": lambda: pf.diary_write(b("text") or "", b("where") or "", b("at"), b("link"), bool(b("here"))),
+                "/api/diary/query": lambda: pf.diary_query(b("op"), body, bool(b("here"))),
+                "/api/diary/home": lambda: {"machine": pf.peers.set_diary_home(str(b("machine") or ""))},
+                "/api/diary/open": lambda: diary_mod.open_in(b("app")),
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
@@ -2830,7 +2942,7 @@ def diary_of(pf, cid, text, files, acct):
         raise Problem("共享的电脑上不能记日记。")
     if files:
         raise Problem("日记只能记文字。")
-    return pf.call(pf.diary, cid, text)
+    return pf.diary(cid, text)
 
 
 def send(pf, cid, text, files, ctx=None, refs=None, acct=None):

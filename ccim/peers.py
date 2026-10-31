@@ -92,6 +92,24 @@ def identity():
     return m
 
 
+def diary_home_file():
+    """日记存在哪台电脑（#376），只看本机的文件，飞书、微信的进程也能用：加入了别人的看总控上次告诉的
+    （总控还没说过：局域网里的总控默认就是它，服务器上的还不知道，返回 None），总控看自己存的设置（设的那台不在了就是自己）。"""
+    me = identity()["id"]
+    hub = _load("hub.json", None)
+    if hub:
+        return _told(hub)
+    mid = _load("diary.json", {}).get(OWNER)
+    return mid if mid and (mid == me or mid in _load("peers.json", {})) else me
+
+
+def _told(hub):
+    c = _load("diary-home.json", {})
+    if c.get("hub") == hub.get("hub_id") and c.get("machine"):
+        return c["machine"]
+    return None if hub.get("server") else hub.get("hub_id")
+
+
 def lan_ips():
     ips = []
     try:
@@ -611,6 +629,54 @@ class Peers:
                     return mid
         return None
 
+    # ----- 日记存在哪台电脑（#376） -----
+
+    def diary_home(self, account=None):
+        """主人（服务器总控上是 account）的日记存在哪台电脑。总控上存设置（diary.json，按账号）：没设或那台被移除了，
+        局域网的总控是它自己，服务器上是这个账号最早加入的那台。加入的电脑用总控在长轮询里告诉的。"""
+        if not self.is_hub():
+            return _told(self.hub)
+        acct = account or OWNER
+        own = [m["id"] for m in self.machines(acct, own=True) if not m.get("shared")]
+        mid = _load("diary.json", {}).get(acct)
+        return mid if mid in own else (own[0] if own else None)
+
+    def set_diary_home(self, mid, account=None):
+        """改日记存在哪台电脑，返回改后的。加入的电脑交给总控改（/peer/diary）。"""
+        if not self.is_hub():
+            try:
+                status, _, data = self._hub_request("/peer/diary", json.dumps({"machine": mid}).encode(), {}, 15)
+            except (OSError, http.client.HTTPException):
+                raise ValueError("连不上总控，等连上再改。")
+            if status == 404:
+                raise ValueError("总控上的 ccim 版本较旧，先升级总控。")
+            r = json.loads(data or b"{}")
+            if status != 200:
+                raise ValueError(r.get("error") or "没改成，再试一次。")
+            self._diary_told(r.get("machine"))
+            return r.get("machine")
+        acct = account or OWNER
+        if mid not in [m["id"] for m in self.machines(acct, own=True) if not m.get("shared")]:
+            raise ValueError("没有这台电脑。")
+        with self.lock:
+            d = _load("diary.json", {})
+            d[acct] = mid
+            _save("diary.json", d)
+            for n in self.nodes:              # 叫在线的电脑马上来取（长轮询的回应里带着改后的）
+                if self.online(n):
+                    try:
+                        self._box(n).put_nowait({"kind": "diary"})
+                    except queue.Full:
+                        pass
+        self._emit_machines()
+        return mid
+
+    def _diary_told(self, mid):
+        """总控说日记存在 mid：记下来（飞书、微信的进程、重启后都看这个文件）。"""
+        with self.lock:                       # 长轮询和改设置的请求可能同时到
+            if mid and self.hub and _load("diary-home.json", {}) != {"hub": self.hub["hub_id"], "machine": mid}:
+                _save("diary-home.json", {"hub": self.hub["hub_id"], "machine": mid})
+
     # ----- 离线时先存着的消息 -----
 
     def queue_out(self, mid, method, path, body):
@@ -751,6 +817,8 @@ class Peers:
                 msg = json.loads(data)
                 self.machines_from_hub = msg.get("machines") or self.machines_from_hub
                 self.hub_gzip = bool(msg.get("gzip"))
+                if msg.get("diary"):
+                    self._diary_told(msg["diary"])
                 for m in msg.get("msgs") or []:
                     if m["kind"] == "ev":
                         self._touched(m["ev"])
@@ -884,6 +952,12 @@ def _handler(peers):
                         peers._touched(dict(ev, _m=mid))
                         peers.pf.channel.events.publish(dict(ev, _m=mid))
                     return self._reply(200, {}, key, nonce)
+                if path == "/peer/diary":            # 加入的电脑上改日记存在哪台（#376）：按它所属的账号
+                    try:
+                        m = peers.set_diary_home(str(json.loads(body or b"{}").get("machine") or ""), peers.owner_of(mid))
+                    except ValueError as e:
+                        return self._reply(400, {"error": str(e)}, key, nonce)
+                    return self._reply(200, {"machine": m}, key, nonce)
                 if path == "/peer/call":
                     target = self.headers.get("X-Target") or ""
                     method, p = self.headers.get("X-Method") or "GET", self.headers.get("X-Path") or "/"
@@ -925,7 +999,8 @@ def _handler(peers):
                 w = peers.waiting.get(m.get("rid") or "")
                 if w:
                     w[2].set()
-            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs, "gzip": True}, key, nonce)
+            return self._reply(200, {"machines": peers.machines(peers.owner_of(mid)), "msgs": msgs, "gzip": True,
+                                     "diary": peers.diary_home(peers.owner_of(mid))}, key, nonce)
 
     return Handler
 

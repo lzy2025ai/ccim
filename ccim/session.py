@@ -1450,7 +1450,7 @@ def _start_work(chat, pf):
 
 
 def _diary_tools():
-    """用户的日记（#363）：用户在对话里用 /diary 记的，按天存在这台电脑上，只读。"""
+    """用户的日记（#363）：用户在对话里用 /diary 记的，按天存在一台电脑上（几台电脑时去那台查，#376），只读。"""
     from . import diary
 
     async def run(fn, *a):
@@ -1465,13 +1465,13 @@ def _diary_tools():
           {"type": "object", "properties": {"start": {"type": "string", "description": "从哪天开始，YYYY-MM-DD"},
                                              "end": {"type": "string", "description": "到哪天为止（含这天），YYYY-MM-DD"}}})
     async def diary_read(args):
-        return await run(diary.read, args.get("start"), args.get("end"))
+        return await run(lambda: diary.query("read", start=args.get("start"), end=args.get("end")))
 
     @tool("diary_search", "按关键词搜用户的日记，几个词用空格分开，都出现在同一条里才算；结果新的在前，带日期和时间。"
           "标题里的链接点了回到记它的那个对话，提到某条时把链接原样写成 [文字](#/…)。",
           {"type": "object", "properties": {"query": {"type": "string", "description": "关键词"}}, "required": ["query"]})
     async def diary_search(args):
-        return await run(diary.search, args.get("query") or "")
+        return await run(lambda: diary.query("search", query=args.get("query") or ""))
 
     return [diary_read, diary_search]
 

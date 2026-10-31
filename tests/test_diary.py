@@ -124,9 +124,9 @@ class CommandTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        p = patch.dict(os.environ, {"HOME": self.tmp.name})
-        p.start()
-        self.addCleanup(p.stop)
+        for p in (patch.dict(os.environ, {"HOME": self.tmp.name}), patch.object(registry, "HOME", os.path.join(self.tmp.name, ".ccim"))):
+            p.start()
+            self.addCleanup(p.stop)
 
     def test_feishu_diary(self):
         b = FakeBridge()

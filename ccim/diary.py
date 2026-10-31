@@ -5,8 +5,14 @@
 网页里记的，「记在哪」写成 Markdown 链接，指向记它的那个对话里的那张日记卡片（完整网址，Obsidian 里点了用浏览器打开）；
 以前没带链接的照常读。
 助手用 diary_read / diary_search 两个工具查（session.py 的 _diary_tools）。
+
+几台电脑时日记集中存在一台上（#376，peers.diary_home）：平台进程按它转过去写、去查（Platform.diary_write / diary_query），
+那台不在线时先存进本机的 diary-pending.jsonl，连上后按原来的时间补写；飞书、微信的进程交给本机平台，平台没在运行也先存着。
+设置页能在那台电脑上用访达、VS Code、Obsidian 打开日记文件夹（apps / open_in）。
 """
-import datetime, os, re
+import datetime, json, os, platform as _platform, re, secrets, shutil, subprocess, threading
+
+from . import registry
 
 CMD = re.compile(r"^/(diary|日记)(?=\s|$)\s*", re.I)
 HEAD = re.compile(r"^## (\d{1,2}:\d{2})(?: · (.*))?$")
@@ -27,21 +33,308 @@ def parse(text):
     return (text or "").lstrip()[m.end():].strip() if m else None
 
 
+_lock = threading.Lock()
+
+
+def _minutes(t):
+    h, m = t.split(":")
+    return int(h) * 60 + int(m)
+
+
 def add(text, where, now=None, link=None):
-    """记一条，返回 {date, time, where, path}。link：回到记它的地方的完整网址（网页里记的才有）。"""
+    """记一条，返回 {date, time, where, path}。link：回到记它的地方的完整网址（网页里记的才有）。
+    now：记的时间（别的电脑记的、暂存后补写的用原来的时间，#376）：写进那天的文件，比已有的早就插到它们前面。"""
     text = (text or "").strip()
     if not text:
         raise ValueError("在 /diary 后面写上要记的内容。")
     now = now or datetime.datetime.now()
     d, t = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
-    os.makedirs(root(), exist_ok=True)
     f = os.path.join(root(), d + ".md")
     where = " ".join((where or "").split())
     label = f" · [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · {where}" if where else ""
-    new = not os.path.exists(f) or os.path.getsize(f) == 0
-    with open(f, "a", encoding="utf-8") as fh:
-        fh.write(("" if new else "\n") + f"## {t}{label}\n\n{text}\n")
+    block = f"## {t}{label}\n\n{text}\n"
+    with _lock:
+        os.makedirs(root(), exist_ok=True)
+        try:
+            with open(f, encoding="utf-8") as fh:
+                old = fh.read()
+        except FileNotFoundError:
+            old = ""
+        pos, off = None, 0
+        for ln in old.splitlines(keepends=True):     # 第一条比它晚的标题
+            m = HEAD.match(ln.rstrip("\r\n"))
+            if m and _minutes(m.group(1)) > _minutes(t):
+                pos = off
+                break
+            off += len(ln)
+        if pos is None:                              # 最常见：追加在最后
+            with open(f, "a", encoding="utf-8") as fh:
+                fh.write(("" if not old.strip() else "\n" if old.endswith("\n") else "\n\n") + block)
+        else:
+            tmp = f + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(old[:pos] + block + "\n" + old[pos:])
+            os.replace(tmp, f)
     return {"date": d, "time": t, "where": where, "path": f}
+
+
+def when(at):
+    """传来的时间（ISO 写法）→ datetime；没有或不对就是现在。"""
+    try:
+        return datetime.datetime.fromisoformat(str(at)) if at else datetime.datetime.now()
+    except ValueError:
+        return datetime.datetime.now()
+
+
+# ---------- 存在哪台电脑（#376） ----------
+
+def _pending_file():
+    return os.path.join(registry.HOME, "diary-pending.jsonl")
+
+
+def hold(item):
+    """存日记的电脑不在线：先存在本机，平台连上它以后补写（take_pending）。几个进程都可能写，一行一条追加。"""
+    os.makedirs(registry.HOME, exist_ok=True)
+    with open(_pending_file(), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def take_pending():
+    """取出暂存的（取走就从文件里拿掉）；没写成的再 hold 回去。"""
+    f = _pending_file()
+    if not os.path.exists(f):
+        return []
+    work = f + f".{os.getpid()}"
+    try:
+        os.replace(f, work)
+    except OSError:
+        return []
+    out = []
+    with open(work, encoding="utf-8") as fh:
+        for ln in fh:
+            try:
+                out.append(json.loads(ln))
+            except ValueError:
+                pass
+    os.remove(work)
+    return out
+
+
+def _platform_api(path, body):
+    """交给本机的平台（飞书、微信的进程用）。平台没在运行抛 OSError；平台说不行抛 ValueError。"""
+    import urllib.error, urllib.request
+    from .platform import url
+    req = urllib.request.Request(url().rstrip("/") + path, data=json.dumps(body).encode(), method="POST",
+                                 headers={"X-CCIM": "1", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.load(e).get("error")
+        except ValueError:
+            msg = None
+        raise ValueError(msg or "日记出错了，再试一次。")
+    except urllib.error.URLError as e:
+        raise OSError(str(e))
+
+
+def _here():
+    """存日记的就是这台电脑（没加入别的电脑、或设的就是这台）。"""
+    from . import peers
+    return peers.diary_home_file() == peers.identity()["id"]
+
+
+def record(text, where):
+    """飞书、微信里记的（#376）：存日记的是这台就直接写；否则交给本机平台转过去，平台没在运行先存着。
+    返回 {date, time}，暂存的多一个 pending。"""
+    now = datetime.datetime.now()
+    if _here():
+        return add(text, where, now)
+    if not (text or "").strip():
+        raise ValueError("在 /diary 后面写上要记的内容。")
+    item = {"text": text, "where": where, "at": now.isoformat(timespec="seconds")}
+    try:
+        return _platform_api("/api/diary/add", item)
+    except OSError:
+        hold(item)
+        return {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"), "pending": True}
+
+
+def query(op, **kw):
+    """Agent 查日记（diary_read / diary_search）：存在这台就直接查，否则经本机平台去那台查。"""
+    if _here():
+        return read(kw.get("start"), kw.get("end")) if op == "read" else search(kw.get("query") or "")
+    try:
+        return _platform_api("/api/diary/query", dict(kw, op=op))["text"]
+    except OSError:
+        raise ValueError("日记存在另一台电脑上，这台电脑上的 ccim 网页平台没在运行，查不到。")
+
+
+def run_query(op, kw):
+    return read(kw.get("start"), kw.get("end")) if op == "read" else search(kw.get("query") or "")
+
+
+# ---------- 在那台电脑上打开日记文件夹（#376） ----------
+
+def _system():
+    return _platform.system()
+
+
+def _mac_app(name, bundle):
+    for d in ("/Applications", os.path.expanduser("~/Applications")):
+        if os.path.isdir(os.path.join(d, name + ".app")):
+            return True
+    try:
+        r = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{bundle}'"], capture_output=True, text=True, timeout=3)
+        return bool(r.stdout.strip())
+    except Exception:
+        return False
+
+
+def _win_exe(*rel):
+    for base in (os.environ.get("LOCALAPPDATA"), os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        for r in rel:
+            p = os.path.join(base or "", r)
+            if base and os.path.isfile(p):
+                return p
+    return None
+
+
+def _win_vscode():
+    return _win_exe(os.path.join("Programs", "Microsoft VS Code", "Code.exe"), os.path.join("Microsoft VS Code", "Code.exe"))
+
+
+def _win_obsidian():
+    if _win_exe(os.path.join("Programs", "Obsidian", "Obsidian.exe"), os.path.join("Obsidian", "Obsidian.exe")):
+        return True
+    try:
+        import winreg
+        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "obsidian"))
+        return True
+    except Exception:
+        return False
+
+
+def apps():
+    """这台电脑上能打开日记文件夹的：[{id, name}]，没装的不列。"""
+    sysname = _system()
+    out = [{"id": "files", "name": {"Darwin": "访达", "Windows": "资源管理器"}.get(sysname, "文件管理器")}]
+    if sysname == "Darwin":
+        code, obs = _mac_app("Visual Studio Code", "com.microsoft.VSCode"), _mac_app("Obsidian", "md.obsidian")
+    elif sysname == "Windows":
+        code, obs = bool(_win_vscode() or shutil.which("code")), _win_obsidian()
+    else:
+        code, obs = bool(shutil.which("code")), bool(shutil.which("obsidian"))
+    if code:
+        out.append({"id": "vscode", "name": "VS Code"})
+    if obs:
+        out.append({"id": "obsidian", "name": "Obsidian"})
+    return out
+
+
+def _open_url(u):
+    sysname = _system()
+    if sysname == "Darwin":
+        subprocess.run(["open", u], capture_output=True, timeout=15)
+    elif sysname == "Windows":
+        os.startfile(u)
+    else:
+        subprocess.Popen(["xdg-open", u], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def obsidian_config():
+    """Obsidian 记库列表的文件。"""
+    sysname = _system()
+    if sysname == "Darwin":
+        return os.path.expanduser("~/Library/Application Support/obsidian/obsidian.json")
+    if sysname == "Windows":
+        return os.path.join(os.environ.get("APPDATA") or "", "obsidian", "obsidian.json")
+    return os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "obsidian", "obsidian.json")
+
+
+def obsidian_running():
+    """Obsidian 开着吗：它开着时会改写库列表，这时不去动。看不出来就当开着。"""
+    sysname = _system()
+    try:
+        if sysname == "Windows":
+            r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Obsidian.exe"], capture_output=True, text=True, timeout=5)
+            return "obsidian.exe" in r.stdout.lower()
+        r = subprocess.run(["pgrep", "-x", "Obsidian" if sysname == "Darwin" else "obsidian"], capture_output=True, timeout=5)
+        return r.returncode == 0
+    except Exception:
+        return True
+
+
+def obsidian_vault(folder, cfg=None, running=None):
+    """日记文件夹在 Obsidian 里的库编号：已经是库就用它；不是的，Obsidian 没开着时加进库列表（先备份原文件）。
+    加不了返回 None。"""
+    cfg = cfg or obsidian_config()
+    real = os.path.realpath(folder)
+    try:
+        with open(cfg, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        data = None
+    except (OSError, ValueError):
+        return None                              # 读不懂的不碰
+    if data is not None and not isinstance(data, dict):
+        return None
+    vaults = (data or {}).get("vaults")
+    if vaults is not None and not isinstance(vaults, dict):
+        return None
+    for vid, v in (vaults or {}).items():
+        if isinstance(v, dict) and isinstance(v.get("path"), str) and os.path.realpath(v["path"]) == real:
+            return vid
+    if not os.path.isdir(os.path.dirname(cfg)):   # 没打开过 Obsidian：不替它建配置
+        return None
+    if running if running is not None else obsidian_running():
+        return None
+    vid = secrets.token_hex(8)
+    data = dict(data or {})
+    data["vaults"] = dict(vaults or {}, **{vid: {"path": folder, "ts": int(datetime.datetime.now().timestamp() * 1000)}})
+    if os.path.exists(cfg):
+        shutil.copy2(cfg, cfg + ".ccim-bak")
+    tmp = cfg + ".ccim-tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False)
+    os.replace(tmp, cfg)
+    return vid
+
+
+def open_in(app):
+    """在这台电脑上用 app 打开日记文件夹。返回 {}；Obsidian 没能直接打开这个库时返回 {"pick": True}（打开了选库的界面）。"""
+    if app not in {a["id"] for a in apps()}:
+        raise ValueError("这台电脑上没有这个应用。")
+    d = root()
+    os.makedirs(d, exist_ok=True)
+    sysname = _system()
+    if app == "files":
+        if sysname == "Darwin":
+            subprocess.run(["open", d], capture_output=True, timeout=15)
+        elif sysname == "Windows":
+            os.startfile(d)
+        else:
+            subprocess.Popen(["xdg-open", d], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {}
+    if app == "vscode":
+        if sysname == "Darwin":
+            r = subprocess.run(["open", "-b", "com.microsoft.VSCode", d], capture_output=True, timeout=15)
+            if r.returncode:
+                subprocess.run(["open", "-a", "Visual Studio Code", d], capture_output=True, timeout=15)
+        elif sysname == "Windows":
+            exe = _win_vscode()
+            subprocess.Popen([exe, d] if exe else ["cmd", "/c", "code", d], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(["code", d], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {}
+    from urllib.parse import quote
+    vid = obsidian_vault(d)
+    if vid:
+        _open_url("obsidian://open?vault=" + quote(vid))
+        return {}
+    _open_url("obsidian://choose-vault")
+    return {"pick": True}
 
 
 def _entries(d):

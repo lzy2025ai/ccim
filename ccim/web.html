@@ -3364,6 +3364,7 @@ async function sendDiary(id, typed, qs, mid, quiet){
   try { r = await act(() => api("/api/chat/send", {id, text: "/diary " + withQuotes(qs, body), files: []}, mid)); }
   catch { return false; }
   if (r.queued) toast(`「${r.machine}」现在离线，上线后记上`);
+  else if (r.pending) toast(`已记下，「${r.machine}」现在离线，连上后写进日记`);
   else if (!quiet) toast("已记到今天的日记");
   return true;
 }
@@ -5684,7 +5685,7 @@ function renderSettingsList(){
   const onModels = !onMachines && current.id === "models" || (!current.id && !narrow() && !S.hub);
   $("#list").innerHTML = `<div class="list-head"><h1>设置</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div><div class="scroll">
     <a class="item ${onModels ? "on" : ""}" href="#/settings/models" style="text-decoration:none;color:inherit"><span class="t"><span class="title">默认模型和思考深度</span><span class="sub">Agent 和对话没单独设置时用${multi() ? "，每台电脑各设各的" : ""}</span></span></a>
-    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">已完成的对话、工作区、右下角助理</span></span></a>
+    <a class="item ${onChats ? "on" : ""}" href="#/settings/chats" style="text-decoration:none;color:inherit"><span class="t"><span class="title">对话</span><span class="sub">已完成的对话、工作区、日记、右下角助理</span></span></a>
     <a class="item ${onMachines ? "on" : ""}" href="#/settings/machines" style="text-decoration:none;color:inherit"><span class="t"><span class="title">电脑${oldMachines().length ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${oldMachines().length ? `${oldMachines().length} 台版本较旧，去升级` : multi() ? `${S.machines.length} 台电脑` : "文件、磁盘清理，添加别的电脑"}</span></span></a>
     ${devMachine() ? `<a class="item ${current.id === "dev" ? "on" : ""}" href="#/settings/dev" style="text-decoration:none;color:inherit"><span class="t"><span class="title">开发${devCount() ? `<span class="udot" style="margin-left:6px"></span>` : ""}</span><span class="sub">${devCount() ? `${devCount()} 件等你处理` : "验收、合并、升级"}</span></span></a>` : ""}
     ${isOwner() ? `<a class="item ${onAccounts ? "on" : ""}" href="#/settings/accounts" style="text-decoration:none;color:inherit"><span class="t"><span class="title">账号</span><span class="sub">给别人开账号</span></span></a>` : ""}
@@ -6454,9 +6455,45 @@ function renderChatSettings(){
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">在对话旁边看文件、改文件<div class="muted" style="font-size:12.5px">打开后，对话的三点菜单里有「打开工作区」</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${wsOn === v}" class="${wsOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setWorkspace(${v})"`}>${l}</button>`).join("")}</div></div>
     </div><div class="sect"><h3>日记</h3>
-      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">聊天里显示日记<div class="muted" style="font-size:12.5px">在对话里发「/diary 内容」记一笔，日记存在「文稿」（Windows 是「文档」）的 ccim-日记 文件夹里，能用 Obsidian 打开</div></div>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">聊天里显示日记<div class="muted" style="font-size:12.5px">在对话里发「/diary 内容」记一笔</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${dyOn === v}" class="${dyOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryCards(${v})"`}>${l}</button>`).join("")}</div></div>
+      ${ro ? "" : `<div id="diary-where">${diaryWhere()}</div>`}
     </div>${ro ? "" : pocketSettings()}</div></div>`;
+  if (!ro) loadDiaryWhere();
+}
+// 日记存在哪台电脑、哪个文件夹，用什么打开（#376）。DYW：{home, info, off}，info 是存日记那台的 {path, apps}
+let DYW = null;
+function diaryWhere(){
+  if (!DYW) return "";
+  const {home, info} = DYW, ms = home.machines || [];
+  const m = ms.find(x => x.id === home.machine) || {};
+  const row = (t, sub, ctl) => `<div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:220px">${t}${sub ? `<div class="muted" style="font-size:12.5px;word-break:break-all">${sub}</div>` : ""}</div>${ctl}</div>`;
+  let h = "";
+  if (ms.length > 1)
+    h += row("存在哪台电脑", "", `<div style="width:220px">${dd("diaryhome", ms.map(x => [x.id, x.name + (x.online === false ? "（离线）" : "")]), home.machine, v => setDiaryHome(v))}</div>`);
+  if (info)
+    h += row("日记文件夹", esc(info.path), `<div style="display:flex;gap:8px;flex-wrap:wrap">${(info.apps || []).map(a =>
+      `<button class="btn" onclick="openDiary('${a.id}')">用${/^[A-Za-z]/.test(a.name) ? ` ${esc(a.name)} ` : esc(a.name)}打开</button>`).join("")}</div>`);
+  else if (DYW.off) h += row("日记文件夹", `「${esc(m.name || "存日记的电脑")}」现在离线`, "");
+  return h;
+}
+async function loadDiaryWhere(){
+  let home, info = null, off = false;
+  try { home = await api("/api/diary/home", undefined, null); } catch { return; }
+  if (home.machine) { try { info = await api("/api/diary/info", undefined, home.machine); } catch { off = true; } }
+  DYW = {home, info, off};
+  const box = $("#diary-where");
+  if (box) box.innerHTML = diaryWhere();
+}
+async function setDiaryHome(mid){
+  if (DYW && mid === DYW.home.machine) return;
+  try { await act(() => api("/api/diary/home", {machine: mid}, null), "已保存，之后的日记记到这台电脑"); }
+  finally { loadDiaryWhere(); }
+}
+async function openDiary(app){
+  if (!DYW) return;
+  const r = await act(() => api("/api/diary/open", {app}, DYW.home.machine));
+  if (r.pick) toast(`在 Obsidian 里把文件夹「${DYW.info.path}」作为仓库打开`);
 }
 function pocketSettings(){   // 右下角的助理（#294）：在 S.me 那台电脑上，设置也存在那台
   const g = pocketCfg(), seg = (opts, cur, js) => `<div class="seg" role="radiogroup">${opts.map(([v, l, off]) =>

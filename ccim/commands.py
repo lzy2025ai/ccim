@@ -117,14 +117,15 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         if sender != bridge.owner():
             await say("只有主人能记日记。")
             return True
-        try:
-            r = diary.add(note, f"{bridge.channel.label or '聊天'} · {bridge.name}")
+        try:                                  # 几台电脑时写到存日记的那台（#376）
+            r = await asyncio.to_thread(diary.record, note, f"{bridge.channel.label or '聊天'} · {bridge.name}")
         except ValueError as err:
             await say(str(err))
         except OSError:
             await say("日记没记上：文稿文件夹写不进去。")
         else:
-            await say(f"已记到 {r['date']} 的日记（{r['time']}）。")
+            await say(f"已记下。存日记的电脑现在离线，连上后记到 {r['date']} 的日记（{r['time']}）。" if r.get("pending")
+                      else f"已记到 {r['date']} 的日记（{r['time']}）。")
         return True
 
     codex = getattr(chat, "agent", None) == "codex"

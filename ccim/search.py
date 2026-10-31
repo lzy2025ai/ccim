@@ -197,9 +197,14 @@ def open_chat(pf, aid, acct, cid, around=None, n=10):
     if cid not in src:                        # 结果里的编号是缩短的；也认 list_chats 那种不带 x: 的会话编号
         key = cid[2:] if cid.startswith("x:") else cid
         hits = [k for k in src if len(key) >= 8 and (k.startswith("x:" + key) or k == key)]
-        if len(hits) != 1:
-            return None
-        cid = hits[0]
+        if len(hits) == 1:
+            cid = hits[0]
+        else:                                 # 复盘材料（#364）给的是用户所有对话的编号，不只它参与过的
+            m = pf.chats().get(cid)
+            if not m or share.owner_map(pf).get(cid) != acct or m.get("helper") or m.get("side_of"):
+                return None
+            src = {cid: (m.get("title") or "对话", "网页对话", lambda: pf.channel.logs.read(cid),
+                         ME if aid and m.get("agent") == aid else pf.mentions._name(m, {}))}
     title, where, load, owner = src[cid][:4]
     rows = [(i, r) for i, r in enumerate(load()) if _usable(r)]
     if around is None:

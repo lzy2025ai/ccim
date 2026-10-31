@@ -1014,6 +1014,14 @@ class Platform:
         if m.get("fork_from") and cid not in b.chats:
             b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
         self._back_from_away(cid, m)
+        head = re.match(r"(?:>[^\n]*\n)*\s*", text or "").end()   # 网页的引用拼在最前面，跳过它再认（#117）
+        rv = board_mod.COMMAND.match((text or "")[head:])
+        if rv:                                # /review 要求（#364）：新开的对话记成复盘对话，拉过哪几天的材料就列在任务面板那几天里
+            ask = text[head + rv.end():].strip()
+            chats = self.chats()
+            if cid in chats and not chats[cid].get("title"):
+                chats[cid].update(review=True, title=title_text(ask)[:30] or "复盘", title_auto=True)
+                self.store.write(chats)
         mid = "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
@@ -1023,8 +1031,10 @@ class Platform:
             if cid in chats and not chats[cid].get("title"):
                 chats[cid]["title"] = title_text(text)[:30]
                 self.store.write(chats)
+        if rv:                                # Claude Code 自己也有 /review（审代码），不能原样交过去
+            text = text[:head] + (ask or "复盘今天的工作。")
+            hidden = board_mod.note() + (f"\n\n{hidden}" if hidden else "")
         from .bridge import QUEUE
-        head = re.match(r"(?:>[^\n]*\n)*\s*", text or "").end()   # 网页的引用拼在最前面，跳过它再认（#117）
         q = QUEUE.match((text or "")[head:])   # 前面还要拼别的内容，所以 /queue 在这里认出来
         if q:
             text = text[:head] + text[head + q.end():]
@@ -1067,28 +1077,16 @@ class Platform:
             self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": "d-" + uuid.uuid4().hex[:10], "text": content}))
         return {"ok": True, "diary": True, "chat": cid}
 
-    def review(self, d, aid, mat, view=None):
-        """复盘某一天（#241）：交给选的 Agent，复盘是它的一个普通对话（meta 的 review 记日期，review_view 记用的哪套视角）。
-        每次都开一个新对话（#263）：几套视角、同一套跑几次都互不影响，在当天详情里作为几个版本切换着看。
-        材料由网页从各台电脑取来（/api/board/day?material=1）。在主循环里调。"""
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""):
-            raise Problem("日期不对。")
-        if not agents.get(aid):
-            raise Problem("找不到这个 Agent。")
-        vs = board_mod.views(registry.global_config())
-        v = next((x for x in vs if x["id"] == view), None) if view else vs[0]
-        if not v:
-            raise Problem("没有这套复盘视角了，刷新页面再选。")
-        y, mo, dd = d.split("-")
-        cid = self.new_chat(agent=aid, title=f"{int(mo)}月{int(dd)}日 复盘·{v['name']}")
+    def review_range(self, cid, start, end):
+        """复盘对话（#364）拉了 start～end 的材料：记进它覆盖的日期范围，任务面板那几天里列出它。"""
         chats = self.chats()
-        chats[cid].update(review=d, review_view=v["id"], review_name=v["name"])
-        self.store.write(chats)
-        hidden = v["prompt"].replace("{date}", d) + "\n\n" + board_mod.LINK_NOTE + "\n\n---\n\n" + ((mat or "").strip()[:board_mod.MATERIAL_MAX] or "（这一天没有对话记录。）")
-        t = asyncio.ensure_future(self.send(cid, f"复盘这一天：{v['name']}", hidden=hidden, mark={"review": d}))
-        self.background.add(t)
-        t.add_done_callback(self.background.discard)
-        return {"chat": cid}
+        m = chats.get(cid)
+        if not m or not m.get("review"):
+            return
+        r = board_mod.merged(m, start, end)
+        if r != m.get("review"):
+            m["review"] = r
+            self.store.write(chats)
 
     async def helper_chat(self, kind, fresh=False, account=None):
         """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个（共享电脑上的访客各自一个），不进对话列表；fresh 就换一个新的。"""
@@ -1481,7 +1479,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "pocket": bool(m.get("pocket")), "review": m.get("review"), "review_name": m.get("review_name"),
+                "listed": listed(cid, m), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -2419,10 +2417,10 @@ def _handler(pf):
                                                    q.get("groups") == "1"),
                 # 只读：在请求线程里算，不占主循环（#335）；一个个对话取视图要反复读 state.json，快照里只读一遍
                 "/api/board": lambda: _snapshot(lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None)),
-                "/api/board/day": lambda: _snapshot(lambda: {
-                    **board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None),
-                    **({"material": board_mod.material(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct)}
-                       if q.get("material") else {})}),
+                "/api/board/day": lambda: _snapshot(lambda: board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None)),
+                # 复盘的 Agent 在别的电脑上时，从这台拉这几天的材料（#364）
+                "/api/board/material": lambda: _snapshot(lambda: {"material": board_mod.material(
+                    pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False)}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
@@ -2527,7 +2525,6 @@ def _handler(pf):
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
                 "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
-                "/api/board/review": lambda: pf.call(pf.review, b("date") or "", b("agent") or "", b("material") or "", b("view")),
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),

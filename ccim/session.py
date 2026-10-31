@@ -1460,13 +1460,15 @@ def _diary_tools():
             return _err(str(e))
 
     @tool("diary_read", "读用户的日记（用户在对话里用 /diary 随手记的）。按日期范围读，日期写成 2026-01-31；"
-          "start、end 都不写是今天，只写 start 是那一天。用户问「今天 / 这周 / 最近日记写了啥」时用。",
+          "start、end 都不写是今天，只写 start 是那一天。用户问「今天 / 这周 / 最近日记写了啥」时用。"
+          "每条标题里「记在哪」是能点的链接，点了回到记它的那个对话；回答里提到某条日记时，把这个链接原样写成 [文字](#/…)，用户能点过去看当时的上下文。",
           {"type": "object", "properties": {"start": {"type": "string", "description": "从哪天开始，YYYY-MM-DD"},
                                              "end": {"type": "string", "description": "到哪天为止（含这天），YYYY-MM-DD"}}})
     async def diary_read(args):
         return await run(diary.read, args.get("start"), args.get("end"))
 
-    @tool("diary_search", "按关键词搜用户的日记，几个词用空格分开，都出现在同一条里才算；结果新的在前，带日期和时间。",
+    @tool("diary_search", "按关键词搜用户的日记，几个词用空格分开，都出现在同一条里才算；结果新的在前，带日期和时间。"
+          "标题里的链接点了回到记它的那个对话，提到某条时把链接原样写成 [文字](#/…)。",
           {"type": "object", "properties": {"query": {"type": "string", "description": "关键词"}}, "required": ["query"]})
     async def diary_search(args):
         return await run(diary.search, args.get("query") or "")

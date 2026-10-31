@@ -16,7 +16,7 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 """
 import asyncio, glob, json, logging, os, queue, re, shutil, threading, time, uuid
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
@@ -1132,15 +1132,32 @@ class Platform:
             v = {}
         title = v.get("title") or ""
         where = f"{v['agent_name']}「{title}」" if v.get("agent_name") and title else f"「{title}」" if title else ""
+        rid = "d-" + uuid.uuid4().hex[:10]
+        logged = cid in self.chats()
         try:
-            diary_mod.add(content, where)
+            diary_mod.add(content, where, link=self.diary_link(cid, v, rid if logged else None))
         except ValueError as e:
             raise Problem(str(e))
         except OSError:
             raise Problem("日记没记上：文稿文件夹写不进去。")
-        if cid in self.chats():
-            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": "d-" + uuid.uuid4().hex[:10], "text": content}))
+        if logged:
+            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": rid, "text": content}))
         return {"ok": True, "diary": True, "chat": cid}
+
+    def diary_link(self, cid, v, rid):
+        """日记里回到记它的地方的完整网址（#363）：打开那个对话、滚到那张日记卡片（rid，按记录 id 找，退回删掉了就只打开对话）。
+        网址的根：加入了服务器上的总控用它的地址（哪里都能打开），否则用本机网页。Skill 助手里记的不带；侧边对话指向主对话。"""
+        m = self.meta(cid) if not cid.startswith("x:") else {}
+        if m.get("helper"):
+            return None
+        if m.get("side_of"):
+            cid, rid, v = m["side_of"], None, {"agent": self.meta(m["side_of"]).get("agent")}
+        hub = (getattr(getattr(self, "peers", None), "hub", None) or {}).get("url") or ""
+        root = hub if hub.startswith("https://") else \
+            f"http://127.0.0.1:{registry.read_state(self.home).get('port') or self.entry.get('port') or PORT}"
+        aid = v.get("agent")
+        path = f"#/agents/{quote(aid, safe='')}/{quote(cid, safe='')}" if aid else f"#/chats/{quote(cid, safe='')}"
+        return f"{root.rstrip('/')}/{path}" + (f"?m={rid}" if rid else "")
 
     def review_range(self, cid, start, end):
         """复盘对话（#364）拉了 start～end 的材料：记进它覆盖的日期范围，任务面板那几天里列出它。"""

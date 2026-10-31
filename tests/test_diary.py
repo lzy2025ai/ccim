@@ -55,6 +55,36 @@ class DiaryFileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             diary.add("  ", "x")
 
+    def test_link(self):
+        now = datetime.datetime(2026, 10, 31, 14, 32)
+        diary.add("有个想法", "小助手「周计划」", now, link="https://hub.example/#/agents/a1/c1?m=d-1")
+        diary.add("没有标题的对话", "", now, link="http://127.0.0.1:8978/#/chats/c2?m=d-2")
+        diary.add("飞书里记的", "飞书 · proj", now)
+        f = os.path.join(self.tmp.name, "Documents", "ccim-日记", "2026-10-31.md")
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("## 14:32 · [小助手「周计划」](https://hub.example/#/agents/a1/c1?m=d-1)\n", text)
+        self.assertIn("## 14:32 · [原对话](http://127.0.0.1:8978/#/chats/c2?m=d-2)\n", text)
+        es = diary._entries("2026-10-31")
+        self.assertEqual([(e["where"], e["link"]) for e in es],
+                         [("小助手「周计划」", "https://hub.example/#/agents/a1/c1?m=d-1"),
+                          ("原对话", "http://127.0.0.1:8978/#/chats/c2?m=d-2"), ("飞书 · proj", "")])
+        r = diary.read("2026-10-31")
+        self.assertIn("### 2026-10-31 14:32 · [小助手「周计划」](#/agents/a1/c1?m=d-1)\n有个想法", r)
+        self.assertIn("### 2026-10-31 14:32 · 飞书 · proj\n飞书里记的", r)
+        self.assertIn("[小助手「周计划」](#/agents/a1/c1?m=d-1)", diary.search("想法"))
+        self.assertIn("有个想法", diary.search("周计划"))      # 记在哪照样能搜
+        self.assertNotIn("有个想法", diary.search("hub.example"))   # 网址不算
+
+    def test_old_format(self):
+        root = os.path.join(self.tmp.name, "Documents", "ccim-日记")
+        os.makedirs(root)
+        with open(os.path.join(root, "2026-10-02.md"), "w", encoding="utf-8") as fh:
+            fh.write("## 14:32 · 小助手「晨练」\n\n跑步\n\n## 15:00 · 写了 [别的](链接) 的标题\n\n看书\n")
+        r = diary.read("2026-10-02")
+        self.assertIn("### 2026-10-02 14:32 · 小助手「晨练」\n跑步", r)
+        self.assertIn("### 2026-10-02 15:00 · 写了 [别的](链接) 的标题\n看书", r)
+
     def test_hand_edited_file(self):
         root = os.path.join(self.tmp.name, "Documents", "ccim-日记")
         os.makedirs(root)
@@ -167,8 +197,16 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual([x["type"] for x in log], ["diary"])
         self.assertEqual(log[0]["text"], "今天心情不错\n第二行")
         text = diary.read()
-        self.assertIn("小助手「周计划」", text)
+        self.assertIn(f"[小助手「周计划」](#/agents/{self.aid}/{cid}?m={log[0]['id']})", text)
         self.assertIn("今天心情不错\n第二行", text)
+        f = diary._entries(datetime.date.today().isoformat())[0]
+        self.assertEqual(f["link"], f"http://127.0.0.1:18978/#/agents/{self.aid}/{cid}?m={log[0]['id']}")
+        # 加入了服务器上的总控：用它的地址
+        self.pf.peers.hub = {"url": "https://hub.example"}
+        self.assertEqual(self.pf.diary_link(cid, {"agent": self.aid}, "d-x"), f"https://hub.example/#/agents/{self.aid}/{cid}?m=d-x")
+        self.pf.peers.hub = {"url": "http://192.168.1.2:8979"}       # 局域网里另一台电脑当总控：还是本机网页
+        self.assertTrue(self.pf.diary_link(cid, {}, None).startswith("http://127.0.0.1:18978/#/chats/"))
+        self.pf.peers.hub = None
         # 群聊、@ 别人的输入框里发也一样
         st, r = self.req("POST", "/api/chat/mention", {"id": cid, "text": "/diary 第二条", "to": [self.aid], "files": []})
         self.assertEqual(st, 200, r)

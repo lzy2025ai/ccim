@@ -2900,6 +2900,7 @@ function threadOrder(log, from){
     // 助手自己在这一轮里 @ 的人（ask_agent）和它们的回答：排在这一轮的回答前面
     if (r.by && (r.type === "user" || r.type === "mention")) { order.push(i); at = order.length; }
     else if (r.type === "user" && r.to && r.to.length || r.type === "mention" || r.type === "work") order.push(i);   // 成员新开对话去做的卡片（#359）跟着它的回答排
+    else if (r.sub) order.push(i);     // 被 @ 的 Agent 发的文件、聊天记录：跟着它那组回答排，不挪到主 Agent 那里（#357）
     else if (r.type === "user") { order.push(i); at = order.length; }
     else order.splice(at++, 0, i);
   }

@@ -739,8 +739,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .item .stack{width:58px}
 .at{display:inline-flex;align-items:center;gap:3px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:0 6px;font-size:13px;white-space:nowrap}
 .at button{color:var(--qing);font-size:11px;opacity:.7}
-.at.to{gap:5px;padding:2px 6px 2px 3px}
-.at.to .seal{width:18px;height:18px;border-radius:5px;font-size:8px;padding:1px}
+.at.to,.at.av{gap:5px;padding:2px 6px 2px 3px;vertical-align:middle}
+.at .seal{width:18px;height:18px;border-radius:5px;font-size:8px;padding:1px}
 .bubble .at{background:#fff}
 .meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
 .quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
@@ -3513,7 +3513,7 @@ function drawChatRcpt(){
   const to = listTo();
   el.innerHTML = chatRcpt.map(r => r === to
       ? `<span class="at to">发给${seal(agentOf(r), "sm", false)}${esc(agentOf(r).name)}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`
-      : `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`).join("")
+      : atChip(r, `atDrop(${q(r)})`)).join("")
     + chatRefs.map(r => `<span class="at">#${esc(r.title)}<button aria-label="去掉" onclick="chatRefs=chatRefs.filter(x=>x.id!==${q(r.id)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
 }
 // 引用这个 Agent 以前的对话（#199）：输入框打 #，或者列表三点菜单里「引用」
@@ -6491,7 +6491,13 @@ async function openProject(id, keepInput = true){
   drawProject();
   if (v) $("#input").value = v;
 }
-function chipsOf(ids){ return ids.map(id => `<span class="at">@${esc((agentOf(id) || {name: "已删除的 Agent"}).name)}</span>`).join(" "); }
+function chipsOf(ids){ return ids.map(id => atChip(id)).join(" "); }
+// @ 某个 Agent 的标记：头像 + 名字（#361）；x 是去掉它的 onclick
+function atChip(id, x){
+  const a = agentOf(id);
+  const del = x ? `<button aria-label="去掉" onclick="${x}">${ICON.x}</button>` : "";
+  return a ? `<span class="at av">${seal(a, "sm", false)}${esc(a.name)}${del}</span>` : `<span class="at">@${esc(id ? "已删除的 Agent" : "")}${del}</span>`;
+}
 function liveOf(r){
   // 排队中的回答：它所在的对话正在干活、而且它是那个对话里最早没做完的一件，就是正在做的这件
   if (r.state !== "queued") return null;
@@ -6630,7 +6636,7 @@ function drawProject(){
 }
 function drawRcpt(){
   const box = $("#rcpt"); if (!box) return;
-  box.innerHTML = rcpt.length ? rcpt.map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="rcpt=rcpt.filter(x=>x!==${q(r)});drawProject()">${ICON.x}</button></span>`).join("")
+  box.innerHTML = rcpt.length ? rcpt.map(r => atChip(r, `rcpt=rcpt.filter(x=>x!==${q(r)});drawProject()`)).join("")
                               : `<span class="muted" style="font-size:12px">先 @ 选派给谁</span>`;
 }
 function membersPanel(p){
@@ -7251,7 +7257,7 @@ function sideAgents(){
   return S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
 }
 function sideRcpt(){
-  return (SIDE.to || []).map(r => `<span class="at">@${esc((agentOf(r) || {}).name || "")}<button aria-label="去掉" onclick="SIDE.to=SIDE.to.filter(x=>x!==${q(r)});$('#side-rcpt').innerHTML=sideRcpt()">${ICON.x}</button></span>`).join("");
+  return (SIDE.to || []).map(r => atChip(r, `SIDE.to=SIDE.to.filter(x=>x!==${q(r)});$('#side-rcpt').innerHTML=sideRcpt()`)).join("");
 }
 function sideAt(e){
   if (!SIDE || !SIDE.id) return;

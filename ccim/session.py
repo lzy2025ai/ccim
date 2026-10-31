@@ -612,7 +612,7 @@ class Chat:
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat",   # 只读
-                               "mcp__ccim__send_to_chat"] + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
+                               "mcp__ccim__send_to_chat"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
@@ -1154,6 +1154,8 @@ class Chat:
         if chat.chat_type == "p2p":           # 私聊只有主人能用；群里不给，免得别人借它看主人的私聊、用管理员权限
             # 平台上 Agent 的对话用 search_chats / open_chat，范围更全，不再给 list_chats / read_chat（两套重叠，助手会挑错）
             tools += ([] if lent or _searchable(chat) else _look_around(chat)) + ([] if guest_of(chat.b) else [run_as_admin])   # 共享电脑上的访客不给
+            if not lent and not guest_of(chat.b):
+                tools += _diary_tools()       # 查用户的日记（#363）
             # Codex 不给：转交的目标是 Claude Code 的会话
             if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent and not side and chat.agent == "claude":
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
@@ -1164,6 +1166,7 @@ class Chat:
         return tools
 
 
+DIARY_TOOLS = ["mcp__ccim__diary_read", "mcp__ccim__diary_search"]   # 只读
 SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
 APP_TOOLS = [f"mcp__ccim__app_{n}" for n in ("list", "query", "save", "delete", "open")]   # 应用的数据有 git 记录，能退回
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__share_skill_to_platform"]
@@ -1443,6 +1446,31 @@ def _start_work(chat, pf):
             t.works = getattr(t, "works", 0) + 1
         return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在{place}的卡片里能看到进度。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
     return start_work
+
+
+def _diary_tools():
+    """用户的日记（#363）：用户在对话里用 /diary 记的，按天存在这台电脑上，只读。"""
+    from . import diary
+
+    async def run(fn, *a):
+        try:
+            return {"content": [{"type": "text", "text": await asyncio.to_thread(fn, *a)}]}
+        except ValueError as e:
+            return _err(str(e))
+
+    @tool("diary_read", "读用户的日记（用户在对话里用 /diary 随手记的）。按日期范围读，日期写成 2026-01-31；"
+          "start、end 都不写是今天，只写 start 是那一天。用户问「今天 / 这周 / 最近日记写了啥」时用。",
+          {"type": "object", "properties": {"start": {"type": "string", "description": "从哪天开始，YYYY-MM-DD"},
+                                             "end": {"type": "string", "description": "到哪天为止（含这天），YYYY-MM-DD"}}})
+    async def diary_read(args):
+        return await run(diary.read, args.get("start"), args.get("end"))
+
+    @tool("diary_search", "按关键词搜用户的日记，几个词用空格分开，都出现在同一条里才算；结果新的在前，带日期和时间。",
+          {"type": "object", "properties": {"query": {"type": "string", "description": "关键词"}}, "required": ["query"]})
+    async def diary_search(args):
+        return await run(diary.search, args.get("query") or "")
+
+    return [diary_read, diary_search]
 
 
 def _searchable(chat):

@@ -36,6 +36,10 @@ def describe_tool(name, inp):
         return "请 " + "、".join("@" + str(x) for x in ([to] if isinstance(to, str) else to)) + " 帮忙：" + short(inp.get("text"), 40)
     if name.startswith("mcp__ccim__search_chats"):
         return "翻以前的对话：" + short(inp.get("query"), 40)
+    if "diary_read" in name:                    # #363（Codex 里没有 mcp__ccim__ 前缀）
+        return ("看日记 " + " ~ ".join(dict.fromkeys(x for x in (inp.get("start"), inp.get("end")) if x))).strip()
+    if "diary_search" in name:
+        return "翻日记：" + short(inp.get("query"), 40)
     if name.startswith("mcp__ccim__open_chat"):
         return "读以前的对话"
     if name.startswith("mcp__ccim__platform_agents"):

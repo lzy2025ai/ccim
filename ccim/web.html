@@ -1329,6 +1329,10 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .answer img{max-width:100%;border-radius:8px}
 .note{max-width:760px;margin:-8px auto 18px;padding:0 22px;font-size:13px;color:var(--muted)}
 .note .answer{line-height:1.6}
+.diary-card{max-width:min(520px,100%);margin-left:auto;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--qing);border-radius:10px;padding:10px 14px;text-align:left}
+.diary-card .dh{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:4px}
+.diary-card .dh svg{width:14px;height:14px}
+.diary-card .dt{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14.5px}
 .card-done{font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:4px 0 12px}
 .sentfile{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
   text-decoration:none;color:inherit;margin:2px 0 10px}
@@ -2823,6 +2827,7 @@ function recHtml(r, i, src = "log"){
       ${items.slice(0, 4).map(x => `<div class="ln">${esc(x.sender)}：${esc(clLine(x))}</div>`).join("")}
       <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button>${timeActs(r)}</div>`;
   }
+  if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card"><div class="dh">${ICON.kb}日记</div><div class="dt">${esc(r.text)}</div></div>${timeActs(r)}</div></div>` : "";
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
@@ -3262,6 +3267,13 @@ async function sendChat(){
   if (!v && !files.length) return;
   closePop();
   const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
+  if (DIARY.test(typed)) {                // 记日记（#363）：不交给助手，也不算开始干活
+    if (files.length) return toast("日记只能记文字，先去掉附件");
+    const src = detail;
+    $("#input").value = ""; saveDraft(); quotes.list = []; drawQuotes(); drawComposerState();
+    if (!await sendDiary(src.id, typed, qs, undefined, !src.readonly && diaryShown())) back();
+    return;
+  }
   quotes.list = []; drawQuotes();
   if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
@@ -3311,6 +3323,19 @@ async function sendChat(){
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
   } else await toSplit(r, src);
+}
+// 记日记（#363）：/diary 内容。quiet：对话里会出现日记卡片，不用再提示
+const DIARY = /^\/(diary|日记)(?=\s|$)/i;
+const diaryShown = () => (S.global || {}).diary_cards !== "off";
+async function sendDiary(id, typed, qs, mid, quiet){
+  const body = typed.replace(DIARY, "").trim();
+  if (!body && !qs.length) { toast("在 /diary 后面写上要记的内容"); return false; }
+  let r;
+  try { r = await act(() => api("/api/chat/send", {id, text: "/diary " + withQuotes(qs, body), files: []}, mid)); }
+  catch { return false; }
+  if (r.queued) toast(`「${r.machine}」现在离线，上线后记上`);
+  else if (!quiet) toast("已记到今天的日记");
+  return true;
 }
 async function stopChat(){ await act(() => api("/api/chat/stop", {id: detail.id})); }
 async function cardAct(mid, value){ await act(() => api("/api/chat/action", {id: detail.id, mid, value})); }
@@ -3576,6 +3601,7 @@ function atTyped(e){   // 打了 @（全角的也算）：弹出选 Agent，和 
 // 开头打 / ：列出能用的命令（#82）
 const SLASH = [
   ["/queue", "排在后面，手头这件做完再处理", "内容"],
+  ["/diary", "记一笔日记，不打断手头的事", "内容"],
   ["/stop", "停下正在做的事"],
   ["/skip", "某一步卡住了：结束这一步，接着做"],
   ["/status", "当前状态"],
@@ -4684,6 +4710,7 @@ async function skcSend(text){
   const ta = $("#skc-in"), v = (text || (ta ? ta.value : "")).trim();
   if (!v || !SKC || !SKC.id) return;
   if (ta) { ta.value = ""; saveDraft("skc-in"); }
+  if (DIARY.test(v)) { if (!await sendDiary(SKC.id, v, [], SKC.mid) && ta && !ta.value) { ta.value = v; saveDraft("skc-in"); } return; }
   SKC.log.push({type: "user", text: v, sending: true});
   if (!SKC.busy) SKC.progress = {steps: [], text: ""};
   SKC.busy = true; drawSkChat();
@@ -6365,6 +6392,7 @@ function renderChatSettings(){
   const cur = (ro ? shared : S.global || {}).archive_days || "30";
   const opts = [["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["never", "不删除"]];
   const wsOn = !!(ro ? shared : S.global || {}).workspace;
+  const dyOn = (ro ? shared : S.global || {}).diary_cards !== "off";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
     <div class="pane"><div class="sect"><h3>归档的对话</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">归档后多久没有新消息就删除<div class="muted" style="font-size:12.5px">存进知识库的内容会保留</div></div>
@@ -6372,6 +6400,9 @@ function renderChatSettings(){
     </div><div class="sect"><h3>工作区</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">在对话旁边看文件、改文件<div class="muted" style="font-size:12.5px">打开后，对话的三点菜单里有「打开工作区」</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${wsOn === v}" class="${wsOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setWorkspace(${v})"`}>${l}</button>`).join("")}</div></div>
+    </div><div class="sect"><h3>日记</h3>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">聊天里显示日记<div class="muted" style="font-size:12.5px">在对话里发「/diary 内容」记一笔，日记存在「文稿」（Windows 是「文档」）的 ccim-日记 文件夹里，能用 Obsidian 打开</div></div>
+        <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${dyOn === v}" class="${dyOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryCards(${v})"`}>${l}</button>`).join("")}</div></div>
     </div>${ro ? "" : pocketSettings()}</div></div>`;
 }
 function pocketSettings(){   // 右下角的助理（#294）：在 S.me 那台电脑上，设置也存在那台
@@ -6408,6 +6439,13 @@ async function setWorkspace(on){
   let fail = 0;
   for (const mid of targets) { try { await api("/api/workspace", {on}, mid); } catch { fail++; } }
   toast(fail ? "有电脑没连上，那台下次再改" : on ? "已打开，对话的三点菜单里能打开工作区" : "已关闭");
+  await loadState(); renderChatSettings();
+}
+async function setDiaryCards(on){
+  const targets = multi() ? (S.machines || []).filter(m => m.online && !m.shared).map(m => m.id) : [S.me];
+  let fail = 0;
+  for (const mid of targets) { try { await api("/api/diary_cards", {on}, mid); } catch { fail++; } }
+  toast(fail ? "有电脑没连上，那台下次再改" : on ? "已打开" : "已关闭，日记照常记");
   await loadState(); renderChatSettings();
 }
 let gsMachine = null;   // 默认模型设在哪台电脑上（每台电脑各存一份，#140）
@@ -7232,6 +7270,11 @@ async function sideSend(text){
   if (!typed || !SIDE || !SIDE.id) return;
   const qs = SIDE.quote ? [SIDE.quote] : [], v = withQuotes(qs, typed);
   if (ta) ta.value = "";
+  if (DIARY.test(typed)) {
+    const s = SIDE; s.quote = null;
+    if (!await sendDiary(s.id, typed, qs, s.mid)) { s.quote = qs[0] || null; if (ta && !ta.value) { ta.value = typed; sideFit(); } }
+    return;
+  }
   SIDE.quote = null;
   const to = text ? [] : SIDE.to || [];
   if (to.length) {                    // @ 了其他 Agent：它们在侧边栏里回答（#290）

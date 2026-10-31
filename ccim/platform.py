@@ -355,6 +355,7 @@ class WebChannel(Channel):
         pass
 
     async def send_file(self, chat_id, path):
+        chat_id = self.outer(chat_id)         # 被 @ 的 Agent 发的：记到群里（#357）
         rec = {"type": "file", "path": os.path.realpath(path), "name": os.path.basename(path), "size": os.path.getsize(path)}
         snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
         if snap:
@@ -385,6 +386,7 @@ class WebChannel(Channel):
 
     async def send_chatlog(self, chat_id, log):
         """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
+        chat_id = self.outer(chat_id)
         items = []
         for it in log["items"]:
             it = dict(it)

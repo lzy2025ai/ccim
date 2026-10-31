@@ -3080,10 +3080,11 @@ async function reloadChat(){
 }
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
+  const host = (c.members || []).length ? "主持：" : "";   // 群聊：不 @ 人时由谁回复（#359）
   $("#main").innerHTML = `
     <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name" title="${esc(c.title)}">${esc(c.title)}</div>
-        <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">临时对话</span>`}
+        <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${host}${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">${host}临时对话</span>`}
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${wsHead(c)}

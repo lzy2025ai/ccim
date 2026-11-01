@@ -40,10 +40,11 @@ TASK_DONE = {"completed", "failed", "stopped", "killed"}
 CLI = shutil.which("claude") or next((p for p in map(os.path.expanduser, ["~/.local/bin/claude", "~/.claude/local/claude",
                                      "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]) if os.path.exists(p)), None)
 
+FILES_NOTE = "需要把图片、视频、文件交给用户时，调用 ccim 的 send_file 工具（mcp__ccim__send_file）发到聊天里。"
 APPEND = """\
 你正在通过{label}和用户对话（ccim 把这个项目目录接到了{label}）。用户多半在手机上看回复：
 - 回答简洁，{style}
-- 需要把图片、视频、文件交给用户时，调用 mcp__ccim__send_file 工具发到聊天里。之前的记录里用过的 SendUserFile 在这里用不了。
+- {files}之前的记录里用过的 SendUserFile 在这里用不了。
 - 要给用户看多条聊天消息的原文（比如微信、飞书里某人或某个群说的话）时，调用 mcp__ccim__send_chatlog 发成一份聊天记录，你的总结写在回答里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里，需要时用 Read 查看。
 - 没有交互式提问框，有问题直接在回复里问。"""
@@ -1860,7 +1861,8 @@ def role_note(entry):
 
 
 def prompt_note(text, channel):
-    return text.format(label=channel.label or "聊天软件", style=channel.style or "排版简单，不要用表格和 HTML。")
+    return text.format(label=channel.label or "聊天软件", style=channel.style or "排版简单，不要用表格和 HTML。",
+                       files=getattr(channel, "files_note", "") or FILES_NOTE)
 
 
 def _err(text):

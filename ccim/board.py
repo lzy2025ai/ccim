@@ -1,8 +1,8 @@
-"""任务面板（#48）：哪些对话在等你、在干活、最近在跟，一句话进度，概览数据。
+"""任务面板（#48）：哪些对话在等你、在干活，一句话进度，概览数据。
 
 - 每个网页对话的记录扫一遍得到摘要（最后一个回答的时间和状态、有没有等批准的卡片、每天发了几条），按文件大小和修改时间缓存。
 - 未读：对话 meta 的 seen_at（网页里打开过就更新）早于最后一个回答。平台第一次启动这个功能时，已有的对话都算看过。
-  任务面板里点「知道了」记 dismissed_at：不再等你处理，但没打开过的仍算未读（#65）。
+  以前任务面板里点「知道了」记 dismissed_at（#65）；#390 起「等你处理」是没标完成的对话都在，未读只管红点。
 - 一句话进度：每轮回答完（网页对话，不含 @ 的子对话、项目、定时任务）用小模型总结，存在 meta 的 brief。
 """
 import asyncio, datetime, logging, os, re, time, uuid
@@ -35,7 +35,7 @@ def summary(logs, cid):
     hit = _SUM.get(cid)
     if hit and hit[0] == (st.st_size, st.st_mtime):
         return hit[1]
-    s = {"answer_at": 0, "answer_state": None, "pending": False, "days": {}, "last_user": "",
+    s = {"answer_at": 0, "answer_state": None, "pending": False, "days": {}, "last_user": "", "rounds": 0,
          "spans": {}, "hours": {}, "sids": []}
     for r in logs.read(cid):
         t = r.get("type")
@@ -53,6 +53,8 @@ def summary(logs, cid):
             s["hours"].setdefault(day, [0] * 24)[lt.tm_hour] += 1
             s["last_user"] = r.get("text") or ""
             s["user_ats"] = (s.get("user_ats") or [])[-1:] + [r.get("at") or 0]   # 最近两次提问的时间（#157）
+            if not (r.get("sched") or r.get("from_chat")):    # 沟通了几轮（#390）：只数你自己发的，定时任务、别的对话转来的不算
+                s["rounds"] += 1
         elif t == "answer" or (t == "mention" and r.get("state") in ("done", "error")):
             s["answer_at"], s["answer_state"] = r.get("done_at") or r.get("at") or 0, r.get("state")
             s["last_by"] = r.get("agent") if t == "mention" else None   # 最后回答的是群里哪个成员（#192）
@@ -168,23 +170,21 @@ def stats(pf, keep=None, everything=True, acct=None):
            "tokens": {d: v for d, v in tk.items() if d >= tsince} if tokens.ready() else None}
     if everything:
         out["quota"] = usage.cached()
-    out["recent"] = recent(pf, chats, keep)
+    out["open"] = open_rows(pf, chats, keep)
     return out
 
 
-def recent(pf, chats, keep=None):
-    """任务面板「最近在跟」（#268）：没归档、不在等你、没在干活的顶层对话里，置顶的和最近 7 天聊过的。
-    整体状态里只带了最近一部分对话，这一栏要的自己给。"""
-    since = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+def open_rows(pf, chats, keep=None):
+    """任务面板「等你处理」要的（#390）：没标完成、没在干活、回答过的顶层对话，不管多久以前的都在，直到标完成。
+    定时任务的对话每次到点都会回答，你没在里面说过话的不算。整体状态里只带了最近一部分对话，这一栏要的自己给。"""
     rows = []
     for cid, m in chats.items():
         if not top_level(m, cid) or not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
             continue
-        if not (m.get("pin") is not None or (m.get("last_active") or "") >= since):
+        s = summary(pf.channel.logs, cid)
+        if not s.get("answer_at") or (m.get("schedule") and not s.get("rounds")):
             continue
-        v = pf.chat_view(cid)
-        if not v.get("attention") and not v.get("crew"):
-            rows.append(v)
+        rows.append(pf.chat_view(cid))
     return rows
 
 

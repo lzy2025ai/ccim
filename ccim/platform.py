@@ -615,10 +615,12 @@ class Platform:
         if not board_mod.top_level(m, cid):
             return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
+        rounds = summ.get("rounds") or 0
         crew = self.mentions.crew(cid)         # 群里被 @ 的成员在干活：和主 Agent 在干活一样，先不算等你处理（#192）
         att = board_mod.attention(m, summ)
         return {"attention": None if crew and att != "ask" else att, "unread": board_mod.unread(m, summ),
-                "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew}
+                "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew,
+                "rounds": rounds, "answered": bool(summ.get("answer_at")) and not (m.get("schedule") and not rounds)}
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""

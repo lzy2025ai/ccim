@@ -186,14 +186,9 @@ body{overflow:hidden}
 .newtag.ask{color:#8A6A12}
 .newtag.err{color:var(--bad)}
 .brow.fresh .btitle{font-weight:700}
-/* 点了「知道了」、还没打开看过：最近在跟里比别的稍重一点（#65） */
-.udot.soft{background:none;box-shadow:inset 0 0 0 1.5px var(--qing);margin-right:0}
-.brow.quiet.unread .btitle{font-weight:600;color:var(--ink)}
 /* 置顶的对话（#194、#347）：标题后一颗星，整行垫一层淡淡的金色 */
 .bstar{display:inline-flex;flex:none;color:var(--huang)} .bstar svg{width:13px;height:13px}
 .brow.starred{background:rgba(184,144,42,.07);border-color:rgba(184,144,42,.28)}
-.brow.quiet.starred{border-radius:10px;border-bottom-color:transparent;margin-bottom:4px}
-.brow.quiet.starred:hover{background:rgba(184,144,42,.12)}
 .glass-bed .brow.starred{box-shadow:inset 3px 0 0 var(--huang),inset 0 1px 0 rgba(255,255,255,.95),0 10px 26px -14px rgba(43,76,111,.32)}
 .item .mk{padding:0;border:0;border-radius:0;gap:0;background:none} .item .mk svg{opacity:1}   /* 别被 Skill 市场的 .mk 带上边框 */
 .item .mk.star{color:var(--huang)}
@@ -324,13 +319,23 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .bempty{color:var(--faint);font-size:13px;margin:4px 0 0}
 .brow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;text-decoration:none;color:inherit}
 .brow:hover{border-color:var(--line-strong)}
-.brow.quiet{border-color:transparent;border-radius:0;padding:11px 14px;margin-bottom:0;border-bottom:1px solid var(--line)}
-.brow.quiet:last-of-type{border-bottom-color:transparent}
-.brow.quiet:hover{background:var(--paper);border-radius:10px;border-bottom-color:transparent}
+/* 等你处理（#390）：右边多一格沟通了几轮；多选时最左边多一个勾 */
+.brow.w{grid-template-columns:auto minmax(0,1fr) auto auto auto}
+.brow.w.picking{grid-template-columns:auto auto minmax(0,1fr) auto auto auto;cursor:pointer}
+.brow.w .bside{width:200px}   /* 定宽，轮数那一格上下对齐 */
+.bround{display:flex;align-items:baseline;gap:3px;width:62px;justify-content:flex-end;color:var(--ink-2);white-space:nowrap}
+.bround b{font:italic 400 30px/1 "Didot","Bodoni 72","Bodoni MT",Georgia,serif;letter-spacing:-.5px;color:var(--qing)}
+.bround small{font:400 12px/1 var(--song);color:var(--muted)}
+.bpick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line-strong);display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.6)}
+.bpick svg{width:12px;height:12px}
+.brow.picked .bpick{background:var(--qing);border-color:var(--qing)}
+.glass-bed .brow.picked{border-color:color-mix(in srgb,var(--qing) 55%,transparent)}
+.bsec h2 .sp{flex:1}
+.bpickbar{display:flex;gap:6px}
+.bsec h2 .btn{font-size:12.5px;font-weight:400;padding:3px 10px}
 .bmain{min-width:0;display:flex;flex-direction:column}
 .btop{display:flex;align-items:center;gap:8px;min-width:0;line-height:20px}
 .btitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brow.quiet .btitle{font-weight:500}
 .bico{position:relative;display:flex;align-self:start;margin-top:-2px}   /* 和标题那一行对齐，细线连到下一行的 Agent 名字（#273） */
 .bico>.seal,.bico>.chaticon{width:24px;height:24px}
 .bico.linked::after{content:"";position:absolute;left:11.5px;top:27px;width:22px;height:9px;border:solid var(--line-strong);border-width:0 0 1.2px 1.2px;border-bottom-left-radius:8px;pointer-events:none}
@@ -368,7 +373,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .abar i{display:block;height:100%;background:var(--qing);border-radius:3px}
 .acnt{font-size:12px;color:var(--muted);white-space:nowrap}
 @media (max-width:1100px){.bgrid{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:760px){.bhead,.bgrid{padding-left:14px;padding-right:14px}.drow{grid-template-columns:minmax(0,1fr) auto}.dtm{grid-column:1 / -1;line-height:16px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
+@media (max-width:760px){.bhead,.bgrid{padding-left:14px;padding-right:14px}.drow{grid-template-columns:minmax(0,1fr) auto}.dtm{grid-column:1 / -1;line-height:16px}.brow{grid-template-columns:auto minmax(0,1fr) auto}.brow.w{grid-template-columns:auto minmax(0,1fr) auto auto}.brow.w.picking{grid-template-columns:auto auto minmax(0,1fr) auto auto}.bround{width:auto}.bround b{font-size:24px}.brow.w{gap:10px}.brow.w .bside{width:auto;max-width:72px}.bwho-x{display:none}.bside{max-width:110px}.bmeta{grid-column:2 / -1;justify-content:flex-end}}
 .upg{font-size:12.5px;color:var(--muted);margin-right:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .upg-miss ul{margin:4px 0 0;padding-left:20px;font-size:12.5px;color:var(--muted)} .upg-miss b{color:var(--ink);font-weight:600}
 .upg.new{color:var(--warn)} .upg.ok{color:var(--ok)} .upg.err{color:var(--bad)}
@@ -4264,9 +4269,7 @@ async function markSeen(id, force){
   if (c) { if (c.attention !== "ask") c.attention = null; c.unread = false; drawAttention(); }
   try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
 }
-let boardStats = null, boardStatsAt = 0, showAllRecent = false;
-let recentTab = (() => { try { return localStorage.getItem("ccim.recentTab") || "chats"; } catch { return "chats"; } })();
-function setRecentTab(t){ recentTab = t; showAllRecent = false; try { localStorage.setItem("ccim.recentTab", t); } catch {} renderBoard(true); }
+let boardStats = null, boardStatsAt = 0, BSEL = null;     // BSEL：「等你处理」多选时选中的对话编号
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];
   const parts = await Promise.all(ms.map(m => api("/api/board", undefined, m.id).catch(() => null)));
@@ -4283,14 +4286,23 @@ async function loadBoardStats(){
     }
     if (p.quota && p.quota.windows && (!out.quota || p.quota.at > out.quota.at)) out.quota = p.quota;   // 额度：用最新的那份
   }
-  out.recent = parts.flatMap((p, i) => p ? remember(p.recent, ms[i].id) : []);   // 「最近在跟」（#268）
+  out.open = parts.flatMap((p, i) => p ? remember(p.open || p.recent, ms[i].id) : []);   // 没标完成的对话（#390；旧版本的电脑给的是最近 7 天的）
   boardStats = out; boardStatsAt = Date.now();
 }
-function withRecent(){                // 整体状态里的对话加上任务面板「最近在跟」要的那几条（#268）
+function withOpen(){                  // 整体状态里的对话加上「等你处理」要的、更早的那些（#268、#390）
   const seen = new Set(S.chats.map(c => c.id));
-  return S.chats.concat(((boardStats || {}).recent || []).filter(c => !seen.has(c.id)));
+  return S.chats.concat(((boardStats || {}).open || []).filter(c => !seen.has(c.id)));
 }
-const REASON = {done: ["回答完了", "done"], ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
+const REASON = {ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
+// 等你处理（#390）：回答过、没在干活、没标完成的都在，看过也不走；定时任务的对话你没在里面说过话的不算（后台给 answered）
+const isOpen = c => !working(c) && !c.archived && (c.attention === "ask" || c.attention === "err" || (c.answered ?? !!c.attention));
+const openAt = c => c.created || c.last_active || "";
+function openAge(c){                  // 开了多久
+  const t = openAt(c) && new Date(openAt(c).replace(" ", "T"));
+  if (!t || isNaN(t)) return "";
+  const h = (Date.now() - t) / 3600000;
+  return h < 1 ? "刚开" : h < 24 ? `开了 ${Math.floor(h)} 小时` : `开了 ${Math.floor(h / 24)} 天`;
+}
 function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
 function boardRow(c, kind){
   // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
@@ -4308,35 +4320,48 @@ function boardRow(c, kind){
     : esc(c.brief || (said !== c.title ? c.title : ""));
   const r = REASON[c.attention];
   const replying = boardReply && boardReply.id === c.id;
-  const btn = c.attention === "ask" ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
+  const wait = kind === "wait", picking = wait && BSEL, picked = picking && BSEL.has(c.id);
+  const btn = c.attention === "ask" && !picking ? `<button class="btn primary" onclick="event.preventDefault();location.hash=${q(boardHref(c))}">去批准</button>`
     : "";
-  const more = kind !== "work" && !replying ? `<button class="bmore-btn" aria-label="更多操作" title="更多操作" onclick="boardMenu(event,${q(c.id)},${kind === "wait"})">${ICON.more}</button>` : "";
-  const soft = kind === "recent" && c.unread;      // 点过「知道了」但还没打开看过
-  const dot = c.attention && c.attention !== "ask" ? `<span class="udot"></span>` : soft ? `<span class="udot soft"></span>` : "";
-  const row = `<a class="brow ${kind === "recent" ? "quiet" : ""} ${c.pin != null ? "starred" : ""} ${c.attention ? "fresh" : ""} ${soft ? "unread" : ""} ${kind === "work" ? "work" : ""} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""}" href="${boardHref(c)}">${kind === "work" ? ANTS : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
+  const more = wait && !replying && !picking ? `<button class="bmore-btn" aria-label="更多操作" title="更多操作" onclick="boardMenu(event,${q(c.id)})">${ICON.more}</button>` : "";
+  const dot = c.attention !== "ask" && (c.attention || c.unread) ? `<span class="udot"></span>` : "";   // 回答还没看过
+  const age = wait ? openAge(c) : "";
+  const side = wait ? [age, who].filter(Boolean).join(" · ") : who;
+  const round = wait && c.rounds ? `<span class="bround" title="你发了 ${c.rounds} 次"><b>${c.rounds}</b><small>轮</small></span>` : wait ? `<span class="bround"></span>` : "";
+  const row = `<a class="brow ${c.pin != null ? "starred" : ""} ${dot ? "fresh" : ""} ${kind === "work" ? "work" : "w"} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""} ${picking ? "picking" : ""} ${picked ? "picked" : ""}" href="${boardHref(c)}"${picking ? ` onclick="event.preventDefault();pickOpen(${q(c.id)})" role="checkbox" aria-checked="${!!picked}"` : ""}>${kind === "work" ? ANTS : ""}${picking ? `<span class="bpick" aria-hidden="true">${picked ? ICON.check : ""}</span>` : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
     <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.pin != null ? `<span class="bstar" title="置顶">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
-    <span class="bside"><span class="btopr"><span class="bwhen">${kind === "work" ? "" : when(c.last_active)}</span>${more}</span><span class="bwho" title="${esc(who)}">${esc(who)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
+    ${round}<span class="bside"><span class="btopr"><span class="bwhen">${wait ? when(c.last_active) : ""}</span>${more}</span><span class="bwho" title="${esc(side)}">${wait && age ? `${esc(age)}${who ? `<span class="bwho-x"> · ${esc(who)}</span>` : ""}` : esc(side)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
   if (!replying) return row;
   return `<div class="bitem">${row}<div class="breply"><textarea class="textarea" id="br-text" rows="2" placeholder="回复${esc(a ? a.name : "")}" aria-label="回复"
       oninput="boardReply.text=this.value" onkeydown="if(sendKey(event)){event.preventDefault();sendBoardReply()}else if(event.key==='Escape')closeBoardReply()">${esc(boardReply.text)}</textarea>
     <div class="acts"><button class="btn" onclick="closeBoardReply()">取消</button><button class="btn primary" id="br-send" onclick="sendBoardReply()">发送</button></div></div></div>`;
 }
 let boardReply = null;               // 面板里正在回复的 {id, text}；面板重画时输入的内容不丢
-function boardMenu(e, id, wait){     // 右上角的三点：知道了、快捷回复（#273）
-  e.preventDefault();
-  pop(e, (wait ? `<button onclick="closePop();dismissTask(${q(id)})">知道了</button>` : "")
-    + `<button onclick="closePop();openBoardReply(${q(id)})">快捷回复</button>`);
+function boardMenu(e, id){           // 右上角的三点：快捷回复、打开、标为已完成（#273、#390）
+  e.preventDefault(); e.stopPropagation();
+  const c = withOpen().find(x => x.id === id);
+  pop(e, `<button onclick="closePop();openBoardReply(${q(id)})">快捷回复</button>`
+    + (c ? `<button onclick="closePop();location.hash=${q(boardHref(c))}">打开</button>` : "")
+    + `<button onclick="closePop();finishOpen([${q(id)}])">标为已完成</button>`);
 }
-async function dismissTask(id){
-  const c = chatById(id);
-  const was = c && {attention: c.attention, unread: c.unread};
-  if (c) { c.attention = null; c.unread = true; }
-  if (boardReply && boardReply.id === id) boardReply = null;
+function pickOpen(id){ if (!BSEL) return; BSEL.has(id) ? BSEL.delete(id) : BSEL.add(id); renderBoard(true); }
+function startPick(){ BSEL = new Set(); boardReply = null; renderBoard(true); }
+function endPick(){ BSEL = null; renderBoard(true); }
+function pickAll(ids){ BSEL = BSEL && BSEL.size === ids.length ? new Set() : new Set(ids); renderBoard(true); }
+async function finishOpen(ids){       // 标为已完成：离开「等你处理」
+  const rows = withOpen().filter(c => ids.includes(c.id));
+  if (!rows.length) return;
+  const res = await Promise.allSettled(rows.map(c => api("/api/chat/mark", {id: c.id, changes: {archived: true, pin: null}}, machineOfChat(c))));
+  const ok = rows.filter((c, i) => res[i].status === "fulfilled");
+  ok.forEach(c => { c.archived = true; const k = MORE.known[c.id]; if (k) k.archived = true; });
+  if (boardStats) boardStats.open = (boardStats.open || []).filter(c => !ok.some(x => x.id === c.id));
+  if (boardReply && ok.some(c => c.id === boardReply.id)) boardReply = null;
+  if (BSEL) BSEL = null;
+  const bad = rows.length - ok.length;
+  toast(bad ? `${ok.length} 个标好了，${bad} 个没标上：${res.find(x => x.status === "rejected").reason.message}` : ok.length > 1 ? `${ok.length} 个已标为完成` : "已标为完成");
   drawAttention(); renderBoard(true);
-  try { await api("/api/chat/dismiss", {id}, ownerOf(id) || ctxMachine); }
-  catch (e) { if (c) Object.assign(c, was); drawAttention(); renderBoard(true); toast(e.message); return; }
-  refreshSoon();
+  refreshLists().catch(() => {});
 }
 function openBoardReply(id){
   if (!boardReply || boardReply.id !== id) boardReply = {id, text: ""};
@@ -4611,36 +4636,28 @@ async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
-  const tops = withRecent().filter(c => isTop(c) && !c.archived);
-  const wait = tops.filter(c => c.attention).sort((a, b) => (a.attention === "ask" ? -1 : 0) - (b.attention === "ask" ? -1 : 0) || (b.pin != null) - (a.pin != null) || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
+  const tops = withOpen().filter(c => isTop(c) && !c.archived);
+  // 等你批准、出错停下的在最上面，其余开得最久的在上面，让早该结束的对话一直摆在眼前（#390）
+  const rank = c => c.attention === "ask" ? 0 : c.attention === "err" ? 1 : 2;
+  const wait = tops.filter(isOpen).sort((a, b) => rank(a) - rank(b) || (openAt(a) < openAt(b) ? -1 : openAt(a) > openAt(b) ? 1 : 0));
   const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => (b.pin != null) - (a.pin != null));
-  const weekAgo = new Date(Date.now() - 7 * 86400000);
-  // 置顶的（#194、#347）排最前，超过 7 天没聊也留着
-  const recent = tops.filter(c => !c.attention && !working(c) && (c.pin != null || c.last_active && new Date(c.last_active.replace(" ", "T")) >= weekAgo))
-    .sort((a, b) => (b.pin != null) - (a.pin != null) || ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v[agTab]).sort((a, b) => b[1][agTab] - a[1][agTab]).slice(0, 6);
   const maxT = Math.max(1, ...ags.map(([, v]) => v[agTab]));
-  const sec = (title, color, n, body, cls = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span></h2>${body}</div>`;
+  const sec = (title, color, n, body, cls = "", tool = "") => `<div class="bsec ${cls}"><h2><i style="background:${color}"></i>${title}<span class="n">${n}</span>${tool}</h2>${body}</div>`;
   if (boardReply && !wait.some(c => c.id === boardReply.id)) boardReply = null;     // 那件事已经不在等你了
+  if (BSEL) { const ids = new Set(wait.map(c => c.id)); BSEL.forEach(id => ids.has(id) || BSEL.delete(id)); if (!wait.length) BSEL = null; }
   const ta = $("#br-text"), focused = ta && document.activeElement === ta, sel = ta && [ta.selectionStart, ta.selectionEnd];
   const top = $(".board") ? $(".board").scrollTop : 0;
+  const ids = JSON.stringify(wait.map(c => c.id)).replace(/"/g, "&quot;");
+  const tool = !wait.length ? "" : BSEL
+    ? `<span class="sp"></span><span class="bpickbar"><button class="btn" onclick="pickAll(${ids})">${BSEL.size === wait.length ? "全不选" : "全选"}</button><button class="btn" onclick="endPick()">取消</button><button class="btn primary" ${BSEL.size ? "" : "disabled"} onclick="finishOpen([...BSEL])">标为已完成${BSEL.size ? `（${BSEL.size}）` : ""}</button></span>`
+    : `<span class="sp"></span><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
   $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
     <div class="bgrid"><div class="bleft">
       ${kpiHtml(st)}
-      ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting")}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
-      ${(() => {
-        // 对话：临时对话；Agent：和 Agent 的对话，都是一个对话一行（#119）
-        const temps = recent.filter(c => !c.agent), withAgent = recent.filter(c => c.agent);
-        const list = recentTab === "agents" ? withAgent : temps;
-        const tabs = `<span class="rtabs" role="tablist"><button role="tab" aria-selected="${recentTab === "chats"}" class="${recentTab === "chats" ? "on" : ""}" onclick="setRecentTab('chats')">对话 ${temps.length}</button><button role="tab" aria-selected="${recentTab === "agents"}" class="${recentTab === "agents" ? "on" : ""}" onclick="setRecentTab('agents')">Agent ${withAgent.length}</button></span>`;
-        const few = Math.max(recentTab === "agents" ? 10 : 5, list.filter(c => c.pin != null).length);   // 置顶的不折叠
-        const body = list.length ? (showAllRecent ? list : list.slice(0, few)).map(c => boardRow(c, "recent")).join("")
-            + (list.length > few && !showAllRecent ? `<button class="bmore" onclick="showAllRecent=true;renderBoard(true)">显示另外 ${list.length - few} 件</button>` : "")
-          : `<p class="bempty">${recentTab === "agents" ? "最近 7 天没和 Agent 聊过。" : "最近 7 天没有别的对话。"}</p>`;
-        return `<div class="bsec"><h2><i style="background:var(--faint)"></i>最近在跟${tabs}</h2>${body}</div>`;
-      })()}
+      ${sec("等你处理", "var(--zhu)", wait.length, wait.length ? `<div class="glass-bed">${wait.map(c => boardRow(c, "wait")).join("")}</div>` : `<p class="bempty">没有在等你的事。</p>`, "waiting", tool)}
     </div><div class="bright">
       <div class="bcard"><h2>活跃度<span class="sp"></span><small>点一天查看</small></h2>${boardStats ? heatHtml(st.heat || {}, st.today, st.done || {}) : `<p class="bempty">…</p>`}</div>
       ${finCard(st)}

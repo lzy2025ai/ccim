@@ -104,16 +104,32 @@ class ChatPageTests(unittest.TestCase):
         self.assertEqual([r["id"] for r in rows], ["w-300"])
         self.assertEqual(more["older"], 0)
 
-    def test_board_recent_and_day_reviews(self):
+    def test_board_open_and_day_reviews(self):
+        """等你处理（#390）：没标完成、回答过的都在，不管多早；在干活的、标完成的、没回答过的不在；
+        定时任务的对话你没在里面说过话的不算。轮数只数你自己发的。"""
         from ccim import board
         chats = registry.read_state(self.pf.home)["chats"]
-        chats["w-111"]["pin"] = -3                                       # 置顶的：很早也在「最近在跟」
         chats["w-202"] = {"title": "10月25日 复盘", "agent": self.agent, "review": "2026-10-25", "last_active": ts(5000)}
+        chats["s-x-" + self.agent] = {"title": "日报", "agent": self.agent, "schedule": "x", "last_active": ts(3)}
+        chats["s-y-" + self.agent] = {"title": "周报", "agent": self.agent, "schedule": "y", "last_active": ts(3)}
         registry.write_state(self.pf.home, chats=chats)
-        rec = {r["id"] for r in board.recent(self.pf, self.pf.chats())}
-        self.assertIn("w-111", rec)
-        self.assertIn("w-201", rec)                                       # 和 Agent 的对话也在（Agent 那一栏）
-        self.assertNotIn("w-099", rec)                                    # 在干活的不在这一栏
+        logs = self.pf.channel.logs
+        for cid in ("w-111", "w-099", "w-115", "w-201", "s-x-" + self.agent, "s-y-" + self.agent):
+            logs.append(cid, {"type": "user", "text": "定时", "sched": "x"} if cid.startswith("s-") else {"type": "user", "text": "做一下"})
+            logs.append(cid, {"type": "answer", "text": "好了", "state": "done"})
+        logs.append("w-111", {"type": "user", "text": "再改改"})
+        logs.append("w-111", {"type": "user", "text": "转来的", "from_chat": "w-001"})
+        logs.append("w-111", {"type": "answer", "text": "改好了", "state": "done"})
+        logs.append("s-y-" + self.agent, {"type": "user", "text": "这周的再细一点"})
+        logs.append("w-050", {"type": "user", "text": "还没回答"})
+        rows = {r["id"]: r for r in board.open_rows(self.pf, self.pf.chats())}
+        self.assertEqual(rows["w-111"]["rounds"], 2)                     # 很早的也在；转来的不算一轮
+        self.assertIn("w-201", rows)                                      # 和 Agent 的对话也在
+        self.assertIn("s-y-" + self.agent, rows)                          # 定时任务的对话，你在里面说过话
+        for cid in ("w-099", "w-115", "w-050", "s-x-" + self.agent):     # 在干活、标完成、没回答过、没说过话的定时任务
+            self.assertNotIn(cid, rows)
+        self.assertTrue(rows["w-111"]["answered"])
+        self.assertFalse(self.pf.chat_view("s-x-" + self.agent)["answered"])
         self.assertEqual([r["id"] for r in board.day(self.pf, "2026-10-25")["reviews"]], ["w-202"])
 
     def test_http(self):

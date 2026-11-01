@@ -24,7 +24,7 @@ IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 NOTE = """\
 （以下是 ccim 的说明，不用回复这一段）你正在通过{label}和用户对话，用户多半在手机上看回复：
 - 回答简洁，{style}
-- {files}
+- 需要把图片、视频、文件交给用户时，调用 ccim 的 send_file 工具发到聊天里。
 - 用户发来的图片和文件已保存到本地，路径写在消息里。
 - 没有交互式提问框，有问题直接在回复里问。
 - 用户要你到点或每隔一段时间做某件事时，用命令 `ccim schedule add` 建定时任务（用法看 `ccim schedule add --help`），

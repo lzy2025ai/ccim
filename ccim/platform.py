@@ -14,7 +14,7 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 
 安全：只监听 127.0.0.1；Host 必须是本机地址（挡 DNS rebinding）；接口要带 X-CCIM 头（别的网站跨域发不过来）。
 """
-import asyncio, glob, json, logging, os, queue, re, shutil, threading, time, uuid
+import asyncio, glob, json, logging, os, queue, re, shutil, subprocess, threading, time, uuid
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -1997,6 +1997,13 @@ class Platform:
                    v=len(vs) - 1 if src == path else int(v), latest=src == path)
         return out
 
+    def doc_reveal(self, cid, path):
+        """在访达里选中对话里的这个文件（#392）：能打开预览的就能显示，不限工作目录。"""
+        self.doc_versions(cid, path)
+        if not os.path.exists(path):
+            raise Problem("找不到这个文件了。")
+        subprocess.run(["open", "-R", path], capture_output=True)
+
     def doc_save(self, cid, path, text, mtime):
         self.doc_versions(cid, path)
         if not isinstance(text, str):
@@ -2749,9 +2756,9 @@ def _handler(pf):
             u = urlparse(self.path)
             if self._remote():
                 return
-            # 别的电脑转来的：/api/ws/reveal 只给这台电脑的主人（#322），访客不行
+            # 别的电脑转来的：/api/ws/reveal、/api/doc/reveal 只给这台电脑的主人（#322），访客不行
             if self.headers.get("X-From-Peer") and (u.path in ("/api/pick", "/api/reveal")
-                                                     or u.path == "/api/ws/reveal" and share.account_of(self.headers)):
+                                                     or u.path in ("/api/ws/reveal", "/api/doc/reveal") and share.account_of(self.headers)):
                 return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
                 if self._guest("POST", u.path, {}, None)[1]:
@@ -2815,6 +2822,7 @@ def _handler(pf):
                 "/api/diary/open": lambda: diary_mod.open_in(b("app")),
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
+                "/api/doc/reveal": lambda: pf.call(pf.doc_reveal, b("chat"), b("path")),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/app/write": lambda: apps_mod.data_write(b("id"), b("path"), b("text")),
                 "/api/app/remove": lambda: apps_mod.data_remove(b("id"), b("path")),

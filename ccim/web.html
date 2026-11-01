@@ -517,6 +517,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .app-nm{border:0;background:none;padding:2px 6px;margin-left:-6px;border-radius:6px;font:600 14px var(--sans);color:var(--ink);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;min-width:0}
 .app-nm:hover{background:var(--sunk)}
 .docpane .app-frame{display:block;height:100%}
+body.doc-only .app,body.doc-only .pback{display:none}
+body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .app-frame{flex:1;width:100%;border:0;background:#fff;min-height:0}
 @media (max-width:760px){.app-bar .back span{display:none}.app-bar{padding:8px 10px}}
 .ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
@@ -1216,10 +1218,37 @@ body.side-open{--doc-w:min(36vw,460px)}
   .doc-body textarea{padding:18px 16px 60px;font-size:16px}
   .doc-top{padding:8px 8px 8px 6px}
 }
+/* 编辑：实时预览（#392） */
+.doc-body:has(.live-ed){background:var(--panel)}
+.live-ed{max-width:760px;min-height:100%;margin:0 auto;padding:28px 32px 120px;outline:0;white-space:pre-wrap;word-break:break-word;font:15.5px/1.8 var(--sans);color:var(--ink);caret-color:var(--qing)}
+.live-ed .ln{min-height:1.8em}
+.live-ed .ln:not(.on) .lv-mk{display:none}
+.live-ed .lv-mk{color:var(--faint);font-weight:400;font-style:normal}
+.live-ed .h1{font-size:1.75em;font-weight:700;line-height:1.4;margin:.3em 0 .1em}
+.live-ed .h2{font-size:1.45em;font-weight:700;line-height:1.4;margin:.3em 0 .1em}
+.live-ed .h3{font-size:1.22em;font-weight:650;line-height:1.5;margin:.2em 0 .1em}
+.live-ed .h4,.live-ed .h5,.live-ed .h6{font-size:1.05em;font-weight:650}
+.live-ed .quote{border-left:3px solid var(--line-strong);padding-left:14px;color:var(--ink-2)}
+.live-ed .quote.on{border-left-color:var(--qing)}
+.live-ed .lm{color:var(--muted)}
+.live-ed .ln:not(.on) .bul{position:relative;color:transparent}
+.live-ed .ln:not(.on) .bul::before{content:"•";position:absolute;left:0;right:0;text-align:center;color:var(--muted)}
+.live-ed .ln.on .bul{color:var(--muted)}
+.live-ed code{font:.88em var(--mono);padding:1px 5px;border-radius:4px;background:var(--sunk);color:#B5303A}
+.live-ed .code,.live-ed .tb{font:13px/1.7 var(--mono);background:var(--sunk);padding:0 14px;min-height:1.7em}
+.live-ed .tb{background:none;padding:0}
+.live-ed .code.fence .fm{color:var(--faint)}
+.live-ed .lk{color:var(--qing);text-decoration:underline;text-decoration-color:rgba(43,76,111,.35);text-underline-offset:3px}
+.live-ed .hr:not(.on){position:relative}
+.live-ed .hr:not(.on)::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px solid var(--line-strong)}
+.live-ed .lv-img{display:block;margin:6px 0;user-select:none}
+.live-ed .lv-img img{max-width:100%;max-height:420px;border-radius:6px;display:block}
+@media (max-width:760px){.live-ed{padding:20px 18px 100px;font-size:16px}}
 /* 公众号排版（#35） */
 .wx-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--paper);border-bottom:1px solid var(--line)}
 .wx-bar .sp{flex:1}
 .wx-bar .select{width:auto;min-width:110px}
+.wx-lb{font-size:13px;color:var(--muted)}
 #doc-save[hidden]{display:none}
 .wx-bar .btn svg{width:14px;height:14px}
 .wx-page{background:#fff;max-width:600px;margin:20px auto 60px;padding:28px 22px 50px;box-shadow:0 1px 4px rgba(29,34,43,.08);border-radius:4px}
@@ -7722,14 +7751,13 @@ async function openDoc(path, v, chat, inWs){
     toast(e.message); if (DOC && !DOC.d) closeDoc(true); return;
   }
   if (!DOC || DOC.path !== path) return;
-  const lastView = (() => { try { return localStorage.getItem("ccim.mdView"); } catch { return null; } })();
-  const mode = DOC.mode === "edit" && d.latest && d.editable ? "edit" : d.kind !== "md" ? "view" : DOC.d ? (DOC.mode === "edit" ? "view" : DOC.mode) : lastView === "wx" ? "wx" : "view";
+  const mode = DOC.mode === "edit" && d.latest && d.editable ? "edit" : "view";
   DOC = {...DOC, d, draft: d.text || "", dirty: false, mode: d.kind === "text" ? "edit" : mode};
   if (DOC.ws && WS) WS.docs[path] = DOC;
   drawDoc();
 }
 async function closeDoc(force){
-  if (!DOC) return;
+  if (!DOC || DOC_ONLY) return;
   if (DOC.ws) { if (force || !WS) { DOC = null; return; } return narrow() ? wsGo("files") : wsCloseTab(DOC.path); }
   if (!force && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，关掉就丢掉了。", "丢掉")) return;
   DOC = null; drawDoc();
@@ -7744,10 +7772,10 @@ function docBody(){
   if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
+  if (DOC.mode === "edit" && d.kind === "md") return `<div id="doc-live" class="live-ed" contenteditable="true" spellcheck="false" autocapitalize="off" role="textbox" aria-multiline="true"></div>`;
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
   if (DOC.mode === "edit") return `<textarea id="doc-ta" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
-  if (d.kind === "md" && DOC.mode === "wx") return wxView();
-  if (d.kind === "md") return `<article class="doc-md ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${docMd(DOC.draft, d.assets)}</article>`;
+  if (d.kind === "md") return wxView();   // Markdown 的预览直接按公众号主题排版（#392）
   if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
@@ -7784,7 +7812,7 @@ const docRoot = () => DOC && DOC.ws ? $("#ws-ed") : $("#docpane");
 function drawWsDoc(){                    // 工作区：文档画在中间的编辑区，上面是标签
   const el = $("#ws-ed"); if (!el) return;
   const d = DOC.d, name = d ? d.name : DOC.path.split("/").pop(), rel = wsInside(DOC.path) ? wsRel(DOC.path) : name;
-  const modes = d && d.kind === "md" ? [["view", "预览"], ["edit", "源码"], ["wx", "公众号"]] : d && d.kind === "html" && d.latest ? [["view", "预览"], ["edit", "源码"]] : [];
+  const modes = d && d.kind === "md" ? [["view", "预览"], ["edit", "编辑"]] : d && d.kind === "html" && d.latest ? [["view", "预览"], ["edit", "源码"]] : [];
   const keep = el.querySelector(".doc-body")?.scrollTop || 0, same = el.dataset.path === DOC.path;
   el.dataset.path = DOC.path;
   el.innerHTML = `${wsTabs()}<div class="doc-top">
@@ -7793,13 +7821,12 @@ function drawWsDoc(){                    // 工作区：文档画在中间的编
       ${DOC.savedAt ? `<span class="saved">已保存</span>` : ""}
       ${modes.length ? `<span class="seg mini">${modes.map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
-      ${d && !["img", "video", "audio", "other"].includes(d.kind) ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
+      ${d && d.kind !== "other" ? docMoreBtn() : ""}
     </div>
     <div class="doc-body">${docBody()}</div>
     <button class="ws-ask" onclick="WS.ctx=true;WS.phoneCtx=true;wsGo('chat')">${ICON.chat}问 AI</button>`;
   if (same) el.querySelector(".doc-body").scrollTop = keep;
-  if (DOC.mode === "wx") wxImgTools();
-  codeSync();
+  docMounted();
   drawWsCtx();
 }
 function drawDoc(){
@@ -7824,20 +7851,19 @@ function drawDoc(){
   }
   delete el.dataset.app;
   el.innerHTML = `<div class="doc-top">
-      <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
+      ${DOC_ONLY ? `<a class="icon-btn" aria-label="回到对话" title="回到对话" href="${esc(docOnlyBack())}">${ICON.chat}</a>` : `<button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>`}
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
-      ${d && (d.kind === "md" || d.editable && d.latest) ? `<span class="seg mini">${[["view", "预览"], ...(d.kind === "md" ? [["wx", "公众号"]] : []), ...(d.editable && d.latest ? [["edit", "编辑"]] : [])]
+      ${d && d.editable && d.latest ? `<span class="seg mini">${[["view", "预览"], ["edit", "编辑"]]
         .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
-      ${d ? `<a class="icon-btn" aria-label="下载" title="下载" href="${esc(docFileUrl())}" download="${esc(name)}">${ICON.dl}</a>` : ""}
+      ${d ? docMoreBtn() : ""}
       ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
     </div>
     ${d && !d.latest ? `<div class="doc-old"><span>${esc(verLabel(vs[d.v], d.v))}</span><span class="sp"></span>
       ${d.editable ? `<button class="btn" onclick="docRestore()">用这一版的内容</button>` : ""}<button class="btn" onclick="openDoc(DOC.path)">看最新的</button></div>` : ""}
     <div class="doc-body">${docBody()}</div>`;
-  if (DOC.mode === "wx") wxImgTools();
-  codeSync();
+  docMounted();
 }
 // 手机浏览器里嵌着的 PDF 可能只显示第一页，新标签页里能完整翻。主屏幕图标打开的网页新标签页没登录，不给这个按钮
 const pdfTab = () => STANDALONE ? "" : `<a class="icon-btn" aria-label="在新标签页打开" title="在新标签页打开" href="${esc(docFileUrl())}" target="_blank" rel="noopener">${ICON.ext}</a>`;
@@ -7852,8 +7878,89 @@ function docVersions(e){
 function docMode(m){
   if (!DOC || DOC.mode === m) return;
   DOC.mode = m; drawDoc();
-  if (m === "edit") $("#doc-ta")?.focus();
-  else if (DOC.d && DOC.d.kind === "md") try { localStorage.setItem("ccim.mdView", m); } catch {}   // Markdown 默认用上次看的版式
+  if (m === "edit") { const r = docRoot(); r?.querySelector("#doc-ta")?.focus(); if (r?.querySelector("#doc-live")) liveFocus(); }
+}
+function docMounted(){   // 正文画好以后：预览里的图片工具、代码高亮、实时预览编辑器
+  if (DOC.d && DOC.d.kind === "md" && DOC.mode === "view") wxImgTools();
+  codeSync();
+  liveMount();
+}
+// 右上角「更多」（#392）：下载、复制、在访达中显示、复制到公众号收在一起
+function docMoreBtn(){ return `<button class="icon-btn" aria-label="更多" title="更多" onclick="docMore(event)">${ICON.more}</button>`; }
+function docMore(e){
+  const d = DOC.d, b = (js, label) => `<button onclick="closePop();${js}">${label}</button>`;
+  pop(e, [
+    d.kind === "md" ? b("wxCopy()", "复制到公众号") : "",
+    typeof d.text === "string" ? b("docCopyText()", "复制全文") : "",
+    canReveal(DOC.machine) ? b("docReveal()", "在访达中显示") : "",
+    DOC_ONLY || STANDALONE || d.kind === "app" ? "" : b("docNewTab()", "在新标签页打开"),
+    b("docDownload()", docPics().length ? `下载（含 ${docPics().length} 张配图）` : "下载"),
+  ].join(""));
+}
+// 单独一个标签页只开这个文档（#392）：/?doc=路径&chat=对话&m=电脑，不用记它在哪个对话里
+const DOC_ONLY = (() => { const q = new URLSearchParams(location.search); return q.get("doc") && q.get("chat") ? {path: q.get("doc"), chat: q.get("chat"), m: q.get("m")} : null; })();
+async function docNewTab(){
+  if (DOC.dirty && DOC.d.editable) await docSave(true);   // 新标签页读的是文件，先把改的存上
+  const q = new URLSearchParams({doc: DOC.path, chat: DOC.chat});
+  if (isRemote(DOC.machine)) q.set("m", DOC.machine);
+  window.open("/?" + q, "_blank", "noopener");
+}
+function docOnlyBack(){   // 单独标签页左上角：回到这个文档所在的对话
+  const c = chatById(DOC.chat);
+  return `/#/${c && c.agent ? `agents/${encodeURIComponent(c.agent)}/` : "chats/"}${encodeURIComponent(DOC.chat)}`;
+}
+async function docCopyText(){
+  try { await navigator.clipboard.writeText(DOC.draft); toast("已复制"); } catch { toast("复制没成功，再试一次"); }
+}
+async function docReveal(){
+  const mid = DOC.machine;
+  await act(() => api("/api/doc/reveal", {chat: DOC.chat, path: DOC.path}, mid || null));
+  if (isRemote(mid)) toast(`已在「${(machineOf(mid) || {}).name || "那台电脑"}」的访达里选中`);
+}
+function docDownload(){
+  const name = DOC.d.name || DOC.path.split("/").pop(), pics = docPics();
+  const a = document.createElement("a"); a.download = name; a.href = docFileUrl();
+  if (pics.length) {   // 有本地配图：Markdown 和图片打成一个 zip，解压后图片路径对得上（#392）
+    const base = name.replace(/\.(md|markdown)$/i, ""), used = new Set();
+    let text = DOC.draft;
+    const files = pics.map(([ref, uri]) => {
+      let p = ref.split(/[?#]/)[0]; try { p = decodeURIComponent(p); } catch {}
+      p = p.replace(/^\.\//, "");
+      if (p.startsWith("/") || p.split("/").includes("..")) {   // 放在别处的图：收进 images/，文里的引用跟着改
+        let f = p.split("/").pop() || "image", k = 1;
+        while (used.has("images/" + f)) f = f.replace(/(\.\w+)?$/, m => `-${++k}${m}`);
+        p = "images/" + f;
+        text = text.split("(" + ref).join("(" + p).split(`"${ref}"`).join(`"${p}"`).split(`'${ref}'`).join(`'${p}'`);
+      }
+      used.add(p);
+      const bin = atob(uri.slice(uri.indexOf(",") + 1)), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return [base + "/" + p, u8];
+    });
+    files.unshift([base + "/" + name, new TextEncoder().encode(text)]);
+    a.href = URL.createObjectURL(zipStore(files)); a.download = base + ".zip";
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  document.body.append(a); a.click(); a.remove();
+}
+const docPics = () => DOC && DOC.d && DOC.d.kind === "md" ? Object.entries(DOC.d.assets || {}).filter(([, u]) => /^data:[^,]*;base64,/.test(u)) : [];
+function zipStore(files){   // 不压缩的 zip（图片本来就压缩过）：[[路径, Uint8Array]] → Blob
+  const crcT = zipStore.t || (zipStore.t = Array.from({length: 256}, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xEDB88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; }));
+  const crc = d => { let c = -1; for (let i = 0; i < d.length; i++) c = crcT[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+  const parts = [], dir = []; let off = 0;
+  for (const [path, data] of files){
+    const nm = new TextEncoder().encode(path), c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [14, c, 4], [18, data.length, 4], [22, data.length, 4], [26, nm.length, 2]].forEach(([o, v, n]) => n === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+    parts.push(h, nm, data);
+    const e = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [16, c, 4], [20, data.length, 4], [24, data.length, 4], [28, nm.length, 2], [42, off, 4]].forEach(([o, v, n]) => n === 4 ? e.setUint32(o, v, true) : e.setUint16(o, v, true));
+    dir.push(e, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = dir.reduce((t, x) => t + x.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [8, files.length, 2], [10, files.length, 2], [12, size, 4], [16, off, 4]].forEach(([o, v, n]) => n === 4 ? end.setUint32(o, v, true) : end.setUint16(o, v, true));
+  return new Blob([...parts, ...dir, end], {type: "application/zip"});
 }
 function docInput(ta){
   DOC.draft = ta.value;
@@ -7970,8 +8077,8 @@ function wxHtml(src, assets){
 }
 function wxView(){
   const d = DOC.d;
-  return `<div class="wx-bar">${dd("wxtheme", Object.entries(WX_THEMES).map(([k, t]) => [k, t.name]), wxTheme, v => { wxTheme = v; try { localStorage.setItem("ccim.wxTheme", v); } catch {} drawDocBody(); })}
-      <span class="sp"></span><button class="btn primary" onclick="wxCopy()">${ICON.copy}复制到公众号</button></div>
+  return `<div class="wx-bar"><span class="wx-lb">主题</span>${dd("wxtheme", Object.entries(WX_THEMES).map(([k, t]) => [k, t.name]), wxTheme, v => { wxTheme = v; try { localStorage.setItem("ccim.wxTheme", v); } catch {} drawDocBody(); })}
+</div>
     <div class="wx-page ${canBlock() ? "can-edit" : ""}" onclick="blockClick(event)">${wxHtml(DOC.draft, d.assets)}</div>`;
 }
 function cleanCopy(el){
@@ -7981,8 +8088,9 @@ function cleanCopy(el){
   return c;
 }
 async function wxCopy(){
-  const art = $("#wx-art"); if (!art) return;
-  const c = cleanCopy(art), html = c.outerHTML, text = art.innerText;
+  let art = docRoot()?.querySelector("#wx-art");
+  if (!art) { const t = document.createElement("template"); t.innerHTML = wxHtml(DOC.draft, DOC.d.assets); art = t.content.firstElementChild; }   // 编辑时也能复制
+  const c = cleanCopy(art), html = c.outerHTML, text = art.innerText || art.textContent;
   try {
     await navigator.clipboard.write([new ClipboardItem({"text/html": new Blob([html], {type: "text/html"}), "text/plain": new Blob([text], {type: "text/plain"})})]);
   } catch {
@@ -8124,8 +8232,230 @@ function drawDocBody(){
   const b = docRoot()?.querySelector(".doc-body"); if (!b || !DOC) return;
   const top = b.scrollTop;
   b.innerHTML = docBody(); b.scrollTop = top;
-  if (DOC.mode === "wx") wxImgTools();
-  codeSync();
+  docMounted();
+}
+
+// ---- 编辑：像 Obsidian 的实时预览（#392）。原文一行一个 div，标题、加粗等直接显示效果，标记符号只在光标所在的行露出来 ----
+// 输入一律拦下来自己改原文（beforeinput），再只重画变了的行；中文输入法的组字交给浏览器，组完再从页面读回原文
+const LV_RE = /(`+)([^`]+?)\1|!\[([^\]]*)\]\(([^)]*)\)|\[([^\]]+)\]\(([^)]*)\)|\*\*(?=\S)(.+?)\*\*|__(?=\S)(.+?)__|~~(?=\S)(.+?)~~|(?<![*\w\\])\*(?=[^\s*])(.+?)\*(?![\w*])|(https?:\/\/[^\s<>）)\]，。]+)|\\([\\`*_{}\[\]()#+\-.!|~<>])/g;
+const lvMk = t => t ? `<span class="lv-mk">${esc(t)}</span>` : "";
+function lvInline(s){
+  let out = "", at = 0;
+  const re = new RegExp(LV_RE.source, "g");
+  for (let m; (m = re.exec(s));){
+    out += esc(s.slice(at, m.index)); at = m.index + m[0].length;
+    if (m[1]) out += lvMk(m[1]) + `<code>${esc(m[2])}</code>` + lvMk(m[1]);
+    else if (m[3] != null){
+      const u = m[4].trim().replace(/\s+["'][^"']*["']$/, "").replace(/^<|>$/g, ""), a = (DOC.d && DOC.d.assets) || {};
+      const src = a[u] || (/^(https?:|data:image\/)/i.test(u) ? u : "");
+      out += lvMk(m[0]) + (src ? `<span class="lv-img" contenteditable="false"><img src="${esc(src)}" alt="${esc(m[3])}"></span>` : "");
+    }
+    else if (m[5]) out += lvMk("[") + `<span class="lk">${lvInline(m[5])}</span>` + lvMk(`](${m[6]})`);
+    else if (m[7]) out += lvMk("**") + `<b>${lvInline(m[7])}</b>` + lvMk("**");
+    else if (m[8]) out += lvMk("__") + `<b>${lvInline(m[8])}</b>` + lvMk("__");
+    else if (m[9]) out += lvMk("~~") + `<s>${lvInline(m[9])}</s>` + lvMk("~~");
+    else if (m[10]) out += lvMk("*") + `<i>${lvInline(m[10])}</i>` + lvMk("*");
+    else if (m[11]) out += `<span class="lk">${esc(m[11])}</span>`;
+    else out += lvMk("\\") + esc(m[12]);
+  }
+  return out + esc(s.slice(at));
+}
+function lvLines(L, on){   // 每行的 html；on = [第一行, 最后一行]，光标所在的行
+  const out = []; let fence = null;
+  for (let i = 0; i < L.length; i++){
+    const l = L[i]; let cls = "", h = "", m;
+    if (fence !== null){
+      if (l.trim().startsWith(fence)) { cls = "code fence"; h = `<span class="fm">${esc(l)}</span>`; fence = null; }
+      else { cls = "code"; h = esc(l); }
+    }
+    else if ((m = l.match(/^\s{0,3}(```|~~~)/))) { fence = m[1]; cls = "code fence"; h = `<span class="fm">${esc(l)}</span>`; }
+    else if ((m = l.match(/^(\s{0,3}(#{1,6})\s+)(.*)$/))) { cls = "h" + m[2].length; h = lvMk(m[1]) + lvInline(m[3]); }
+    else if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l)) { cls = "hr"; h = lvMk(l); }
+    else if ((m = l.match(/^(\s{0,3}>\s?)(.*)$/))) { cls = "quote"; h = lvMk(m[1]) + lvInline(m[2]); }
+    else if ((m = l.match(/^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s+)?(.*)$/))) {
+      cls = "li";
+      h = esc(m[1]) + (/\d/.test(m[2]) ? `<span class="lm">${esc(m[2])}</span>` : `<span class="bul">${esc(m[2])}</span>`) + esc(m[3])
+        + (m[4] ? `<span class="lm">${esc(m[4])}</span>` : "") + lvInline(m[5]);
+    }
+    else if (/^\s*\|.*\|\s*$/.test(l)) { cls = "tb"; h = esc(l); }
+    else h = lvInline(l);
+    out.push(`<div class="ln${cls ? " " + cls : ""}${on && i >= on[0] && i <= on[1] ? " on" : ""}">${h || "<br>"}</div>`);
+  }
+  return out;
+}
+function lvText(el){   // 一行的原文：图片那些不能编辑的部分不算
+  let s = "";
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {acceptNode: n => n.parentElement.closest("[contenteditable=false]") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+  for (let n; (n = w.nextNode());) s += n.nodeValue;
+  return s;
+}
+function lvTextNodes(el){
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {acceptNode: n => n.parentElement.closest("[contenteditable=false]") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+  const out = []; for (let n; (n = w.nextNode());) out.push(n); return out;
+}
+function lvPos(root, node, off){   // 页面上的位置 → 原文里的第几个字
+  const kids = root.children, lv = root._lv;
+  let line = node === root ? kids[Math.min(off, kids.length - 1)] : node;
+  while (line && line.parentNode !== root) line = line.parentNode;
+  if (!line) return 0;
+  const idx = [...kids].indexOf(line);
+  let g = 0; for (let i = 0; i < idx; i++) g += lv.lines[i].length + 1;
+  if (node === root) return off >= kids.length ? g + lv.lines[idx].length : g;
+  const r = document.createRange(); r.setStart(line, 0);
+  try { r.setEnd(node, off); } catch { return g; }
+  let col = 0;
+  for (const t of lvTextNodes(line)){
+    if (t === node) { col += off; break; }
+    if (r.intersectsNode(t)) col += t.length; else break;
+  }
+  return g + Math.min(col, lv.lines[idx].length);
+}
+function lvLineOf(lines, g){ let i = 0; while (i < lines.length - 1 && g > lines[i].length) { g -= lines[i].length + 1; i++; } return [i, g]; }
+function lvPoint(root, g){   // 原文里的第几个字 → 页面上的位置
+  const [i, col] = lvLineOf(root._lv.lines, g), line = root.children[i];
+  if (!line) return [root, 0];
+  let c = col;
+  for (const t of lvTextNodes(line)){
+    if (c <= t.length && t.parentElement.offsetParent !== null || c < t.length) return [t, c];
+    c -= t.length;
+  }
+  return [line, line.childNodes.length && line.lastChild.nodeName === "BR" ? line.childNodes.length - 1 : line.childNodes.length];
+}
+function lvSel(root){
+  const s = getSelection();
+  if (!s.rangeCount || !root.contains(s.anchorNode) || !root.contains(s.focusNode)) return null;
+  const a = lvPos(root, s.anchorNode, s.anchorOffset), b = lvPos(root, s.focusNode, s.focusOffset);
+  return [Math.min(a, b), Math.max(a, b)];
+}
+function lvSetSel(root, a, b = a){
+  const s = getSelection(), [n1, o1] = lvPoint(root, a), [n2, o2] = lvPoint(root, b);
+  s.setBaseAndExtent(n1, o1, n2, o2);
+  const r = s.getRangeAt(0).getBoundingClientRect(), box = root.closest(".doc-body");   // 光标跑到看不见的地方时滚过去
+  if (box && r.height){ const v = box.getBoundingClientRect(); if (r.bottom > v.bottom - 30) box.scrollTop += r.bottom - v.bottom + 60; else if (r.top < v.top + 10) box.scrollTop -= v.top - r.top + 40; }
+}
+function lvRender(root, sel){
+  const lv = root._lv, on = sel ? [lvLineOf(lv.lines, sel[0])[0], lvLineOf(lv.lines, sel[1])[0]] : null;
+  lv.on = on ? on.join("-") : "";
+  const hs = lvLines(lv.lines, on), kids = [...root.children];
+  let a = 0; while (a < kids.length && a < hs.length && kids[a]._h === hs[a]) a++;
+  let z = 0; while (z < kids.length - a && z < hs.length - a && kids[kids.length - 1 - z]._h === hs[hs.length - 1 - z]) z++;
+  kids.slice(a, kids.length - z).forEach(k => k.remove());
+  const t = document.createElement("template"); t.innerHTML = hs.slice(a, hs.length - z).join("");
+  [...t.content.children].forEach((k, j) => k._h = hs[a + j]);
+  root.insertBefore(t.content, kids[kids.length - z] && z ? kids[kids.length - z] : null);
+}
+function lvCommit(root, text, a, b = a, kind){
+  const lv = root._lv, old = DOC.draft, now = Date.now();
+  if (text !== old){
+    const typing = kind === "type" && lv.last === "type" && now - lv.at < 1000;   // 连着打的字算一步撤销
+    if (!typing) { lv.undo.push({text: old, sel: lv.sel || [a, a]}); if (lv.undo.length > 300) lv.undo.shift(); }
+    lv.redo = []; lv.last = kind; lv.at = now;
+    DOC.draft = text; docInput({value: text});
+  }
+  lv.lines = text.split("\n");
+  lvRender(root, [a, b]); lvSetSel(root, a, b); lv.sel = [a, b];
+}
+function lvHistory(root, back){
+  const lv = root._lv, from = back ? lv.undo : lv.redo, to = back ? lv.redo : lv.undo, x = from.pop();
+  if (!x) return;
+  to.push({text: DOC.draft, sel: lvSel(root) || [0, 0]});
+  DOC.draft = x.text; docInput({value: x.text}); lv.last = "";
+  lv.lines = x.text.split("\n"); lvRender(root, x.sel); lvSetSel(root, x.sel[0], x.sel[1]); lv.sel = x.sel;
+}
+function lvEnter(text, a, b){   // 回车：列表、引用自动续上；空的一项再回车就结束列表
+  const ls = text.lastIndexOf("\n", a - 1) + 1, line = text.slice(ls, a);
+  const m = line.match(/^(\s*)([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?(.*)$/) || line.match(/^(\s{0,3}>\s?)()()()()()(.*)$/);
+  if (m && a === b && text.slice(a, text.indexOf("\n", a) < 0 ? text.length : text.indexOf("\n", a)).trim() === "" && !m[7].trim())
+    return [text.slice(0, ls) + text.slice(a), ls];
+  let pre = "";
+  if (m && m[2]) pre = m[1] + (m[3] ? (+m[3] + 1) + m[4] : m[2]) + m[5] + (m[6] ? "[ ] " : "");
+  else if (m) pre = m[1];
+  return [text.slice(0, a) + "\n" + pre + text.slice(b), a + 1 + pre.length];
+}
+function liveMount(){
+  const root = docRoot()?.querySelector("#doc-live");
+  if (!root || root._lv) return;
+  root._lv = {lines: DOC.draft.replace(/\r/g, "").split("\n"), undo: [], redo: [], sel: null, on: null};
+  if (DOC.draft.includes("\r")) DOC.draft = DOC.draft.replace(/\r/g, "");
+  lvRender(root, null);
+  let composing = false;
+  const sync = () => {   // 浏览器自己改了页面（输入法组字等）：从页面读回原文
+    const kids = [...root.children], old = root._lv.lines, on = root._lv.on ? root._lv.on.split("-").map(Number) : [-1, -1];
+    const lines = kids.map(lvText).map(x => x.replace(/\u00a0/g, " "));
+    if (!lines.length) lines.push("");
+    root._lv.lines = lines;
+    const sel = lvSel(root) || [0, 0];
+    kids.forEach((k, i) => { if (lines.length !== old.length || lines[i] !== old[i] || i >= on[0] && i <= on[1]) k._h = ""; });   // 浏览器动过的行重画
+    lvCommit(root, lines.join("\n"), sel[0], sel[1], "type");
+  };
+  root.addEventListener("beforeinput", e => {
+    if (composing || e.isComposing || e.inputType === "insertCompositionText" || !e.cancelable) return;
+    const t = e.inputType, text = DOC.draft;
+    let [a, b] = lvSel(root) || [0, 0];
+    const tr = e.getTargetRanges ? e.getTargetRanges() : [];
+    if (tr.length && (t.startsWith("delete") || t === "insertReplacementText")){
+      const x = lvPos(root, tr[0].startContainer, tr[0].startOffset), y = lvPos(root, tr[0].endContainer, tr[0].endOffset);
+      if (y > x || a === b) { a = Math.min(x, y); b = Math.max(x, y); }
+    }
+    e.preventDefault();
+    if (t === "insertText") return lvCommit(root, text.slice(0, a) + (e.data || "") + text.slice(b), a + (e.data || "").length, undefined, "type");
+    if (/^insert(FromPaste|FromDrop|ReplacementText|FromYank)/.test(t)){
+      const v = ((e.dataTransfer && e.dataTransfer.getData("text/plain")) || e.data || "").replace(/\r/g, "");
+      return lvCommit(root, text.slice(0, a) + v + text.slice(b), a + v.length, undefined, "paste");
+    }
+    if (t === "insertParagraph" || t === "insertLineBreak") { const [v, c] = lvEnter(text, a, b); return lvCommit(root, v, c, undefined, "enter"); }
+    if (t.startsWith("delete")){
+      if (a === b){
+        if (/Backward/.test(t)) a = Math.max(0, a - (/[\uDC00-\uDFFF]/.test(text[a - 1] || "") ? 2 : 1));
+        else b = Math.min(text.length, b + (/[\uD800-\uDBFF]/.test(text[b] || "") ? 2 : 1));
+      }
+      return lvCommit(root, text.slice(0, a) + text.slice(b), a, undefined, "del");
+    }
+    if (t === "historyUndo" || t === "historyRedo") return lvHistory(root, t === "historyUndo");
+  });
+  root.addEventListener("input", e => { if (!composing && !e.isComposing) sync(); });   // 拦不下来的（个别手机输入法）
+  root.addEventListener("compositionstart", () => { composing = true; });
+  root.addEventListener("compositionend", () => { composing = false; setTimeout(sync); });
+  root.addEventListener("keydown", e => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); return lvHistory(root, !e.shiftKey); }
+    if (mod && e.key === "y") { e.preventDefault(); return lvHistory(root, false); }
+    if (mod && /^[bi]$/.test(e.key) && !composing){   // 加粗、斜体：给选中的字两边加符号
+      e.preventDefault();
+      const [a, b] = lvSel(root) || [0, 0], w = e.key === "b" ? "**" : "*", text = DOC.draft;
+      return lvCommit(root, text.slice(0, a) + w + text.slice(a, b) + w + text.slice(b), a + w.length, b + w.length, "fmt");
+    }
+    if (e.key === "Tab" && !mod && !e.altKey && !composing){   // 列表里 Tab 缩进、Shift+Tab 退回
+      e.preventDefault();
+      const [a, b] = lvSel(root) || [0, 0], text = DOC.draft, ls = text.lastIndexOf("\n", a - 1) + 1;
+      if (!/^\s*([-*+]|\d+[.)])\s/.test(text.slice(ls))) return lvCommit(root, text.slice(0, a) + "    " + text.slice(b), a + 4, undefined, "type");
+      if (!e.shiftKey) return lvCommit(root, text.slice(0, ls) + "  " + text.slice(ls), a + 2, b + 2, "fmt");
+      const n = (text.slice(ls).match(/^ {1,2}/) || [""])[0].length;
+      return lvCommit(root, text.slice(0, ls) + text.slice(ls + n), Math.max(ls, a - n), Math.max(ls, b - n), "fmt");
+    }
+    docKey(e);
+  });
+  root.addEventListener("click", e => { if (e.target.closest(".lv-img")) e.preventDefault(); });
+  const onSel = () => {   // 光标换了行：那几行露出标记符号
+    if (!root.isConnected) return document.removeEventListener("selectionchange", onSel);
+    const sel = lvSel(root), lv = root._lv;
+    if (composing || lv.down) { if (sel) lv.sel = sel; return; }   // 按着鼠标拖选时先不重画，松开再说
+    if (!sel) { if (lv.on && document.activeElement !== root) { lvRender(root, null); } return; }
+    lv.sel = sel;
+    const on = [lvLineOf(lv.lines, sel[0])[0], lvLineOf(lv.lines, sel[1])[0]].join("-");
+    if (on === lv.on) return;
+    lvRender(root, sel); lvSetSel(root, sel[0], sel[1]);
+  };
+  document.addEventListener("selectionchange", onSel);
+  root.addEventListener("pointerdown", () => {
+    root._lv.down = true;
+    document.addEventListener("pointerup", () => { root._lv.down = false; onSel(); }, {once: true});
+  });
+}
+function liveFocus(){
+  const root = docRoot()?.querySelector("#doc-live"); if (!root) return;
+  root.focus({preventScroll: true});
+  if (!lvSel(root)) lvSetSel(root, 0);
 }
 
 // ================= 工作区（#206） =================
@@ -8719,6 +9049,12 @@ addEventListener("resize", () => listTip());
   if (!EMBED) {                          // 右下角助理里嵌着的对话页：推送由外面的页面转过来（#294）
     connectEvents();
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
+  }
+  if (DOC_ONLY) {
+    document.body.classList.add("doc-only"); document.title = DOC_ONLY.path.split("/").pop();
+    ctxMachine = DOC_ONLY.m || S.me; booted = true;
+    addEventListener("beforeunload", e => { if (DOC && DOC.dirty) e.preventDefault(); });
+    return openDoc(DOC_ONLY.path, null, DOC_ONLY.chat);
   }
   if (!location.hash) history.replaceState(null, "", lastChat() && !narrow() ? "#/chats" : "#/chats/new");   // 上次开着的对话由 route 接着打开
   route(); booted = true;

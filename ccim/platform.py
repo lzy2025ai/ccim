@@ -636,12 +636,37 @@ class Platform:
             self.store.write(chats)
         return {}
 
+    def _agent_bridges(self, aid):
+        """这个 Agent 的 Bridge：本身、项目目录里的（@）、访客的（#）、侧边对话的（|）。"""
+        return [b for key, b in self.bridges.items() if key == aid or key.startswith(aid) and key[len(aid)] in "@#|"]
+
     def relaunch_agent(self, aid):
-        """Agent 改了要换启动参数的设置（chrome）：它已经开着的对话下一条消息时按原会话续接，带上新参数。"""
-        for key, b in self.bridges.items():
-            if key == aid or key.startswith(aid + "@"):
+        """Agent 改了要换启动参数的设置（chrome、角色说明）：它已经开着的对话下一条消息时按原会话续接，带上新参数。"""
+        for b in self._agent_bridges(aid):
+            for c in b.chats.values():
+                c.reconnect = True
+
+    def agent_chats(self, aid, keys):
+        """改 Agent 的这些设置会影响到的对话（#387）：聊过、没完成、没单独设置这几项。"""
+        sid = "codex_session_id" if (agents.get(aid) or {}).get("base") == "codex" else "session_id"
+        return [cid for cid, m in self.chats().items()
+                if m.get("agent") == aid and m.get(sid) and not m.get("archived") and not m.get("hidden")
+                and any(not m.get(k) and k not in (m.get("keep") or {}) for k in keys)]
+
+    def apply_agent(self, aid, keys, before, live):
+        """Agent 的模型、思考深度改了（#387）。live：已开的对话下一条消息起换上新的；否则它们留着改之前 Agent 的值。"""
+        a = agents.get(aid) or {}
+        if not live:
+            chats = self.chats()
+            for cid in self.agent_chats(aid, keys):
+                m = chats[cid]
+                m["keep"] = {**(m.get("keep") or {}), **{k: before.get(k) for k in keys if not m.get(k)}}
+            self.store.write(chats)
+        for b in self._agent_bridges(aid):
+            b.entry.update({k: a.get(k) for k in keys})
+            if live:
                 for c in b.chats.values():
-                    c.reconnect = True
+                    c.refollow(keys)
 
     # ----- 临时对话保存为 Agent（#318） -----
 
@@ -1646,11 +1671,13 @@ class Platform:
         base = (a or {}).get("base") or t.get("base") or "claude"
         g = registry.global_config()
         px = "" if base == "claude" else "codex_"
-        model = (c or {}).get("model") or (a or t).get("model") or g.get(px + "model")
-        effort = (c or {}).get("effort") or (a or t).get("effort") or g.get(px + "effort")
+        c = c or {}
+        keep = c.get("keep") or {}            # 改 Agent 设置时选了只用于新对话：留着当时的（#387）
+        model = c.get("model") or (keep["model"] if "model" in keep else (a or t).get("model")) or g.get(px + "model")
+        effort = c.get("effort") or (keep["effort"] if "effort" in keep else (a or t).get("effort")) or g.get(px + "effort")
         dm, de = _defaults(base, agents.cwd(a) if a else (t.get("dir") or os.path.expanduser("~")))
         return {"base": base, "model": model or dm, "effort": effort or de,
-                "model_custom": bool((c or {}).get("model")), "effort_custom": bool((c or {}).get("effort"))}
+                "model_custom": bool(c.get("model") or keep.get("model")), "effort_custom": bool(c.get("effort") or keep.get("effort"))}
 
     def _fork_title(self, cid, m):
         """分叉出来、还没开口的对话：用分叉那条回答之前的问题当标题；开口后第一句话就是标题。"""
@@ -3187,10 +3214,19 @@ def save_agent(pf, aid, fields, acct=None):
             raise Problem("工作目录不能是整个硬盘，选一个具体的文件夹。")
         if d == os.path.realpath(os.path.expanduser("~")) and not fields.get("confirmed"):
             return {"confirm": "home"}        # 主目录：网页上说明影响，用户确认后再带 confirmed 保存（#50）
+    apply = fields.pop("apply", None)
     if aid:
-        before = (agents.get(aid) or {}).get("chrome")
+        before = agents.get(aid) or {}
+        new = agents.clean(fields)
+        keys = [] if new.get("base", before.get("base")) != before.get("base") else \
+            [k for k in ("model", "effort") if k in new and new[k] != before.get(k)]
+        n = len(pf.call(pf.agent_chats, aid, keys)) if keys and apply not in ("live", "new") else 0
+        if n:
+            return {"confirm": "apply", "count": n}   # 网页上选用不用到已开的对话（#387）
         a = agents.update(aid, **fields)
-        if bool(a.get("chrome")) != bool(before):
+        if keys:
+            pf.call(pf.apply_agent, aid, keys, before, apply != "new")
+        if bool(a.get("chrome")) != bool(before.get("chrome")) or (a.get("role") or "") != (before.get("role") or ""):
             pf.call(pf.relaunch_agent, aid)
     else:
         a = agents.create(**fields)

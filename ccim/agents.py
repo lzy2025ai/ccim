@@ -83,7 +83,7 @@ def _new_id(name):
     return f"{base}-{uuid.uuid4().hex[:4]}"
 
 
-def _clean(fields):
+def clean(fields):
     out = {k: v for k, v in fields.items() if k in FIELDS}
     for k in ("model", "effort", "role", "dir"):
         if k in out:
@@ -106,7 +106,7 @@ def _clean(fields):
 
 
 def create(**fields):
-    f = _clean(fields)
+    f = clean(fields)
     if not (f.get("name") or "").strip():
         raise ValueError("先给它起个名字")
     with _locked():
@@ -121,7 +121,7 @@ def create(**fields):
 
 
 def update(aid, **fields):
-    f = _clean(fields)
+    f = clean(fields)
     with _locked():
         data = _read()
         if aid not in data:

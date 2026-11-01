@@ -380,14 +380,28 @@ class Chat:
         return registry.effective(self.b.path, self.model, self.effort)
 
     def default(self, key):
-        """没在这个聊天里单独设置时用什么：Agent / 项目的设置 > 全局默认（Claude Code、Codex 各一套）> 不传，交给它们自己取。"""
+        """没在这个聊天里单独设置时用什么：Agent / 项目的设置 > 全局默认（Claude Code、Codex 各一套）> 不传，交给它们自己取。
+        keep：改 Agent 设置时选了「只用于新对话」，这个对话留着当时 Agent 的值（#387），None 是当时 Agent 没设。"""
         g = registry.global_config()
-        return self.b.entry.get(key) or g.get(key if self.agent == "claude" else f"codex_{key}")
+        keep = self.b.saved(self.chat_id).get("keep") or {}
+        own = keep[key] if key in keep else self.b.entry.get(key)
+        return own or g.get(key if self.agent == "claude" else f"codex_{key}")
 
     def follow(self, key):
         """/model 默认、/effort 默认：这个聊天不再单独设置，回到跟随项目 / 全局 / Claude Code。"""
+        keep = self.b.saved(self.chat_id).get("keep") or {}
+        if key in keep:
+            self.b.save(self.chat_id, keep={k: v for k, v in keep.items() if k != key} or None)
         self.set(**{key: None})
         setattr(self, key, self.default(key))
+
+    def refollow(self, keys):
+        """Agent 改了设置、选了用到已开的对话（#387）：没单独设置的换上新值，下一条消息按原会话续接。"""
+        saved = self.b.saved(self.chat_id)
+        for k in keys:
+            if not saved.get(k) and k not in (saved.get("keep") or {}) and getattr(self, k) != self.default(k):
+                setattr(self, k, self.default(k))
+                self.reconnect = True
 
     def set(self, **kw):
         for k, v in kw.items():

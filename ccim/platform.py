@@ -238,8 +238,8 @@ class WebChannel(Channel):
     live = True
     style = "可以用 Markdown（标题、加粗、列表、表格、代码块、链接）。"
     files_note = ("把这台电脑上的文件、文件夹交给用户时，默认写完整路径、用反引号包起来（不写 file:// 链接），"
-                  "网页上点一下就能打开、下载、在访达中显示；文件不在项目目录里、或者用户要你直接发文件时，"
-                  "调用 ccim 的 send_file 工具发到聊天里。")
+                  "网页上点一下就能打开、下载、在访达中显示。图片、视频要让用户在聊天里直接看，文件不在项目目录里，"
+                  "或者用户要你直接发文件时，调用 ccim 的 send_file 工具发到聊天里。")
 
     def __init__(self, project_path, entry, secret, handlers):
         super().__init__(project_path, entry, secret, handlers)

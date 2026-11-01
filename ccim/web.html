@@ -137,6 +137,8 @@ body{overflow:hidden}
 .thread{flex:1;overflow:auto;padding:22px 0 10px}
 .chat-mid{flex:1;display:flex;min-height:0}
 .chat-mid .thread{min-width:0}
+/* 右侧章节目录占了 210px，输入框跟着消息区在剩下的宽度里居中（#404） */
+.ws-convo.toc-on .composer,body.pocket-tight .ws-convo.toc-on .composer{width:auto;padding-right:22px;margin-left:max(0px,calc((100% - 970px) / 2));margin-right:calc(210px + max(0px,calc((100% - 970px) / 2)))}
 .toc{width:210px;flex:none;border-left:1px solid var(--line);padding:16px 12px;overflow:auto}
 .toc h3{font-size:12px;color:var(--faint);font-weight:500;margin:0 0 8px 4px}
 .toc ol{list-style:none;margin:0;padding:0;border-left:1.5px solid var(--line)}
@@ -3080,6 +3082,7 @@ function drawToc(){
   const cs = chapters();
   if (btn) { btn.hidden = !cs.length; btn.classList.toggle("on", showToc && tocWide()); }
   toc.hidden = !cs.length || !showToc || !tocWide();
+  toc.closest(".ws-convo")?.classList.toggle("toc-on", !toc.hidden);
   if (toc.hidden) return;
   toc.innerHTML = `<h3>章节</h3><ol>${cs.map(([i, n]) => `<li><button data-i="${i}" onclick="jumpChapter(${i})">${esc(n)}<span class="d">${when(stamp(detail.log[i].at))}</span></button></li>`).join("")}</ol>`;
   tocSpy();

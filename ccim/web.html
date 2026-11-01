@@ -517,6 +517,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .app-nm{border:0;background:none;padding:2px 6px;margin-left:-6px;border-radius:6px;font:600 14px var(--sans);color:var(--ink);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;min-width:0}
 .app-nm:hover{background:var(--sunk)}
 .docpane .app-frame{display:block;height:100%}
+body.doc-only .app,body.doc-only .pback{display:none}
+body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .app-frame{flex:1;width:100%;border:0;background:#fff;min-height:0}
 @media (max-width:760px){.app-bar .back span{display:none}.app-bar{padding:8px 10px}}
 .ov-head{padding:22px 32px 0;display:flex;align-items:center;gap:12px}
@@ -1220,8 +1222,8 @@ body.side-open{--doc-w:min(36vw,460px)}
 .doc-body:has(.live-ed){background:var(--panel)}
 .live-ed{max-width:760px;min-height:100%;margin:0 auto;padding:28px 32px 120px;outline:0;white-space:pre-wrap;word-break:break-word;font:15.5px/1.8 var(--sans);color:var(--ink);caret-color:var(--qing)}
 .live-ed .ln{min-height:1.8em}
-.live-ed .ln:not(.on) .mk{display:none}
-.live-ed .mk{color:var(--faint);font-weight:400;font-style:normal}
+.live-ed .ln:not(.on) .lv-mk{display:none}
+.live-ed .lv-mk{color:var(--faint);font-weight:400;font-style:normal}
 .live-ed .h1{font-size:1.75em;font-weight:700;line-height:1.4;margin:.3em 0 .1em}
 .live-ed .h2{font-size:1.45em;font-weight:700;line-height:1.4;margin:.3em 0 .1em}
 .live-ed .h3{font-size:1.22em;font-weight:650;line-height:1.5;margin:.2em 0 .1em}
@@ -7755,7 +7757,7 @@ async function openDoc(path, v, chat, inWs){
   drawDoc();
 }
 async function closeDoc(force){
-  if (!DOC) return;
+  if (!DOC || DOC_ONLY) return;
   if (DOC.ws) { if (force || !WS) { DOC = null; return; } return narrow() ? wsGo("files") : wsCloseTab(DOC.path); }
   if (!force && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，关掉就丢掉了。", "丢掉")) return;
   DOC = null; drawDoc();
@@ -7849,7 +7851,7 @@ function drawDoc(){
   }
   delete el.dataset.app;
   el.innerHTML = `<div class="doc-top">
-      <button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>
+      ${DOC_ONLY ? `<a class="icon-btn" aria-label="回到对话" title="回到对话" href="${esc(docOnlyBack())}">${ICON.chat}</a>` : `<button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>`}
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
       ${d && d.editable && d.latest ? `<span class="seg mini">${[["view", "预览"], ["edit", "编辑"]]
@@ -7891,8 +7893,21 @@ function docMore(e){
     d.kind === "md" ? b("wxCopy()", "复制到公众号") : "",
     typeof d.text === "string" ? b("docCopyText()", "复制全文") : "",
     canReveal(DOC.machine) ? b("docReveal()", "在访达中显示") : "",
+    DOC_ONLY || STANDALONE || d.kind === "app" ? "" : b("docNewTab()", "在新标签页打开"),
     b("docDownload()", docPics().length ? `下载（含 ${docPics().length} 张配图）` : "下载"),
   ].join(""));
+}
+// 单独一个标签页只开这个文档（#392）：/?doc=路径&chat=对话&m=电脑，不用记它在哪个对话里
+const DOC_ONLY = (() => { const q = new URLSearchParams(location.search); return q.get("doc") && q.get("chat") ? {path: q.get("doc"), chat: q.get("chat"), m: q.get("m")} : null; })();
+async function docNewTab(){
+  if (DOC.dirty && DOC.d.editable) await docSave(true);   // 新标签页读的是文件，先把改的存上
+  const q = new URLSearchParams({doc: DOC.path, chat: DOC.chat});
+  if (isRemote(DOC.machine)) q.set("m", DOC.machine);
+  window.open("/?" + q, "_blank", "noopener");
+}
+function docOnlyBack(){   // 单独标签页左上角：回到这个文档所在的对话
+  const c = chatById(DOC.chat);
+  return `/#/${c && c.agent ? `agents/${encodeURIComponent(c.agent)}/` : "chats/"}${encodeURIComponent(DOC.chat)}`;
 }
 async function docCopyText(){
   try { await navigator.clipboard.writeText(DOC.draft); toast("已复制"); } catch { toast("复制没成功，再试一次"); }
@@ -8223,7 +8238,7 @@ function drawDocBody(){
 // ---- 编辑：像 Obsidian 的实时预览（#392）。原文一行一个 div，标题、加粗等直接显示效果，标记符号只在光标所在的行露出来 ----
 // 输入一律拦下来自己改原文（beforeinput），再只重画变了的行；中文输入法的组字交给浏览器，组完再从页面读回原文
 const LV_RE = /(`+)([^`]+?)\1|!\[([^\]]*)\]\(([^)]*)\)|\[([^\]]+)\]\(([^)]*)\)|\*\*(?=\S)(.+?)\*\*|__(?=\S)(.+?)__|~~(?=\S)(.+?)~~|(?<![*\w\\])\*(?=[^\s*])(.+?)\*(?![\w*])|(https?:\/\/[^\s<>）)\]，。]+)|\\([\\`*_{}\[\]()#+\-.!|~<>])/g;
-const lvMk = t => t ? `<span class="mk">${esc(t)}</span>` : "";
+const lvMk = t => t ? `<span class="lv-mk">${esc(t)}</span>` : "";
 function lvInline(s){
   let out = "", at = 0;
   const re = new RegExp(LV_RE.source, "g");
@@ -9034,6 +9049,12 @@ addEventListener("resize", () => listTip());
   if (!EMBED) {                          // 右下角助理里嵌着的对话页：推送由外面的页面转过来（#294）
     connectEvents();
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送
+  }
+  if (DOC_ONLY) {
+    document.body.classList.add("doc-only"); document.title = DOC_ONLY.path.split("/").pop();
+    ctxMachine = DOC_ONLY.m || S.me; booted = true;
+    addEventListener("beforeunload", e => { if (DOC && DOC.dirty) e.preventDefault(); });
+    return openDoc(DOC_ONLY.path, null, DOC_ONLY.chat);
   }
   if (!location.hash) history.replaceState(null, "", lastChat() && !narrow() ? "#/chats" : "#/chats/new");   // 上次开着的对话由 route 接着打开
   route(); booted = true;

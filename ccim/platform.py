@@ -236,7 +236,7 @@ class WebChannel(Channel):
     label = "网页"
     cards = False
     live = True
-    style = "可以用 Markdown（标题、加粗、列表、表格、代码块、链接）。"
+    style = "可以用 Markdown（标题、加粗、列表、表格、代码块、链接）。写到本机的文件、文件夹时，路径用反引号包起来，不要写成 file:// 链接。"
 
     def __init__(self, project_path, entry, secret, handlers):
         super().__init__(project_path, entry, secret, handlers)

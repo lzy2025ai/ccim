@@ -1370,8 +1370,8 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .answer hr{border:0;border-top:1px solid var(--line);margin:12px 0}
 .answer blockquote{margin:0 0 10px;padding:2px 12px;border-left:3px solid var(--line-strong);color:var(--muted)}
 .answer a{color:var(--qing)}
-.answer code.fp.on{cursor:pointer;color:var(--qing);text-decoration:underline dotted;text-underline-offset:3px}
-.answer code.fp.on:hover{text-decoration-style:solid}
+.answer .fp.on{cursor:pointer;color:var(--qing);text-decoration:underline dotted;text-underline-offset:3px}
+.answer .fp.on:hover{text-decoration-style:solid}
 .answer img{max-width:100%;border-radius:8px}
 .note{max-width:760px;margin:-8px auto 18px;padding:0 22px;font-size:13px;color:var(--muted)}
 .note .answer{line-height:1.6}
@@ -1897,6 +1897,8 @@ function fpLooks(t){   // 像不像路径：带 / 或者有扩展名；命令、
 const FP = new Map();   // "电脑|对话|路径" → {path, dir}；null：不存在或不在工作目录里；"wait"：正在查
 let fpTimer = 0;
 function fpCtx(el){
+  const s = el.closest("[data-fpchat]");   // 群里被 @ 的 Agent 的回答：按它自己那个对话的目录认（#400）
+  if (s) return {chat: s.dataset.fpchat, mid: s.dataset.fpmid || (el.closest("#sidepane") ? SIDE && SIDE.mid || ctxMachine : ctxMachine)};
   if (el.closest("#sidepane")) return SIDE && SIDE.id ? {chat: SIDE.id, mid: SIDE.mid || ctxMachine} : null;
   return el.closest("#main") && detail && detail.id && detail.id !== "new" ? {chat: detail.id, mid: ctxMachine} : null;
 }
@@ -1904,7 +1906,7 @@ function fpScan(){
   clearTimeout(fpTimer);
   fpTimer = setTimeout(() => {
     const ask = new Map();
-    document.querySelectorAll("code.fp:not([data-ck])").forEach(el => {
+    document.querySelectorAll(".fp:not([data-ck])").forEach(el => {
       const c = fpCtx(el); if (!c) return;
       const k = `${c.mid || ""}|${c.chat}|${el.dataset.fp}`, v = FP.get(k);
       if (v === "wait") return;
@@ -1953,8 +1955,14 @@ function fpDownload(chat, mid, p){
   a.href = fileUrl(chat, p) + (isRemote(mid) ? `&machine=${encodeURIComponent(mid)}` : ""); a.download = p.split("/").pop();
   document.body.append(a); a.click(); a.remove();
 }
-new MutationObserver(() => { if (document.querySelector("code.fp:not([data-ck])")) fpScan(); }).observe(document.body, {childList: true, subtree: true});
+new MutationObserver(() => { if (document.querySelector(".fp:not([data-ck])")) fpScan(); }).observe(document.body, {childList: true, subtree: true});
 
+function mdPath(t){   // [文字](路径) 里的本机路径：相对路径、绝对路径、file://（#400）；网址、站内链接不算
+  t = t.trim();
+  if (/^file:\/\//i.test(t)) { try { t = decodeURIComponent(t.replace(/^file:\/\/(localhost)?/i, "")); } catch { return ""; } }
+  else if (/^[a-z][\w+.-]*:|^#|^\/\//i.test(t)) return "";
+  return t && t.length <= 300 && !/[\n<>]/.test(t) ? t.replace(/:\d+(?::\d+)?$/, "") : "";
+}
 // ---- Markdown（只认常见写法，先转义再排版） ----
 function md(src){
   const lines = String(src || "").replace(/\r/g, "").split("\n"), out = [];
@@ -1964,6 +1972,7 @@ function md(src){
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/\[([^\]]+)\]\((#\/[\w\-.~%\/]+(?:\?[\w\-.~%=&]+)?)\)/g, '<a href="$2">$1</a>')   // 站内链接（复盘里提到的对话，#284；日记回到那条，?m=记录，#363）：当前页打开
+    .replace(/\[([^\]]+)\]\((?:&lt;(.+?)&gt;|([^)\s]+))\)/g, (all, t, a, b) => { const f = mdPath(unesc(a || b)); return f ? `<span class="fp" data-fp="${esc(f)}">${t}</span>` : all; })   // 本机文件（#400）：和反引号路径一样认
     .replace(/(^|[\s（(])(https?:\/\/[^\s<）)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   let i = 0;
   while (i < lines.length){
@@ -3793,11 +3802,14 @@ function mentionActs(i, r, live){
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
   return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
+function fpScope(r, html){   // 被 @ 的 Agent 回答里的路径按它自己那个对话的目录认（#400）
+  return r.chat ? `<div style="display:contents" data-fpchat="${esc(r.chat)}" data-fpmid="${esc(r.machine || "")}">${html}</div>` : html;
+}
 function mentionOne(r, i){
   const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
   const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
   return `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
-      ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${mentionActs(i, r, live)}`;
+      ${fpScope(r, replyBody(r, live))}${files ? `<div class="work-out">${files}</div>` : ""}${mentionActs(i, r, live)}`;
 }
 function mentionGroup(mid){
   // 补充进成员正在做的那一轮的 @（#304）：回答放在最后一句补充下面
@@ -7458,7 +7470,7 @@ function sideRec(r, i){
           <button onclick="sideAsk(${q(r.agent)})">接着问它</button></div>`;
     const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
     return `<div class="skc-msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b>${r.machine && r.machine !== (SIDE.mid || S.me) ? whereTag(r.agent, SIDE.mid || S.me) : ""}${stateLabel(r, live)}</div>
-      ${replyBody(r, live)}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
+      ${fpScope(r, replyBody(r, live))}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
   }
   if (r.type === "work") return workCard(r, "skc-msg", SIDE.mid || S.me);   // 被 @ 的 Agent 新开对话去做（#290）
   if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>

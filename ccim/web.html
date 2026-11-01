@@ -1679,7 +1679,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <button class="unfold" title="展开列表" onclick="toggleList(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/></svg>列表</button>
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/schedules" data-nav="schedules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时</a>
-    <a href="#/agents" data-nav="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
+    <a href="#/agents" data-nav="agents" onclick="return navAgents(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
     <a href="#/apps" data-nav="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
@@ -2440,6 +2440,14 @@ let booted = false;               // 刚打开网页时没记着的话本来是�
 function lastChat(){ try { return JSON.parse(localStorage.getItem("ccim.lastChat") || "null"); } catch { return null; } }
 function setLastChat(v){ try { v ? localStorage.setItem("ccim.lastChat", JSON.stringify(v)) : localStorage.removeItem("ccim.lastChat"); } catch {} }
 function forgetChat(id){ const l = lastChat(); if (l && (!id || l.id === id)) setLastChat(null); }
+// 侧栏「AI 员工」（#397）：离开时停在某个 Agent 的页面，再点回到那里；回到总览后就不记了
+function navAgents(e){
+  if (current.view === "agents" || e.metaKey || e.ctrlKey || e.shiftKey) return true;
+  let to = null; try { to = localStorage.getItem("ccim.lastAgents"); } catch {}
+  const aid = to && to.startsWith("#/agents/") ? decodeURIComponent(to.split("/")[2] || "") : "";
+  if (!aid || !S.agents.some(x => x.id === aid)) return true;   // 那个 Agent 已经删了：回总览
+  e.preventDefault(); location.hash = to; return false;
+}
 function restoreHash(){
   const l = lastChat(), c = l && chatById(l.id);
   if (!l || EMBED || narrow() || (c && c.agent)) return null;
@@ -2459,6 +2467,9 @@ function route(){
   const parts = hpath.slice(2).split("/");
   const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
+  if (current.view === "agents" && !EMBED) try {
+    current.id && current.id !== "new" ? localStorage.setItem("ccim.lastAgents", hpath) : localStorage.removeItem("ccim.lastAgents");
+  } catch {}
   const jm = hq && new URLSearchParams(hq).get("m");   // 带着某条记录（日记回到记它的地方，#363）：打开后滚到那条
   if (jm) jumpTo = {chat: current.view === "agents" ? current.sub : current.id, rid: jm};
   const own = ownerOf(current.id && current.id.startsWith("edit-") ? current.id.slice(5) : current.id);

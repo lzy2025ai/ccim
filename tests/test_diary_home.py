@@ -194,6 +194,41 @@ class PeerTests(Base):
         self.assertIn("## 22:10\n\n离线时记的", self.day("2026-10-30"))
         self.assertIn("离线时记的", Platform.diary_query(pf, "read", {"start": "2026-10-30"})["text"])
 
+    def test_files_through_hub_and_pending(self):
+        """带附件的日记（#394）：转到存日记的那台时附件一起带过去；那台不在线先暂存，补写时附件还在。"""
+        from ccim.platform import diary_files
+        hub, node = self.pair()
+        got = []
+
+        def at_home(pf, method, path, body=b"", headers=None, timeout=None):
+            b = json.loads(body)
+            got.append(b)
+            r = Platform.diary_write(fake_platform(hub, "http://127.0.0.1:7000"), b["text"], b["where"], b["at"], b["link"], b["here"],
+                                     diary_files(b.get("files")))
+            return 200, "application/json", json.dumps(r).encode()
+        node_pf = fake_platform(node, "http://127.0.0.1:8000")
+        with patch.object(peers, "local_request", side_effect=at_home):
+            Platform.diary_write(node_pf, "", "", "2026-10-31T09:05:00", files=[{"name": "图 1.png", "data": b"PNG"}])
+        self.assertEqual(got[0]["files"][0]["name"], "图 1.png")
+        text = self.day("2026-10-31")
+        self.assertIn("![图 1.png](<附件/20261031-090500-", text)
+        fn = text.split("(<附件/")[1].split(">)")[0]
+        with open(os.path.join(diary.root(), "附件", fn), "rb") as fh:
+            self.assertEqual(fh.read(), b"PNG")
+
+        pf = fake_platform(types.SimpleNamespace(diary_home=lambda: "m2", me={"id": "m1"}, online=lambda m: False,
+                                                 forward=lambda *a, **k: (_ for _ in ()).throw(peers.Offline())), "http://127.0.0.1:1")
+        self.assertTrue(Platform.diary_write(pf, "离线带文件", "", "2026-10-30T22:10:00",
+                                             files=[{"name": "a.pdf", "data": b"PDF"}])["pending"])
+        it = diary.take_pending()[0]
+        self.assertEqual(diary.pending_files(it), [{"name": "a.pdf", "data": b"PDF"}])
+        pf.peers.diary_home = lambda: "m1"
+        Platform.diary_write(pf, it["text"], it["where"], it["at"], files=diary.pending_files(it))
+        diary.drop_pending_files(it)
+        self.assertIn("离线带文件\n\n[a.pdf](<附件/20261030-221000-", self.day("2026-10-30"))
+        self.assertEqual(os.listdir(diary._pending_dir()), [])
+        self.assertEqual(diary.pending_files({"files": [{"name": "x", "path": "/etc/hosts"}]}), [])   # 只认暂存文件夹里的
+
 
 def fake_platform(p, root):
     return types.SimpleNamespace(peers=p, _machine_name=lambda mid: "B", _web_root=lambda: root)

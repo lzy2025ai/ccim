@@ -1378,6 +1378,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .diary-card{max-width:min(520px,100%);margin-left:auto;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--qing);border-radius:10px;padding:10px 14px;text-align:left}
 .diary-card .dh{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:4px}
 .diary-card .dh svg{width:14px;height:14px}
+.diary-card .files{justify-content:flex-start;margin-top:8px}
 .diary-card .dt{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14.5px}
 /* 日记样式（#378）：便签、横线纸 */
 .diary-card.ds-note{position:relative;background:#FFF1A6;border:0;border-radius:2px 2px 14px 2px;padding:16px 16px 12px;transform:rotate(-.4deg);box-shadow:0 1px 1px rgba(90,70,0,.08),0 8px 16px -8px rgba(90,70,0,.4)}
@@ -2938,7 +2939,7 @@ function recHtml(r, i, src = "log"){
       ${items.slice(0, 4).map(x => `<div class="ln">${esc(x.sender)}：${esc(clLine(x))}</div>`).join("")}
       <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button>${timeActs(r)}</div>`;
   }
-  if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card${diaryCls()}"><div class="dh">${ICON.kb}日记</div><div class="dt">${esc(r.text)}</div></div>${timeActs(r)}</div></div>` : "";
+  if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card${diaryCls()}"><div class="dh">${ICON.kb}日记</div>${r.text ? `<div class="dt">${esc(r.text)}</div>` : ""}${diaryFiles(r.files)}</div>${timeActs(r)}</div></div>` : "";
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
@@ -3380,10 +3381,9 @@ async function sendChat(){
   closePop();
   const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
   if (DIARY.test(typed)) {                // 记日记（#363）：不交给助手，也不算开始干活
-    if (files.length) return toast("日记只能记文字，先去掉附件");
-    const src = detail;
-    $("#input").value = ""; saveDraft(); quotes.list = []; drawQuotes(); drawComposerState();
-    if (!await sendDiary(src.id, typed, qs, undefined, !src.readonly && diaryShown())) back();
+    const src = detail, kept = pendingFiles;
+    $("#input").value = ""; saveDraft(); quotes.list = []; drawQuotes(); pendingFiles = []; saveFiles(); drawPending(); drawComposerState();
+    if (!await sendDiary(src.id, typed, qs, undefined, !src.readonly && diaryShown(), files)) { back(); pendingFiles = kept; saveFiles(); drawPending(); drawComposerState(); }
     return;
   }
   quotes.list = []; drawQuotes();
@@ -3439,13 +3439,19 @@ async function sendChat(){
 // 记日记（#363）：/diary 内容。quiet：对话里会出现日记卡片，不用再提示
 const DIARY = /^\/(diary|日记)(?=\s|$)/i;
 const diaryShown = () => (S.global || {}).diary_cards !== "off";
+function diaryFiles(fs){      // 日记带的图片、文件（#394）
+  if (!fs || !fs.length) return "";
+  return `<div class="files">${fs.map(f => { const src = fileUrl(detail.id, f.path);
+    return isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
+      : `<a class="file" href="${src}" download="${esc(f.name)}">${ICON.file}${esc(f.name)}</a>`; }).join("")}</div>`;
+}
 const DIARY_STYLES = [["", "卡片"], ["note", "便签"], ["paper", "横线纸"]];
 const diaryCls = () => { const v = (S.global || {}).diary_style; return DIARY_STYLES.some(x => x[0] && x[0] === v) ? " ds-" + v : ""; };
-async function sendDiary(id, typed, qs, mid, quiet){
+async function sendDiary(id, typed, qs, mid, quiet, files){
   const body = typed.replace(DIARY, "").trim();
-  if (!body && !qs.length) { toast("在 /diary 后面写上要记的内容"); return false; }
+  if (!body && !qs.length && !(files || []).length) { toast("在 /diary 后面写上要记的内容"); return false; }
   let r;
-  try { r = await act(() => api("/api/chat/send", {id, text: "/diary " + withQuotes(qs, body), files: []}, mid)); }
+  try { r = await act(() => api("/api/chat/send", {id, text: "/diary " + withQuotes(qs, body), files: files || []}, mid)); }
   catch { return false; }
   if (r.queued) toast(`「${r.machine}」现在离线，上线后记上`);
   else if (r.pending) toast(`已记下，「${r.machine}」现在离线，连上后写进日记`);
@@ -4086,8 +4092,7 @@ const isReview = v => /^\/review(\s|$)/.test(v);
 async function startTemp0(v, files){
   const m0 = draft.machine || S.me;
   if (DIARY.test(v)) {                   // 记日记、看额度：不用新建对话（#381）
-    if (files.length) return toast("日记只能记文字，先去掉附件");
-    if (await sendDiary("", v, [], m0, false)) { $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); drawComposerState(); }
+    if (await sendDiary("", v, [], m0, false, files)) { $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); pendingFiles = []; saveFiles(); drawPending(); drawComposerState(); }
     return;
   }
   if (/^\/usage\s*$/i.test(v) && draft.base === "claude") {

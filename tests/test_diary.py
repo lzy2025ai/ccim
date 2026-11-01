@@ -224,6 +224,26 @@ class PlatformTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(self.sent, [(cid, "你好")])
 
+    def test_send_diary_files(self):
+        """/diary 带图片、文件（#394）：附件存进日记的「附件」，卡片上带着；只发附件不写字也行。"""
+        st, r = self.req("POST", "/api/chat/new", {"agent": self.aid})
+        cid = r["id"]
+        up = os.path.join(registry.pdir(self.pf.home), "uploads")
+        os.makedirs(up, exist_ok=True)
+        key = os.path.join(up, "k1-截图.png")
+        with open(key, "wb") as fh:
+            fh.write(b"IMG")
+        st, r = self.req("POST", "/api/chat/send", {"id": cid, "text": "/diary", "files": [{"key": key, "name": "截图.png"}]})
+        self.assertEqual(st, 200, r)
+        self.assertEqual(self.sent, [])
+        log = self.pf.channel.logs.read(cid)
+        self.assertEqual(log[-1]["files"], [{"name": "截图.png", "path": key}])
+        e = diary._entries(datetime.date.today().isoformat())[-1]
+        self.assertTrue(e["text"].startswith("![截图.png](<附件/"), e["text"])
+        self.assertIn(os.path.join(diary.root(), "附件"), diary.read())       # 给助手的是完整路径
+        st, r = self.req("POST", "/api/chat/send", {"id": cid, "text": "/diary x", "files": [{"key": "/etc/hosts", "name": "h"}]})
+        self.assertEqual(st, 400, r)
+
     def test_setting(self):
         st, r = self.req("POST", "/api/diary_cards", {"on": False})
         self.assertEqual(st, 200, r)

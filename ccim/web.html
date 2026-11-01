@@ -2469,6 +2469,11 @@ function route(){
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
   if (current.view === "agents" && !EMBED) try {
     current.id && current.id !== "new" ? localStorage.setItem("ccim.lastAgents", hpath) : localStorage.removeItem("ccim.lastAgents");
+    if (current.id && current.id !== "new" && current.sub && current.sub !== "settings") {   // 每个 Agent 上次看的对话：从总览点进来时接着开它
+      const m = agentLastChats(); delete m[current.id]; m[current.id] = current.sub;
+      const ks = Object.keys(m); ks.slice(0, Math.max(0, ks.length - 200)).forEach(k => delete m[k]);
+      localStorage.setItem("ccim.agentChats", JSON.stringify(m));
+    }
   } catch {}
   const jm = hq && new URLSearchParams(hq).get("m");   // 带着某条记录（日记回到记它的地方，#363）：打开后滚到那条
   if (jm) jumpTo = {chat: current.view === "agents" ? current.sub : current.id, rid: jm};
@@ -5589,11 +5594,17 @@ function showAgentOn(){   // 换了打开的对话：列表滚到它（推送重
   if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - (b.height - r.height) / 2;
   listScroll = {key: listKey(), top: box.scrollTop};
 }
+function agentLastChats(){ try { return JSON.parse(localStorage.getItem("ccim.agentChats") || "{}") || {}; } catch { return {}; } }
 async function openAgentLatest(id){
   if (!agentSide || agentSide.id !== id || !agentSide.a || agentSide.stale) await fetchAgentSide(id);
   if (current.view !== "agents" || current.id !== id || current.sub) return;
-  const first = (agentSide.chats || []).find(c => !c.project && (!c.schedule || c.listed));
-  if (first) { history.replaceState(null, "", `#/agents/${encodeURIComponent(id)}/${encodeURIComponent(first.id)}`); current.sub = first.id; renderList(); openChat(first.id); return; }
+  const shown = (agentSide.chats || []).filter(c => !c.project && (!c.schedule || c.listed)), last = agentLastChats()[id];
+  const first = shown.find(c => c.id === last) || shown[0];   // 上次看的那个（#397），没有了就最近的
+  if (first) {
+    history.replaceState(null, "", `#/agents/${encodeURIComponent(id)}/${encodeURIComponent(first.id)}`); current.sub = first.id; renderList(); openChat(first.id);
+    document.querySelector(".list .item.child.on")?.scrollIntoView({block: "nearest"});   // 列表很长、它在下面时滚到能看见
+    return;
+  }
   const a = agentOf(id) || agentSide.a || {name: ""};
   $("#main").innerHTML = `<div class="empty"><h2>和${esc(a.name)}聊点什么</h2><p>${esc(a.role || "")}</p>
     <button class="btn primary" onclick="startAgent(${q(id)})">${ICON.plus}开个新对话</button></div>`;

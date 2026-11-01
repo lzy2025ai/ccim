@@ -467,6 +467,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .checkrow .files-list{display:block;font:12px/1.5 var(--mono);color:var(--muted);margin-top:4px;word-break:break-all}
 .checkrow .cb{align-self:flex-start;margin-top:2px}
 .checkrow[aria-checked=true] .cb{background:var(--qing);border-color:var(--qing);color:#fff}
+.checkrow[role=radio] .cb{border-radius:50%}
+.checkrow .cr-sub{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 @media (hover:none){.item .more{display:inline-flex}.item:hover .when,.item.on .when{display:inline}}
 .msg.wide{max-width:1180px}
 /* 新对话：在哪台电脑、哪个目录干活，放在输入框上面（名字、路径再长也不挤输入框下面那一行） */
@@ -5726,9 +5728,37 @@ async function saveAgent(id){
     if (!await confirmBox("用整个主目录当工作目录？", "它能读写主目录下的所有文件（桌面、文档、各个项目和配置）；找文件、搜内容会比较慢；在终端里从主目录开的对话也会算到它名下。只是写作、调研的话，工作目录留空更合适。", "仍然使用主目录")) return;
     r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
   }
+  if (r.confirm === "dir") {             // 换了工作目录：聊过的对话还在原来的（#387）
+    if (!await confirmBox(`已开的 ${r.count} 个对话还在原来的文件夹`, `它们接着在「${r.dir}」里聊，之前生成的文件也在那里；新对话在新文件夹里开始。`, "保存", "primary")) return;
+    fields.dir_ok = true;
+    r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
+  }
+  if (r.confirm === "apply") {           // 模型、思考深度改了：已开的对话换不换（#387）
+    const apply = await applyBox(r.count);
+    if (!apply) return;
+    r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true, apply}}, where));
+  }
   toast(id ? "已保存" : r.chat ? "已保存为 Agent，这个对话归到它名下了" : "已新建");
   agentTab = "overview"; await loadState();
   if (id) renderAgent(id); else location.hash = `#/agents/${encodeURIComponent(r.id)}` + (r.chat ? `/${encodeURIComponent(r.chat)}` : "");
+}
+function applyBox(n){
+  const opts = [["live", "已开的对话也换", "下一条消息起用新设置，正在回答的等这一轮做完"], ["new", "只用于新对话", "已开的对话继续用原来的设置"]];
+  let pick = "live";
+  return new Promise(res => {
+    dialog(`已开的 ${n} 个对话也换成新设置吗？`, `<div class="pick-list" role="radiogroup">${opts.map(([v, t, d]) =>
+      `<button type="button" class="checkrow" role="radio" aria-checked="${v === pick}" data-v="${v}"><span class="cb">${ICON.check}</span><span>${t}<span class="cr-sub">${d}</span></span></button>`).join("")}</div>`,
+      `<button class="btn" id="cb-no">取消</button><button class="btn primary" id="cb-ok">保存</button>`);
+    const rows = [...document.querySelectorAll(".dialog [role=radio]")];
+    const set = v => { pick = v; rows.forEach(r => r.setAttribute("aria-checked", r.dataset.v === v)); };
+    rows.forEach((r, i) => {
+      r.onclick = () => set(r.dataset.v);
+      r.onkeydown = e => { if (/Arrow(Up|Down)/.test(e.key)) { e.preventDefault(); const o = rows[(i + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length]; set(o.dataset.v); o.focus(); } };
+    });
+    $("#cb-no").onclick = () => { closeDialog(); res(null); };
+    $("#cb-ok").onclick = () => { closeDialog(); res(pick); };
+    $("#cb-ok").focus();
+  });
 }
 async function deleteAgent(id, name){
   if (!await confirmBox(`删除「${name}」？`, "它接的飞书、微信会一起断开；它的工作目录和工作区里的文件不会删。", "删除")) return;
@@ -8580,9 +8610,9 @@ function dialog(title, body, foot){
   document.body.append(s);
 }
 function closeDialog(){ document.querySelector(".scrim:not(.dirpick)")?.remove(); }
-function confirmBox(title, text, okLabel){
+function confirmBox(title, text, okLabel, kind = "danger"){
   return new Promise(res => {
-    dialog(title, `<p>${esc(text)}</p>`, `<button class="btn" id="cb-no">取消</button><button class="btn danger" id="cb-ok">${esc(okLabel)}</button>`);
+    dialog(title, `<p>${esc(text)}</p>`, `<button class="btn" id="cb-no">取消</button><button class="btn ${kind}" id="cb-ok">${esc(okLabel)}</button>`);
     $("#cb-no").onclick = () => { closeDialog(); res(false); };
     $("#cb-ok").onclick = () => { closeDialog(); res(true); };
     $("#cb-ok").focus();

@@ -83,7 +83,7 @@ def _new_id(name):
     return f"{base}-{uuid.uuid4().hex[:4]}"
 
 
-def _clean(fields):
+def clean(fields):
     out = {k: v for k, v in fields.items() if k in FIELDS}
     for k in ("model", "effort", "role", "dir"):
         if k in out:
@@ -106,7 +106,7 @@ def _clean(fields):
 
 
 def create(**fields):
-    f = _clean(fields)
+    f = clean(fields)
     if not (f.get("name") or "").strip():
         raise ValueError("先给它起个名字")
     with _locked():
@@ -121,7 +121,7 @@ def create(**fields):
 
 
 def update(aid, **fields):
-    f = _clean(fields)
+    f = clean(fields)
     with _locked():
         data = _read()
         if aid not in data:
@@ -198,6 +198,15 @@ def _sync(a):
             registry.update(proc, **vals)
         else:
             _set_project(proc, path, **vals)
+
+
+def mark_apply(aid, apply):
+    """改模型、思考深度时选的「已开的对话也换 live / 只用于新对话 new」（#387），写在飞书、微信登记里，由它们的进程自己照办。"""
+    for kind, proc, path in linked_paths(aid):
+        if kind == "feishu":
+            registry.update(proc, settings_apply=apply)
+        else:
+            _set_project(proc, path, settings_apply=apply)
 
 
 def absorb(path, **changes):

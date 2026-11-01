@@ -2,6 +2,7 @@
 
 auto 模式下，大多数操作由 Claude Code 自己放行或拦下，不会走到这里；
 走到这里的是它认为必须由人拍板的少数操作。
+被 auto 模式拦下的操作也弹卡片（ask_denied，#396）：允许这一条、这一轮都允许、不允许。
 """
 import asyncio, itertools, logging
 
@@ -19,9 +20,9 @@ LABELS = {}                                   # 按钮上的字（默认 允许 
 
 
 class Pending:
-    def __init__(self, chat_id, name, inp, ctx):
+    def __init__(self, chat_id, name, inp, ctx, denied=False):
         self.id = f"a{next(_ids)}"
-        self.chat_id, self.name, self.inp, self.ctx = chat_id, name, inp, ctx
+        self.chat_id, self.name, self.inp, self.ctx, self.denied = chat_id, name, inp, ctx, denied
         self.future = asyncio.get_running_loop().create_future()
         self.message_id = None
 
@@ -35,7 +36,10 @@ class Pending:
     def card(self, project):
         yes, no = LABELS.get(self.name, ("允许", "拒绝"))
         buttons = [{"text": yes, "style": "primary", "value": {"ccim": "approve", "id": self.id, "choice": "allow"}}]
-        if getattr(self.ctx, "suggestions", None):
+        if self.denied:
+            buttons.append({"text": "这一轮都允许", "style": "default",
+                            "value": {"ccim": "approve", "id": self.id, "choice": "turn"}})
+        elif getattr(self.ctx, "suggestions", None):
             buttons.append({"text": "本会话都允许", "style": "default",
                             "value": {"ccim": "approve", "id": self.id, "choice": "always"}})
         buttons.append({"text": no, "style": "danger", "value": {"ccim": "approve", "id": self.id, "choice": "deny"}})
@@ -44,6 +48,7 @@ class Pending:
 
     def resolved_card(self, project, choice):
         title, color = {"allow": ("已允许", "green"), "always": ("已允许（本会话同类操作不再询问）", "green"),
+                        "turn": ("已允许（这一轮的操作不再询问）", "green"),
                         "deny": ("已拒绝", "red"), "timeout": ("超时未处理，已拒绝", "grey"),
                         "cancel": ("已取消", "grey")}[choice]
         return {"title": f"{title} · {project}", "color": color, "body": self.body()}
@@ -55,10 +60,22 @@ class Approvals:
         self.pending = {}                     # id → Pending
 
     async def ask(self, chat_id, name, inp, ctx):
-        p = Pending(chat_id, name, inp, ctx)
+        choice = await self._wait(Pending(chat_id, name, inp, ctx))
+        if choice == "allow":
+            return PermissionResultAllow()
+        if choice == "always":
+            return PermissionResultAllow(updated_permissions=ctx.suggestions)
+        return PermissionResultDeny(message={"deny": "用户拒绝了这个操作。", "cancel": "用户停止了这个任务。"}.get(
+            choice, "用户没有及时批准，已当作拒绝。"))
+
+    async def ask_denied(self, chat_id, name, inp):
+        """被 auto 模式拦下的操作：返回 allow / turn / deny / timeout / cancel。"""
+        return await self._wait(Pending(chat_id, name, inp, None, denied=True))
+
+    async def _wait(self, p):
         self.pending[p.id] = p
         try:
-            p.message_id = await self.channel.send_card(chat_id, p.card(self.project))
+            p.message_id = await self.channel.send_card(p.chat_id, p.card(self.project))
             choice = await asyncio.wait_for(asyncio.shield(p.future), TIMEOUT)
         except asyncio.TimeoutError:
             choice = "timeout"
@@ -67,15 +84,10 @@ class Approvals:
             raise
         finally:
             self.pending.pop(p.id, None)
-        log.info("审批 %s %s → %s", name, str(inp)[:80], choice)
+        log.info("审批 %s %s → %s", p.name, str(p.inp)[:80], choice)
         if choice in ("timeout", "cancel"):           # 按钮、文字回复的卡片在各自的路径里已经更新过了
             await self._update(p, choice)
-        if choice == "allow":
-            return PermissionResultAllow()
-        if choice == "always":
-            return PermissionResultAllow(updated_permissions=ctx.suggestions)
-        return PermissionResultDeny(message={"deny": "用户拒绝了这个操作。", "cancel": "用户停止了这个任务。"}.get(
-            choice, "用户没有及时批准，已当作拒绝。"))
+        return choice
 
     async def _update(self, p, choice):
         if p.message_id:

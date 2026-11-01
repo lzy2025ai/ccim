@@ -9,7 +9,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
                               HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
-from . import devices, registry, usage
+from . import approval, devices, registry, usage
 from .channels.base import chatlog_as_text
 from .progress import clock, describe_tool, short
 
@@ -228,6 +228,11 @@ class Chat:
         # 没单独设置就是 None：不传给 Claude Code，让它按项目、全局设置自己取，和终端里用的一致
         self.model = saved.get("model") or self.default("model")
         self.effort = saved.get("effort") or self.default("effort")
+        # 权限（#396）：None 自动、ask 逐条确认、free 全部放行；perm_once 这一轮做完切回自动（默认是）
+        self.perm = saved.get("perm") if self.perm_ok() else None
+        self.perm_once = saved.get("perm_once") is not False
+        self.turn_free = False                # 卡片上点了「这一轮都允许」
+        self.allow_once = []                  # 卡片上点了「允许」：这一条重试时放行
         self.queue = asyncio.Queue()
         self.worker = None
         self.client = None
@@ -402,6 +407,43 @@ class Chat:
             if not saved.get(k) and getattr(self, k) != self.default(k):
                 setattr(self, k, self.default(k))
                 self.reconnect = True
+
+    def perm_ok(self):
+        """能放开权限的对话：访客的 Agent、借出的、侧边对话、Skill 助手不行，限制保持不变。"""
+        e = self.b.entry
+        return not (guest_of(self.b) or e.get("side") or e.get("lent") or e.get("helper"))
+
+    async def set_perm(self, perm=None, once=None, turn_free=None):
+        """网页上切换权限：不用重连，下一步操作就按新的来。"""
+        if not self.perm_ok():
+            return
+        if once is not None:
+            self.perm_once = bool(once)
+            self.b.save(self.chat_id, perm_once=self.perm_once)
+        if turn_free is not None:
+            self.turn_free = bool(turn_free)
+            self.b.save(self.chat_id, turn_free=self.turn_free)
+        if perm is not False:
+            self.perm = perm if perm in ("ask", "free") else None
+            self.b.save(self.chat_id, perm=self.perm)
+            await self._apply_mode()
+
+    async def _apply_mode(self):
+        if self.client:
+            try:
+                await self.client.set_permission_mode(PERM_MODE.get(self.perm, "auto"))
+            except Exception:
+                log.warning("切换权限模式失败", exc_info=True)
+
+    async def _perm_turn_end(self):
+        self.allow_once.clear()
+        if self.turn_free:
+            self.turn_free = False
+            self.b.save(self.chat_id, turn_free=False)
+        if self.perm and self.perm_once:
+            self.perm = None
+            self.b.save(self.chat_id, perm=None)
+            await self._apply_mode()
 
     def set(self, **kw):
         for k, v in kw.items():
@@ -617,7 +659,7 @@ class Chat:
             opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {"sandbox": sandbox} if self.b.entry.get("side") else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
                 fork_session=fork, resume_session_at=self.fork_at if fork else None,
-                cwd=self.b.path, permission_mode="auto", can_use_tool=self._can_use_tool,
+                cwd=self.b.path, permission_mode=PERM_MODE.get(self.perm, "auto"), can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, env=self.ccim_env(),
                 disallowed_tools=["AskUserQuestion"] + CRON_TOOLS + (SIDE_OFF if self.b.entry.get("side") else []),
@@ -628,7 +670,8 @@ class Chat:
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material",   # 只读
                                "mcp__ccim__send_to_chat"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
-                hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_bash])],
+                hooks={"PreToolUse": [HookMatcher(hooks=[self._pre_tool])],
+                       "PermissionDenied": [HookMatcher(hooks=[self._denied], timeout=approval.TIMEOUT + 30)],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
                 system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) else "" if self.b.entry.get("lent") else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
@@ -689,6 +732,10 @@ class Chat:
         finally:
             pub.cancel()
             self.b.save(self.chat_id, busy=False, asked=None, since=None, steps=[])
+            try:
+                await self._perm_turn_end()
+            except Exception:
+                log.warning("收回权限出错", exc_info=True)
             idle = getattr(self.b.channel, "idle", None)
             if idle:                          # 网页：回答比「这一轮结束」先到，列表刷新早了会一直显示执行中（#98）
                 idle(self.chat_id)
@@ -1003,6 +1050,41 @@ class Chat:
 
     async def _can_use_tool(self, name, inp, ctx):
         return await self.b.approvals.ask(self.chat_id, name, inp, ctx)
+
+    async def _pre_tool(self, data, tool_use_id, ctx):
+        """先过 ccim 自己的拦截（_pre_bash），再看用户放行了没有：全部放行、这一轮都允许、卡片上允许过的这一条（#396）。"""
+        name, inp = (data or {}).get("tool_name"), (data or {}).get("tool_input") or {}
+        if name == "Bash":
+            r = await self._pre_bash(data, tool_use_id, ctx)
+            if r:
+                return r
+        if not self.perm_ok():
+            return {}
+        k = _tool_key(name, inp)
+        if k in self.allow_once:
+            self.allow_once.remove(k)
+        elif not (self.perm == "free" or self.turn_free):
+            return {}
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                       "permissionDecisionReason": "用户同意了"}}
+
+    async def _denied(self, data, tool_use_id, ctx):
+        """auto 模式拦下了一步：弹卡片问用户。同意了就让 Claude 原样再调一次，_pre_tool 放行（#396）。"""
+        if not self.perm_ok():
+            return {}
+        name, inp = (data or {}).get("tool_name"), (data or {}).get("tool_input") or {}
+        choice = await self.b.approvals.ask_denied(self.chat_id, name, inp)
+        if choice == "turn":
+            self.turn_free = True
+            self.b.save(self.chat_id, turn_free=True)
+        elif choice == "allow":
+            self.allow_once.append(_tool_key(name, inp))
+        else:
+            note = "用户拒绝了这一步，不要换个办法绕过去；需要的话说明原因，让用户决定。" if choice == "deny" else ""
+            return {"hookSpecificOutput": {"hookEventName": "PermissionDenied", "additionalContext": note}} if note else {}
+        return {"hookSpecificOutput": {"hookEventName": "PermissionDenied", "retry": True,
+                                       "additionalContext": "用户在审批卡片上同意了这一步。请用完全相同的参数再调用一次这个工具，"
+                                                            "不要改写、拆分或合并。"}}
 
     async def _pre_bash(self, data, tool_use_id, ctx):
         """对话里不升级 ccim（ccim promote）：由用户在网页「设置 → 开发」里点（#156，原来是在对话里弹确认卡片，#146）。"""
@@ -1701,6 +1783,13 @@ def _outcome(name, state, answer):
     if state == "done":
         return f"【{name}】\n{answer or '（没有回答）'}"
     return f"【{name}】没有做完（{ {'stopped': '被停下了', 'error': '出错了', 'lost': '平台重启过'}.get(state, state) }）：{answer}"
+
+
+PERM_MODE = {"ask": "default"}               # 逐条确认：Claude Code 自己的询问模式；全部放行仍是 auto，由 _pre_tool 放行
+
+
+def _tool_key(name, inp):
+    return name + "\n" + json.dumps(inp, sort_keys=True, ensure_ascii=False)
 
 
 def guest_of(b):

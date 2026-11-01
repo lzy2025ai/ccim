@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import registry
-from .peers import OWNER, Server
+from .peers import OWNER, PAGE_GLOBAL, Server
 
 log = logging.getLogger("ccim.hub")
 
@@ -461,7 +461,7 @@ class Hub:
             info = (out.get("machine_info") or {}).get(out["me"]) or {}
             out.setdefault(k, info.get(k) or ({} if k in ("global", "defaults", "models") else None))
         g = ((out.get("machine_info") or {}).get(out["me"]) or {}).get("global") or {}
-        out["global"] = {k: g[k] for k in ("archive_days",) if g.get(k)}   # 默认模型各台电脑自己的，服务器上不显示
+        out["global"] = {k: g[k] for k in PAGE_GLOBAL if g.get(k)}   # 默认模型各台电脑自己的，服务器上不显示
         return out
 
     def serve(self):

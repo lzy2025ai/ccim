@@ -38,6 +38,7 @@ POOL_MAX = 4
 RETRY_SAFE = ("/peer/poll", "/peer/reply", "/peer/push")   # 复用的连接断了换一条重发：这几个重发没有副作用
 GZIP_MIN = 4096                               # 回给总控的结果超过这么大才压缩（#260）
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
+PAGE_GLOBAL = ("archive_days", "workspace", "diary_cards", "diary_style")   # 网页按「当前那台」显示的全局设置，经总控也要带上（#378）
 QUICK = {"/api/state", "/api/chats", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
          "/api/peer/result"}
 QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
@@ -589,8 +590,8 @@ class Peers:
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
                               "home": s.get("home"), "ccim": s.get("ccim"), "perms": s.get("perms"), **({"guest": s["guest"]} if s.get("guest") else {}),
                               "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话
-                              "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）
-                                         if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}}
+                              "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）、网页显示用的设置
+                                         if k in ("model", "effort", "codex_model", "codex_effort") + PAGE_GLOBAL}}
         if changed:
             try:
                 _save("peer-cache.json", self.cache)

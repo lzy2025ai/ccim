@@ -4,7 +4,7 @@ Agent 每发一次文档存一份副本（snaps/<对话>/），面板里能切�
 文档里用相对路径引用的图片（HTML 还有样式表、脚本）读出来打包成 data: 地址一起交给网页，
 这样别的电脑、服务器上打开也能显示，HTML 放进隔离的 iframe（srcdoc）里也不用再请求。
 """
-import base64, html as htmllib, mimetypes, os, re, shutil, time, uuid, zipfile
+import base64, html as htmllib, mimetypes, os, re, shutil, tarfile, time, uuid, zipfile
 import xml.etree.ElementTree as ET
 
 KINDS = {".md": "md", ".markdown": "md", ".html": "html", ".htm": "html", ".docx": "docx", ".pdf": "pdf"}
@@ -16,6 +16,8 @@ TEXT_EXT = {".txt", ".text", ".log", ".csv", ".tsv", ".json", ".jsonl", ".yaml",
 TEXT_NAMES = {"Makefile", "Dockerfile", "LICENSE", "README", ".gitignore", ".env"}
 EDITABLE = ("md", "html", "text")
 ASSET_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif", ".css", ".js", ".mp4", ".webm"}
+ARCHIVES = (".zip", ".tar", ".tar.gz", ".tgz")   # 压缩包（#402）：预览里看目录结构
+MAX_ENTRIES = 5000          # 压缩包里最多列这么多项
 MAX_DOC = 20 << 20          # 文档本身
 MAX_ASSET = 15 << 20        # 单个附带文件
 MAX_ASSETS = 40 << 20       # 附带文件合计
@@ -26,6 +28,8 @@ class Problem(Exception):
 
 
 def kind(name):
+    if (name or "").lower().endswith(ARCHIVES):
+        return "archive"
     ext = os.path.splitext(name or "")[1].lower()
     if ext in KINDS:
         return KINDS[ext]
@@ -40,7 +44,7 @@ def snap_dir(folder, chat):
 
 def snapshot(folder, chat, path):
     """存一份副本，返回副本路径；不是文档或太大就不存。"""
-    if not kind(path):
+    if kind(path) in (None, "archive"):   # 压缩包不存副本：往往很大，预览只看目录
         return None
     try:
         if os.path.getsize(path) > MAX_DOC:
@@ -163,6 +167,11 @@ def view(path, base=None):
     k = kind(path)
     if not k:
         raise Problem("这种文件不能预览。")
+    if k == "archive":
+        try:
+            return {"kind": k, "mtime": os.path.getmtime(path), "editable": False, **archive_list(path)}
+        except OSError:
+            raise Problem("文件已经不在了。")
     if k == "pdf":      # 网页拿原文件交给浏览器自带的阅读器，这里不读内容
         try:
             return {"kind": k, "mtime": os.path.getmtime(path), "editable": False}
@@ -183,6 +192,45 @@ def view(path, base=None):
     else:
         out["html"] = _inline_html(text, base)
     return out
+
+
+def _zip_name(info):
+    """不标 UTF-8 的 zip（Mac 的 zip 命令、Windows 打的），zipfile 当成 cp437 读出来是乱码：先按 UTF-8、再按 GBK 还原。"""
+    n = info.filename
+    if info.flag_bits & 0x800:
+        return n
+    try:
+        raw = n.encode("cp437")
+    except UnicodeEncodeError:
+        return n
+    for enc in ("utf-8", "gbk"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return n
+
+
+def archive_list(path):
+    """压缩包里的文件（#402）：{entries: [{n: 路径, s: 大小, d: 是不是文件夹}], total}。只读目录，不解压。"""
+    out = []
+    try:
+        if path.lower().endswith(".zip"):
+            with zipfile.ZipFile(path) as z:
+                infos = z.infolist()
+                for i in infos[:MAX_ENTRIES]:
+                    out.append({"n": _zip_name(i).rstrip("/"), "s": i.file_size, "d": i.is_dir()})
+                total = len(infos)
+        else:
+            with tarfile.open(path) as t:
+                total = 0
+                for m in t:
+                    total += 1
+                    if len(out) < MAX_ENTRIES:
+                        out.append({"n": m.name.lstrip("./").rstrip("/") or m.name, "s": m.size, "d": m.isdir()})
+    except (zipfile.BadZipFile, tarfile.TarError, EOFError, ValueError):
+        raise Problem("这个压缩包打不开，可能已经损坏，或者有密码。")
+    return {"entries": [e for e in out if e["n"]], "total": total}
 
 
 def save(path, text, mtime):

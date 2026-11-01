@@ -1394,6 +1394,22 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .sentfile:hover{border-color:var(--ink-2)}
 .sentfile .sf-tip{color:var(--muted);font-size:12px}
 .sentfile .sf-tip:empty{display:none}
+.sf-wrap{display:inline-flex;align-items:stretch;margin:2px 0 10px}
+.sf-wrap .sentfile{margin:0;border-radius:10px 0 0 10px}
+.sf-more{border:1px solid var(--line);border-left:0;border-radius:0 10px 10px 0;background:none;color:var(--muted);padding:0 8px;cursor:pointer;display:flex;align-items:center}
+.sf-more svg{width:16px;height:16px}
+.sf-more:hover{color:var(--ink);border-color:var(--ink-2)}
+.arc{padding:12px 16px 24px;font-size:13px}
+.arc-head{color:var(--muted);margin-bottom:8px}
+.arc details>summary{list-style:none;cursor:pointer}
+.arc details>summary::-webkit-details-marker{display:none}
+.arc .row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px}
+.arc .row:hover{background:var(--hover,rgba(0,0,0,.04))}
+.arc .row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arc .row .sz{color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.arc .row .car{width:12px;flex:none;color:var(--muted);transition:transform .15s}
+.arc details[open]>summary .car{transform:rotate(90deg)}
+.arc .kids{padding-left:16px}
 .sentimg{display:block;max-width:420px;max-height:320px;border-radius:10px;border:1px solid var(--line);margin:2px 0 10px}
 /* 聊天记录（#218）：像微信里转发的聊天记录 */
 .chatlog{display:block;width:min(320px,100%);text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;
@@ -2249,9 +2265,27 @@ const fileUrl = (chat, path) => `/api/file/-/${encodeURIComponent(String(path).s
 // 主屏幕图标打开的网页下载不了文件：先在页面里取下来，再交给系统分享面板（存储到文件、隔空投送）。
 const STANDALONE = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
 const fileGet = new Map();            // 地址 → {pct, ctl} 正在取；{file} 已取好
-function fileChip(src, name){
+function fileChip(src, name, path){
   const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
-  return `<a class="sentfile" href="${src}" download="${esc(name)}"${STANDALONE ? ` onclick="return saveFile(event,this)"` : ""}>${ICON.file}${esc(name)}<small class="sf-tip">${tip}</small></a>`;
+  const a = `<a class="sentfile" href="${src}" download="${esc(name)}"${STANDALONE ? ` onclick="return saveFile(event,this)"` : ""}>${ICON.file}${esc(name)}<small class="sf-tip">${tip}</small></a>`;
+  // Agent 发来的文件（#402）：点卡片照旧下载，旁边「⋯」还能在访达中显示、预览
+  return path ? `<span class="sf-wrap">${a}<button class="sf-more" aria-label="更多" title="更多" onclick="fileMore(event,${q(path)})">${ICON.more}</button></span>` : a;
+}
+const canPreview = name => /\.(zip|tar|tgz|tar\.gz|txt|log|csv|tsv|json|jsonl|ya?ml|xml|sql|py|js|ts|sh)$/i.test(name || "");
+let fileMoreAt = null;                // 点开「⋯」的那张卡片，菜单里的「下载」点它
+function fileMore(e, path){
+  fileMoreAt = e.currentTarget.previousElementSibling;
+  const chat = detail && detail.id, mid = ctxMachine, P = JSON.stringify(path), C = JSON.stringify(chat), M = JSON.stringify(mid || "");
+  const b = (js, label) => `<button onclick="closePop();${esc(js)}">${label}</button>`;
+  pop(e, [
+    b("fileMoreAt && fileMoreAt.click()", "下载"),
+    canReveal(mid) ? b(`fileReveal(${C},${M},${P})`, "在访达中显示") : "",
+    canPreview(path) ? b(`openDoc(${P})`, "预览") : "",
+  ].join(""));
+}
+async function fileReveal(chat, mid, path){
+  await act(() => api("/api/doc/reveal", {chat, path}, mid || null));
+  if (isRemote(mid)) toast(`已在「${(machineOf(mid) || {}).name || "那台电脑"}」的访达里选中`);
 }
 function fileTip(src){
   const g = fileGet.get(src), tip = !g ? "" : g.file ? "点一下保存" : `取文件 ${g.pct}%`;
@@ -2929,7 +2963,7 @@ function recHtml(r, i, src = "log"){
       : isVideo(r.name) ? videoHtml(src, r.name)
       : isAudio(r.name) ? audioHtml(src, r.name)
       : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
-      : fileChip(src, r.name)}${timeActs(r)}</div>`;
+      : fileChip(src, r.name, r.path)}${timeActs(r)}</div>`;
   }
   if (r.type === "app") return `<div class="msg">${appChip(r)}${timeActs(r)}</div>`;
   if (r.type === "chatlog"){
@@ -7803,6 +7837,7 @@ function docBody(){
   if (d.kind === "video") return `<div class="ws-img"><video src="${esc(docFileUrl())}" controls playsinline></video></div>`;
   if (d.kind === "audio") return `<div class="ws-img"><audio src="${esc(docFileUrl())}" controls></audio></div>`;
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
+  if (d.kind === "archive") return arcView(d);
   if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
@@ -7813,6 +7848,28 @@ function docBody(){
   if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
+}
+// 压缩包（#402）：按文件夹排成树，文件夹带里面文件的总大小；只有一个顶层文件夹时默认展开
+function arcView(d){
+  const root = {kids: new Map(), size: 0, files: 0};
+  for (const e of d.entries || []) {
+    let n = root; const parts = e.n.split("/").filter(Boolean);
+    parts.forEach((p, k) => {
+      const last = k === parts.length - 1;
+      if (!n.kids.has(p)) n.kids.set(p, {kids: new Map(), size: 0, files: 0, dir: !last || e.d});
+      const c = n.kids.get(p);
+      if (last && !e.d) { c.size = e.s; c.dir = false; }
+      n = c;
+    });
+  }
+  const sum = n => { if (!n.dir && n !== root) { n.files = 1; return n.size; } n.size = 0; n.files = 0; for (const c of n.kids.values()) { n.size += sum(c); n.files += c.files; } return n.size; };
+  sum(root);
+  const sort = m => [...m.entries()].sort(([a, x], [b, y]) => (y.dir - x.dir) || a.localeCompare(b, "zh"));
+  const row = (name, n, open) => n.dir
+    ? `<details ${open ? "open" : ""}><summary class="row"><span class="car">${ICON.chev}</span>${ICON.folder}<span class="nm">${esc(name)}</span><span class="sz">${n.files} 个文件 · ${bytes(n.size)}</span></summary><div class="kids">${sort(n.kids).map(([k, c]) => row(k, c, false)).join("")}</div></details>`
+    : `<div class="row"><span class="car"></span>${ICON.file}<span class="nm" title="${esc(name)}">${esc(name)}</span><span class="sz">${bytes(n.size)}</span></div>`;
+  const top = sort(root.kids);
+  return `<div class="arc"><div class="arc-head">${root.files} 个文件，解压后 ${bytes(root.size)}${d.total > (d.entries || []).length ? `，只列出前 ${(d.entries || []).length} 项` : ""}</div>${top.map(([k, c]) => row(k, c, top.length === 1)).join("") || `<p class="muted">压缩包是空的</p>`}</div>`;
 }
 // 代码编辑（#237）：输入框文字透明，下面垫一层高亮，左边行号；滚动时两层一起动
 function codeEd(ro){

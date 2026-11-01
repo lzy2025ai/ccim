@@ -646,12 +646,27 @@ class Platform:
             for c in b.chats.values():
                 c.reconnect = True
 
-    def agent_chats(self, aid, keys):
-        """改 Agent 的这些设置会影响到的对话（#387）：聊过、没完成、没单独设置这几项。"""
+    def agent_chats(self, aid, keys=None, channels=False):
+        """改 Agent 的这些设置会影响到的对话（#387）：聊过、没完成、没单独设置这几项（keys 为空就不看这条）。
+        channels：连它接的飞书、微信里聊过的一起数（只读，由它们的进程自己照办）。"""
         sid = "codex_session_id" if (agents.get(aid) or {}).get("base") == "codex" else "session_id"
-        return [cid for cid, m in self.chats().items()
-                if m.get("agent") == aid and m.get(sid) and not m.get("archived") and not m.get("hidden")
-                and any(not m.get(k) and k not in (m.get("keep") or {}) for k in keys)]
+        free = lambda m: not keys or any(not m.get(k) and k not in (m.get("keep") or {}) for k in keys)
+        out = [cid for cid, m in self.chats().items()
+               if m.get("agent") == aid and m.get(sid) and not m.get("archived") and not m.get("hidden") and free(m)]
+        for kind, proc, path in agents.linked_paths(aid) if channels else ():
+            chats = registry.read_state(proc).get("chats") or {}
+            chats = (chats.get(path) or {}) if kind == "weixin" else chats
+            out += [f"{kind}:{c}" for c, m in chats.items() if isinstance(m, dict) and m.get(sid) and free(m)]
+        return out
+
+    def keep_dir(self, aid, path):
+        """Agent 换了工作目录（#387）：聊过的对话还在原来的目录接着聊（会话记录按目录存），新对话用新的。"""
+        chats = self.chats()
+        sid = "codex_session_id" if (agents.get(aid) or {}).get("base") == "codex" else "session_id"
+        for m in chats.values():
+            if m.get("agent") == aid and m.get(sid) and not m.get("cwd"):
+                m["cwd"] = path
+        self.store.write(chats)
 
     def apply_agent(self, aid, keys, before, live):
         """Agent 的模型、思考深度改了（#387）。live：已开的对话下一条消息起换上新的；否则它们留着改之前 Agent 的值。"""
@@ -3220,9 +3235,19 @@ def save_agent(pf, aid, fields, acct=None):
         new = agents.clean(fields)
         keys = [] if new.get("base", before.get("base")) != before.get("base") else \
             [k for k in ("model", "effort") if k in new and new[k] != before.get(k)]
-        n = len(pf.call(pf.agent_chats, aid, keys)) if keys and apply not in ("live", "new") else 0
+        old_dir = agents.cwd(before)
+        moved = "dir" in new and (new["dir"] or None) != (before.get("dir") or None)
+        dir_ok = fields.pop("dir_ok", None)
+        n = len(pf.call(pf.agent_chats, aid)) if moved and not dir_ok else 0
+        if n:                                 # 换目录：告诉用户聊过的对话还在原来的目录（#387）
+            return {"confirm": "dir", "count": n, "dir": old_dir}
+        n = len(pf.call(pf.agent_chats, aid, keys, True)) if keys and apply not in ("live", "new") else 0
         if n:
             return {"confirm": "apply", "count": n}   # 网页上选用不用到已开的对话（#387）
+        if moved:
+            pf.call(pf.keep_dir, aid, old_dir)
+        if keys:
+            agents.mark_apply(aid, "new" if apply == "new" else "live")   # 先写，飞书、微信看到新设置时就知道怎么办
         a = agents.update(aid, **fields)
         if keys:
             pf.call(pf.apply_agent, aid, keys, before, apply != "new")

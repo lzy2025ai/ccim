@@ -200,6 +200,15 @@ def _sync(a):
             _set_project(proc, path, **vals)
 
 
+def mark_apply(aid, apply):
+    """改模型、思考深度时选的「已开的对话也换 live / 只用于新对话 new」（#387），写在飞书、微信登记里，由它们的进程自己照办。"""
+    for kind, proc, path in linked_paths(aid):
+        if kind == "feishu":
+            registry.update(proc, settings_apply=apply)
+        else:
+            _set_project(proc, path, settings_apply=apply)
+
+
 def absorb(path, **changes):
     """命令行改了项目的设置（ccim config、--model、--agent）：记到对应的 Agent 上，再同步给它的其他渠道。"""
     a = for_path(path)

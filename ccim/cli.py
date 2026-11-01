@@ -60,6 +60,7 @@ async def _serve(path, entry, secret, mode):
         bridge = Platform(path, entry)
     else:
         bridge = Bridge(path, entry)
+        bridge.reload = lambda: registry.get(path)
     channel = load(entry["channel"])(path, entry, secret, bridge.handlers())
     bridge.attach(channel)
     chats = registry.read_state(path).get("chats")

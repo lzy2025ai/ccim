@@ -396,10 +396,10 @@ class Chat:
         setattr(self, key, self.default(key))
 
     def refollow(self, keys):
-        """Agent 改了设置、选了用到已开的对话（#387）：没单独设置的换上新值，下一条消息按原会话续接。"""
+        """Agent 改了设置（#387）：没单独设置的按现在该用的换上（记了 keep 的还是原来的），变了就下一条消息按原会话续接。"""
         saved = self.b.saved(self.chat_id)
         for k in keys:
-            if not saved.get(k) and k not in (saved.get("keep") or {}) and getattr(self, k) != self.default(k):
+            if not saved.get(k) and getattr(self, k) != self.default(k):
                 setattr(self, k, self.default(k))
                 self.reconnect = True
 

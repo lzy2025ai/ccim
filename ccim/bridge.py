@@ -44,6 +44,7 @@ class Bridge:
         self.background = set()               # 后台补发等任务，留着引用免得被回收
         self.caffeinate = Caffeinate()
         self.inbox = os.path.join(path, ".ccim", "inbox")
+        self.reload = None                    # 飞书、微信：现读登记里的设置（Agent 改了不用重启，#387）；网页平台自己管
 
     def attach(self, channel):
         self.channel = channel
@@ -95,8 +96,45 @@ class Bridge:
 
     # ----- 事件 -----
 
+    LIVE = ("model", "effort", "role", "chrome")
+
+    def refresh(self):
+        """Agent 改了设置（#387）：按网页上选的，已开的对话下一条消息起换上新的，或者留着原来的。
+        上次见到的设置记在状态的 seen 里，进程重启后也知道改之前是什么。"""
+        if not self.reload:
+            return
+        fresh = self.reload() or {}
+        cur = {k: fresh.get(k) or None for k in self.LIVE}
+        self.entry.update(cur)
+        state = registry.read_state(self.home)
+        seen_all = state.get("seen") or {}
+        seen = seen_all.get(self.path)
+        if seen == cur:
+            return
+        if seen is not None:
+            keys = [k for k in ("model", "effort") if seen.get(k) != cur[k]]
+            if keys and fresh.get("settings_apply") == "new":
+                chats = self.store.read()
+                sid = self.chat_class().SID_KEY
+                for m in chats.values():
+                    if isinstance(m, dict) and m.get(sid):
+                        keep = {**{k: seen.get(k) for k in keys if not m.get(k)}, **(m.get("keep") or {})}
+                        if keep:
+                            m["keep"] = keep
+                self.store.write(chats)
+            for c in self.chats.values():
+                c.refollow(keys)
+                if any(seen.get(k) != cur[k] for k in ("role", "chrome")):
+                    c.reconnect = True
+        seen_all[self.path] = cur
+        registry.write_state(self.home, seen=seen_all)
+
     async def on_message(self, inc):
         text = (inc.text or "").strip()
+        try:
+            self.refresh()
+        except Exception:
+            log.exception("读 Agent 设置失败")
         if self.entry.get("claim_code") and inc.chat_type == "p2p":
             if text == self.entry["claim_code"]:
                 self.entry = registry.update(self.path, owner_open_id=inc.sender_id, claim_code=None)

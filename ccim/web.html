@@ -5728,6 +5728,11 @@ async function saveAgent(id){
     if (!await confirmBox("用整个主目录当工作目录？", "它能读写主目录下的所有文件（桌面、文档、各个项目和配置）；找文件、搜内容会比较慢；在终端里从主目录开的对话也会算到它名下。只是写作、调研的话，工作目录留空更合适。", "仍然使用主目录")) return;
     r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
   }
+  if (r.confirm === "dir") {             // 换了工作目录：聊过的对话还在原来的（#387）
+    if (!await confirmBox(`已开的 ${r.count} 个对话还在原来的文件夹`, `它们接着在「${r.dir}」里聊，之前生成的文件也在那里；新对话在新文件夹里开始。`, "保存", "primary")) return;
+    fields.dir_ok = true;
+    r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true}}, where));
+  }
   if (r.confirm === "apply") {           // 模型、思考深度改了：已开的对话换不换（#387）
     const apply = await applyBox(r.count);
     if (!apply) return;
@@ -8605,9 +8610,9 @@ function dialog(title, body, foot){
   document.body.append(s);
 }
 function closeDialog(){ document.querySelector(".scrim:not(.dirpick)")?.remove(); }
-function confirmBox(title, text, okLabel){
+function confirmBox(title, text, okLabel, kind = "danger"){
   return new Promise(res => {
-    dialog(title, `<p>${esc(text)}</p>`, `<button class="btn" id="cb-no">取消</button><button class="btn danger" id="cb-ok">${esc(okLabel)}</button>`);
+    dialog(title, `<p>${esc(text)}</p>`, `<button class="btn" id="cb-no">取消</button><button class="btn ${kind}" id="cb-ok">${esc(okLabel)}</button>`);
     $("#cb-no").onclick = () => { closeDialog(); res(false); };
     $("#cb-ok").onclick = () => { closeDialog(); res(true); };
     $("#cb-ok").focus();

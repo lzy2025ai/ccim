@@ -223,6 +223,7 @@ class Hub:
         if not b:
             b = self.bridges[path] = Bridge(path, self._entry(path, settings), store=HubStore(self.home, path), home=self.home)
             b.attach(ProjectChannel(self, path))
+            b.reload = lambda: self._entry(path, dict(self.projects()).get(path))
             b.help_extra = "\n\n/项目　看看有哪些项目、当前是哪个\n/项目 名字　切到那个项目（也可以写序号）"
         return b
 

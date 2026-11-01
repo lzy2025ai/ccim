@@ -73,6 +73,37 @@ class AgentApplyTests(unittest.TestCase):
         self.assertEqual(c.model, "opus")
         self.assertFalse(self.pf.meta("w-a").get("keep"))
 
+    def test_dir_change_keeps_old_chats_where_they_were(self):
+        old = agents.cwd(agents.get(self.aid))
+        other = os.path.join(os.path.dirname(old), "other")
+        os.makedirs(other)
+        r = self.P.save_agent(self.pf, self.aid, {"dir": other})
+        self.assertEqual(r, {"confirm": "dir", "count": 2, "dir": old})
+        self.P.save_agent(self.pf, self.aid, {"dir": other, "dir_ok": True})
+        self.assertEqual(self.pf.chat_dir("w-a"), old)
+        self.assertEqual(self.pf.chat_dir("w-d"), old)                 # 已完成的以后打开也接得上
+        self.assertEqual(self.pf.chat_dir("w-c"), other)               # 没聊过的算新对话
+
+    def test_feishu_follows_choice(self):
+        from ccim.bridge import Bridge
+        proj = agents.cwd(agents.get(self.aid))
+        registry.put(proj, {"kind": "feishu", "agent_id": self.aid, "model": "sonnet"})
+        registry.write_state(proj, chats={"oc_1": {"session_id": "f-1"}, "oc_2": {"session_id": "f-2", "effort": "low"}})
+        b = Bridge(proj, dict(registry.get(proj)))
+        b.reload = lambda: registry.get(proj)
+        b.refresh()                                                    # 第一次只记下现在的
+        c = b.chat("oc_1", "p2p")
+        self.assertEqual(self.save(), {"confirm": "apply", "count": 3})   # 网页 1 个 + 飞书 2 个
+        self.save(apply="new")
+        b.refresh()
+        self.assertEqual(c.model, "sonnet")
+        self.assertEqual(b.chat("oc_2", "p2p").model, "sonnet")
+        self.P.save_agent(self.pf, self.aid, {"effort": "high", "apply": "live"})
+        b.refresh()
+        self.assertEqual(c.effort, "high")
+        self.assertTrue(c.reconnect)
+        self.assertEqual(b.chat("oc_2", "p2p").effort, "low")          # 单独设过的不动
+
 
 if __name__ == "__main__":
     unittest.main()

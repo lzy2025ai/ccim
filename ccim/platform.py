@@ -1654,11 +1654,16 @@ class Platform:
         return {"toast": toast}
 
     async def set_chat(self, cid, key, value):
-        if key not in ("model", "effort"):
-            raise Problem("只能改模型和思考深度。")
+        if key not in ("model", "effort", "perm", "perm_once", "turn_free"):
+            raise Problem("只能改模型、思考深度和权限。")
         b = self._bridge(cid)
         c = b.chat(cid, "p2p")
-        if value:
+        if key.startswith("perm") or key == "turn_free":     # 权限（#396）
+            if c.agent != "claude" or not c.perm_ok():
+                raise Problem("这个对话不能改权限。")
+            await c.set_perm(perm=value if key == "perm" else False, once=value if key == "perm_once" else None,
+                             turn_free=bool(value) if key == "turn_free" else None)
+        elif value:
             c.set(**{key: value})
         else:
             c.follow(key)
@@ -1711,7 +1716,9 @@ class Platform:
         effort = c.get("effort") or (keep["effort"] if "effort" in keep else (a or t).get("effort")) or g.get(px + "effort")
         dm, de = _defaults(base, agents.cwd(a) if a else (t.get("dir") or os.path.expanduser("~")))
         return {"base": base, "model": model or dm, "effort": effort or de,
-                "model_custom": bool(c.get("model") or keep.get("model")), "effort_custom": bool(c.get("effort") or keep.get("effort"))}
+                "model_custom": bool(c.get("model") or keep.get("model")), "effort_custom": bool(c.get("effort") or keep.get("effort")),
+                "perm": c.get("perm"), "perm_once": c.get("perm_once") is not False,
+                "turn_free": bool(c.get("turn_free"))}
 
     def _fork_title(self, cid, m):
         """分叉出来、还没开口的对话：用分叉那条回答之前的问题当标题；开口后第一句话就是标题。"""
@@ -1744,7 +1751,8 @@ class Platform:
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "stall": self._stall(cid), "bg": self.channel.bg_of.get(cid) or [],
                 "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"),
-                "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m)}
+                "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m),
+                "perm_ok": not (share.chat_owner(self, cid) or m.get("side_of") or m.get("side_at") or m.get("helper"))}
 
     @staticmethod
     def _linked(m):

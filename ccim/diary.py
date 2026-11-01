@@ -20,6 +20,9 @@ LINKED = re.compile(r"^\[(.*)\]\((https?://\S+)\)$")     # 「记在哪」带链
 READ_DAYS = 62            # diary_read 一次最多读几天
 READ_MAX = 40000          # 一次最多给助手多少字
 SEARCH_MAX = 40           # 搜索最多给几条
+ATTACH = "附件"           # 日记带的图片、文件（#394）放在日记文件夹下的这里
+FILES_MAX = 50 * 1024 * 1024   # 一条日记的附件最多这么大（转给存日记的电脑时要整个带过去）
+IMG = re.compile(r"\.(png|jpe?g|gif|webp|bmp|svg|heic)$", re.I)
 
 
 def root():
@@ -41,20 +44,36 @@ def _minutes(t):
     return int(h) * 60 + int(m)
 
 
-def add(text, where, now=None, link=None):
+def _save_files(files, now):
+    """附件（#394）存进「附件」，返回正文里引用它们的几行：图片嵌入，别的是链接。files：[{name, data}]，data 是 bytes。"""
+    d = os.path.join(root(), ATTACH)
+    os.makedirs(d, exist_ok=True)
+    lines = []
+    for f in files:
+        name = re.sub(r"[\x00-\x1f/\\:<>\[\]]", "_", f.get("name") or "").strip() or "file"
+        fn = f"{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}-{name}"
+        with open(os.path.join(d, fn), "wb") as fh:
+            fh.write(f["data"])
+        lines.append(f"{'!' if IMG.search(name) else ''}[{name}](<{ATTACH}/{fn}>)")
+    return lines
+
+
+def add(text, where, now=None, link=None, files=None):
     """记一条，返回 {date, time, where, path}。link：回到记它的地方的完整网址（网页里记的才有）。
-    now：记的时间（别的电脑记的、暂存后补写的用原来的时间，#376）：写进那天的文件，比已有的早就插到它们前面。"""
+    now：记的时间（别的电脑记的、暂存后补写的用原来的时间，#376）：写进那天的文件，比已有的早就插到它们前面。
+    files：带的图片、文件（#394），[{name, data}]。"""
     text = (text or "").strip()
-    if not text:
+    if not text and not files:
         raise ValueError("在 /diary 后面写上要记的内容。")
     now = now or datetime.datetime.now()
     d, t = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
     f = os.path.join(root(), d + ".md")
     where = " ".join((where or "").split())
     label = f" · [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · {where}" if where else ""
-    block = f"## {t}{label}\n\n{text}\n"
     with _lock:
         os.makedirs(root(), exist_ok=True)
+        body = "\n\n".join(x for x in [text] + (_save_files(files, now) if files else []) if x)
+        block = f"## {t}{label}\n\n{body}\n"
         try:
             with open(f, encoding="utf-8") as fh:
                 old = fh.read()
@@ -92,11 +111,51 @@ def _pending_file():
     return os.path.join(registry.HOME, "diary-pending.jsonl")
 
 
-def hold(item):
-    """存日记的电脑不在线：先存在本机，平台连上它以后补写（take_pending）。几个进程都可能写，一行一条追加。"""
+def _pending_dir():
+    return os.path.join(registry.HOME, "diary-pending")
+
+
+def hold(item, files=None):
+    """存日记的电脑不在线：先存在本机，平台连上它以后补写（take_pending）。几个进程都可能写，一行一条追加。
+    files（[{name, data}]）存进 diary-pending 文件夹，item 里记 [{name, path}]；已经是 path 的照旧。"""
     os.makedirs(registry.HOME, exist_ok=True)
+    if files:
+        os.makedirs(_pending_dir(), exist_ok=True)
+        kept = []
+        for f in files:
+            if "data" not in f:
+                kept.append(f)
+                continue
+            p = os.path.join(_pending_dir(), secrets.token_hex(6))
+            with open(p, "wb") as fh:
+                fh.write(f["data"])
+            kept.append({"name": f.get("name") or "file", "path": p})
+        item = dict(item, files=kept)
     with open(_pending_file(), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def pending_files(item):
+    """暂存的那条带的附件读出来：[{name, data}]。只认 diary-pending 文件夹里的。"""
+    d = os.path.realpath(_pending_dir()) + os.sep
+    out = []
+    for f in item.get("files") or []:
+        p = os.path.realpath(str(f.get("path") or ""))
+        if p.startswith(d) and os.path.isfile(p):
+            with open(p, "rb") as fh:
+                out.append({"name": f.get("name") or "file", "data": fh.read()})
+    return out
+
+
+def drop_pending_files(item):
+    d = os.path.realpath(_pending_dir()) + os.sep
+    for f in item.get("files") or []:
+        p = os.path.realpath(str(f.get("path") or ""))
+        if p.startswith(d):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 def take_pending():
@@ -385,6 +444,7 @@ def site_link(link):
 
 
 def _fmt(d, e):
+    e = dict(e, text=e["text"].replace(f"](<{ATTACH}/", f"](<{os.path.join(root(), ATTACH)}/"))   # 附件写成完整路径，助手能直接打开
     site = site_link(e.get("link"))
     where = f"[{e['where'] or '原对话'}]({site})" if site else e["where"]
     head = " · ".join(x for x in (d + (" " + e["time"] if e["time"] else ""), where) if x)

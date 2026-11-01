@@ -14,7 +14,7 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 
 安全：只监听 127.0.0.1；Host 必须是本机地址（挡 DNS rebinding）；接口要带 X-CCIM 头（别的网站跨域发不过来）。
 """
-import asyncio, glob, json, logging, os, queue, re, shutil, subprocess, threading, time, uuid
+import asyncio, base64, glob, json, logging, os, queue, re, shutil, subprocess, threading, time, uuid
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -1173,11 +1173,18 @@ class Platform:
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
 
-    def diary(self, cid, text):
+    def diary(self, cid, text, files=()):
         """/diary 内容（#363）：记进日记（存日记的那台电脑，#376），对话里留一张日记卡片（type=diary），不交给助手、不进它的上下文。
+        files：网页传上来的图片、文件（#394，已经过 check_message），一起记进去，卡片上也显示。
         在请求线程里调：转给别的电脑要等，不占主循环。"""
         from . import diary as diary_mod
         content = diary_mod.parse(text) or ""
+        if sum(os.path.getsize(f["key"]) for f in files) > diary_mod.FILES_MAX:
+            raise Problem(f"日记的附件太大了（最多 {diary_mod.FILES_MAX >> 20} MB）。")
+        data = []
+        for f in files:
+            with open(f["key"], "rb") as fh:
+                data.append({"name": f.get("name") or os.path.basename(f["key"]), "data": fh.read()})
 
         def prep():
             if not cid:                       # 新对话页里记的（#381）：不属于哪个对话
@@ -1192,9 +1199,12 @@ class Platform:
             logged = cid in self.chats()
             return where, rid, logged, self.diary_link(cid, v, rid if logged else None)
         where, rid, logged, link = self.call(prep)
-        r = self.diary_write(content, where, link=link)
+        r = self.diary_write(content, where, link=link, files=data)
+        rec = {"type": "diary", "id": rid, "text": content}
+        if files:
+            rec["files"] = [{"name": d["name"], "path": f["key"]} for d, f in zip(data, files)]
         if logged:
-            self.call(lambda: self.channel._emit(cid, self.channel.logs.append(cid, {"type": "diary", "id": rid, "text": content})))
+            self.call(lambda: self.channel._emit(cid, self.channel.logs.append(cid, rec)))
         out = {"ok": True, "diary": True, "chat": cid}
         if r.get("pending"):
             out.update(pending=True, machine=r.get("machine"))
@@ -1203,9 +1213,10 @@ class Platform:
     def _machine_name(self, mid):
         return next((m["name"] for m in self.peers.machines() if m["id"] == mid), "存日记的电脑")
 
-    def diary_write(self, text, where, at=None, link=None, here=False):
+    def diary_write(self, text, where, at=None, link=None, here=False, files=None):
         """记一条到存日记的那台电脑（#376）：是这台（或 here：别的电脑转来的）就写，否则转过去；
-        那台不在线先存在本机（diary.hold），连上后按原来的时间补写。返回 {date, time}，暂存的带 pending、machine。"""
+        那台不在线先存在本机（diary.hold），连上后按原来的时间补写。返回 {date, time}，暂存的带 pending、machine。
+        files：[{name, data}]（#394），转过去时用 base64 带上。"""
         from . import diary as diary_mod
         from .peers import Offline
         now = diary_mod.when(at)
@@ -1214,26 +1225,28 @@ class Platform:
             if link and link.startswith("http://127.0.0.1:"):    # 别的电脑上的本机网址：换成这台的，在这台上点得开
                 link = self._web_root() + link[link.find("/", len("http://")):]
             try:
-                r = diary_mod.add(text, where, now, link)
+                r = diary_mod.add(text, where, now, link, files)
             except ValueError as e:
                 raise Problem(str(e))
             except OSError:
                 raise Problem("日记没记上：文稿文件夹写不进去。")
             return {"date": r["date"], "time": r["time"]}
-        if not (text or "").strip():
+        if not (text or "").strip() and not files:
             raise Problem("在 /diary 后面写上要记的内容。")
         item = {"text": text, "where": where, "at": now.isoformat(timespec="seconds"), "link": link}
         try:
             if not home:                          # 还不知道存在哪台（刚加入服务器上的总控）：先存着
                 raise Offline()
-            st, _, data = self.peers.forward(home, "POST", "/api/diary/add", json.dumps(dict(item, here=True)).encode(),
+            sent = dict(item, here=True, **({"files": [{"name": f["name"], "b64": base64.b64encode(f["data"]).decode()}
+                                                       for f in files]} if files else {}))
+            st, _, data = self.peers.forward(home, "POST", "/api/diary/add", json.dumps(sent).encode(),
                                              {"Content-Type": "application/json"})
         except Offline:
             st, data = 503, b"{}"
         if st == 200:
             return json.loads(data)
         if st in (404, 502, 503):                 # 不在线、还没升级到能收日记的版本：先存着
-            diary_mod.hold(item)
+            diary_mod.hold(item, files)
             return {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"), "pending": True,
                     "machine": self._machine_name(home)}
         try:
@@ -1285,14 +1298,18 @@ class Platform:
                     continue
                 for item in diary_mod.take_pending():
                     try:
-                        r = self.diary_write(item.get("text") or "", item.get("where") or "", item.get("at"), item.get("link"))
+                        files = diary_mod.pending_files(item)
+                        r = self.diary_write(item.get("text") or "", item.get("where") or "", item.get("at"), item.get("link"),
+                                             files=files)
                     except Problem:
                         log.warning("暂存的日记写不进去，丢掉：%s", item.get("at"))
+                        diary_mod.drop_pending_files(item)
                         continue
                     except Exception:
                         log.warning("补写日记出错", exc_info=True)
                         diary_mod.hold(item)
                         continue
+                    diary_mod.drop_pending_files(item)    # 又没写成的，diary_write 已经重新暂存了一份
                     if not r.get("pending"):
                         log.info("补写了 %s 的日记", item.get("at"))
             except Exception:
@@ -2816,7 +2833,8 @@ def _handler(pf):
                 "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
                 "/api/diary_style": lambda: set_diary_style(str(b("value") or "")),
                 # 日记存在哪台电脑（#376）：add / query 是飞书、微信的进程和别的电脑转来的（here），open 在这台上打开日记文件夹
-                "/api/diary/add": lambda: pf.diary_write(b("text") or "", b("where") or "", b("at"), b("link"), bool(b("here"))),
+                "/api/diary/add": lambda: pf.diary_write(b("text") or "", b("where") or "", b("at"), b("link"), bool(b("here")),
+                                                         diary_files(b("files"))),
                 "/api/diary/query": lambda: pf.diary_query(b("op"), body, bool(b("here"))),
                 "/api/diary/home": lambda: {"machine": pf.peers.set_diary_home(str(b("machine") or ""))},
                 "/api/diary/open": lambda: diary_mod.open_in(b("app")),
@@ -2926,7 +2944,7 @@ def _handler(pf):
                 return True
             return os.path.isfile(path) and any(
                 r.get("type") in ("file", "edit") and path in (r.get("path"), r.get("snap"))   # snap：旧版本的留底，下载用
-                or r.get("type") == "user" and any(f.get("path") == path for f in r.get("files") or [])
+                or r.get("type") in ("user", "diary") and any(f.get("path") == path for f in r.get("files") or [])
                 or r.get("type") == "chatlog" and any(x.get("image") == path for x in r.get("items") or [])
                 for r in pf.channel.logs.read(chat))
 
@@ -3004,9 +3022,15 @@ def diary_of(pf, cid, text, files, acct):
         return None
     if acct:
         raise Problem("共享的电脑上不能记日记。")
-    if files:
-        raise Problem("日记只能记文字。")
-    return pf.diary(cid, text)
+    return pf.diary(cid, text, files)
+
+
+def diary_files(fs):
+    """别的电脑转来的日记附件（#394）：[{name, b64}] → [{name, data}]。"""
+    try:
+        return [{"name": str(f.get("name") or "file"), "data": base64.b64decode(f.get("b64") or "")} for f in fs or []]
+    except (ValueError, AttributeError):
+        raise Problem("日记的附件没传完整，再试一次。")
 
 
 def slash_skills(q, acct):

@@ -7891,7 +7891,7 @@ function docMore(e){
     d.kind === "md" ? b("wxCopy()", "复制到公众号") : "",
     typeof d.text === "string" ? b("docCopyText()", "复制全文") : "",
     canReveal(DOC.machine) ? b("docReveal()", "在访达中显示") : "",
-    b("docDownload()", "下载"),
+    b("docDownload()", docPics().length ? `下载（含 ${docPics().length} 张配图）` : "下载"),
   ].join(""));
 }
 async function docCopyText(){
@@ -7903,8 +7903,49 @@ async function docReveal(){
   if (isRemote(mid)) toast(`已在「${(machineOf(mid) || {}).name || "那台电脑"}」的访达里选中`);
 }
 function docDownload(){
-  const a = document.createElement("a"); a.href = docFileUrl(); a.download = DOC.d.name || DOC.path.split("/").pop();
+  const name = DOC.d.name || DOC.path.split("/").pop(), pics = docPics();
+  const a = document.createElement("a"); a.download = name; a.href = docFileUrl();
+  if (pics.length) {   // 有本地配图：Markdown 和图片打成一个 zip，解压后图片路径对得上（#392）
+    const base = name.replace(/\.(md|markdown)$/i, ""), used = new Set();
+    let text = DOC.draft;
+    const files = pics.map(([ref, uri]) => {
+      let p = ref.split(/[?#]/)[0]; try { p = decodeURIComponent(p); } catch {}
+      p = p.replace(/^\.\//, "");
+      if (p.startsWith("/") || p.split("/").includes("..")) {   // 放在别处的图：收进 images/，文里的引用跟着改
+        let f = p.split("/").pop() || "image", k = 1;
+        while (used.has("images/" + f)) f = f.replace(/(\.\w+)?$/, m => `-${++k}${m}`);
+        p = "images/" + f;
+        text = text.split("(" + ref).join("(" + p).split(`"${ref}"`).join(`"${p}"`).split(`'${ref}'`).join(`'${p}'`);
+      }
+      used.add(p);
+      const bin = atob(uri.slice(uri.indexOf(",") + 1)), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return [base + "/" + p, u8];
+    });
+    files.unshift([base + "/" + name, new TextEncoder().encode(text)]);
+    a.href = URL.createObjectURL(zipStore(files)); a.download = base + ".zip";
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
   document.body.append(a); a.click(); a.remove();
+}
+const docPics = () => DOC && DOC.d && DOC.d.kind === "md" ? Object.entries(DOC.d.assets || {}).filter(([, u]) => /^data:[^,]*;base64,/.test(u)) : [];
+function zipStore(files){   // 不压缩的 zip（图片本来就压缩过）：[[路径, Uint8Array]] → Blob
+  const crcT = zipStore.t || (zipStore.t = Array.from({length: 256}, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xEDB88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; }));
+  const crc = d => { let c = -1; for (let i = 0; i < d.length; i++) c = crcT[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+  const parts = [], dir = []; let off = 0;
+  for (const [path, data] of files){
+    const nm = new TextEncoder().encode(path), c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [14, c, 4], [18, data.length, 4], [22, data.length, 4], [26, nm.length, 2]].forEach(([o, v, n]) => n === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+    parts.push(h, nm, data);
+    const e = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [16, c, 4], [20, data.length, 4], [24, data.length, 4], [28, nm.length, 2], [42, off, 4]].forEach(([o, v, n]) => n === 4 ? e.setUint32(o, v, true) : e.setUint16(o, v, true));
+    dir.push(e, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = dir.reduce((t, x) => t + x.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [8, files.length, 2], [10, files.length, 2], [12, size, 4], [16, off, 4]].forEach(([o, v, n]) => n === 4 ? end.setUint32(o, v, true) : end.setUint16(o, v, true));
+  return new Blob([...parts, ...dir, end], {type: "application/zip"});
 }
 function docInput(ta){
   DOC.draft = ta.value;

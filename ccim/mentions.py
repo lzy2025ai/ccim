@@ -183,7 +183,7 @@ class Mentions:
                 t = asyncio.create_task(self._run_remote(cid, rid, sub, prompt, home[aid], aid, title, text, depth, bool(side)))
             else:
                 self._ensure(cid, aid, view.get("dir"), title, bool(side))
-                t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text, depth))
+                t = asyncio.create_task(self._run(cid, rid, sub, prompt, user["at"], text, depth, by=by))
             self.pf.background.add(t)
             t.add_done_callback(self.pf.background.discard)
             if by:
@@ -208,6 +208,7 @@ class Mentions:
         from .session import Task
         task = Task(prompt)                   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记
         task.depth = depth
+        task.group = cid
         if not await c.inject(task):
             return None
         if c.turn and c.turn.steps:           # 进度里写用户的原话，不写拼上去的之前的内容
@@ -316,7 +317,7 @@ class Mentions:
         elif f:
             self.waiters.pop(upd["id"], None)
 
-    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None, task=None):
+    async def _run(self, cid, rid, sub, prompt, upto, text, depth=0, extra=None, task=None, by=None):
         """task：已经交给它的（补充进去后被单独排成一轮的，#304），只等结果。"""
         from .session import Task
         start = time.time()
@@ -330,9 +331,11 @@ class Mentions:
                 b = self.pf._bridge(sub)
                 chat = b.chat(sub, "p2p")
                 # 它的对话里只显示用户说的那句，带过去的之前的内容不重复显示
-                self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid}))
+                self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid,
+                                                                          **({"from_by": by} if by else {})}))
                 task = Task(prompt)
                 task.depth = depth
+                task.group = cid              # 群里 @ 它的这一轮：发的东西群聊里也记（#409）
                 chat.submit(task)
             self.tasks[rid] = (sub, task)
             state, answer = await task.future
@@ -367,7 +370,8 @@ class Mentions:
             while token is None and rid in self.running:   # 那台电脑离线就等它上线
                 try:
                     status, r = await call("/api/peer/task", {"chat": sub, "agent": aid, "prompt": prompt, "title": title,
-                                                              "kind": "mention", "of": cid, "shown": text, "depth": depth,
+                                                              "kind": "mention", "of": cid, "of_machine": self.pf.peers.me["id"],
+                                                              "shown": text, "depth": depth,
                                                               **({"side": True} if side else {})})
                 except Offline:
                     if time.time() > deadline:

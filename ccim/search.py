@@ -49,7 +49,7 @@ def sources(pf, aid, acct):
             continue
         outer = m.get("mention_of")
         if m.get("agent") == aid and outer and outer in chats:
-            pick.append(outer)                # 本机对话里被 @ 的子对话：内容在外层对话里都有（外层可能没选 Agent）
+            pick += [outer, cid]              # 本机群聊里它的子对话：群里 @ 它的在外层都有，用户在子对话里直接说的只在这里（#409）
         elif m.get("agent") == aid or aid in members(m):
             pick.append(cid)
     name = lambda x: pf.mentions._agent_name(x)
@@ -60,7 +60,10 @@ def sources(pf, aid, acct):
         where = "群聊" if outer or ms else "定时任务" if m.get("schedule") else "网页对话"
         title = m.get("title") or pf.chat_view(cid).get("title") or "对话"
         owner_name = ME if m.get("agent") == aid else pf.mentions._name(m, {})
-        if outer:                             # 别的电脑上的群聊，这里只有它被 @ 的那部分
+        if outer and outer in chats:
+            where, title = "子会话", (chats[outer].get("title") or title)
+            note = f"你在群聊「{title}」里的子会话：用户在这里直接跟你说的，群里其他人看不到"
+        elif outer:                           # 别的电脑上的群聊，这里只有它被 @ 的那部分和子会话里直接说的
             note = "别的电脑上的群聊，你在里面被 @ 过"
         elif ms:
             others = [name(x) for x in ms if x != aid]

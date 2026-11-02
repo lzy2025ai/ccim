@@ -2715,7 +2715,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${today} ${(agentSide && agentSide.on || current.sub) === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">成员</span>` : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">${c.group && c.group.side ? "侧边对话" : "成员"}</span>` : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" && !c.member ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   // @ 过其他 Agent 的对话：干完活后标题处换成最后回答的那个 Agent（#302）；干活时第二行已经写了是谁，还是标题
@@ -2825,9 +2825,9 @@ let avTimer = 0, avHide = 0, avSeq = 0;
 const avGot = {};                 // Agent → 上次取到的 {rows, total}：再停上去先显示它，取到新的再换（#307）
 function avCard(aid){
   const a = agentOf(aid), got = avGot[aid], cs = got ? got.rows : null;
-  const ds = c => [c.of ? (c.of.title === c.title ? "被 @" : `在「${c.of.title}」里被 @`) : "", c.brief || ""].filter(Boolean).join(" · ");
+  const ds = c => [c.of && !c.member ? (c.of.title === c.title ? "被 @" : `在「${c.of.title}」里被 @`) : "", c.brief || ""].filter(Boolean).join(" · ");
   return `<div class="av-card-h">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span></div>`
-    + (!cs ? `<p class="muted av-empty">正在取…</p>` : cs.length ? cs.map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span><span class="when">${when(c.last_active)}</span></span>${ds(c) ? `<span class="ds">${esc(ds(c))}</span>` : ""}</a>`).join("")
+    + (!cs ? `<p class="muted av-empty">正在取…</p>` : cs.length ? cs.map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span>${c.member ? `<span class="tag member">${c.group && c.group.side ? "侧边对话" : "成员"}</span>` : ""}<span class="when">${when(c.last_active)}</span></span>${ds(c) ? `<span class="ds">${esc(ds(c))}</span>` : ""}</a>`).join("")
       : `<p class="muted av-empty">还没有任务</p>`)
     + `<a class="av-all" href="#/agents/${encodeURIComponent(aid)}" onclick="avClose()">查看全部${got && got.total > cs.length ? ` ${got.total} 条` : ""}</a>`;
 }
@@ -2844,7 +2844,8 @@ function avOpen(el){
   p.onmouseenter = () => clearTimeout(avHide);
   p.onmouseleave = avLater;
   const seq = ++avSeq;
-  api0(`/api/agent/recent?id=${encodeURIComponent(aid)}`).catch(() => {     // 那台还是老版本：用手上的对话列表
+  const at = detail && detail.id && !detail.mention_of ? `&at=${encodeURIComponent(detail.id)}` : "";   // 当前群聊里它的子对话排第一（#409）
+  api0(`/api/agent/recent?id=${encodeURIComponent(aid)}${at}`).catch(() => {     // 那台还是老版本：用手上的对话列表
     const cs = (S.chats || []).filter(c => (c.agent === aid || (c.members || []).includes(aid)) && !c.archived)
       .sort((x, y) => String(y.last_active || "").localeCompare(String(x.last_active || "")));
     return {rows: cs.slice(0, 5), total: cs.length};
@@ -2948,9 +2949,9 @@ function recHtml(r, i, src = "log"){
       <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div>${timeActs(r)}</div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "user"){
-    const from = r.from_chat && chatById(r.from_chat);
+    const from = r.from_chat && (chatById(r.from_chat) || (detail.group && detail.group.id === r.from_chat ? detail.group : null));
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : `在「${esc(from.title)}」里 @ 的`}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : fromGroup(r, from)}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
       ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
         const src = f.path && fileUrl(detail.id, f.path);
         return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
@@ -2994,6 +2995,11 @@ function recHtml(r, i, src = "log"){
   if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
+}
+// 子对话里群里 @ 它的那条（#409）：在哪个群聊、谁找的它
+function fromGroup(r, from){
+  const by = r.from_by && agentOf(r.from_by);
+  return by ? `${esc(by.name)}在群聊「${esc(from.title)}」里找它` : `在群聊「${esc(from.title)}」里 @ 的`;
 }
 const clLine = x => (x.text || "").replace(/\s+/g, " ").trim() || (x.image ? "[图片]" : "");
 const CL_COLORS = ["#5B8C5A", "#4A7FB0", "#B0754A", "#8A6BB0", "#B05A6E", "#4A9A9A", "#8C8A4A"];
@@ -3733,12 +3739,8 @@ function stickyAt(){
   const first = (detail.log || []).find(r => r.type === "user");
   return ((first && first.to) || []).filter(agentOf);
 }
-// 从某个 Agent 的列表打开它只是成员的群聊（#359）：输入框默认发给它，点掉就是正常发群里（这次打开期间不再带）
 let toOff = null, rcptKey = null;
-function listTo(){
-  if (!detail || current.view !== "agents" || current.sub !== detail.id || detail.readonly || !current.id || current.id === detail.agent) return null;
-  return (detail.members || []).includes(current.id) && agentOf(current.id) ? current.id : null;
-}
+function listTo(){ return null; }           // #409：成员的列表里是它的子对话，不再从列表进群聊、默认发给它
 function defaultRcpt(){
   const t = listTo();
   return t ? (toOff === detail.id ? [] : [t]) : stickyAt();
@@ -5679,14 +5681,16 @@ function renderAgentSide(){
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
   const a = agentOf(id) || agentSide.a || {name: "", seal: "", base: "claude"};
   const m = machineOf(a.machine || ownerOf(id) || S.me);
-  // 它参与的群聊列的是群聊本身（#359）；它从群里新开去做的对话挂在那个群下面
+  // 它只是成员的群聊列它在里面的子对话（#409）；它从群里新开去做的对话挂在那个子对话下面
   const rows0 = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));
   const ids = new Set(rows0.map(c => c.id));
-  const rows = rows0.map(c => !c.parent && c.dispatched_from && ids.has(c.dispatched_from.id) ? {...c, parent: c.dispatched_from.id} : c);
-  // 打开的对话不在列表里（#371）：群里它那份子对话选中所在的群；别的（刚开的、项目里的）先插在列表里
+  const subOf = new Map(rows0.filter(c => c.mention_of).map(c => [c.mention_of, c.id]));   // 群聊 → 它在里面的子对话
+  const home = c => ids.has(c.dispatched_from.id) ? c.dispatched_from.id : subOf.get(c.dispatched_from.id);
+  const rows = rows0.map(c => !c.parent && c.dispatched_from && home(c) ? {...c, parent: home(c)} : c);
+  // 打开的对话不在列表里（#371，刚开的、项目里的）：先插在列表里
   const d = current.sub && !ids.has(current.sub) && detail && detail.id === current.sub ? detail : null;
-  agentSide.on = d && d.mention_of && ids.has(d.mention_of) ? d.mention_of : current.sub;
-  if (d && agentSide.on === d.id && !d.side_of) rows.unshift({...d, log: undefined});
+  agentSide.on = current.sub;
+  if (d && !d.side_of) rows.unshift({...d, log: undefined});
   const ch = (a.channels || []).map(c => c.kind === "weixin" ? "微信" : "飞书");
   $("#list").innerHTML = `
     <div class="list-head">${backLink()}<button class="fold" style="margin-left:auto" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button></div>

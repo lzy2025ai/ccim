@@ -2975,8 +2975,8 @@ function recHtml(r, i, src = "log"){
       <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='cardAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
   }
   if (r.type === "file"){
-    const src = fileUrl(detail.id, r.path);
-    const img = isImg(r.name), dk = docKind(r.name);
+    const src = sentUrl(r, r.path);
+    const img = isImg(r.name), dk = !r.mid && docKind(r.name);
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : isAudio(r.name) ? audioHtml(src, r.name)
@@ -3006,8 +3006,10 @@ function openChatlog(i){
   dialog(r.title, `<div class="cl-list">${(r.items || []).map(x => `<div class="cl-it">${clAvatar(x.sender)}<div class="cl-main">
     <div class="cl-hd"><b>${esc(x.sender)}</b><span>${esc(x.time || "")}</span></div>
     ${x.text ? `<div class="cl-tx">${esc(x.text)}</div>` : ""}
-    ${x.image ? `<img src="${fileUrl(detail.id, x.image)}" alt="图片" onclick="showImage(this.src)">` : ""}</div></div>`).join("")}</div>`);
+    ${x.image ? `<img src="${sentUrl(r, x.image)}" alt="图片" onclick="showImage(this.src)">` : ""}</div></div>`).join("")}</div>`);
 }
+// 别的电脑上被 @ 的成员发的（#357）：文件在那台电脑上，按它的子对话去取
+const sentUrl = (r, path) => r.mid ? fileUrl(r.sub, path) + (isRemote(r.mid) ? `&machine=${encodeURIComponent(r.mid)}` : "") : fileUrl(detail.id, path);
 function liveHtml(){
   const p = detail.progress; if (!p) return "";
   const last = p.steps[p.steps.length - 1];

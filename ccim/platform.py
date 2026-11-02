@@ -2480,10 +2480,14 @@ class Platform:
         if r is not None:
             self.peer_results.pop(token, None)
             self.peer_runs.pop(token, None)
-        # 被 @ 的 Agent 打开了这台电脑上的应用：交给那边，在用户看着的对话里打开（#337）
+        # 被 @ 的 Agent 打开了这台电脑上的应用（#337）、发的文件和聊天记录（#357）：交给那边，记到用户看着的对话里
+        rows = [x for x in (self.channel.logs.read(cid) if cid else [])
+                if x.get("type") in ("app", "file", "chatlog") and x.get("at", 0) >= start]
         apps = [{"app": x.get("app"), "name": x.get("name"), "icon": x.get("icon") or "", "at": x.get("at")}
-                for x in (self.channel.logs.read(cid) if cid else []) if x.get("type") == "app" and x.get("at", 0) >= start]
-        return dict(r or {"done": False}, apps=apps)
+                for x in rows if x["type"] == "app"]
+        sent = [{k: x[k] for k in ("type", "at", "path", "name", "size", "title", "items", "text") if k in x}
+                for x in rows if x["type"] != "app"]
+        return dict(r or {"done": False}, apps=apps, sent=sent)
 
     def run(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)

@@ -393,6 +393,11 @@ class Mentions:
                         opened.add((a["app"], a.get("at")))
                         self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, {
                             "type": "app", "app": a["app"], "name": a.get("name") or "", "icon": a.get("icon") or "", "mid": mid}))
+                for x in r.get("sent") or []:    # 它在那台电脑上发的文件、聊天记录（#357）：记到这里，打开时去那台电脑取
+                    if x.get("type") in ("file", "chatlog") and (x["type"], x.get("at")) not in opened:
+                        opened.add((x["type"], x.get("at")))
+                        rec = {k: x[k] for k in ("type", "path", "name", "size", "title", "items", "text") if k in x}
+                        self.pf.channel._emit(cid, self.pf.channel.logs.append(cid, dict(rec, mid=mid, sub=sub)))
                 if r.get("done"):
                     upd.update(state=r.get("state") or "done", text=r.get("text") or "", steps=r.get("steps") or [],
                                said=r.get("said"), elapsed=r.get("elapsed"), agent=aid, ctx=r.get("ctx"))

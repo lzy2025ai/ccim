@@ -4850,9 +4850,12 @@ async function renderBoard(quick){
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
   const tops = withOpen().filter(c => isTop(c) && !c.archived);
-  // 等你批准、出错停下的在最上面，其余开得最久的在上面，让早该结束的对话一直摆在眼前（#390）
-  const rank = c => c.attention === "ask" ? 0 : c.attention === "err" ? 1 : 2;
-  const wait = tops.filter(isOpen).sort((a, b) => rank(a) - rank(b) || (openAt(a) < openAt(b) ? -1 : openAt(a) > openAt(b) ? 1 : 0));
+  // 等你批准、出错停下的在最上面；再是有新回答没看过的（红点），刚回答完的在上面；
+  // 其余看过的开得最久的在上面，让早该结束的对话一直摆在眼前（#390）
+  const rank = c => c.attention === "ask" ? 0 : c.attention === "err" ? 1 : c.attention || c.unread ? 2 : 3;
+  const cmp = (x, y) => x < y ? -1 : x > y ? 1 : 0;
+  const wait = tops.filter(isOpen).sort((a, b) => rank(a) - rank(b)
+    || (rank(a) === 2 ? cmp(b.last_active || "", a.last_active || "") : cmp(openAt(a), openAt(b))));
   const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => (b.pin != null) - (a.pin != null));
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v[agTab]).sort((a, b) => b[1][agTab] - a[1][agTab]).slice(0, 6);

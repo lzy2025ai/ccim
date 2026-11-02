@@ -1706,40 +1706,38 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
 .employee-overview .ov-head{padding-bottom:6px}
 .employee-overview .ov-head .primary{background:var(--badge-ink);border-color:var(--badge-ink);color:#fff}
 .employee-overview .ov-body{background:radial-gradient(ellipse at top,#fff9 0,transparent 70%);padding-top:24px}
-.employee-overview .cgrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px 24px;align-items:stretch}
+.employee-overview .cgrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px 36px;align-items:stretch}
 .employee-overview .sec-head{margin-bottom:18px}
-.badge-card.ccard{isolation:isolate;padding:0;margin-top:40px;gap:0;border-radius:20px;border:1px solid #cbb998;background:linear-gradient(112deg,#fff8 0,transparent 28% 68%,#fff5 79%,transparent 89%),radial-gradient(ellipse at 7% 3%,#fffdf6 0,transparent 58%),repeating-radial-gradient(ellipse at 72% 8%,#a88d5b0a 0 1px,transparent 1px 9px),#f4eee2;box-shadow:inset 0 1px 0 #fff,inset 0 0 0 3px #fff9,inset 0 0 0 5px #d6c6a855,inset 1px 0 0 #fff9,0 2px 0 #b9a98e,0 13px 24px #24322924,0 3px 7px #2432291c;cursor:default;min-width:0}
-.badge-card:hover{border-color:#b79d70;box-shadow:inset 0 1px 0 #fff,inset 0 0 0 3px #fff9,inset 0 0 0 5px #d6c6a855,inset 1px 0 0 #fff9,0 2px 0 #b9a98e,0 17px 30px #2432292b,0 4px 9px #24322920}
-.badge-clip{position:absolute;z-index:2;top:-43px;left:calc(50% - 20px);width:40px;height:65px;pointer-events:none}
-.badge-clip::before{content:"";position:absolute;left:5px;top:0;width:30px;height:51px;background:repeating-linear-gradient(90deg,#ffffff18 0 1px,#061a2712 1px 3px),linear-gradient(90deg,#071b2c,#23485c 30%,#0c2b3f 65%,#061a2b);border:1px solid #0a2332;box-shadow:inset 2px 0 3px #70a1ab40,inset -3px 0 4px #020c15a8,0 2px 4px #102b4333;border-radius:0 0 5px 5px}
-.badge-clip::after{content:"";position:absolute;left:0;bottom:0;width:40px;height:33px;border:4px solid #a48249;border-radius:7px;background:linear-gradient(180deg,transparent 48%,#f9e8bd 49%,#9d7134 63%,#e4c88d 76%,#73572f 100%);box-shadow:inset 0 0 0 1px #ffedc4,inset 2px 2px 2px #fff8,0 3px 5px #18231866}
-.badge-link{display:flex;flex:1;min-width:0;flex-direction:column;gap:9px;padding:20px 24px 0;color:inherit;text-decoration:none;border-radius:20px;overflow:hidden}
+.badge-card.ccard{isolation:isolate;padding:0;margin-top:40px;gap:0;border-radius:20px;border:1px solid var(--badge-line);background:#f6f1e5 url("/badge/paper.webp") center/cover no-repeat;box-shadow:inset 0 1px 1px 2px #fffef8,inset 0 0 0 4px #e1d5bd80,inset -2px -3px 3px #9c896747,0 3px 0 #c4baa6,0 5px 3px #433a2933,4px 14px 18px #34302230,12px 24px 32px #34302212;cursor:default;min-width:0}
+.badge-card:hover{border-color:#bea478;box-shadow:inset 0 1px 1px 2px #fffef8,inset 0 0 0 4px #e1d5bd80,inset -2px -3px 3px #9c896747,0 3px 0 #c4baa6,0 5px 3px #433a2933,4px 16px 22px #34302238,12px 26px 36px #34302218}
+.badge-clip{position:absolute;z-index:2;top:-57px;left:calc(50% - 39px);width:78px;height:91px;background:url("/badge/clasp.webp") center/100% 100% no-repeat;mask:url("/badge/clasp-mask.svg") center/100% 100% no-repeat;filter:drop-shadow(1px 3px 2px #2b21194d);pointer-events:none}
+.badge-link{display:flex;flex:1;min-width:0;flex-direction:column;gap:8px;padding:16px 28px 0;color:inherit;text-decoration:none;border-radius:20px;overflow:hidden}
 .badge-number{font:500 11px/24px var(--sans);letter-spacing:.1em;color:#806c4d;padding-right:70px;min-height:24px}
-.badge-portrait{position:relative;margin:3px 0 4px;padding:5px;border:1px solid #cfbd9c;border-radius:21px;background:linear-gradient(145deg,#fffef8,#dccdb3 84%,#fffdf5);box-shadow:inset 0 1px 2px #fff,inset 0 -1px 2px #9e896655,0 2px 5px #69573b33}
+.badge-portrait{position:relative;margin:3px 0 4px;width:84%;padding:5px;border:1px solid #cfbd9c;border-radius:21px;background:linear-gradient(145deg,#fffef8,#dccdb3 84%,#fffdf5);box-shadow:inset 0 1px 2px #fff,inset 0 -1px 2px #9e896655,0 2px 5px #69573b33}
 .badge-portrait::after{content:"";position:absolute;z-index:1;inset:6px;pointer-events:none;border-radius:15px;background:linear-gradient(116deg,#fff6 0,transparent 27% 64%,#fff3 77%,transparent 89%);mix-blend-mode:screen}
-.badge-card .badge-portrait .seal{display:flex;width:100%;height:auto;aspect-ratio:1.18;border-radius:15px;font-size:52px;overflow:hidden;box-shadow:inset 0 0 0 1px #fff8,0 0 0 1px #6f604744}
+.badge-card .badge-portrait .seal{display:flex;width:100%;height:auto;aspect-ratio:1.24;border-radius:18px;font-size:52px;overflow:hidden;box-shadow:0 0 0 1px #b6a17a44}
 .badge-card .badge-portrait .seal.one{font-size:66px}
-.badge-stamp{position:absolute;z-index:2;right:-8px;bottom:-8px;width:48px;height:48px;display:grid;place-items:center;border:1px solid #aa9565;border-radius:50%;background:radial-gradient(circle at 35% 25%,#fff9,transparent 45%),conic-gradient(from 30deg,#d8c792,#c5d5d8,#d8d3e4,#d7d8c3,#e4d9b2,#d8c792);color:#79653d;box-shadow:inset 0 0 0 3px #fff8,inset 0 0 0 4px #ad9768,0 0 0 3px #fff9,0 2px 4px #58462c3d;font:600 18px var(--song);text-shadow:0 1px #fff}
-.badge-card .nm{font:600 21px/1.35 var(--song);white-space:normal;overflow-wrap:anywhere;padding:0;min-height:1.35em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin:0}
+.badge-stamp{position:absolute;z-index:2;right:-13px;bottom:-7px;width:54px;height:54px;display:grid;place-items:center;border:1px solid #bda263;border-radius:50%;background:radial-gradient(circle at 35% 25%,#ffffff90,transparent 45%),repeating-conic-gradient(from 12deg,#ffffff05 0deg 3deg,#a69b7d20 3deg 4deg),conic-gradient(from 35deg,#ddcda1,#d5e3e8,#b9d5ce,#f7e6ad,#e8cbd9,#bcd4e8,#ddcda1);color:#ac8743;box-shadow:inset 0 0 0 2px #fff9,inset 0 0 0 4px #cab37b,inset 0 0 0 5px #fff9,0 0 0 3px #fffaf0,1px 3px 4px #58462c40;font:600 23px var(--song);text-shadow:0 1px #fff,-1px -1px #7e603780;transform:rotate(8deg)}
+.badge-stamp::after{content:"";position:absolute;inset:7px;border:1px dotted #af955f;border-radius:50%}
+.badge-card .nm{font:600 21px/1.35 var(--song);white-space:normal;overflow-wrap:anywhere;padding:0;min-height:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin:0}
 .badge-card .meta{min-height:24px}
-.badge-card .tag{background:#e0e0d7;color:#34444b}
+.badge-card .tag{background:#e0e0d7;color:#34444b;font-size:12px;padding:3px 9px;border-radius:7px}
 .badge-card .tag.weixin{background:#dce9dc;color:#326546}
 .badge-card .tag.feishu{background:#dee8f7;color:#356395}
-.badge-card .role{font-size:13px;line-height:1.6;color:var(--badge-muted);min-height:42px}
+.badge-card .role{font-size:14px;line-height:1.6;color:var(--badge-muted);min-height:40px}
 .badge-card .path{color:var(--badge-muted);font-size:12px;min-height:20px}
-.badge-card .foot{border-color:var(--badge-line);font-size:12px;color:var(--badge-muted);padding-top:12px;padding-bottom:4px;min-height:35px}
+.badge-card .foot{border-color:var(--badge-line);font-size:13px;color:var(--badge-muted);padding-top:12px;padding-bottom:7px;min-height:36px}
 .badge-card .foot .status{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge-enter{position:relative;display:flex;align-items:center;justify-content:center;gap:14px;min-height:54px;margin:0 -24px;padding:10px 22px;color:#fff;background:radial-gradient(ellipse at 50% 0,#41657b91,transparent 72%),repeating-linear-gradient(135deg,#ffffff08 0 1px,transparent 1px 4px),linear-gradient(120deg,#173a50,#091f31);border-top:1px solid #b39964;border-radius:0 0 19px 19px;box-shadow:inset 0 2px 0 #ffffff38,inset 0 -2px 4px #020d17a8;font:600 16px var(--song)}
-.badge-card::before,.badge-card::after{content:"";position:absolute;z-index:1;bottom:0;width:42px;height:42px;pointer-events:none;background:repeating-linear-gradient(135deg,#ffffff12 0 1px,transparent 1px 3px),#2e5148;border-top:3px double #d9b76c}
-.badge-card::before{left:0;clip-path:polygon(0 0,100% 100%,0 100%);border-radius:0 0 0 19px;background:linear-gradient(45deg,transparent 47%,#e0bd76 48% 53%,transparent 54%),#2e5148}
-.badge-card::after{right:0;clip-path:polygon(100% 0,100% 100%,0 100%);border-radius:0 0 19px 0;background:linear-gradient(-45deg,transparent 47%,#e0bd76 48% 53%,transparent 54%),#2e5148}
+.badge-enter{position:relative;display:flex;align-items:center;justify-content:center;gap:14px;min-height:48px;margin:0 -12px;padding:10px 22px;color:#fff;background:#102c3e url("/badge/leather.svg") center/180px;border:1px solid #a48a55;border-radius:15px 15px 11px 11px;box-shadow:inset 0 1px 1px #fff9,inset 0 0 0 3px #20394a,inset 0 0 0 4px #b8a77b70,0 -2px 3px #7e705f33;font:600 16px var(--song)}
+.badge-card::before,.badge-card::after{content:"";position:absolute;z-index:1;bottom:-1px;width:60px;height:53px;pointer-events:none;background:url("/badge/corner.svg") left bottom/100% 100% no-repeat;filter:drop-shadow(0 -1px 1px #40362250)}
+.badge-card::before{left:-1px}.badge-card::after{right:-1px;transform:scaleX(-1)}
 .badge-card .pin,.badge-card .more{z-index:3;opacity:1;top:9px;width:36px;height:36px;padding:9px;border-radius:9px;color:#777568}
 .badge-card .pin{right:42px}.badge-card .more{right:6px}
 .badge-card .pin.on{color:#94661f}.badge-card .pin svg{width:18px;height:18px}
 .badge-card .pin:hover,.badge-card .more:hover{background:#dfd4bc80;color:#795823}
 .employee-overview :is(a,button,input):focus-visible{outline:3px solid #3374ab;outline-offset:4px}
 .badge-card:focus-within{border-color:#3374ab}
-.badge-card.off{background:repeating-linear-gradient(135deg,#88888808 0 1px,transparent 1px 5px),#eeece5}
+.badge-card.off{background-color:#eeece5}
 .badge-card.off .badge-enter{background:#485660}
 .employee-overview .ccard.add{margin-top:40px;border-color:#c0b49b;border-radius:20px;min-height:240px;color:#666b62}
 @media (max-width:760px){
@@ -1751,8 +1749,9 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
  .employee-overview .ov-body{padding:18px 22px 90px}
  .employee-overview .cgrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:24px}
  .badge-link{padding-left:24px;padding-right:24px;gap:8px}
- .employee-overview .badge-card{margin-top:32px}
- .badge-card .badge-portrait .seal{aspect-ratio:1.6}
+ .employee-overview .badge-card{margin-top:40px}
+ .badge-portrait{width:100%}
+ .badge-card .badge-portrait .seal{aspect-ratio:1.65}
  .badge-card .nm{min-height:0;font-size:22px}
  .badge-card .role{font-size:14px}
 }

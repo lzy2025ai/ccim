@@ -1700,6 +1700,63 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
 }
 .ws-ask{display:none}
 @media (max-width:760px){#main.ws-file .ws-ask{display:flex}}
+
+/* AI 员工工牌：仅总览启用，项目和其他卡片保持原样。 */
+.employee-overview{--badge-ink:#102b43;--badge-muted:#62665f;--badge-gold:#a47a36;--badge-line:#d9ccb4;background:#f4f2ec;color:var(--badge-ink)}
+.employee-overview .ov-head{padding-bottom:6px}
+.employee-overview .ov-head .primary{background:var(--badge-ink);border-color:var(--badge-ink);color:#fff}
+.employee-overview .ov-body{background:radial-gradient(ellipse at top,#fff9 0,transparent 70%);padding-top:24px}
+.employee-overview .cgrid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:28px 24px;align-items:stretch}
+.employee-overview .sec-head{margin-bottom:18px}
+.badge-card.ccard{isolation:isolate;padding:0;margin-top:40px;gap:0;border-radius:20px;border:1px solid var(--badge-line);background:repeating-linear-gradient(135deg,#b69a6c07 0 1px,transparent 1px 5px),radial-gradient(ellipse at 0 0,#fffdf7,#f1ebde);box-shadow:inset 0 0 0 3px #fffc,inset 0 0 0 5px #d6c6a84d,0 9px 18px #2432291c,0 2px 4px #24322918;cursor:default;min-width:0}
+.badge-card:hover{border-color:#bea478;box-shadow:inset 0 0 0 3px #fffc,inset 0 0 0 5px #d6c6a84d,0 12px 24px #24322926}
+.badge-clip{position:absolute;z-index:2;top:-43px;left:calc(50% - 20px);width:40px;height:65px;pointer-events:none}
+.badge-clip::before{content:"";position:absolute;left:5px;top:0;width:30px;height:51px;background:repeating-linear-gradient(90deg,#ffffff0d 0 1px,transparent 1px 3px),linear-gradient(90deg,#081f30,#234b5c 45%,#0a2639);border:1px solid #0a2332;box-shadow:inset 0 0 0 3px #122c3b,0 2px 4px #102b4333;border-radius:0 0 5px 5px}
+.badge-clip::after{content:"";position:absolute;left:0;bottom:0;width:40px;height:33px;border:4px solid #a48249;border-radius:7px;background:linear-gradient(180deg,transparent 60%,#e1c88f 61%,#8b6633 77%,#e8d7ae 83%,#73572f 100%);box-shadow:inset 0 0 0 1px #f9e6bb,0 2px 3px #18231866}
+.badge-link{display:flex;flex:1;min-width:0;flex-direction:column;gap:10px;padding:20px 24px 0;color:inherit;text-decoration:none;border-radius:20px;overflow:hidden}
+.badge-number{font:500 11px/24px var(--sans);letter-spacing:.1em;color:#806c4d;padding-right:70px;min-height:24px}
+.badge-portrait{position:relative;margin:3px 0 4px}
+.badge-card .badge-portrait .seal{display:flex;width:100%;height:auto;aspect-ratio:1.18;border-radius:18px;font-size:52px;overflow:hidden;box-shadow:0 0 0 1px #b6a17a44}
+.badge-card .badge-portrait .seal.one{font-size:66px}
+.badge-stamp{position:absolute;right:-10px;bottom:-8px;width:52px;height:52px;display:grid;place-items:center;border:3px double #aa9565;border-radius:50%;background:conic-gradient(from 30deg,#e3d5a6,#d8d8eb,#b7d9ce,#efe4b7,#e5cad8,#c1daea,#e3d5a6);color:#73582e;box-shadow:0 0 0 3px #fff9,0 2px 4px #58462c26;font:600 22px var(--song);text-shadow:0 1px #fff}
+.badge-card .nm{font:600 21px/1.35 var(--song);white-space:normal;overflow-wrap:anywhere;padding:0;min-height:2.7em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin:0}
+.badge-card .meta{min-height:24px}
+.badge-card .tag{background:#e0e0d7;color:#34444b}
+.badge-card .tag.weixin{background:#dce9dc;color:#326546}
+.badge-card .tag.feishu{background:#dee8f7;color:#356395}
+.badge-card .role{font-size:13px;line-height:1.6;color:var(--badge-muted);min-height:42px}
+.badge-card .path{color:var(--badge-muted);font-size:12px;min-height:20px}
+.badge-card .foot{border-color:var(--badge-line);font-size:12px;color:var(--badge-muted);padding-top:12px;padding-bottom:4px;min-height:35px}
+.badge-card .foot .status{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-enter{position:relative;display:flex;align-items:center;justify-content:center;gap:14px;min-height:48px;margin:0 -12px;padding:10px 22px;color:#fff;background:repeating-linear-gradient(135deg,#ffffff05 0 1px,transparent 1px 4px),linear-gradient(120deg,#173a50,#091f31);border:1px solid #a48a55;border-radius:15px 15px 11px 11px;box-shadow:inset 0 0 0 2px #ffffff20;font:600 16px var(--song)}
+.badge-card::before,.badge-card::after{content:"";position:absolute;z-index:1;bottom:0;width:42px;height:42px;pointer-events:none;background:repeating-linear-gradient(135deg,#ffffff12 0 1px,transparent 1px 3px),#2e5148;border-top:3px double #d9b76c}
+.badge-card::before{left:0;clip-path:polygon(0 0,100% 100%,0 100%);border-radius:0 0 0 19px;background:linear-gradient(45deg,transparent 47%,#e0bd76 48% 53%,transparent 54%),#2e5148}
+.badge-card::after{right:0;clip-path:polygon(100% 0,100% 100%,0 100%);border-radius:0 0 19px 0;background:linear-gradient(-45deg,transparent 47%,#e0bd76 48% 53%,transparent 54%),#2e5148}
+.badge-card .pin,.badge-card .more{z-index:3;opacity:1;top:9px;width:36px;height:36px;padding:9px;border-radius:9px;color:#777568}
+.badge-card .pin{right:42px}.badge-card .more{right:6px}
+.badge-card .pin.on{color:#94661f}.badge-card .pin svg{width:18px;height:18px}
+.badge-card .pin:hover,.badge-card .more:hover{background:#dfd4bc80;color:#795823}
+.employee-overview :is(a,button,input):focus-visible{outline:3px solid #3374ab;outline-offset:4px}
+.badge-card:focus-within{border-color:#3374ab}
+.badge-card.off{background:repeating-linear-gradient(135deg,#88888808 0 1px,transparent 1px 5px),#eeece5}
+.badge-card.off .badge-enter{background:#485660}
+.employee-overview .ccard.add{margin-top:40px;border-color:#c0b49b;border-radius:20px;min-height:240px;color:#666b62}
+@media (max-width:760px){
+ .employee-overview .ov-head{padding:20px 18px 12px;flex-wrap:wrap;gap:14px 10px}
+ .employee-overview .ov-head h1{font-size:24px}
+ .employee-overview .ov-head .search{order:3;flex-basis:100%;width:100%}
+ .employee-overview .ov-head .primary{min-height:44px;font-size:13px}
+ .employee-overview .mtabs{padding:0 12px}
+ .employee-overview .ov-body{padding:18px 22px 90px}
+ .employee-overview .cgrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:24px}
+ .badge-link{padding-left:24px;padding-right:24px;gap:8px}
+ .employee-overview .badge-card{margin-top:32px}
+ .badge-card .badge-portrait .seal{aspect-ratio:1.6}
+ .badge-card .nm{min-height:0;font-size:22px}
+ .badge-card .role{font-size:14px}
+}
+@media (prefers-reduced-motion:reduce){.employee-overview *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
 </style>
 
 </head>
@@ -5596,13 +5653,23 @@ function agentCard(a){
   const off = (machineOf(a.machine || S.me) || {online: true}).online === false;
   const st = off ? `<span class="status"><i></i>电脑离线</span>` : a.busy ? `<span class="status busy"><i></i>${esc(a.doing || "干活中")}</span>` : `<span class="status on"><i></i>空闲</span>`;
   const ch = (a.channels || []).map(c => `<span class="tag ${c.kind === "weixin" ? "weixin" : "feishu"}">${c.kind === "weixin" ? "微信" : "飞书"}</span>`).join("");
-  return `<a class="ccard ${off ? "off" : ""}" href="#/agents/${encodeURIComponent(a.id)}" oncontextmenu="agentMenu(event,${q(a.id)})">
-    ${a.shared ? "" : `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();agentMenu(event,${q(a.id)})">${ICON.more}</button>
-    <button class="pin ${a.pinned ? "on" : ""}" aria-label="${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="event.preventDefault();event.stopPropagation();pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>`}
-    <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${a.shared ? `<span class="tag">共享</span>` : ""}${ch}</div></div></div>
-    <div class="role">${esc(a.role || "还没写角色说明")}</div>
-    <span class="path">${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}</span>
-    <div class="foot"><span class="grow">${waitOf(a.id) ? `<span class="wait"><i></i>${waitOf(a.id)} 个对话等你</span>` : st}</span><span>${when(a.last_active)}</span>${off ? "" : `<span class="go">对话</span>`}</div></a>`;
+  // 展示编号沿用原始列表顺序，搜索、置顶不会重新编号；不是持久化员工 ID。
+  const number = String(S.agents.indexOf(a) + 1).padStart(4, "0");
+  return `<article class="ccard badge-card ${off ? "off" : ""}" data-agent-id="${esc(a.id)}" oncontextmenu="agentMenu(event,${q(a.id)})">
+    <span class="badge-clip" aria-hidden="true"></span>
+    <a class="badge-link" href="#/agents/${encodeURIComponent(a.id)}" aria-label="${esc(a.name)}，进入对话">
+      <span class="badge-number" aria-label="员工编号 ${number}">No.${number}</span>
+      <div class="badge-portrait">${seal(a, "", false)}<span class="badge-stamp" aria-hidden="true">AI</span></div>
+      <div class="nm" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${a.shared ? `<span class="tag">共享</span>` : ""}${ch}</div>
+      <div class="role" title="${esc(a.role || "还没写角色说明")}">${esc(a.role || "还没写角色说明")}</div>
+      <span class="path" title="${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}">${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}</span>
+      <div class="foot"><span class="grow">${waitOf(a.id) ? `<span class="wait"><i></i>${waitOf(a.id)} 个对话等你</span>` : st}</span><span>${when(a.last_active)}</span></div>
+      <span class="badge-enter">${off ? "查看对话" : "进入对话"}<span aria-hidden="true">→</span></span>
+    </a>
+    ${a.shared ? "" : `<button class="more" aria-label="${esc(a.name)}：更多操作" title="更多操作" onclick="agentMenu(event,${q(a.id)})">${ICON.more}</button>
+    <button class="pin ${a.pinned ? "on" : ""}" aria-pressed="${!!a.pinned}" aria-label="${esc(a.name)}：${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>`}
+    </article>`;
 }
 function renderAgentCards(listOnly){
   if (listOnly) return;
@@ -5613,6 +5680,7 @@ function renderAgentCards(listOnly){
     : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p>
       ${addable.length ? `<div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">${addable.map(m => `<button class="btn primary" onclick="${newOnAgents(m.id)}">${ICON.plus}${multi() ? `在「${esc(m.name || "这台电脑")}」上新建 Agent` : "新建 Agent"}</button>`).join("")}</div>` : ""}</div>`;
   $("#main").innerHTML = overviewHtml("AI 员工", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
+  $("#main .overview").classList.add("employee-overview");
 }
 function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
 function newOn(view, mid){
@@ -5621,7 +5689,14 @@ function newOn(view, mid){
   if (view === "agents") { agentDraftFrom = {machine: m}; location.hash = "#/agents/new"; }
   else newProject(m);
 }
-async function pinAgent(id, on){ await act(() => api("/api/agent/pin", {id, on})); await loadState(); if (!current.id) renderAgentCards(); }
+async function pinAgent(id, on){
+  const keepFocus = document.activeElement?.matches(".badge-card .pin") && document.activeElement.closest(".badge-card").dataset.agentId === id;
+  await act(() => api("/api/agent/pin", {id, on})); await loadState();
+  if (!current.id) {
+    renderAgentCards();
+    if (keepFocus) [...document.querySelectorAll(".badge-card")].find(el => el.dataset.agentId === id)?.querySelector(".pin")?.focus({preventScroll:true});
+  }
+}
 function agentMenu(e, id){
   e.preventDefault(); e.stopPropagation();
   const a = agentOf(id) || (agentSide && agentSide.id === id ? agentSide.a : null);

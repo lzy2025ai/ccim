@@ -624,7 +624,7 @@ class Platform:
         att = board_mod.attention(m, summ)
         return {"attention": None if crew and att != "ask" else att, "unread": board_mod.unread(m, summ),
                 "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew,
-                "rounds": rounds, "answered": bool(summ.get("answer_at")) and not (m.get("schedule") and not rounds)}
+                "rounds": rounds, "answered": board_mod.answered(m, summ)}
 
     def _direct_turn(self, cid):
         """子对话里最近一轮是用户直接说的（不是群里 @ 它的）。"""

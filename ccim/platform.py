@@ -615,7 +615,8 @@ class Platform:
     def _board_marks(self, cid, m):
         if m.get("mention_of") and self._direct_turn(cid):
             summ = board_mod.summary(self.channel.logs, cid)   # 群成员的子对话里直接聊的那一轮（#409）：答完在它的列表里提示
-            return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ), "ask": ""}
+            return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ), "direct": True,   # 任务面板也算它（#417）
+                    "ask": board_mod.ask_preview(summ.get("last_user"))}
         if not board_mod.top_level(m, cid):     # 群里 @ 它的那一轮：只在群聊里提示，子对话不重复
             return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
@@ -628,8 +629,7 @@ class Platform:
 
     def _direct_turn(self, cid):
         """子对话里最近一轮是用户直接说的（不是群里 @ 它的）。"""
-        last = next((r for r in reversed(self.channel.logs.read(cid)) if r.get("type") == "user"), None)
-        return bool(last and not last.get("from_chat"))
+        return bool(board_mod.summary(self.channel.logs, cid).get("direct"))
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""
@@ -1915,7 +1915,19 @@ class Platform:
         more = {"older": sum(1 for t in live[CHAT_PAGE:] if t[1] not in keep),
                 "archived": sum(1 for t in listed if self._archived(t) and t[1] not in keep),
                 "next": _cursor(live[CHAT_PAGE - 1]) if len(live) > CHAT_PAGE else None}
-        return [self._row(t) for t in tops if t[1] in keep], more
+        return [self._row(t) for t in tops if t[1] in keep] + self._direct_subs(share.chat_filter(self, acct)), more
+
+    def _direct_subs(self, ok):
+        """群成员的子对话里直接聊的那一轮（#417）：在干活、等批准、答完没看的也带在整体状态里，任务面板和角标算它。
+        子对话不进「对话」列表（网页按 mention_of 认）。"""
+        out = []
+        for cid, m in self.chats().items():
+            if not m.get("mention_of") or m.get("archived") or not ok(cid, m.get("agent")):
+                continue
+            summ = board_mod.summary(self.channel.logs, cid)
+            if summ.get("direct") and (m.get("busy") or self._stall(cid) or board_mod.attention(m, summ)):
+                out.append(self.chat_view(cid))
+        return out
 
     def chat_page(self, acct=None, before=None, archived=False, q="", groups=False):
         """/api/chats：「对话」列表里 before 之后（更早）的一页、已归档的一页、按标题和摘要搜；全部群聊。

@@ -1,4 +1,4 @@
-"""群聊里被 @ 的成员在别的电脑上：它发的文件、聊天记录随结果带回，记到群里（#357）；不跑真实对话。"""
+"""群聊里被 @ 的成员发的文件、聊天记录（#357、#409）：别的电脑上的随结果带回群里；本机的群里 @ 那一轮两边都记，直接聊的只在子对话。"""
 import asyncio
 import json
 import tempfile
@@ -46,7 +46,7 @@ class RemoteSentTests(unittest.TestCase):
         sent = [{"type": "chatlog", "title": "群聊", "items": [{"sender": "甲", "text": "hi"}], "text": "甲：hi", "at": 5},
                 {"type": "file", "path": "/b.pdf", "name": "b.pdf", "size": 3, "at": 6}]
         replies = iter([{"token": "t"}, {"done": False, "sent": sent[:1]}, {"done": True, "text": "发了", "sent": sent}])
-        pf.peers = SimpleNamespace(forward=lambda *a: (200, "", json.dumps(next(replies)).encode()))
+        pf.peers = SimpleNamespace(me={"id": "mac-a"}, forward=lambda *a: (200, "", json.dumps(next(replies)).encode()))
         m.running.add(rid)
         sleep = asyncio.sleep
         asyncio.sleep = lambda *_: sleep(0)
@@ -59,6 +59,23 @@ class RemoteSentTests(unittest.TestCase):
         self.assertEqual([r["type"] for r in got], ["chatlog", "file"])          # 两次都带回来的只记一次
         self.assertTrue(all(r["mid"] == "mac-b" and r["sub"] == sub for r in got))
         self.assertEqual(rows[-1]["state"], "done")
+
+    def test_local_member_posts_follow_the_turn(self):
+        from ccim.platform import WebChannel
+        pf = _pf(self.dirs[0].name)
+        ch = object.__new__(WebChannel)
+        ch.logs, ch.platform, ch._emit = pf.channel.logs, pf, lambda *a: None
+        cid, sub = "w-g", "m-w-g-cai"
+        pf.chats = lambda: {cid: {}, sub: {"mention_of": cid}}
+        turn = SimpleNamespace(current=None)
+        pf.mentions = SimpleNamespace(_chat=lambda c: turn)
+        group_task = SimpleNamespace(group=cid)
+        turn.current = (group_task, None)                     # 群里 @ 它的那一轮
+        asyncio.run(ch.send_app(sub, {"id": "a1", "name": "应用"}))
+        turn.current = (SimpleNamespace(), None)              # 用户在子对话里直接说的那一轮
+        asyncio.run(ch.send_app(sub, {"id": "a2", "name": "应用"}))
+        self.assertEqual([r["app"] for r in ch.logs.read(sub)], ["a1", "a2"])
+        self.assertEqual([(r["app"], r["sub"]) for r in ch.logs.read(cid)], [("a1", sub)])
 
 
 if __name__ == "__main__":

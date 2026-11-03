@@ -356,10 +356,7 @@ class WebChannel(Channel):
         pass
 
     async def send_file(self, chat_id, path):
-        sub, chat_id = chat_id, self.outer(chat_id)         # 被 @ 的 Agent 发的：记到群里（#357）
         rec = {"type": "file", "path": os.path.realpath(path), "name": os.path.basename(path), "size": os.path.getsize(path)}
-        if sub != chat_id:
-            rec["sub"] = sub                  # 记下是哪个被 @ 的 Agent 发的，网页里跟着它的回答排（#380）
         snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
         if snap:
             rec["snap"] = snap
@@ -373,26 +370,33 @@ class WebChannel(Channel):
                 rec.update(path=dest, orig=rec["path"])
             except OSError:
                 pass
-        self._emit(chat_id, self.logs.append(chat_id, rec))
+        self._post(chat_id, rec)
 
-    def outer(self, chat_id):
-        """被 @ 的 Agent 的子对话 → 用户看着的那个对话（在这台电脑上的话），不是子对话就是它自己（#337、#345）。"""
+    def group_turn(self, chat_id):
+        """群成员的子对话正在做群里 @ 它的那一轮（#409）：返回群聊编号（在这台电脑上的话），不然 None。
+        子对话里用户直接说的那一轮（单独聊）不算，发的东西只留在子对话里。"""
         chats = self.platform.chats()
         of = (chats.get(chat_id) or {}).get("mention_of")
-        return of if of in chats else chat_id
+        if not of or of not in chats:
+            return None
+        c = self.platform.mentions._chat(chat_id)
+        t = c.current[0] if c and c.current else None
+        return of if getattr(t, "group", None) else None
+
+    def _post(self, chat_id, rec):
+        """Agent 发的文件、应用、聊天记录：记在它自己的对话里；群里 @ 它的那一轮，群聊里也记一份（#357、#409），
+        记下是哪个子对话发的，网页里跟着它的回答排（#380）。"""
+        self._emit(chat_id, self.logs.append(chat_id, dict(rec)))
+        of = self.group_turn(chat_id)
+        if of:
+            self._emit(of, self.logs.append(of, dict(rec, sub=chat_id)))
 
     async def send_app(self, chat_id, app):
-        """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。
-        被 @ 的 Agent 在子对话里干活，记到用户正看着的那个对话里（#337）。那个对话在别的电脑上的照旧记在子对话里。"""
-        sub, chat_id = chat_id, self.outer(chat_id)
-        rec = {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""}
-        if sub != chat_id:
-            rec["sub"] = sub
-        self._emit(chat_id, self.logs.append(chat_id, rec))
+        """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。"""
+        self._post(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""})
 
     async def send_chatlog(self, chat_id, log):
         """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
-        sub, chat_id = chat_id, self.outer(chat_id)
         items = []
         for it in log["items"]:
             it = dict(it)
@@ -406,10 +410,7 @@ class WebChannel(Channel):
                 except OSError:
                     pass
             items.append(it)
-        rec = {"type": "chatlog", "title": log["title"], "items": items, "text": chatlog_text(log)}
-        if sub != chat_id:
-            rec["sub"] = sub
-        self._emit(chat_id, self.logs.append(chat_id, rec))
+        self._post(chat_id, {"type": "chatlog", "title": log["title"], "items": items, "text": chatlog_text(log)})
 
     async def download(self, message_id, kind, key, name, folder):
         """网页上传的文件先放在平台的 uploads 里，这里挪到项目的收件箱。"""
@@ -612,7 +613,10 @@ class Platform:
             return None
 
     def _board_marks(self, cid, m):
-        if not board_mod.top_level(m, cid):
+        if m.get("mention_of") and self._direct_turn(cid):
+            summ = board_mod.summary(self.channel.logs, cid)   # 群成员的子对话里直接聊的那一轮（#409）：答完在它的列表里提示
+            return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ), "ask": ""}
+        if not board_mod.top_level(m, cid):     # 群里 @ 它的那一轮：只在群聊里提示，子对话不重复
             return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
         rounds = summ.get("rounds") or 0
@@ -621,6 +625,11 @@ class Platform:
         return {"attention": None if crew and att != "ask" else att, "unread": board_mod.unread(m, summ),
                 "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew,
                 "rounds": rounds, "answered": bool(summ.get("answer_at")) and not (m.get("schedule") and not rounds)}
+
+    def _direct_turn(self, cid):
+        """子对话里最近一轮是用户直接说的（不是群里 @ 它的）。"""
+        last = next((r for r in reversed(self.channel.logs.read(cid)) if r.get("type") == "user"), None)
+        return bool(last and not last.get("from_chat"))
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""
@@ -1157,6 +1166,10 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
+        if m.get("mention_of") and text:       # 群成员的子对话里用户直接说的（#409）：群里看不到，让它知道这部分只有它有
+            of = self.chats().get(m["mention_of"]) or {}
+            where = f"群聊「{of.get('title') or m.get('title') or ''}」" if of.get("title") or m.get("title") else "群聊"
+            text = f"[用户在你于{where}的子会话里直接跟你说的，群里其他人看不到这段]\n{text}"
         if m.get("side_of") and text:          # 侧边对话：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
         if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
@@ -1735,7 +1748,7 @@ class Platform:
         return {"id": cid, "title": m.get("title") or self._fork_title(cid, m) or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
-                "mention_of": m.get("mention_of"), "side_of": m.get("side_of"),
+                "mention_of": m.get("mention_of"), "side_of": m.get("side_of"), "group": self._group_of(m),
                 "split_from": {"id": m["split_from"], "title": (self.chats().get(m["split_from"]) or {}).get("title") or "群聊"}
                 if m.get("split_from") else None,
                 "dispatched_from": {"id": m["dispatched_from"], "title": (self.chats().get(m["dispatched_from"]) or {}).get("title") or "另一个对话"}
@@ -1753,6 +1766,15 @@ class Platform:
                 "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"),
                 "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m),
                 "perm_ok": not (share.chat_owner(self, cid) or m.get("side_of") or m.get("side_at") or m.get("helper"))}
+
+    def _group_of(self, m):
+        """群成员的子对话在哪个群里（#409）：网页标「成员」/「侧边对话」，点「在群聊里 @ 的」跳过去。"""
+        of = m.get("mention_of")
+        if not of:
+            return None
+        g = self.chats().get(of)
+        return {"id": of, "title": (g or {}).get("title") or m.get("title") or "群聊", "machine": m.get("mention_machine"),
+                "side": bool(m.get("side_at") or (g or {}).get("side_of"))}
 
     @staticmethod
     def _linked(m):
@@ -1956,6 +1978,14 @@ class Platform:
                 chats[cid].pop(k, None)
             else:
                 chats[cid][k] = v
+        if "archived" in changes:             # 群聊标为已完成：成员在里面的子对话跟着走（#409）
+            for m in chats.values():
+                if m.get("mention_of") == cid:
+                    for k in ("archived", "archived_at"):
+                        if changes[k] in (None, False, ""):
+                            m.pop(k, None)
+                        else:
+                            m[k] = changes[k]
         self.store.write(chats)
         if "archived" in changes and bool(changes["archived"]) != was:     # 标为已完成、取消已完成（#369）
             self._done_mark(cid, bool(changes["archived"]), changes.get("archived_at"))
@@ -2429,7 +2459,7 @@ class Platform:
         r = rows[index]
         return {"text": r.get("text") or "", "files": r.get("files") or []}
 
-    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0, side=False):
+    async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0, side=False, of_machine=None):
         """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""
         from .session import Task
         if not agents.get(aid):
@@ -2443,7 +2473,9 @@ class Platform:
                           "created": registry.now(), "last_active": registry.now(),
                           **({"mention_of": of} if kind == "mention" else {"project": project}),
                           **({"side_at": True} if side and kind == "mention" else {})}   # 侧边对话里被 @ 的（#290）：只读
-            self.store.write(chats)
+        if kind == "mention" and of_machine:  # 群聊在哪台电脑上：子对话里点「在 xx 群聊 @ 了它」跳过去（#409）
+            chats[cid]["mention_machine"] = of_machine
+        self.store.write(chats)
         start = time.time()
         b = self._bridge(cid)
         chat = b.chat(cid, "p2p")
@@ -2451,6 +2483,8 @@ class Platform:
                                                                 **({"from_chat": of} if kind == "mention" else {})}))
         task = Task(prompt)
         task.depth = int(depth or 0)
+        if kind == "mention":
+            task.group = of
         chat.submit(task)
         token = uuid.uuid4().hex
         self.peer_results[token] = None       # 活可能做很久：先回个编号，那边隔一会儿来问结果
@@ -2749,7 +2783,7 @@ def _handler(pf):
                 "/api/app/read": lambda: apps_mod.data_read(q.get("id", ""), q.get("path", "")),
                 "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
                 "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
-                "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct),
+                "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct, at=q.get("at")),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
@@ -2874,7 +2908,7 @@ def _handler(pf):
                 "/api/chat/rewind": lambda: pf.run(pf.rewind_chat(b("id"), b("index"), bool(b("files")), b("at")), timeout=120),
                 "/api/peer/task": lambda: pf.run(pf.peer_task(b("chat"), b("agent"), b("prompt") or "", b("title") or "项目",
                                                               b("project") or "", b("kind"), b("of"), b("shown"), b("depth"),
-                                                              bool(b("side")))),
+                                                              bool(b("side")), b("of_machine"))),
                 "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
@@ -3062,8 +3096,6 @@ def send(pf, cid, text, files, ctx=None, refs=None, acct=None):
     d = diary_of(pf, cid, text, files, acct)
     if d:
         return d
-    if pf.meta(cid).get("mention_of"):       # 在群成员的子对话里开口：另开独立对话（#150），网页跳过去
-        cid = pf.call(pf.split_sub, cid)
     pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx, refs=refs))
     return {"ok": True, "chat": cid}
 
@@ -3186,29 +3218,23 @@ def agent_view(pf, aid, detail=False):
 
 
 def _agent_chats(pf, aid):
-    """Agent 页左边列表里它的网页对话（#359）：它参与的群聊列群聊本身（和会话页同一个对话），不列它在里面的子对话；
-    只是成员的标 member。侧边对话里被 @ 的那份不列；别的电脑上的群聊（本机没有外层）照旧列子对话。"""
-    chats, rows, seen = pf.chats(), [], set()
-    for cid, c in chats.items():
-        if c.get("agent") == aid and c.get("mention_of") and c["mention_of"] in chats:
-            cid = c["mention_of"]
-            if not board_mod.top_level(chats[cid], cid):
-                continue
-        elif c.get("agent") != aid and not (aid in (c.get("members") or []) and board_mod.top_level(c, cid)):
+    """Agent 页左边列表里它的网页对话。它当群主的群聊就是它自己的对话；只是成员的（含别的电脑上的群、侧边对话里被 @ 的）
+    列它在里面的子对话（#409，取代 #359 的列群聊本身），标题用群名，带 member。"""
+    rows = []
+    for cid, c in pf.chats().items():
+        if c.get("agent") != aid:
             continue
-        if cid in seen:
-            continue
-        seen.add(cid)
         v = pf.chat_view(cid)
-        if v.get("agent") != aid:
-            v["member"] = True
+        if c.get("mention_of"):
+            v.update(member=True, title=v["group"]["title"])
         rows.append(v)
     return rows
 
 
-def agent_recent(pf, aid, acct=None, n=5):
-    """头像卡片（#298、#307）：这个 Agent 最近的任务。它自己的对话、它在的群聊、在别的对话里被 @ 时做的那份，
-    再加飞书、微信里的；不含归档。{rows, total}，被 @ 的那份带 of（在哪个对话里）。"""
+def agent_recent(pf, aid, acct=None, n=5, at=None):
+    """头像卡片（#298、#307）：这个 Agent 最近的任务。它自己的对话、在别的对话里被 @ 时做的那份（子对话，#409），
+    再加飞书、微信里的；不含归档。{rows, total}，被 @ 的那份带 of（在哪个对话里）。
+    at：网页正看着的对话，它在这里的子对话排第一条，带 here（#409）。"""
     if not agents.get(aid):
         raise Problem("找不到这个 Agent。")
     ok, chats, picks = share.chat_filter(pf, acct), pf.chats(), []
@@ -3217,11 +3243,12 @@ def agent_recent(pf, aid, acct=None, n=5):
             continue
         if m.get("agent") == aid and m.get("mention_of"):
             picks.append((m.get("last_active") or "", cid, m["mention_of"]))
-        elif board_mod.top_level(m, cid) and (m.get("agent") == aid or aid in (m.get("members") or [])):
+        elif board_mod.top_level(m, cid) and m.get("agent") == aid:
             picks.append((m.get("last_active") or "", cid, None))
     ext = [r for r in pf.external_chats(aid) if ok(r["id"], aid) and not r.get("archived")]
     picks += [(r.get("last_active") or "", r["id"], r) for r in ext]
     picks.sort(key=lambda t: t[0], reverse=True)
+    picks.sort(key=lambda t: not (at and t[2] == at))
     rows = []
     for _, cid, x in picks[:n]:
         if isinstance(x, dict):
@@ -3230,6 +3257,7 @@ def agent_recent(pf, aid, acct=None, n=5):
         r = pf.chat_view(cid)
         if x:
             r["of"] = {"id": x, "title": (chats.get(x) or {}).get("title") or "对话"}
+            r.update(member=True, title=r["group"]["title"], here=x == at)
         rows.append(r)
     return {"rows": rows, "total": len(picks)}
 

@@ -195,22 +195,65 @@ class SideMentionTests(unittest.TestCase):
         self.assertEqual([r["state"] for r in pf.channel.logs.read(main) if r["type"] == "work"][-1], "done")
         self.assertIn("配图好了", pf.mentions.unseen(main))                    # 主 Agent 下次能看到成员的汇报
 
-    def test_agent_list_shows_group_itself(self):
-        """Agent 页的列表（#359）：它在的群聊列群聊本身，只是成员的标 member；侧边对话里被 @ 的不列。"""
+    def test_agent_list_shows_member_sub_chats(self):
+        """Agent 页的列表（#409）：只是成员的群聊列它的子对话，标题用群名、标 member；侧边对话里被 @ 的也列，标侧边对话。"""
         from ccim.platform import _agent_chats
         pf = self.pf
         main = self.group()
         sub = pf.mentions._ensure(main, self.member, None, "写公众号")
         side = pf.run(pf.side_chat(main))
-        pf.mentions._ensure(side, self.member, None, "写公众号", side=True)
+        sat = pf.mentions._ensure(side, self.member, None, "写公众号", side=True)
+        chats = pf.chats()
+        chats[main]["title"] = "改过名的群"
+        pf.store.write(chats)
         rows = {r["id"]: r for r in _agent_chats(pf, self.member)}
-        self.assertIn(main, rows)
-        self.assertTrue(rows[main]["member"])
-        self.assertNotIn(sub, rows)
-        self.assertFalse(any(r.get("mention_of") for r in rows.values()))
+        self.assertNotIn(main, rows)
+        self.assertTrue(rows[sub]["member"])
+        self.assertEqual(rows[sub]["title"], "改过名的群")
+        self.assertEqual(rows[sub]["group"]["id"], main)
+        self.assertFalse(rows[sub]["group"]["side"])
+        self.assertTrue(rows[sat]["group"]["side"])
         own = {r["id"]: r for r in _agent_chats(pf, self.main_agent)}
         self.assertIn(main, own)
         self.assertFalse(own[main].get("member"))
+
+    def test_member_recent_puts_current_group_first(self):
+        from ccim.platform import agent_recent
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        other = pf.call(pf.new_chat, agent=self.member, title="最近的单聊")
+        chats = pf.chats()
+        chats[sub]["last_active"] = "2000-01-01 00:00:00"
+        chats[other]["last_active"] = "2099-01-01 00:00:00"
+        pf.store.write(chats)
+        rows = agent_recent(pf, self.member, at=main)["rows"]
+        self.assertEqual(rows[0]["id"], sub)
+        self.assertTrue(rows[0]["here"] and rows[0]["member"])
+        self.assertNotIn(main, [r["id"] for r in rows])          # 只是成员的群不再列群本身
+        self.assertEqual(agent_recent(pf, self.member)["rows"][0]["id"], other)
+
+    def test_archive_group_takes_sub_chats_along(self):
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        pf.call(pf.mark_chat, main, {"archived": True})
+        self.assertTrue(pf.chats()[sub].get("archived"))
+        pf.call(pf.mark_chat, main, {"archived": False})
+        self.assertFalse(pf.chats()[sub].get("archived"))
+
+    def test_sub_chat_only_flags_direct_turns(self):
+        """子对话（#409）：群里 @ 它的那一轮答完只在群里提示；用户在子对话里直接说的那一轮答完，子对话提示。"""
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        logs = pf.channel.logs
+        logs.append(sub, {"type": "user", "text": "群里的问题", "from_chat": main})
+        logs.append(sub, {"type": "answer", "state": "done", "text": "群里的回答"})
+        self.assertIsNone(pf.chat_view(sub)["attention"])
+        logs.append(sub, {"type": "user", "text": "私下问一句"})
+        logs.append(sub, {"type": "answer", "state": "done", "text": "私下的回答"})
+        self.assertEqual(pf.chat_view(sub)["attention"], "done")
 
     def test_tools(self):
         from ccim import session

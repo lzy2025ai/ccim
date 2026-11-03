@@ -38,15 +38,10 @@ PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}    # 添加到主屏幕用（#17）
 STATIC.update({f"/avatars/{name}.webp": "image/webp" for name in agents.AVATARS})
-STATIC.update({"/badge/" + name: mime for name, mime in {
-    "paper.webp": "image/webp", "clasp.webp": "image/webp",
-    "leather.svg": "image/svg+xml", "corner.svg": "image/svg+xml",
-    "clasp-mask.svg": "image/svg+xml",
-}.items()})
 
 
 def static_file(path):
-    """内置图标、头像、工牌材质和 manifest；只提供白名单里的随包资源。"""
+    """内置图标、头像和 manifest；只提供白名单里的随包资源。"""
     if path not in STATIC:
         return None
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:

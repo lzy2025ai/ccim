@@ -438,6 +438,8 @@ class Hub:
             return True
         if mid not in self.allowed(aid):
             return False
+        if aid in (ev.get("_p") or ()):      # 被拉进这个群聊的人（#419）
+            return True
         if self.peers.guest_of(mid, aid):
             return ev.get("_a") == aid or (not ev.get("_a") and not ev.get("chat") and ev.get("type") in ("skills", "kb"))
         return not ev.get("_a")

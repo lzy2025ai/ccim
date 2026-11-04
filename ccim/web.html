@@ -422,6 +422,9 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .chat-head .icon-btn.on{background:var(--qing-soft);color:var(--qing)}
 .msg{max-width:760px;margin:0 auto 22px;padding:0 22px}
 .msg.me{display:flex;justify-content:flex-end}
+.invite-bar{display:flex;align-items:center;gap:10px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel, #fff);font-size:14px}
+.invite-bar .grow{flex:1}
+.composer.member #chip-model,.composer.member #chip-effort,.composer.member #chip-perm,.composer.member .chip[onclick^="pickKbs"],.composer.member .mfx{display:none!important}
 .msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
 .bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg:not(.me)>.bubble{display:inline-block;max-width:80%;margin-top:6px;border-radius:14px 14px 14px 4px}
@@ -2251,7 +2254,7 @@ function searchRows(){
   for (const c of MORE.found || []) if (!seen.has(c.id)) { seen.add(c.id); local.push(c); }
   return local.sort((a, b) => ((b.last_active || "") > (a.last_active || "") ? 1 : -1));
 }
-const agentOf = id => S.agents.find(a => a.id === id);
+const agentOf = id => S.agents.find(a => a.id === id) || ((detail && detail.people_view || {}).agents || []).find(a => a.id === id);   // 被拉进别人的群（#419）：群里的 Agent 不在自己的列表里
 const multi = () => (S.machines || []).length > 1;
 const machineOf = id => (S.machines || []).find(m => m.id === id);
 const sharedM = id => !!(machineOf(id) || {}).shared;     // 别人共享给我的电脑（#154）：只能用自己的那块
@@ -2728,12 +2731,13 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.invite ? "邀请你加入" : c.at_me ? "有人 @ 你" : c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
+const joinedOf = c => c.people_role === "in" || c.people_role === "invited";
 function renderChatList(){
-  const rows = chatFilter ? searchRows().filter(c => !c.agent)     // 和 Agent 的对话在 Agent 里
-    : allChats().filter(c => !c.agent && (!c.pocket || c.expanded || c.pin != null || c.id === current.id));   // 挂件里的：放大过的才列出（#326）
+  const rows = chatFilter ? searchRows().filter(c => !c.agent || joinedOf(c))     // 和 Agent 的对话在 Agent 里；被拉进别人的群的在这里（#419）
+    : allChats().filter(c => (!c.agent || joinedOf(c)) && (!c.pocket || c.expanded || c.pin != null || c.id === current.id));   // 挂件里的：放大过的才列出（#326）
   $("#list").innerHTML = `
     <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="searchChats(this.value);this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
@@ -2765,8 +2769,8 @@ async function openChat(id){
     }
     $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return;
   }
-  if (current.view === "chats" && current.id === id && !EMBED) detail.agent ? forgetChat(id) : setLastChat({id, machine: ctxMachine});
-  if (detail.agent && current.view === "chats") {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）
+  if (current.view === "chats" && current.id === id && !EMBED) detail.agent && !notCreator() ? forgetChat(id) : setLastChat({id, machine: ctxMachine});
+  if (detail.agent && current.view === "chats" && !notCreator()) {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）；被拉进别人的群（#419）留在对话页
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
     current = {view: "agents", id: detail.agent, sub: id};
     document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === "agents"));
@@ -2888,6 +2892,7 @@ function msgActs(src, i, r){
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (r.type === "answer" && r.text) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
+  if (notCreator()) return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
@@ -2942,24 +2947,33 @@ function canFork(i, r, src = "log"){
   const last = detail.log.map(x => x.type).lastIndexOf("answer");
   return i === last || (!!r.fork && detail.base !== "codex");
 }
+function userFiles(r){
+  return r.files && r.files.length ? `<div class="files">${r.files.map(f => {
+    const src = f.path && fileUrl(detail.id, f.path);
+    return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
+      : src && isVideo(f.name) ? videoHtml(src, f.name)
+      : src && isAudio(f.name) ? audioHtml(src, f.name)
+      : f.path && docKind(f.name) ? `<button class="file doc" onclick="openDoc(${q(f.path)})">${ICON.file}${esc(f.name)}</button>`
+      : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
+  }).join("")}</div>` : "";
+}
 function recHtml(r, i, src = "log"){
   if (r.type === "user" && r.by){           // 对话里的助手自己 @ 的人；assistant：没选 Agent 的对话里的（#179）
     const a = r.by === "assistant" ? null : agentOf(r.by) || {name: "已删除的 Agent", base: "claude"};
     return `<div class="msg">${a ? `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b></div>` : fromRow()}
       <div class="bubble">${chipsOf(r.to || [])} ${esc(r.text)}</div>${timeActs(r)}</div>${src === "log" ? mentionGroup(r.id) : ""}`;
   }
+  if (r.type === "user" && PV() && !r.from_chat && !r.sched){   // 多人群聊（#419）：别人说的放左边、写上名字
+    const w = r.person || PV().creator;
+    if (w && w.id !== PV().me) return `<div class="msg"><div class="from-row">${personAv(w.name)}<b>${esc(w.name)}</b></div>
+      ${r.text || r.to || r.at_people ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${peopleChips(r.at_people)}${userText(r.text)}</div>` : ""}
+      ${userFiles(r)}${timeActs(r)}</div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
+  }
   if (r.type === "user"){
     const from = r.from_chat && (chatById(r.from_chat) || (detail.group && detail.group.id === r.from_chat ? detail.group : null));
     const sch = r.sched ? `<a class="fork-from" style="margin-bottom:4px" href="#/schedules/${encodeURIComponent(r.sched_id || "")}">${ICON.clock}定时任务「${esc(r.sched)}」</a>` : "";
-    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : fromGroup(r, from)}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div>` : ""}
-      ${r.files && r.files.length ? `<div class="files">${r.files.map(f => {
-        const src = f.path && fileUrl(detail.id, f.path);
-        return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
-          : src && isVideo(f.name) ? videoHtml(src, f.name)
-          : src && isAudio(f.name) ? audioHtml(src, f.name)
-          : f.path && docKind(f.name) ? `<button class="file doc" onclick="openDoc(${q(f.path)})">${ICON.file}${esc(f.name)}</button>`
-          : `<span class="file">${ICON.file}${esc(f.name)}</span>`;
-      }).join("")}</div>` : ""}
+    return `<div class="msg me ${r.sending ? "sending" : ""}"><div>${sch}${from ? `<a class="fork-from" style="margin-bottom:4px" href="#/chats/${encodeURIComponent(from.id)}">${r.relay ? `「${esc(from.title)}」里的 Agent 转交来的` : r.dispatch ? `在「${esc(from.title)}」里派来的` : fromGroup(r, from)}</a>` : r.relay ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">另一个对话的 Agent 转交来的</div>` : ""}${src === "elsewhere" ? `<div class="fork-from" style="margin-bottom:4px;text-align:right">在${esc(r.via || detail.origin_source || "终端")}里说的</div>` : ""}${r.refs && r.refs.length ? `<div class="refs">${r.refs.map(x => `<a class="at" href="#/agents/${encodeURIComponent(detail.agent || "")}/${encodeURIComponent(x.id)}">#${esc(x.title)}</a>`).join(" ")}</div>` : ""}${r.text || r.to || r.at_people ? `<div class="bubble">${r.to ? chipsOf(r.to) + " " : ""}${peopleChips(r.at_people)}${userText(r.text)}</div>` : ""}
+      ${userFiles(r)}
       ${r.text ? msgActs(src, i, r) : timeActs(r)}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
   if (r.type === "mention") return r.report && src === "log" ? `<div class="msg">${mentionOne(r, i)}</div>` : "";   // 新开对话做完回来汇报的（#359），前面没有用户消息
@@ -3187,39 +3201,91 @@ async function toSplit(r, src){          // 在群成员的子对话里开口：
   location.hash = `#/agents/${encodeURIComponent(src.agent)}/${encodeURIComponent(r.chat)}`;
   return true;
 }
+// ---- 群里的真人（#419）：对话里除了 Agent 还能拉平台上的账号 ----
+const PV = () => (detail && detail.people_view) || null;
+const notCreator = () => !!detail && (detail.people_role === "in" || detail.people_role === "invited");
+const humansIn = p => p ? [p.creator, ...(p.people || []).filter(x => x.state === "in")] : [];
+let chatPeople = [], chatCall = false;   // 输入框里 @ 了群里哪些人、@ 了这个对话本来的 Agent（多人群里它要 @ 才回答）
+function personAv(name){
+  return `<span class="seal sm one" style="--c:#8A8F87" aria-hidden="true"><span>${esc([...(name || "?")][0])}</span></span>`;
+}
+function personName(id){ const p = PV(); return (humansIn(p).find(x => x.id === id) || {}).name || ""; }
+function peopleChips(ids){
+  return (ids || []).map(id => `<span class="at av">${personAv(personName(id))}${esc(personName(id) || "已退出")}</span> `).join("");
+}
+async function peopleOf(cid){ return api(`/api/chat/people?id=${encodeURIComponent(cid)}`); }
+async function addPerson(cid, id, name){
+  const r = await act(() => api("/api/chat/people", {id: cid, add: [id]}));
+  const p = (r.people || []).find(x => x.id === id);
+  toast(p && p.state === "invited" ? `已邀请「${name}」，对方同意后进群` : `「${name}」已进群`);
+  showGroup = true; await reloadChat();
+}
+async function removePerson(id, name, self){
+  if (!await confirmBox(self ? "退出这个群聊？" : `把「${name}」移出群聊？`, self ? "退出后就看不到这个群聊了。" : "", self ? "退出" : "移出")) return;
+  const cid = detail.id;
+  await act(() => api("/api/chat/people", {id: cid, remove: [id]}), self ? "已退出" : "已移出");
+  if (self) { await loadState(); location.hash = "#/chats"; } else await reloadChat();
+}
+async function answerInvite(ok){
+  const cid = detail.id;
+  await act(() => api("/api/chat/join", {id: cid, accept: ok}), ok ? "已加入" : "");
+  if (ok) { showGroup = true; await reloadChat(); } else { await loadState(); location.hash = "#/chats"; }
+}
+function inviteBar(c){
+  const el = document.querySelector(".composer"); if (!el) return;
+  el.innerHTML = `<div class="invite-bar"><span>「${esc(c.invite.by)}」邀请你加入这个群聊</span>
+    <span class="grow"></span><button class="btn" onclick="answerInvite(false)">不加入</button><button class="btn primary" onclick="answerInvite(true)">加入</button></div>`;
+}
 // ---- 群聊（#15）：Agent 的对话里拉人进来 ----
 let showGroup = (() => { try { return localStorage.getItem("ccim.groupPanel") !== "0"; } catch { return true; } })();
 function toggleGroup(on){ showGroup = on; try { localStorage.setItem("ccim.groupPanel", on ? "1" : "0"); } catch {} drawChat(); }
 function groupHead(c){
-  if (c.readonly || !c.agent) return "";
-  const ms = c.members || [];
-  const stack = ms.length ? `<span class="stack" style="margin-right:2px">${[c.agent, ...ms].map(agentOf).filter(Boolean).slice(0, 5).map(x => seal(x, "sm", false)).join("")}</span>
-    <button class="btn ${showGroup ? "on" : ""}" onclick="toggleGroup(!showGroup)">成员 ${ms.length + 1}</button>` : "";
+  if (c.readonly || c.invite || !c.agent && !c.temp) return "";
+  const ms = c.members || [], hs = humansIn(c.people_view);
+  const n = (c.agent ? ms.length + 1 : 0) + (hs.length > 1 ? hs.length : 0);
+  const stack = ms.length || hs.length > 1 ? `<span class="stack" style="margin-right:2px">${[c.agent, ...ms].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}${hs.slice(0, 2).map(h => personAv(h.name)).join("")}</span>
+    <button class="btn ${showGroup ? "on" : ""}" onclick="toggleGroup(!showGroup)">成员 ${n}</button>` : "";
   return `${stack}<button class="btn" title="拉人" aria-label="拉人" onclick="pullMenu(event)">${ICON.plus}<span class="t">拉人</span></button>`;
 }
 function groupPanel(c){
-  const ms = c.members || [];
-  if (!showGroup || !ms.length || c.readonly) { $("#main").classList.remove("with-panel"); return ""; }
+  const ms = c.members || [], pv = c.people_view, hs = humansIn(pv);
+  if (!showGroup || !ms.length && hs.length < 2 && !(pv && pv.people.length) || c.readonly || c.invite) { $("#main").classList.remove("with-panel"); return ""; }
   setTimeout(() => $("#main").classList.add("with-panel"));
   const home = ctxMachine || S.me;
   const row = (aid, main) => { const x = agentOf(aid) || {name: "已删除的 Agent", base: "claude"};
     return `<div class="gmem">${seal(x, "", false)}<span class="t"><span class="title">${esc(x.name)} ${main ? `<span class="owner">主 Agent</span>` : whereTag(aid, home)}</span>
       <span class="sub">${BASE[x.base || "claude"]}${x.busy ? "，正在干活" : ""}${memRing(main ? c.ctx : (c.member_ctx || {})[aid])}</span></span>
-      ${main ? "" : `<button class="link danger-link" onclick="removeMember(${q(aid)})">移出</button>`}</div>`; };
+      ${main || notCreator() ? "" : `<button class="link danger-link" onclick="removeMember(${q(aid)})">移出</button>`}</div>`; };
+  const boss = !notCreator();
+  const person = (p, tag) => `<div class="gmem">${personAv(p.name)}<span class="t"><span class="title">${esc(p.name)}${pv && p.id === pv.me ? "（我）" : ""} ${tag}</span></span>
+      ${pv && p.id === pv.me && !boss ? `<button class="link danger-link" onclick="removePerson(${q(p.id)},${q(p.name)},true)">退出</button>`
+        : boss && p !== pv.creator ? `<button class="link danger-link" onclick="removePerson(${q(p.id)},${q(p.name)},false)">移出</button>` : ""}</div>`;
+  const ppl = pv ? [person(pv.creator, `<span class="owner">建群</span>`), ...pv.people.map(p => person(p, p.state === "invited" ? `<span class="muted" style="font-size:12px">等对方同意</span>` : ""))] : [];
   return `<aside class="gpanel">
     <div class="gp-top"><b>群聊</b><button class="icon-btn" aria-label="收起" title="收起" onclick="toggleGroup(false)">${ICON.x}</button></div>
-    <h3>群聊说明 <button class="link" onclick="editNote()">${c.note ? "编辑" : "写一段"}</button></h3>
-    ${c.note ? `<div class="gdesc">${esc(c.note)}</div>` : `<p class="muted" style="font-size:13px;margin:0 0 20px">这个群在做什么、有什么约定。群里每个 Agent 回答时都会照着做。</p>`}
-    <h3>成员 ${ms.length + 1} <button class="link" onclick="pullMenu(event)">拉人</button></h3>
-    ${row(c.agent, true)}${ms.map(m => row(m, false)).join("")}</aside>`;
+    ${c.agent && ms.length ? `<h3>群聊说明 ${boss ? `<button class="link" onclick="editNote()">${c.note ? "编辑" : "写一段"}</button>` : ""}</h3>
+    ${c.note ? `<div class="gdesc">${esc(c.note)}</div>` : boss ? `<p class="muted" style="font-size:13px;margin:0 0 20px">这个群在做什么、有什么约定。群里每个 Agent 回答时都会照着做。</p>` : ""}` : ""}
+    ${ppl.length ? `<h3>人 ${hs.length} <button class="link" onclick="pullMenu(event)">拉人</button></h3>${ppl.join("")}` : ""}
+    ${c.agent ? `<h3>Agent ${ms.length + 1} ${ppl.length || notCreator() ? "" : `<button class="link" onclick="pullMenu(event)">拉人</button>`}</h3>
+    ${row(c.agent, true)}${ms.map(m => row(m, false)).join("")}` : ""}</aside>`;
 }
-function pullMenu(e){
-  const c = detail, home = ctxMachine || S.me;
-  const list = S.agents.filter(a => a.id !== c.agent && !(c.members || []).includes(a.id))
+async function pullMenu(e){
+  const c = detail, home = ctxMachine || S.me, anchor = {currentTarget: e.currentTarget, stopPropagation(){}};
+  e.stopPropagation();
+  let pv = null;
+  try { pv = await peopleOf(c.id); } catch {}
+  if (detail !== c) return;
+  const boss = !pv || pv.role === "creator";
+  const list = !c.agent || !boss ? [] : S.agents.filter(a => a.id !== c.agent && !(c.members || []).includes(a.id))
     .sort((x, y) => ((y.machine || S.me) === home ? 1 : 0) - ((x.machine || S.me) === home ? 1 : 0));
-  const pp = pop(e, `<div class="sec">拉进这个对话</div>` + list.map(a =>
+  const ppl = (pv && pv.candidates) || [];
+  const pp = pop(anchor, (ppl.length ? `<div class="sec">拉人</div>` + ppl.map(p =>
+    `<button data-p="${esc(p.id)}" data-n="${esc(p.name)}">${personAv(p.name)}<span><div>${esc(p.name)}</div></span></button>`).join("") : "")
+    + (c.agent && boss ? `<div class="sec">拉 Agent</div>` + list.map(a =>
     `<button data-a="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, home)}</div><div class="desc">${BASE[a.base || "claude"]}</div></span></button>`).join("")
-    + `<button onclick="closePop();quickAgentForChat()">${ICON.plus}新建一个 Agent 拉进来</button>`, true);
+    + `<button onclick="closePop();quickAgentForChat()">${ICON.plus}新建一个 Agent 拉进来</button>` : "")
+    + (!ppl.length && !(c.agent && boss) ? `<div class="sec">没有可以拉的人</div>` : ""), true);
+  pp.querySelectorAll("[data-p]").forEach(b => b.onclick = () => { closePop(); addPerson(c.id, b.dataset.p, b.dataset.n); });
   pp.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     closePop();
     const src = detail, r = await act(() => api("/api/chat/members", {id: src.id, add: [b.dataset.a]}), "已拉进来，@ 它就能让它回答");
@@ -3266,10 +3332,10 @@ function drawChat(){
         <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}
         ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${wsHead(c)}
-      ${c.temp ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
+      ${c.temp && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
-      <button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>
+      ${notCreator() ? "" : `<button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>`}
     </div>
     ${extNotice(c)}
     ${groupPanel(c)}
@@ -3310,6 +3376,8 @@ function drawChat(){
     </div></div></div>`;
   wsMount(c);
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow(); drawQuotes(); gripInput();
+  if (notCreator()) document.querySelector(".composer")?.classList.add("member");   // 模型、知识库这些设置归建群的人（#419）
+  if (c.invite) { inviteBar(c); return; }
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
   const t = $("#thread"); t.scrollTop = t.scrollHeight;
@@ -3331,6 +3399,7 @@ function drawComposerState(){
   $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : "交代件事")
     : listTo() && chatRcpt.includes(listTo()) ? `给 ${agentOf(listTo()).name} 发消息`
     : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
+    : (PV() || {}).quiet ? "发到群里，@ 谁就交给谁回答"
     : (c.members || []).length ? `给 ${c.agent_name} 发消息，@ 叫群里其他 Agent` : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
   $("#chip-model").innerHTML = `${esc(EMBED && !c.model ? "默认模型" : modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${EMBED ? "" : ICON.down}`;
@@ -3453,10 +3522,10 @@ async function sendChat(){
   quotes.list = []; drawQuotes();
   if (chatRcpt.length && chatRefs.length) { back(); return toast("引用的对话只能交给它自己，@ 别人时先去掉引用"); }
   if (chatRcpt.length && !detail.readonly){       // @ 了其他 Agent：交给它们答
-    const to = chatRcpt, src = detail;
-    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = defaultRcpt(); drawPending(); drawChatRcpt(); drawComposerState();
+    const to = chatCall && detail.agent ? [detail.agent, ...chatRcpt] : chatRcpt, src = detail, at = chatPeople;
+    $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); chatRcpt = defaultRcpt(); chatPeople = []; chatCall = false; drawPending(); drawChatRcpt(); drawComposerState();
     try {
-      const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to}));
+      const r = await act(() => api("/api/chat/mention", {id: src.id, text: v, files, to, ...(at.length ? {at} : {})}));
       if (r.queued) toast(`「${r.machine}」现在离线，上线后自动发出`);
       else if (await toSplit(r, src)) {}
       else if (detail.agent && to.some(a => !(detail.members || []).includes(a))) { toast("已拉进群聊"); reloadChat(); }
@@ -3484,17 +3553,19 @@ async function sendChat(){
     } finally { starting = false; }
     return;
   }
-  const refs = chatRefs; chatRefs = []; drawChatRcpt();
-  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), refs, sending: true, at: Date.now() / 1000};
+  const refs = chatRefs, at = chatPeople, call = chatCall; chatRefs = []; chatPeople = []; chatCall = false; drawChatRcpt();
+  const quiet = (PV() || {}).quiet && !call;      // 多人群聊里没 @ Agent（#419）：只是说给群里的人听，Agent 不回答
+  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), refs, sending: true, at: Date.now() / 1000,
+                ...(PV() ? {person: {id: PV().me}} : {}), ...(at.length ? {at_people: at} : {})};
   detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
-  if (!detail.busy) { detail.busy = true; detail.progress = {steps: [], text: "", guess: true}; }   // 还没开始干活，先显示思考中
+  if (!detail.busy && !quiet) { detail.busy = true; detail.progress = {steps: [], text: "", guess: true}; }   // 还没开始干活，先显示思考中
   drawThread(); drawComposerState();
   const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
   let r;
   const src = detail;
   const wsFile = wsCtxFile();
-  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files, refs: refs.map(x => x.id), ...(wsFile ? {ctx: {ws_file: wsFile}} : {})})); }
-  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); chatRefs = refs; drawChatRcpt(); drawThread(); drawComposerState(); return; }
+  try { r = await act(() => api("/api/chat/send", {id: src.id, text: v, files, refs: refs.map(x => x.id), ...(at.length ? {at} : {}), ...(call ? {call: true} : {}), ...(wsFile ? {ctx: {ws_file: wsFile}} : {})})); }
+  catch { detail.log = detail.log.filter(x => x !== mine); detail.busy = false; detail.progress = null; back(); chatRefs = refs; chatPeople = at; chatCall = call; drawChatRcpt(); drawThread(); drawComposerState(); return; }
   if (r.queued) {                         // 那台电脑离线：先存着，上线后发出
     detail.busy = false; detail.progress = null; drawThread(); drawComposerState();
     toast(`「${r.machine}」现在离线，上线后自动发出`);
@@ -3757,6 +3828,9 @@ function drawChatRcpt(){
   el.innerHTML = chatRcpt.map(r => r === to
       ? `<span class="at to">发给${seal(agentOf(r), "sm", false)}${esc(agentOf(r).name)}<button aria-label="去掉" onclick="atDrop(${q(r)})">${ICON.x}</button></span>`
       : atChip(r, `atDrop(${q(r)})`)).join("")
+    + (chatCall ? (() => { const a = detail && detail.agent ? agentOf(detail.agent) : null;
+        return `<span class="at av">${a ? seal(a, "sm", false) : ""}${esc(a ? a.name : BASE[(detail || {}).base || "claude"])}<button aria-label="去掉" onclick="chatCall=false;drawChatRcpt()">${ICON.x}</button></span>`; })() : "")
+    + chatPeople.map(h => `<span class="at av">${personAv(personName(h))}${esc(personName(h))}<button aria-label="去掉" onclick="chatPeople=chatPeople.filter(x=>x!==${q(h)});drawChatRcpt()">${ICON.x}</button></span>`).join("")
     + chatRefs.map(r => `<span class="at">#${esc(r.title)}<button aria-label="去掉" onclick="chatRefs=chatRefs.filter(x=>x.id!==${q(r.id)});drawChatRcpt()">${ICON.x}</button></span>`).join("");
 }
 // 引用这个 Agent 以前的对话（#199）：输入框打 #，或者列表三点菜单里「引用」
@@ -3792,15 +3866,27 @@ function addRef(id){
 }
 function chatAt(e){
   const own = detail && detail.agent, here = (detail ? ownerOf(detail.id) || ctxMachine : draft.machine) || S.me;
-  const ms = (detail && detail.members) || [];
-  const group = ms.length > 0;               // 群聊：只能 @ 群里的人；要加人用「拉人」
+  const ms = (detail && detail.members) || [], pv = PV();
+  const crowded = humansIn(pv).length > 1;   // 多人群聊（#419）：主 Agent 也要 @ 才回答，群里的人也能 @
+  const group = ms.length > 0 || crowded;    // 群聊：只能 @ 群里的人；要加人用「拉人」
+  const folks = crowded ? humansIn(pv).filter(h => h.id !== pv.me) : [];
   const list = group ? ms.map(agentOf).filter(Boolean)
     : S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
-  if (!list.length) return toast("还没有建好的 Agent，先去 Agent 页建一个");
-  const all = group && list.length > 1 ? `<button data-all="1"><span><div>所有人</div><div class="desc">${list.length} 个 Agent</div></span></button>` : "";
-  const pp = pop(e, `<div class="sec">${group ? "@ 群里的 Agent" : "让谁回答"}</div>` + all + list.map(a =>
+  if (!list.length && !crowded) return toast("还没有建好的 Agent，先去 Agent 页建一个");
+  const mainA = own ? agentOf(own) : null, mainName = mainA ? mainA.name : BASE[detail.base || "claude"];
+  const callMain = crowded ? `<button data-main="1">${mainA ? seal(mainA, "sm", false) : iconOf(detail, null, "sm")}<span><div>${esc(mainName)}</div></span>${chatCall ? `<span class="ck">✓</span>` : ""}</button>` : "";
+  const all = group && list.length > 1 ? `<button data-all="1"><span><div>所有 Agent</div><div class="desc">${list.length} 个 Agent</div></span></button>` : "";
+  const humans = folks.length ? `<div class="sec">@ 群里的人</div>` + folks.map(h =>
+    `<button data-h="${esc(h.id)}">${personAv(h.name)}<span><div>${esc(h.name)}</div></span>${chatPeople.includes(h.id) ? `<span class="ck">✓</span>` : ""}</button>`).join("") : "";
+  const pp = pop(e, humans + (list.length || callMain ? `<div class="sec">${group ? "@ 群里的 Agent" : "让谁回答"}</div>` : "") + callMain + all + list.map(a =>
     `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${ms.includes(a.id) ? "，群成员" : ""}${a.busy ? "，正在干活" : ""}</div></span>${chatRcpt.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
   const dropAt = () => { const i = $("#input"); if (i && /[@＠]$/.test(i.value)) { i.value = i.value.slice(0, -1); draftText = i.value; } };
+  pp.querySelectorAll("[data-main]").forEach(b => b.onclick = () => { chatCall = !chatCall; dropAt(); closePop(); drawChatRcpt(); $("#input")?.focus(); });
+  pp.querySelectorAll("[data-h]").forEach(b => b.onclick = () => {
+    const h = b.dataset.h;
+    chatPeople = chatPeople.includes(h) ? chatPeople.filter(x => x !== h) : [...chatPeople, h];
+    dropAt(); closePop(); drawChatRcpt(); $("#input")?.focus();
+  });
   pp.querySelectorAll("[data-all]").forEach(b => b.onclick = () => { chatRcpt = list.map(a => a.id); dropAt(); closePop(); drawChatRcpt(); $("#input")?.focus(); });
   pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
     const m = b.dataset.m;

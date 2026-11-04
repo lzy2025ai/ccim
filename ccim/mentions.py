@@ -82,7 +82,7 @@ class Mentions:
             if aid and (r.get("by") == aid or (r.get("type") == "mention" and r.get("agent") == aid)):
                 continue
             if r.get("type") == "user":
-                lines.append(f"{self._who(cid, r.get('by'))}：{r['text']}")
+                lines.append(f"{(r.get('person') or {}).get('name') or self._who(cid, r.get('by'))}：{r['text']}")
             elif r.get("type") == "answer" or (r.get("type") == "mention" and r.get("state") == "done"):
                 lines.append(f"{self._name(m, r)}：{r['text']}")
             elif r.get("type") == "chatlog":
@@ -101,7 +101,7 @@ class Mentions:
             self.pf.store.write(chats)
         return sub
 
-    async def send(self, cid, text, to, files=(), by=None, depth=0):
+    async def send(self, cid, text, to, files=(), by=None, depth=0, person=None, quiet=False):
         """在主循环里调。by：是对话里的助手自己 @ 的（ask_agent 工具），不是用户。
         depth：被 @ 的人是第几层派出来的（#179），交给它的任务带上，它再往下派时按这个拦。"""
         from . import groups
@@ -136,7 +136,8 @@ class Mentions:
                for aid in to}
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
-                                **({"by": by} if by else {})})
+                                **({"by": by} if by else {}), **({"person": person} if person else {}),   # 多人群聊里谁说的（#419）
+                                **({"quiet": True} if quiet else {})})
         self.pf.channel._emit(cid, user)
         att = "".join(f"\n（附件：{f['key']}）" for f in files)
         text = plain
@@ -162,10 +163,11 @@ class Mentions:
                 prompt = main[aid] + (f"（侧边对话里之前的内容，每段开头写的是谁说的，都不是你；你自己说过的在你的记忆里）\n{ctx[aid]}\n\n"
                                       if ctx[aid] else "") + f"[用户在侧边对话里 @ 了你]{also} {text}{att}"
             else:
-                prompt = groups.note_prefix(self.pf, cid, aid) + \
+                from . import people
+                prompt = groups.note_prefix(self.pf, cid, aid) + (people.note(self.pf, cid) if person else "") + \
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                    f"[{self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
+                    f"[{(person or {}).get('name') or self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
             if not (by or side or q) and home[aid] == me:
                 into = await self._inject(cid, aid, mid, prompt, text, user["at"], depth)
                 if into:

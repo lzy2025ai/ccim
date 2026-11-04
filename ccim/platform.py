@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import devices, docs, filesend, perf, share, tokens, workspace
+from . import devices, docs, filesend, people, perf, share, tokens, workspace
 from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -647,6 +647,41 @@ class Platform:
             self.store.write(chats)
         return {}
 
+    async def set_people(self, cid, who, add=(), remove=(), join=None):
+        """群聊拉人、移人、同意 / 不同意邀请（#419）。在群里的访客变了，这个群的会话换成新的权限重新接上。"""
+        before = people.fence_of(self, cid)
+        try:
+            if join is not None:
+                out = people.join(self, cid, who, join)
+            elif remove:
+                out = people.remove(self, cid, who, remove)
+            else:
+                out = people.add(self, cid, who, add)
+        except people.Denied as e:
+            raise Problem(str(e))
+        if people.fence_of(self, cid) != before:
+            await self._refence(people.root(self, cid))
+        self.channel.events.publish({"type": "group", "chat": people.root(self, cid)})   # 开着的网页重新取，别人的列表刷新
+        return out
+
+    async def _refence(self, rid):
+        """群里的访客变了：这个群（和它的子对话、侧边对话）的会话断开，下一条消息按新的权限接着原会话聊。"""
+        ids = {c for c in self.chats() if people.root(self, c) == rid}
+        for key, b in list(self.bridges.items()):
+            for cid in ids:
+                c = b.chats.pop(cid, None)
+                if c:
+                    await c.stop()
+                    if c.worker:
+                        c.worker.cancel()
+
+    def people_seen(self, cid, acct):
+        """看过这个对话：被拉进群的人各记各的（#419），建群的人照旧记 seen_at。"""
+        if people.state_of(self, cid, people.me(acct)) in ("in", "invited"):
+            people.seen(self, cid, people.me(acct))
+            return {}
+        return self.mark_seen(cid)
+
     def _agent_bridges(self, aid):
         """这个 Agent 的 Bridge：本身、项目目录里的（@）、访客的（#）、侧边对话的（|）。"""
         return [b for key, b in self.bridges.items() if key == aid or key.startswith(aid) and key[len(aid)] in "@#|"]
@@ -964,6 +999,7 @@ class Platform:
         from .bridge import Bridge
         m = self.meta(cid)
         viewer = share.chat_owner(self, cid)     # 共享电脑上访客的对话（#154）
+        fenced = None if viewer else people.fence_of(self, cid)   # 主人的群里拉了访客（#419）：按访客的权限跑
         if m.get("agent"):
             a = agents.get(m["agent"])
             if not a:
@@ -973,6 +1009,8 @@ class Platform:
             lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
             if lent:
                 key += "#" + viewer
+            elif fenced:
+                key += "#people"
             if m.get("side_of"):              # 侧边对话（#196）：只读，单独一个 Bridge
                 key += "|side"
             elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）：也只读
@@ -980,7 +1018,7 @@ class Platform:
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
                      "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
-                     "agent_id": a["id"], "guest": viewer, "lent": lent}
+                     "agent_id": a["id"], "guest": viewer or fenced, "lent": lent or bool(fenced)}
             name = a["name"]
         else:
             t = m.get("temp") or {}
@@ -988,7 +1026,7 @@ class Platform:
             path = t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
-                     "effort": t.get("effort"), "guest": viewer}
+                     "effort": t.get("effort"), "guest": viewer or fenced, "lent": bool(fenced)}
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
@@ -1131,10 +1169,31 @@ class Platform:
                 out.append({"id": i, "title": v.get("title") or "对话"})
         return out[:10]
 
-    async def send(self, cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None):
-        """hidden：接在用户这句话后面交给助手、不进记录的内容（复盘的材料）；mark：记在用户这条记录上的标记。"""
-        b = self._bridge(cid)
+    async def send(self, cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None, who=None, call=False, at=(),
+                   logged=None):
+        """hidden：接在用户这句话后面交给助手、不进记录的内容（复盘的材料）；mark：记在用户这条记录上的标记。
+        多人群聊（#419）：who 是谁说的（账号编号，主人是 OWNER），call 是 @ 了这个对话的 Agent，at 是 @ 了群里哪些人；
+        logged：这句话已经记过了（同时 @ 了别的 Agent，由 mentions 记的），只交给助手。"""
         m = self.meta(cid)
+        crowd = not m.get("mention_of") and not m.get("side_of") and cid in people.visible_map(self)
+        person = people.label(self, cid, who or people.OWNER) if crowd else None
+        if crowd and people.quiet(self, cid) and not call and not logged:   # 多人群里没 @ Agent：只记下，下次 @ 它时带上
+            mid = "u-" + uuid.uuid4().hex[:10]
+            shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
+            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
+                                                                   "quiet": True, **({"person": person} if person else {}),
+                                                                   **({"at_people": list(at)} if at else {})}))
+            people.ping(self, cid, at)
+            chats = self.chats()
+            if cid in chats:
+                chats[cid]["last_active"] = registry.now()
+                if text and not chats[cid].get("title"):
+                    chats[cid]["title"] = title_text(text)[:30]
+                self.store.write(chats)
+            return
+        if crowd:
+            people.ping(self, cid, at)
+        b = self._bridge(cid)
         refs = self._refs(cid, refs)
         if m.get("fork_from") and cid not in b.chats:
             b.chat(cid, "p2p", None if m.get("fork_at") else m["fork_from"])
@@ -1147,10 +1206,14 @@ class Platform:
             if cid in chats and not chats[cid].get("title"):
                 chats[cid].update(review=True, title=title_text(ask)[:30] or "复盘", title_auto=True)
                 self.store.write(chats)
-        mid = "u-" + uuid.uuid4().hex[:10]
+        mid = logged or "u-" + uuid.uuid4().hex[:10]
         shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
-        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
-                                                               **({"refs": refs} if refs else {}), **(mark or {})}))
+        if not logged:
+            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
+                                                                   **({"refs": refs} if refs else {}), **(mark or {}),
+                                                                   **({"person": person} if person else {}),
+                                                                   **({"at_people": list(at)} if at else {}),
+                                                                   **({"call": True} if call and crowd else {})}))
         if text and not m.get("title"):       # 用用户的原话当标题：交给助手的会拼上引用说明等前缀
             chats = self.chats()
             if cid in chats and not chats[cid].get("title"):
@@ -1182,6 +1245,8 @@ class Platform:
             text = f"（我正在工作区里看这个文件：{ctx['ws_file']}）\n{text}"     # 工作区（#206）
         if hidden and text:
             text = f"{text}\n\n{hidden}"
+        if crowd and text and len(people.humans(self, cid)) >= 2:   # 多人群聊：说明群里有谁、这句是谁说的，带上没 @ 它时大家说的
+            text = people.note(self, cid) + people.backlog(self, cid) + f"【{(person or {}).get('name') or people.name_of(who or people.OWNER)}】{text}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
                        files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
         await b.on_message(inc)
@@ -1898,11 +1963,17 @@ class Platform:
         """出现在「对话」列表里的：和 Agent 的对话在 Agent 页里列（走 /api/agent），不算在这里。"""
         return not (t[2] if t[2] is not None else t[3]).get("agent")
 
+    def _joined(self, acct):
+        """被拉进别人群里的对话（#419）：和 Agent 的也列在「对话」里（那个 Agent 不在自己的 Agent 页）。"""
+        who = people.me(acct)
+        return {cid for cid, ps in people.visible_map(self).items() if who in ps}
+
     def chat_head(self, acct=None):
         """整体状态里的对话：「对话」列表里最近 CHAT_PAGE 条（不含归档）、常驻的（和 Agent 的对话也算）、它们分叉前的原对话
         （分叉出来的挂在它下面）。另外给列表里更早的、已归档的各有多少，和翻下一页从哪开始。"""
         tops = self._tops(share.chat_filter(self, acct))
-        listed = [t for t in tops if self._listed(t)]
+        joined = self._joined(acct)
+        listed = [t for t in tops if self._listed(t) or t[1] in joined]
         live = [t for t in listed if not self._archived(t)]
         keep = {t[1] for t in live[:CHAT_PAGE]} | {t[1] for t in tops if self._hot(t)}
         byid = {t[1]: t for t in tops}
@@ -1930,13 +2001,19 @@ class Platform:
         return out
 
     def chat_page(self, acct=None, before=None, archived=False, q="", groups=False):
+        out = self._chat_page(acct, before, archived, q, groups)
+        share.mark_people(self, out.get("rows") or [], acct)    # 多人群聊（#419）：按这个人自己看到哪算
+        return out
+
+    def _chat_page(self, acct=None, before=None, archived=False, q="", groups=False):
         """/api/chats：「对话」列表里 before 之后（更早）的一页、已归档的一页、按标题和摘要搜；全部群聊。
         {rows, next}，next 是下一页从哪开始。"""
         tops = self._tops(share.chat_filter(self, acct))
         if groups:                            # 定时任务里选「发到群聊」
             return {"rows": [self._row(t) for t in tops if t[2] is not None and t[2].get("agent") and t[2].get("members")
                              and not self._archived(t)], "next": None}
-        tops = [t for t in tops if self._listed(t)]
+        joined = self._joined(acct)
+        tops = [t for t in tops if self._listed(t) or t[1] in joined]
         if q:
             words = q.lower().split()
             hit = [t for t in tops if all(w in self._text(t) for w in words)]
@@ -2642,6 +2719,12 @@ def _handler(pf):
             """共享电脑上访客的请求（#154）：不让做的回 403，返回访客的账号编号（主人返回 None）。"""
             acct = share.account_of(self.headers)
             skills_mod.SPACE.set(acct)            # 访客装、改的 Skill 在它自己那一份里（#154）
+            if not acct and path.startswith("/api/") and path != "/api/events":
+                try:                              # 主人被拉进访客的群聊（#419）：在那里也只能做群成员能做的
+                    share.check_people(pf, None, method, path, q, body)
+                except share.Denied as e:
+                    self._send(403, {"error": str(e)})
+                    return None, True
             if not acct or not path.startswith("/api/") or path == "/api/events":
                 return None, False
             from urllib.parse import unquote
@@ -2649,6 +2732,7 @@ def _handler(pf):
             try:
                 share.remember(pf, acct, name, share.share_of(self.headers))
                 share.check(pf, acct, method, path, q, body)
+                share.check_people(pf, acct, method, path, q, body)
             except share.Denied as e:
                 self._send(403, {"error": str(e)})
                 return acct, True
@@ -2783,7 +2867,8 @@ def _handler(pf):
                     pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False, acct=acct)}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
-                "/api/chat": lambda: pf.chat_detail(q.get("id", "")),
+                "/api/chat": lambda: chat_detail(pf, q.get("id", ""), acct),
+                "/api/chat/people": lambda: pf.call(people.view, pf, q.get("id", ""), people.me(acct)),
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/apps": lambda: {"apps": apps_mod.listing()},
@@ -2853,7 +2938,8 @@ def _handler(pf):
             b = body.get
             routes = {
                 "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
-                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct),
+                "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct,
+                                               bool(b("call")), b("at") or []),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
                 "/api/pocket/settings": lambda: set_pocket(body),
@@ -2882,7 +2968,9 @@ def _handler(pf):
                 "/api/agent/skill/share": lambda: skill_write(pf, lambda: {"names": skills_mod.agent_share(_agent(b("id")), b("group"), b("name"),
                                                                                                            pf.peers.me.get("name") or "")}),
                 "/api/skills/export": lambda: skills_mod.export(b("keys")),
-                "/api/chat/seen": lambda: pf.call(pf.mark_seen, b("id")),
+                "/api/chat/seen": lambda: pf.call(pf.people_seen, b("id"), acct),
+                "/api/chat/people": lambda: pf.run(pf.set_people(b("id"), people.me(acct), add=b("add") or [], remove=b("remove") or [])),
+                "/api/chat/join": lambda: pf.run(pf.set_people(b("id"), people.me(acct), join=bool(b("accept")))),
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
@@ -2925,7 +3013,8 @@ def _handler(pf):
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
                 "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
-                "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or [], acct),
+                "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or [], acct,
+                                                     b("at") or []),
                 "/api/chat/mention/stop": lambda: {"stopped": pf.run(pf.mentions.stop(b("rid") or ""))},
                 "/api/chat/secret": lambda: answer_secret(pf, b("id"), b("password"), b("run"), bool(self.headers.get("X-From-Peer"))),
                 "/api/peers/code": lambda: pf.peers.new_code(),
@@ -3103,12 +3192,27 @@ async def usage_report(d):
     return await usage.report(d if d and os.path.isdir(d) else os.path.expanduser("~"))
 
 
-def send(pf, cid, text, files, ctx=None, refs=None, acct=None):
+def chat_detail(pf, cid, acct=None):
+    """对话内容。被邀请进群、还没同意的（#419）：只给邀请，不给记录。被拉进群的人带上自己是什么身份。"""
+    if cid and not cid.startswith("x:") and people.root(pf, cid) in people.visible_map(pf):
+        who = people.me(acct)
+        st = people.state_of(pf, cid, who)
+        if st == "invited":
+            p = next((p for p in people.people(pf, cid) if p["id"] == who), {})
+            return dict(pf.chat_view(cid), log=[], chapters={}, rewind=[], progress=None, sub_progress={},
+                        invite={"by": people.name_of(p.get("by") or people.OWNER)}, people_role=st,
+                        people_view=dict(people.view(pf, cid, who), people=[]))
+        return dict(pf.chat_detail(cid), people_role=st, people_view=people.view(pf, cid, who))
+    return pf.chat_detail(cid)
+
+
+def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=()):
     check_message(pf, text, files)
     d = diary_of(pf, cid, text, files, acct)
     if d:
         return d
-    pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx, refs=refs))
+    at = [a for a in at if isinstance(a, str)][:20]
+    pf.bg(pf.send(cid, (text or "").strip(), files, ctx=ctx, refs=refs, who=people.me(acct), call=call, at=at))
     return {"ok": True, "chat": cid}
 
 
@@ -3180,14 +3284,30 @@ def leave_hub(pf):
     return {}
 
 
-def mention(pf, cid, text, to, files, acct=None):
+def mention(pf, cid, text, to, files, acct=None, at=()):
     check_message(pf, text, files)
     d = diary_of(pf, cid, text, files, acct)
     if d:
         return d
     if pf.meta(cid).get("mention_of"):
         cid = pf.call(pf.split_sub, cid)
-    return dict(pf.run(pf.mentions.send(cid, (text or "").strip(), to, files)), chat=cid)
+    m = pf.meta(cid)
+    at = [a for a in at if isinstance(a, str)][:20]
+    who = people.me(acct)
+    crowd = cid in people.visible_map(pf)
+    person = pf.call(people.label, pf, cid, who) if crowd else None
+    main = m.get("agent") in to and crowd     # 多人群聊（#419）：同时 @ 了这个对话的 Agent，它也接着回答
+    others = [a for a in to if a != m.get("agent")]
+    if main and not others:
+        return send(pf, cid, text, files, acct=acct, call=True, at=at)
+    quiet = crowd and not main and pf.call(people.quiet, pf, cid)    # 主 Agent 没被 @：下次轮到它时带上这句
+    out = dict(pf.run(pf.mentions.send(cid, (text or "").strip(), others if crowd else to, files, person=person, quiet=quiet)),
+               chat=cid)
+    if crowd:
+        pf.call(people.ping, pf, cid, at)
+    if main and out.get("id"):
+        pf.bg(pf.send(cid, (text or "").strip(), files, who=who, call=True, logged=out["id"]))
+    return out
 
 
 def _busy_of(a):

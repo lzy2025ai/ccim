@@ -31,6 +31,7 @@ class Incoming:
     thread_id: str = None                       # 在话题里发的消息才有
     root_id: str = None                         # 话题的第一条消息
     queue: bool = False                         # /queue：正在干活时排到后面，不补充进这一轮（#79）
+    speaker: dict = None                        # 多人群聊（#419）：{"fence": …} 这一轮按谁的权限跑，见 session.Speaker
 
 
 @dataclass

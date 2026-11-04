@@ -12,6 +12,7 @@
 import asyncio, os, re, time, uuid
 
 from . import agents, registry
+from .peers import OWNER
 
 CONTEXT_LIMIT = 12000                         # 带过去的之前的内容，最多这么多字（取最近的）
 SEEN_LIMIT = 6000
@@ -115,6 +116,8 @@ class Mentions:
         from .platform import Problem
         if not to:
             raise Problem("找不到要 @ 的 Agent。")
+        if person and person["id"] != OWNER and any(home[a] != me for a in to):   # 访客的权限带不到别的电脑上（#419）
+            raise Problem("群里的访客只能 @ 这台电脑上的 Agent。")
         side = m.get("side_of")               # 侧边对话里 @（#290）：被 @ 的只读，带上主对话的内容，不拉进群
         if side:
             for a in to:
@@ -168,6 +171,9 @@ class Mentions:
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
                     f"[{(person or {}).get('name') or self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
+                if person:                    # 多人群聊（#419）：这一轮按 @ 它的人的权限跑
+                    from .session import Speaker
+                    prompt = Speaker(prompt, people.fence_for(self.pf, cid, person["id"]))
             if not (by or side or q) and home[aid] == me:
                 into = await self._inject(cid, aid, mid, prompt, text, user["at"], depth)
                 if into:
@@ -209,6 +215,8 @@ class Mentions:
         from .progress import short
         from .session import Task
         task = Task(prompt)                   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记
+        if hasattr(prompt, "fence"):          # 多人群聊（#419）：权限不一样的不补进去（Chat.inject 会拒），照常排队
+            task.fence = prompt.fence
         task.depth = depth
         task.group = cid
         if not await c.inject(task):
@@ -336,6 +344,8 @@ class Mentions:
                 self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid,
                                                                           **({"from_by": by} if by else {})}))
                 task = Task(prompt)
+                if hasattr(prompt, "fence"):  # 多人群聊（#419）：按 @ 它的人的权限跑
+                    task.fence = prompt.fence
                 task.depth = depth
                 task.group = cid              # 群里 @ 它的这一轮：发的东西群聊里也记（#409）
                 chat.submit(task)

@@ -94,9 +94,13 @@ class PeopleTests(unittest.TestCase):
         self.assertEqual(d["people_role"], "in")
         self.assertEqual(d["people_view"]["agents"][0]["id"], self.owner_agent)
 
-        b = self.pf._bridge(cid)                                       # 有访客：会话圈起来，不能借它看主人的东西
-        self.assertTrue(b.entry["guest"].startswith(people.FENCE))
-        self.assertTrue(b.entry["lent"])
+        self.assertEqual(people.fence_for(self.pf, cid, OWNER), "")    # 谁叫的按谁的权限：主人不圈，访客圈在工作目录
+        fence = people.fence_for(self.pf, cid, "a1")
+        self.assertTrue(fence.startswith(people.FENCE))
+        b = self.pf._bridge(cid)
+        self.assertIsNone(b.entry["guest"])
+        self.assertFalse(b.entry.get("lent"))
+        self.check_turns(b, cid, fence)
 
         other = self.owner_chat()                                      # 别的对话访客照旧看不到
         st, r = self.req("GET", f"/api/chat?id={other}")
@@ -110,7 +114,40 @@ class PeopleTests(unittest.TestCase):
 
         st, r = self.req("POST", "/api/chat/people", {"id": cid, "remove": ["a1"]}, guest=None)
         self.assertEqual(st, 200, r)
-        self.assertIsNone(people.fence_of(self.pf, cid))
+        self.assertIsNone(people.state_of(self.pf, cid, "a1"))
+
+    def check_turns(self, b, cid, fence):
+        from ccim.session import Speaker
+        import asyncio
+
+        async def go():
+            chat = b.chat(cid, "p2p")
+            self.assertIsNone(chat._guest())
+            chat.as_fence = fence                                      # 访客叫的这一轮
+            self.assertEqual(chat._guest(), fence)
+            self.assertTrue(chat.fenced())
+            names = [t.name for t in chat._tool_list()]
+            self.assertNotIn("run_as_admin", names)
+            self.assertNotIn("search_chats", names)
+            self.assertNotIn("ask_agent", names)
+
+            class T:
+                ready, unseen, steps = True, [], []
+
+            class C:
+                sent = []
+
+                async def query(self, p):
+                    self.sent.append(p)
+            chat.turn, chat.client = T(), C()
+            self.assertFalse(await chat.inject(Speaker("主人插一句", "")))   # 权限不一样：不补进这一轮
+            self.assertTrue(await chat.inject(Speaker("访客补一句", fence)))
+            chat.as_fence = ""
+            self.assertFalse(chat.fenced())
+            self.assertIn("run_as_admin", [t.name for t in chat._tool_list()])
+            chat.turn = chat.client = None
+            chat.as_fence = None
+        asyncio.run_coroutine_threadsafe(go(), self.pf.loop).result(20)
 
     def test_hub_visible(self):
         from ccim.hubserver import Hub

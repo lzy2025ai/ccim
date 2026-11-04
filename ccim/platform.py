@@ -649,7 +649,6 @@ class Platform:
 
     async def set_people(self, cid, who, add=(), remove=(), join=None):
         """群聊拉人、移人、同意 / 不同意邀请（#419）。在群里的访客变了，这个群的会话换成新的权限重新接上。"""
-        before = people.fence_of(self, cid)
         try:
             if join is not None:
                 out = people.join(self, cid, who, join)
@@ -659,21 +658,8 @@ class Platform:
                 out = people.add(self, cid, who, add)
         except people.Denied as e:
             raise Problem(str(e))
-        if people.fence_of(self, cid) != before:
-            await self._refence(people.root(self, cid))
         self.channel.events.publish({"type": "group", "chat": people.root(self, cid)})   # 开着的网页重新取，别人的列表刷新
         return out
-
-    async def _refence(self, rid):
-        """群里的访客变了：这个群（和它的子对话、侧边对话）的会话断开，下一条消息按新的权限接着原会话聊。"""
-        ids = {c for c in self.chats() if people.root(self, c) == rid}
-        for key, b in list(self.bridges.items()):
-            for cid in ids:
-                c = b.chats.pop(cid, None)
-                if c:
-                    await c.stop()
-                    if c.worker:
-                        c.worker.cancel()
 
     def people_seen(self, cid, acct):
         """看过这个对话：被拉进群的人各记各的（#419），建群的人照旧记 seen_at。"""
@@ -999,7 +985,6 @@ class Platform:
         from .bridge import Bridge
         m = self.meta(cid)
         viewer = share.chat_owner(self, cid)     # 共享电脑上访客的对话（#154）
-        fenced = None if viewer else people.fence_of(self, cid)   # 主人的群里拉了访客（#419）：按访客的权限跑
         if m.get("agent"):
             a = agents.get(m["agent"])
             if not a:
@@ -1009,8 +994,6 @@ class Platform:
             lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
             if lent:
                 key += "#" + viewer
-            elif fenced:
-                key += "#people"
             if m.get("side_of"):              # 侧边对话（#196）：只读，单独一个 Bridge
                 key += "|side"
             elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）：也只读
@@ -1018,7 +1001,7 @@ class Platform:
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
                      "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
-                     "agent_id": a["id"], "guest": viewer or fenced, "lent": lent or bool(fenced)}
+                     "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
         else:
             t = m.get("temp") or {}
@@ -1026,7 +1009,7 @@ class Platform:
             path = t.get("dir") or os.path.join(registry.HOME, "scratch", t.get("scratch") or cid)
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
-                     "effort": t.get("effort"), "guest": viewer or fenced, "lent": bool(fenced)}
+                     "effort": t.get("effort"), "guest": viewer}
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
@@ -1248,7 +1231,8 @@ class Platform:
         if crowd and text and len(people.humans(self, cid)) >= 2:   # 多人群聊：说明群里有谁、这句是谁说的，带上没 @ 它时大家说的
             text = people.note(self, cid) + people.backlog(self, cid) + f"【{(person or {}).get('name') or people.name_of(who or people.OWNER)}】{text}"
         inc = Incoming(chat_id=cid, chat_type="p2p", sender_id=OWNER, message_id=mid, text=text,
-                       files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q))
+                       files=[("file", f["key"], f["name"]) for f in files], kind="text" if text else "file", queue=bool(q),
+                       speaker={"fence": people.fence_for(self, cid, who or people.OWNER)} if crowd else None)
         await b.on_message(inc)
 
     def diary(self, cid, text, files=()):

@@ -7,7 +7,8 @@ state 是 in（在群里）或 invited（邀请了、对方还没同意）。建
 - 拉人：电脑主人拉的直接进（访客的账号都是主人建的）；别人拉的要对方同意。以后平台上自己注册的账号，看的是「是不是拉人的人建的」。
 - 进来的人看全部历史、能发言、发文件、@ Agent；退回、删除、改设置这些只有建群的人能做（`MEMBER_PATHS` 以外的一律拒绝）。
 - 群里有两个以上真人时，Agent 只在被 @ 时回答（`quiet`）；没 @ 的话记下，下次轮到它时带上（`backlog`）。
-- 群里有访客（不是建群的人）时，Agent 按访客的权限跑：主人建的群用 `FENCE` 开头的占位账号，只能动这个对话的工作目录。
+- 谁叫的这一轮就按谁的权限跑（`fence_for` → session.Speaker）：主人不圈，访客圈在这个对话的工作目录里；
+  换了人就断开、按新的权限接着原会话；别人的话不补进正在跑的这一轮，排到后面。
 - 各人看到哪记在 meta 的 seen_of（建群的人还用 seen_at），被 @ 的记在 pinged，用来算「等你处理」。
 """
 import os, pwd, time
@@ -91,13 +92,14 @@ def name_of(who):
     return share.guest(who).get("name") or "访客"
 
 
-def fence_of(pf, cid):
-    """主人建的群里有访客（同意了的）：会话按访客的权限跑，返回占位账号；否则 None。"""
-    if creator(pf, cid) != OWNER:
+def fence_for(pf, cid, who):
+    """这一轮按谁的权限跑（session.Speaker 的 fence）：电脑主人不圈（""）；建群的访客按它本来的（None）；
+    别的访客圈在这个对话的工作目录里（占位账号，share.fence 认不出它的文件夹）。"""
+    if who == OWNER:
+        return ""
+    if who == creator(pf, cid):
         return None
-    if any(p.get("state") == "in" and p["id"] != OWNER for p in people(pf, cid)):
-        return FENCE + root(pf, cid)
-    return None
+    return FENCE + root(pf, cid)
 
 
 _vis = {"at": 0, "ver": None, "map": {}}

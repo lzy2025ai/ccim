@@ -161,7 +161,7 @@ class CodexChat(Chat):
             if not exe:
                 raise RuntimeError("这台电脑上找不到 Codex，先安装 ChatGPT 桌面版或 Codex 命令行")
             args = [exe, "exec", "--json", "--skip-git-repo-check", "-C", self.b.path]
-            guest = guest_of(self.b)
+            guest = self._guest()             # 多人群聊里访客叫的这一轮也算（#419）
             if guest:                         # 共享电脑上的访客（#154）：主人允许才能用，只能写自己的目录
                 if not share.codex_ok(guest):
                     raise RuntimeError("这台电脑现在只能用 Claude Code，去 Agent 设置里把底座换成 Claude Code")
@@ -252,7 +252,7 @@ class CodexChat(Chat):
         root = os.path.realpath(self.b.path)
         for raw in SEND_RE.findall(text):
             path = os.path.realpath(os.path.join(self.b.path, os.path.expanduser(raw.strip("`'\""))))
-            g = guest_of(self.b)
+            g = self._guest()
             if self.chat_type != "p2p" and not path.startswith(root + os.sep):
                 await self._safe_text(f"群聊里只能发送项目目录里的文件：{os.path.basename(path)}")
             elif g and not share.may_send(g, path, self.b.path):

@@ -26,6 +26,7 @@ log = logging.getLogger("ccim.hub")
 
 WEB_PORT = 8977
 SESSION_DAYS = 30
+DEVICE_DAYS = 90                              # 记住这台设备（#421）：这么久里登录不用再输动态码
 INVITE_DAYS = 7
 OWNER_NAME = "admin"
 PW_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"   # 去掉了 0 O 1 l I，抄的时候不会看错
@@ -207,8 +208,9 @@ class Hub:
             self.fails.setdefault(ip, []).append(time.time())
             self.all_fails.append(time.time())
 
-    def login(self, ip, name, pw, code):
-        """账号名 + 密码，账号要动态码的再加动态码（没给就抛 NeedCode，不算输错）。"""
+    def login(self, ip, name, pw, code, device=None):
+        """账号名 + 密码，账号要动态码的再加动态码（没给就抛 NeedCode，不算输错）。
+        device：记住这台设备时发的令牌（#421），对得上这个账号就不用动态码。"""
         if self.locked(ip):
             raise PermissionError("错的次数太多了，等一刻钟再试。")
         acc = self.accounts()
@@ -218,7 +220,7 @@ class Hub:
             aid = self._by_name(acc, name) if self.accounts_on() else OWNER
             a = acc.get(aid) if aid else None
             if a and self.active(a) and check_password(pw or "", a["password"]):
-                if not a.get("totp"):
+                if not a.get("totp") or self.device_ok(device, aid):
                     return self.new_session(aid)
                 if not str(code or "").strip():
                     raise NeedCode("输入手机验证器上的 6 位动态码。")
@@ -261,6 +263,31 @@ class Hub:
         s = _load("sessions.json", {})
         s.pop(hashlib.sha256((tok or "").encode()).hexdigest(), None)
         _save("sessions.json", s)
+
+    # ----- 记住的设备（#421）：存在 devices.json，只存令牌的哈希 -----
+
+    def remember_device(self, aid):
+        tok = secrets.token_urlsafe(32)
+        d = _load("devices.json", {})
+        now = time.time()
+        d = {k: v for k, v in d.items() if v.get("exp", 0) > now}
+        d[hashlib.sha256(tok.encode()).hexdigest()] = {"acct": aid, "exp": now + DEVICE_DAYS * 86400, "at": now}
+        _save("devices.json", d)
+        return tok
+
+    def device_ok(self, tok, aid):
+        if not tok:
+            return False
+        v = _load("devices.json", {}).get(hashlib.sha256(tok.encode()).hexdigest())
+        return bool(v) and v.get("acct") == aid and v.get("exp", 0) > time.time()
+
+    def devices_of(self, aid):
+        now = time.time()
+        return sum(1 for v in _load("devices.json", {}).values() if v.get("acct") == aid and v.get("exp", 0) > now)
+
+    def drop_devices(self, aid):
+        d = _load("devices.json", {})
+        _save("devices.json", {k: v for k, v in d.items() if v.get("acct") != aid})
 
     def _drop_sessions(self, aid):
         s = _load("sessions.json", {})
@@ -336,9 +363,9 @@ class Hub:
             state = "disabled" if a.get("disabled") else "expired" if a.get("expires") and a["expires"] < now else "ok"
             out.append({"id": aid, "name": a.get("name") or "", "state": state, "created": a.get("created"),
                         "expires": a.get("expires"), "totp": bool(a.get("totp")), "totp_pending": bool(a.get("invite")),
-                        "machines": [m["name"] for m in self.peers.machines(aid, own=True)],
+                        "machines": [m["name"] for m in self.peers.machines(aid, own=True)], "devices": self.devices_of(aid),
                         "shares": {m["id"]: (m.get("shares") or {})[aid] for m in mine if aid in (m.get("shares") or {})}})
-        return {"accounts": out, "me": (acc.get(OWNER) or {}).get("name") or OWNER_NAME}
+        return {"accounts": out, "me": (acc.get(OWNER) or {}).get("name") or OWNER_NAME, "my_devices": self.devices_of(OWNER)}
 
     def _bind_link(self, a):
         tok = secrets.token_urlsafe(24)
@@ -400,6 +427,8 @@ class Hub:
                 self.peers.share(mid, aid, clean_share(opts))
         if pw and aid != OWNER or a.get("disabled"):
             self._drop_sessions(aid)          # 改了密码、停用：已登录的都要重新登录
+        if pw or a.get("disabled") or f.get("forget_devices") or f.get("totp") is False:
+            self.drop_devices(aid)            # 记住的设备也作废（#421），下次登录要重新输动态码
         self.channel.events.publish({"type": "machines"})
         return dict(out, id=aid)
 
@@ -492,6 +521,7 @@ label{display:block;font-size:13px;margin:14px 0 6px}input{width:100%;padding:10
 input:focus{border-color:var(--qing)}button{width:100%;margin-top:20px;padding:11px;border:0;border-radius:10px;background:var(--qing);color:#fff;font:inherit;cursor:pointer}
 .err{color:var(--bad);font-size:13px;min-height:20px;margin-top:10px}.qr{width:200px;margin:6px auto}.qr svg{width:100%;height:auto}
 code{font:12px "SF Mono",Menlo,monospace;word-break:break-all;color:var(--muted)}
+.ck{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;color:var(--muted);cursor:pointer}.ck input{width:16px;height:16px;margin:0;accent-color:var(--qing)}
 </style></head><body><div class="box">__BODY__</div><script>
 async function post(path, body){
   const r = await fetch(path, {method:"POST", headers:{"X-CCIM":"1","Content-Type":"application/json"}, body:JSON.stringify(body)});
@@ -503,12 +533,13 @@ __SCRIPT__
 LOGIN_BODY = """<h1>ccim</h1><p>登录后使用你的 Agent。</p>
 <form id="f"><div id="nmbox"><label for="nm">账号</label><input id="nm" autocomplete="username" autocapitalize="off"></div>
 <label for="pw">密码</label><input id="pw" type="password" autocomplete="current-password">
-<div id="cb" hidden><label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
+<div id="cb" hidden><label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+<label class="ck"><input id="rem" type="checkbox" checked><span>记住这台设备，90 天内登录不用再输动态码</span></label></div>
 <button>登录</button><div class="err" id="err"></div></form>"""
 LOGIN_SCRIPT = """(nmbox.hidden ? pw : nm).focus();
 document.getElementById("f").onsubmit = async e => { e.preventDefault();
   const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
-    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value})});
+    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked})});
   const d = await r.json().catch(() => ({}));
   if (r.ok) { location.href = "/" + location.hash; return; }
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
@@ -560,10 +591,10 @@ def _handler(hub):
                 ok.add(urlparse(hub.public_url).hostname)
             return host in ok
 
-        def _cookie(self):
+        def _cookie(self, name="ccim_hub"):
             for part in (self.headers.get("Cookie") or "").split(";"):
                 k, _, v = part.strip().partition("=")
-                if k == "ccim_hub":
+                if k == name:
                     return v
             return None
 
@@ -576,7 +607,8 @@ def _handler(hub):
                     "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'",   # 右下角的助理把对话页嵌在同一个网页里（#294）
                     "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", **(extra or {})}
             for k, v in hdrs.items():
-                self.send_header(k, v)
+                for one in (v if isinstance(v, list) else [v]):   # 同时设两个 cookie（#421）
+                    self.send_header(k, one)
             self.end_headers()
             self.wfile.write(data)
 
@@ -702,10 +734,16 @@ def _handler(hub):
             try:
                 if path == "/auth/login":
                     try:
-                        tok = hub.login(self._ip(), b.get("name"), b.get("password"), b.get("code"))
+                        tok = hub.login(self._ip(), b.get("name"), b.get("password"), b.get("code"), self._cookie("ccim_dev"))
                     except NeedCode as e:
                         return self._send(401, {"error": str(e), "need_code": True})
-                    return self._send(200, {}, extra=self._set_cookie(tok))
+                    extra = self._set_cookie(tok)
+                    if b.get("remember") and str(b.get("code") or "").strip():   # 这次输了动态码：记住这台设备
+                        dev = hub.remember_device(hub.session_account(tok))   # cookie 只发给登录接口，平时的请求不带（#421）
+                        secure = "; Secure" if self._https() else ""
+                        extra = {"Set-Cookie": [extra["Set-Cookie"], f"ccim_dev={dev}; Path=/auth; HttpOnly; SameSite=Strict; "
+                                                f"Max-Age={DEVICE_DAYS * 86400}{secure}"]}
+                    return self._send(200, {}, extra=extra)
                 if path == "/auth/logout":
                     hub.logout(self._cookie())
                     return self._send(200, {}, extra=self._set_cookie("", 0))

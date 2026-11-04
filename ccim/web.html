@@ -6073,7 +6073,12 @@ const ACC_DAYS = [[0, "一直有效"], [7, "7 天"], [30, "30 天"], [90, "90 �
 let ACC = {list: [], me: "admin"}, AE = null, accDone = null;   // AE：正在编辑的账号；accDone：刚建好 / 刚改的密码，只显示这一次
 const accDay = t => new Date(t * 1000).toLocaleDateString("zh-CN", {year: "numeric", month: "numeric", day: "numeric"});
 const ownMachines = () => (S.machines || []).filter(m => !m.shared);
-async function loadAccounts(){ const r = await api("/api/accounts"); ACC = {list: r.accounts, me: r.me}; }
+async function loadAccounts(){ const r = await api("/api/accounts"); ACC = {list: r.accounts, me: r.me, devices: r.my_devices || 0}; }
+async function forgetDevices(id, name){   // 记住的设备全部取消（#421）：下次登录要重新输动态码
+  if (!await confirmBox(`取消${name ? `「${name}」` : "你"}记住的所有设备？`, "这些设备下次登录要重新输动态码，已经登录着的不受影响。", "全部取消")) return;
+  await act(() => api("/api/accounts/save", {id, fields: {forget_devices: true}}), "已取消");
+  if (id === "owner") { closeDialog(); renderAccounts(); } else { await loadAccounts(); const a = ACC.list.find(x => x.id === id); if (a && AE) AE.devices = a.devices; renderAccountEdit(id); }
+}
 async function renderAccounts(){
   if (current.sub) return renderAccountEdit(current.sub);
   AE = accDone = null;
@@ -6101,7 +6106,7 @@ async function renderAccountEdit(id){
     const a = isNew ? null : ACC.list.find(x => x.id === id);
     if (!isNew && !a) { location.hash = "#/settings/accounts"; return; }
     AE = {id, name: a ? a.name : "", password: isNew ? genPassword() : "", days: null, expires: a ? a.expires : null,
-          totp: a ? a.totp : false, disabled: a ? a.state === "disabled" : false, shares: JSON.parse(JSON.stringify(a ? a.shares || {} : {}))};
+          totp: a ? a.totp : false, devices: a ? a.devices || 0 : 0, disabled: a ? a.state === "disabled" : false, shares: JSON.parse(JSON.stringify(a ? a.shares || {} : {}))};
   }
   const ms = ownMachines();
   const exp = AE.days === null ? (AE.expires ? `${accDay(AE.expires)} 到期` : "") : "";
@@ -6118,7 +6123,8 @@ async function renderAccountEdit(id){
         ${exp ? `<div class="help">${exp}</div>` : AE.days ? `<div class="help">从今天算起，${accDay(Date.now() / 1000 + AE.days * 86400)} 到期</div>` : ""}</div>
       <label>动态码</label><div><div class="seg" role="radiogroup">${[[false, "不需要"], [true, "需要"]].map(([v, l]) =>
           `<button role="radio" aria-checked="${AE.totp === v}" class="${AE.totp === v ? "on" : ""}" onclick="AE.totp=${v};renderAccountEdit(AE.id)">${l}</button>`).join("")}</div>
-        <div class="help">${AE.totp ? "登录时还要输手机验证器上的动态码。保存后给对方一个链接去绑验证器。" : "只用账号和密码登录。"}</div></div>
+        <div class="help">${AE.totp ? "登录时还要输手机验证器上的动态码。保存后给对方一个链接去绑验证器。" : "只用账号和密码登录。"}</div>
+        ${AE.totp && AE.devices ? `<div class="help">记住了 ${AE.devices} 台设备，登录时不用输动态码 <button class="link" onclick="forgetDevices(${q(AE.id)},${q(AE.name)})">全部取消</button></div>` : ""}</div>
       ${isNew ? "" : `<label>状态</label><div><div class="seg" role="radiogroup">${[[false, "正常"], [true, "停用"]].map(([v, l]) =>
           `<button role="radio" aria-checked="${AE.disabled === v}" class="${AE.disabled === v ? "on" : ""}" onclick="AE.disabled=${v};renderAccountEdit(AE.id)">${l}</button>`).join("")}</div></div>`}
     </div>
@@ -6193,7 +6199,8 @@ function ownerAccount(){
   dialog("你的账号", `<div class="form" style="grid-template-columns:1fr">
       <label for="oa-name">账号名</label><input id="oa-name" class="input" maxlength="20" value="${esc(ACC.me)}" autocapitalize="off">
       <label for="oa-pw">新密码</label><input id="oa-pw" class="input" type="password" placeholder="不改就留空" autocomplete="new-password">
-      <div class="help">登录时还要输手机验证器上的动态码，这一点不变。</div></div>`,
+      <div class="help">登录时还要输手机验证器上的动态码，这一点不变。</div>
+      ${ACC.devices ? `<div class="help">记住了 ${ACC.devices} 台设备，登录时不用输动态码 <button class="link" onclick="forgetDevices('owner','')">全部取消</button></div>` : ""}</div>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveOwner()">保存</button>`);
 }
 async function saveOwner(){

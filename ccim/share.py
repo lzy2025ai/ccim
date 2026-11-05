@@ -241,7 +241,7 @@ def _mine_lib(acct, lib):
 
 def _base_ok(acct, aid=None, base=None):
     base = base or (agents.get(aid or "") or {}).get("base") or "claude"
-    if base == "codex" and not codex_ok(acct):
+    if base == "dsh" or (base == "codex" and not codex_ok(acct)):
         raise Denied("这台电脑上只能用 Claude Code。")
 
 

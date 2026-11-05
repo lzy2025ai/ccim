@@ -681,7 +681,7 @@ class Platform:
     def agent_chats(self, aid, keys=None, channels=False):
         """改 Agent 的这些设置会影响到的对话（#387）：聊过、没完成、没单独设置这几项（keys 为空就不看这条）。
         channels：连它接的飞书、微信里聊过的一起数（只读，由它们的进程自己照办）。"""
-        sid = "codex_session_id" if (agents.get(aid) or {}).get("base") == "codex" else "session_id"
+        sid = registry.sid_key((agents.get(aid) or {}).get("base"))
         free = lambda m: not keys or any(not m.get(k) and k not in (m.get("keep") or {}) for k in keys)
         out = [cid for cid, m in self.chats().items()
                if m.get("agent") == aid and m.get(sid) and not m.get("archived") and not m.get("hidden") and free(m)]
@@ -694,7 +694,7 @@ class Platform:
     def keep_dir(self, aid, path):
         """Agent 换了工作目录（#387）：聊过的对话还在原来的目录接着聊（会话记录按目录存），新对话用新的。"""
         chats = self.chats()
-        sid = "codex_session_id" if (agents.get(aid) or {}).get("base") == "codex" else "session_id"
+        sid = registry.sid_key((agents.get(aid) or {}).get("base"))
         for m in chats.values():
             if m.get("agent") == aid and m.get(sid) and not m.get("cwd"):
                 m["cwd"] = path
@@ -1049,7 +1049,7 @@ class Platform:
                 d = os.path.realpath(os.path.expanduser(d))
                 if not os.path.isdir(d):
                     raise Problem("找不到这个文件夹。")
-            rec["temp"] = {"base": t.get("base") if t.get("base") in ("claude", "codex") else "claude", "dir": d or None,
+            rec["temp"] = {"base": t.get("base") if t.get("base") in registry.BASES else "claude", "dir": d or None,
                            "model": t.get("model") or None, "effort": t.get("effort") or None}
         if fork_from:                         # 接着别处的对话聊：origin 留着，网页里把之前的内容也显示出来
             rec.update(fork_from=fork_from, origin=fork_from, source=source)
@@ -1078,7 +1078,7 @@ class Platform:
             raise Problem("它正在回答群里的问题，等它答完再接着聊。")
         if not agents.get(m.get("agent")):
             raise Problem("这个对话的 Agent 已经删掉了。")
-        sid = m.get("codex_session_id" if self._effective(m)["base"] == "codex" else "session_id")
+        sid = m.get(registry.sid_key(self._effective(m)["base"]))
         of = m["mention_of"]
         new = self.new_chat(agent=m["agent"])
         chats = self.chats()
@@ -1468,7 +1468,7 @@ class Platform:
             await self._drop_side(c)
         rows = self.channel.logs.read(cid)
         base = self._effective(m)["base"]
-        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        sid = m.get(registry.sid_key(base))
         done = [i for i, r in enumerate(rows) if r.get("type") == "answer"]
         upto, fork, at = 0, None, None
         if sid and base == "codex":
@@ -1873,10 +1873,10 @@ class Platform:
             from . import history
             a = agents.get(m["agent"]) if m.get("agent") else None
             cwd = agents.cwd(a) if a else None
-            sid = m.get("codex_session_id" if v["base"] == "codex" else "session_id")
+            sid = m.get(registry.sid_key(v["base"]))
             away = m["away"]
             rows = history.read(v["base"], sid, cwd) if sid else []
-            if v["base"] == "codex":          # Codex 的记录没有消息编号，认不出哪些是网页说的：只取在那边的那几段时间
+            if v["base"] != "claude":         # Codex 的记录没有消息编号，认不出哪些是网页说的：只取在那边的那几段时间
                 rows = [r for r in rows if any(x["at"] <= (r.get("at") or 0) < (x.get("back") or float("inf")) for x in away)]
             ew = self._elsewhere([r for r in rows if (r.get("at") or 0) >= away[0]["at"]], v["log"])
             if m.get("busy"):
@@ -2185,7 +2185,7 @@ class Platform:
                 continue
             a = dict(a, id=a_id)
             base, cwd = a.get("base") or "claude", agents.cwd(a)
-            key = "codex_session_id" if base == "codex" else "session_id"
+            key = registry.sid_key(base)
             for where, k, c in registry.all_chats(cwd):
                 sid = c.get(key)
                 if not sid or sid in mine:
@@ -2329,7 +2329,7 @@ class Platform:
             if m.get("away") and not m.get("origin"):     # 转到微信、飞书接着聊过（#212）
                 a = agents.get(m["agent"]) if m.get("agent") else None
                 base = self._effective(m)["base"]
-                sid = m.get("codex_session_id" if base == "codex" else "session_id")
+                sid = m.get(registry.sid_key(base))
                 return {"sig": history.sig(base, sid, agents.cwd(a) if a else None) if sid else None, "open_elsewhere": None}
             if not self._linked(m):
                 return {"sig": None}
@@ -2374,7 +2374,7 @@ class Platform:
         base = self._effective(m)["base"]
         last = max(i for i, r in enumerate(rows) if r.get("type") == "answer")
         fork = rows[index].get("fork") or {}
-        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        sid = m.get(registry.sid_key(base))
         if index == last and sid:
             at = None if base == "codex" else fork.get("at")
         elif fork.get("at") and base != "codex":
@@ -2411,7 +2411,7 @@ class Platform:
         rows = self.channel.logs.read(cid)
         if m.get("busy"):                     # 不分支、接着同一个会话聊，所以要等这一轮做完
             raise Problem("等它这一轮做完再转。")
-        sid = m.get("codex_session_id" if base == "codex" else "session_id")
+        sid = m.get(registry.sid_key(base))
         last = next((r for r in reversed(rows) if r.get("type") == "answer"), None)
         if not sid or not last:
             raise Problem("还没有回答，没什么可接着聊的。")
@@ -2461,7 +2461,7 @@ class Platform:
 
     def _rewind_plan(self, rows, i, base, m=None):
         """退回到第 i 条（自己发的消息）之前：返回 (文件恢复到哪条消息, 接到哪个会话, 接到哪条)；退不了返回 None。"""
-        if base == "codex" or not 0 <= i < len(rows) or rows[i].get("type") != "user" or rows[i].get("by"):
+        if base != "claude" or not 0 <= i < len(rows) or rows[i].get("type") != "user" or rows[i].get("by"):
             return None
         prev = [r for r in rows[:i] if r.get("type") == "answer"]
         sid = at = None
@@ -2658,6 +2658,8 @@ def _defaults(base, path):
     if base == "codex":
         from .codex import defaults
         return defaults(path)
+    if base == "dsh":
+        return None, None
     m, e, _ = registry.claude_defaults(path)
     return m, e
 
@@ -3391,7 +3393,7 @@ def state(pf, acct=None):
         "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
-        "codex": console._codex(), "home": os.path.expanduser("~"), "perms": devices.perms(),
+        "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
         "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @ 时只读，#290）
         "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
@@ -3411,6 +3413,8 @@ def save_agent(pf, aid, fields, acct=None):
         from . import web as console
         if not console._codex():
             raise Problem("这台电脑上还没装 Codex。装好 ChatGPT 桌面版后再选。")
+    if fields.get("base") == "dsh" and not dsh_status()["ready"]:
+        raise Problem("这台电脑上还没装 DeepSeek Harness。")
     if fields.get("dir"):
         d = os.path.realpath(os.path.expanduser(fields["dir"].strip()))
         if not os.path.isdir(d):
@@ -3598,7 +3602,15 @@ def set_archive_days(v):
     return {"archive_days": v}
 
 
+def dsh_status():
+    from . import dsh
+    return dsh.status()
+
+
 def save_global(body):
+    if (body.get("dsh_key") or "").strip():
+        from . import dsh
+        dsh.save_key(body["dsh_key"])
     keys = ("model", "effort", "codex_model", "codex_effort")
     return registry.set_global(**{k: (body.get(k) or "").strip() or None for k in keys if k in body})
 

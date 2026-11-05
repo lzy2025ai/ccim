@@ -1463,7 +1463,7 @@ def _ask_agent(chat, pf):
         lines = []
         for aid, name, machine, online, a in rows:
             role = " ".join((a.get("role") or "").split())
-            base = "Codex" if a.get("base") == "codex" else "Claude"
+            base = {"codex": "Codex", "dsh": "DeepSeek"}.get(a.get("base"), "Claude")
             lines.append(f"- {name}{'（就是你）' if aid == m.get('agent') else ''} · {machine}{'' if online else '（离线）'} · "
                          f"{base}{' · ' + a['model'] if a.get('model') else ''}" + (f" · {role[:60]}" if role else ""))
         return {"content": [{"type": "text", "text": "\n".join(lines)}]}

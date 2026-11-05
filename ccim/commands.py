@@ -63,7 +63,7 @@ def _k(n):
 def _setting(chat):
     """「模型 · 思考深度」，没单独设置的标明跟随 Claude Code 设置。"""
     m, e, m_set, e_set = chat.effective()
-    who = "Codex" if getattr(chat, "agent", None) == "codex" else "Claude Code"
+    who = {"codex": "Codex", "dsh": "DeepSeek Harness"}.get(getattr(chat, "agent", None), "Claude Code")
     follow = f"（跟随 {who} 设置）" if not (m_set or e_set) else ""
     return f"**模型**：{_model_name(m)}　**思考深度**：{e}{follow}"
 
@@ -128,9 +128,9 @@ async def handle(bridge, chat, text, reply_to, sender=None):
                       else f"已记到 {r['date']} 的日记（{r['time']}）。")
         return True
 
-    codex = getattr(chat, "agent", None) == "codex"
+    codex = getattr(chat, "agent", None) in ("codex", "dsh")
     if codex and cmd in ("/resume", "/usage"):
-        await say("这个项目用的是 Codex，没有这个功能。")
+        await say(f"这个项目用的是 {'Codex' if chat.agent == 'codex' else 'DeepSeek Harness'}，没有这个功能。")
         return True
     if cmd == "/help":
         await say((HELP if not codex else CODEX_HELP).format(name=bridge.name) + bridge.help_extra)

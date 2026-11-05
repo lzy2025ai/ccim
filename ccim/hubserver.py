@@ -488,7 +488,7 @@ class Hub:
             out["hub"]["commit"] = upgrade.info().get("commit") or None
         except Exception:
             pass
-        for k in ("global", "defaults", "models", "codex", "home"):   # 页面上这些按「当前那台」取
+        for k in ("global", "defaults", "models", "codex", "dsh", "home"):   # 页面上这些按「当前那台」取
             info = (out.get("machine_info") or {}).get(out["me"]) or {}
             out.setdefault(k, info.get(k) or ({} if k in ("global", "defaults", "models") else None))
         g = ((out.get("machine_info") or {}).get(out["me"]) or {}).get("global") or {}

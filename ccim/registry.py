@@ -7,6 +7,14 @@ App Secret 存进 macOS 钥匙串（服务名 ccim，账户名 app_id），不�
 import contextlib, fcntl, hashlib, json, os, subprocess, tempfile, threading, time
 
 HOME = os.path.expanduser("~/.ccim")
+BASES = ("claude", "codex", "dsh")          # Agent 能用的底座
+
+
+def sid_key(base):
+    """状态里存这个底座对话编号的键（和 Chat.SID_KEY 一致）。"""
+    return {"codex": "codex_session_id", "dsh": "dsh_session_id"}.get(base, "session_id")
+
+
 REG = os.path.join(HOME, "registry.json")
 KEYCHAIN_SERVICE = "ccim"
 

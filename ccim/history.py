@@ -6,7 +6,7 @@ UserMessage / AgentMessage / CommandExecution；用户消息开头 ccim 加的�
 """
 import calendar, glob, json, os, re, threading, time
 
-from . import handoff
+from . import handoff, registry
 from .progress import describe_tool
 
 NOTE_END = "有问题直接在回复里问。\n\n"     # codex.NOTE 的最后一句，用户的话从它后面开始
@@ -169,12 +169,47 @@ def codex(thread_id, limit=200):
     return out[-limit:]
 
 
+def dsh_file(session_id):
+    """ccim 自己记的 DeepSeek Harness 对话（dsh.record 写）。"""
+    if not re.fullmatch(r"session-[0-9a-f-]+", session_id or ""):
+        return None
+    path = os.path.join(registry.HOME, "dsh", "history", session_id + ".jsonl")
+    return path if os.path.isfile(path) else None
+
+
+def dsh(session_id, limit=200):
+    path = dsh_file(session_id)
+    if not path:
+        return []
+    out = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    return out[-limit:]
+
+
+def file_of(base, session_id, cwd=None):
+    """这个底座的对话记录文件。"""
+    if base == "dsh":
+        return dsh_file(session_id)
+    return codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+
+
+def rows_of(base, session_id, cwd=None, limit=200):
+    if base == "dsh":
+        return dsh(session_id, limit)
+    return codex(session_id, limit) if base == "codex" else claude(session_id, cwd, limit)
+
+
 _titles = {}
 
 
 def title(base, session_id, cwd=None):
     """对话的第一句话，当标题（标题功能上线前的老对话没记标题）。按记录文件的修改时间缓存。"""
-    path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+    path = file_of(base, session_id, cwd)
     try:
         key = (path, os.path.getmtime(path)) if path else None
     except OSError:
@@ -182,7 +217,7 @@ def title(base, session_id, cwd=None):
     if not key:
         return None
     if key not in _titles:
-        first = next((r["text"] for r in (codex(session_id, 400) if base == "codex" else claude(session_id, cwd, 400))
+        first = next((r["text"] for r in rows_of(base, session_id, cwd, 400)
                       if r["type"] == "user" and r["text"]), "")
         _titles[key] = " ".join(first.split())[:30] or None
     return _titles[key]
@@ -192,7 +227,7 @@ _READ = {}                                   # (底座, 对话) → (文件大�
 
 
 def read(base, session_id, cwd=None):
-    path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+    path = file_of(base, session_id, cwd)
     try:
         st = os.stat(path) if path else None
     except OSError:
@@ -201,7 +236,7 @@ def read(base, session_id, cwd=None):
     hit = _READ.get(key)
     if sig and hit and hit[0] == sig:
         return [dict(r) for r in hit[1]]
-    rows = codex(session_id) if base == "codex" else claude(session_id, cwd)
+    rows = rows_of(base, session_id, cwd)
     if sig:
         if len(_READ) > 50:
             _READ.clear()
@@ -211,7 +246,7 @@ def read(base, session_id, cwd=None):
 
 def sig(base, session_id, cwd=None):
     """对话记录现在的样子（大小、修改时间）：网页据此判断别处有没有写过，要不要重新读。"""
-    path = codex_file(session_id) if base == "codex" else handoff.transcript_path(session_id, cwd)
+    path = file_of(base, session_id, cwd)
     try:
         st = os.stat(path) if path else None
     except OSError:

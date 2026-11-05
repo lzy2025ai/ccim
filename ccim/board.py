@@ -280,6 +280,77 @@ def done_on(pf, start, end, keep=None, acct=None, chats=None):
     return rows
 
 
+# ----- 全局（#426）：总台这类 Agent 一次看清等你处理、在干活、今天做完的，口径和任务面板一样 -----
+WAIT_MAX = 30
+
+
+def _dur(secs):
+    m = int(secs) // 60
+    return "不到 1 分钟" if m < 1 else f"{m} 分钟" if m < 60 else f"{m // 60} 小时" + (f" {m % 60} 分钟" if m % 60 else "")
+
+
+def overview(pf, keep=None, acct=None, here=None):
+    """overview 工具的文字：等你处理（新的在前）、在干活、今天标为已完成的。here 是问的那个对话，它自己在干活不算。
+    要在主循环里调：_board_marks 里的 crew 会清理 mentions.where。"""
+    from .agents import get as agent_get
+
+    def who(aid):
+        a = agent_get(aid) if aid else None
+        return a["name"] if a else "临时对话"
+
+    def head(cid, m):
+        return f"「{m.get('title') or '新对话'}」（{who(m.get('agent'))}），链接：{_href(cid, m.get('agent'))}，open_chat id={cid}"
+
+    ch, now = pf.channel, time.time()
+    t0 = getattr(ch, "turn_t0", {})
+    chats = pf.chats()
+    wait, busy = [], []
+    for cid, m in chats.items():
+        if cid == here or keep and not keep(cid) or m.get("helper") or m.get("side_of") or m.get("project") or m.get("mention_of"):
+            continue
+        marks = pf._board_marks(cid, m) if top_level(m, cid) and not m.get("archived") else {}
+        crew = marks.get("crew") or []
+        att = marks.get("attention")
+        if att == "ask":
+            wait.append((now, head(cid, m) + "，等你批准"))
+        elif m.get("busy") or crew:
+            line = head(cid, m)
+            if m.get("busy"):
+                if t0.get(cid):
+                    line += f"，干了 {_dur(now - t0[cid])}"
+                doing = ((ch.progress_of.get(cid) or {}).get("steps") or [None])[-1]
+                if doing:
+                    line += f"，正在：{doing}"
+            for c in crew:
+                line += f"，群里的{who(c['agent'])}在干活" + (f"（{c['doing']}）" if c.get("doing") else "")
+            stall = pf._stall(cid)
+            if stall:
+                line += f"，卡在「{stall['step']}」{_dur(stall['secs'])}了"
+            busy.append(line)
+        elif marks.get("answered"):
+            s = summary(ch.logs, cid)
+            state = "出错停下了" if att == "err" else "回答了你还没看" if marks.get("unread") else "回答过了，还没标完成"
+            line = head(cid, m) + f"，{_clock(s.get('answer_at') or 0, True)} {state}"
+            if m.get("brief"):
+                line += f"，进度：{m['brief']}"
+            wait.append((s.get("answer_at") or 0, line))
+    wait.sort(key=lambda x: -x[0])
+    today = datetime.date.today().isoformat()
+    done = done_on(pf, today, today, keep, acct, chats)
+
+    out = [f"现在是 {time.strftime('%m-%d %H:%M')}，这台电脑上的对话："]
+    out.append(f"\n## 等你处理（{len(wait)} 件）")
+    out += [f"- {x}" for _, x in wait[:WAIT_MAX]] or ["没有"]
+    if len(wait) > WAIT_MAX:
+        out.append(f"（还有 {len(wait) - WAIT_MAX} 件更早的没列出来）")
+    out.append(f"\n## 在干活（{len(busy)} 件）")
+    out += [f"- {x}" for x in busy] or ["没有"]
+    out.append(f"\n## 今天做完（{len(done)} 件）")
+    out += [f"- {_clock(r['at'], False)} {r['title']}（{who(r.get('agent'))}）"
+            + ("，对话已清理" if r["gone"] else f"，链接：{_href(r['id'], r.get('agent'))}") for r in done] or ["没有"]
+    return "\n".join(out)
+
+
 # ----- 复盘（#241、#364） -----
 # 复盘是一个普通对话：用户发 `/review 要求`（任务面板某一天的「复盘」按钮会把模板填进输入框），
 # Agent 自己从要求里判断日期范围，用 review_material 按范围拉材料（各台电脑上的），要细看再 open_chat。

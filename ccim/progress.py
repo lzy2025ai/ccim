@@ -45,6 +45,8 @@ def describe_tool(name, inp):
     if "review_material" in name:             # #364（Codex 里没有 mcp__ccim__ 前缀）
         a, b = str(inp.get("start") or ""), str(inp.get("end") or "")
         return "翻这段时间的对话：" + (a if not b or a == b else f"{a} 到 {b}")
+    if name.endswith("overview"):              # #426（Codex 里没有 mcp__ccim__ 前缀）
+        return "看全局：谁在干活、哪些等你处理"
     if name.startswith("mcp__ccim__platform_agents"):
         return "查看平台上的 Agent"
     if "share_skill_to_platform" in name:      # #276（Codex 里没有 mcp__ccim__ 前缀）

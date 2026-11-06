@@ -12,6 +12,7 @@
 import asyncio, os, re, time, uuid
 
 from . import agents, registry
+from .peers import OWNER
 
 CONTEXT_LIMIT = 12000                         # 带过去的之前的内容，最多这么多字（取最近的）
 SEEN_LIMIT = 6000
@@ -82,7 +83,7 @@ class Mentions:
             if aid and (r.get("by") == aid or (r.get("type") == "mention" and r.get("agent") == aid)):
                 continue
             if r.get("type") == "user":
-                lines.append(f"{self._who(cid, r.get('by'))}：{r['text']}")
+                lines.append(f"{(r.get('person') or {}).get('name') or self._who(cid, r.get('by'))}：{r['text']}")
             elif r.get("type") == "answer" or (r.get("type") == "mention" and r.get("state") == "done"):
                 lines.append(f"{self._name(m, r)}：{r['text']}")
             elif r.get("type") == "chatlog":
@@ -101,7 +102,7 @@ class Mentions:
             self.pf.store.write(chats)
         return sub
 
-    async def send(self, cid, text, to, files=(), by=None, depth=0):
+    async def send(self, cid, text, to, files=(), by=None, depth=0, person=None, quiet=False):
         """在主循环里调。by：是对话里的助手自己 @ 的（ask_agent 工具），不是用户。
         depth：被 @ 的人是第几层派出来的（#179），交给它的任务带上，它再往下派时按这个拦。"""
         from . import groups
@@ -115,6 +116,8 @@ class Mentions:
         from .platform import Problem
         if not to:
             raise Problem("找不到要 @ 的 Agent。")
+        if person and person["id"] != OWNER and any(home[a] != me for a in to):   # 访客的权限带不到别的电脑上（#419）
+            raise Problem("群里的访客只能 @ 这台电脑上的 Agent。")
         side = m.get("side_of")               # 侧边对话里 @（#290）：被 @ 的只读，带上主对话的内容，不拉进群
         if side:
             for a in to:
@@ -136,7 +139,8 @@ class Mentions:
                for aid in to}
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
-                                **({"by": by} if by else {})})
+                                **({"by": by} if by else {}), **({"person": person} if person else {}),   # 多人群聊里谁说的（#419）
+                                **({"quiet": True} if quiet else {})})
         self.pf.channel._emit(cid, user)
         att = "".join(f"\n（附件：{f['key']}）" for f in files)
         text = plain
@@ -162,10 +166,14 @@ class Mentions:
                 prompt = main[aid] + (f"（侧边对话里之前的内容，每段开头写的是谁说的，都不是你；你自己说过的在你的记忆里）\n{ctx[aid]}\n\n"
                                       if ctx[aid] else "") + f"[用户在侧边对话里 @ 了你]{also} {text}{att}"
             else:
-                prompt = groups.note_prefix(self.pf, cid, aid) + \
+                from . import people
+                prompt = groups.note_prefix(self.pf, cid, aid) + (people.note(self.pf, cid) if person else "") + \
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                    f"[{self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
+                    f"[{(person or {}).get('name') or self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
+                if person:                    # 多人群聊（#419）：这一轮按 @ 它的人的权限跑
+                    from .session import Speaker
+                    prompt = Speaker(prompt, people.fence_for(self.pf, cid, person["id"]))
             if not (by or side or q) and home[aid] == me:
                 into = await self._inject(cid, aid, mid, prompt, text, user["at"], depth)
                 if into:
@@ -207,6 +215,8 @@ class Mentions:
         from .progress import short
         from .session import Task
         task = Task(prompt)                   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记
+        if hasattr(prompt, "fence"):          # 多人群聊（#419）：权限不一样的不补进去（Chat.inject 会拒），照常排队
+            task.fence = prompt.fence
         task.depth = depth
         task.group = cid
         if not await c.inject(task):
@@ -334,6 +344,8 @@ class Mentions:
                 self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid,
                                                                           **({"from_by": by} if by else {})}))
                 task = Task(prompt)
+                if hasattr(prompt, "fence"):  # 多人群聊（#419）：按 @ 它的人的权限跑
+                    task.fence = prompt.fence
                 task.depth = depth
                 task.group = cid              # 群里 @ 它的这一轮：发的东西群聊里也记（#409）
                 chat.submit(task)

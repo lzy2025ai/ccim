@@ -22,7 +22,7 @@ GUEST_GET = {
     "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/agent/recent", "/api/schedule", "/api/schedule/list",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/board/day", "/api/dirs", "/api/file", "/api/file/part",
-    "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls",
+    "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls", "/api/chat/people",
 }
 GUEST_POST = {
     "/api/upload", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
@@ -33,7 +33,7 @@ GUEST_POST = {
     "/api/agent/save", "/api/agent/delete", "/api/agent/pin", "/api/agent/draft",
     "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
-    "/api/chat/continue",
+    "/api/chat/continue", "/api/chat/people", "/api/chat/join",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
     "/api/chat/side",
     "/api/pocket",
@@ -193,8 +193,12 @@ def _mine_chat(pf, acct, cid):
         if not agent or of_agent(agents.get(agent)) != acct:
             raise Denied("找不到这个对话。")
         return
-    if not cid or cid not in pf.chats() or chat_owner(pf, cid) != acct:
+    if not cid or cid not in pf.chats():
         raise Denied("找不到这个对话。")
+    if chat_owner(pf, cid) != acct:
+        from . import people
+        if people.state_of(pf, cid, acct) not in ("in", "invited"):   # 被拉进群的（#419）：能做哪些由 check_people 管
+            raise Denied("找不到这个对话。")
 
 
 def procs_of(acct):
@@ -296,8 +300,16 @@ def check(pf, acct, method, path, q, body):
         for aid in b.get("add") or []:
             _usable_agent(acct, aid)
     elif path == "/api/chat/mention":
-        for aid in b.get("to") or []:
-            _usable_agent(acct, aid)
+        if chat_owner(pf, b.get("id")) != acct:   # 被拉进别人的群（#419）：能 @ 群里已有的 Agent
+            from . import groups, people
+            r = pf.chats().get(people.root(pf, b.get("id"))) or {}
+            inside = set(groups.members(r)) | {r.get("agent")}
+            for aid in b.get("to") or []:
+                if aid not in inside:
+                    _usable_agent(acct, aid)
+        else:
+            for aid in b.get("to") or []:
+                _usable_agent(acct, aid)
     elif path == "/api/chat/kbs":
         for lib in b.get("kbs") or []:
             _mine_lib(acct, lib)
@@ -349,18 +361,40 @@ def check(pf, acct, method, path, q, body):
             raise Denied("找不到这个定时任务。")
 
 
+def check_people(pf, acct, method, path, q, body):
+    """被拉进别人群里的人（#419，主人也算）：只能做 people.MEMBER_* 里的；邀请还没同意的只能看邀请。"""
+    from . import people
+    if not path.startswith("/api/"):
+        return
+    b = body if isinstance(body, dict) else {}
+    cid = (q.get("id") or q.get("chat")) if method == "GET" else (b.get("id") or b.get("chat"))
+    if not cid or not isinstance(cid, str) or cid.startswith("x:") or path == "/api/chat/new":
+        return
+    chats = pf.chats()
+    if cid not in chats or people.root(pf, cid, chats) not in people.visible_map(pf):   # 没拉过人的对话：照旧
+        return
+    st = people.state_of(pf, cid, people.me(acct))
+    if st in (None, "creator"):
+        return
+    allowed = people.INVITED if st == "invited" else (people.MEMBER_GET if method == "GET" else people.MEMBER_POST)
+    if path not in allowed:
+        raise Denied("这个操作只有建群的人能做。" if st == "in" else "先加入这个群聊。")
+
+
 # ---------- 给谁看什么 ----------
 
 def chat_filter(pf, acct):
     """(对话编号, 它的 Agent) 是不是这个人的（主人 acct=None：去掉访客的）。终端、飞书、微信里的对话跟着它的 Agent。
     列表分页要在挑前几条之前就按人过滤（#268），不然别人的对话会占掉名额。"""
+    from . import people
     owners = owner_map(pf)
+    pmap, who = people.visible_map(pf), people.me(acct)
 
     def ok(cid, aid=None):
         cid = str(cid or "")
         if cid.startswith("x:"):
             return of_agent(agents.get(aid or "")) == acct
-        return owners.get(cid) == acct
+        return owners.get(cid) == acct or who in pmap.get(cid, ())   # 被拉进群的（#419）也看得到
     return ok
 
 
@@ -375,6 +409,7 @@ def filter_state(pf, st, acct):
     st["agents"] = [view_agent(a, acct) for a in st.get("agents") or []
                     if (a.get("account") or None) == acct or a.get("id") in shared]
     st["chats"] = [c for c in st.get("chats") or [] if chat_ok(c)]
+    mark_people(pf, st["chats"], acct)
     st["schedules"] = [s for s in st.get("schedules") or [] if of_schedule(pf, s) == acct]
     if acct:
         g = guest(acct)
@@ -385,6 +420,16 @@ def filter_state(pf, st, acct):
         st.pop("perms", None)
         st["guest"] = {"root": root(acct), "codex": bool(g.get("codex")), "own": bool(g.get("own", True))}
     return st
+
+
+def mark_people(pf, rows, acct):
+    """多人群聊（#419）：「等你处理」按这个人自己看到哪算，邀请还没同意的标上 invite。就地改成副本。"""
+    from . import people
+    pmap, who = people.visible_map(pf), people.me(acct)
+    for i, c in enumerate(rows):
+        if c.get("id") in pmap:
+            rows[i] = people.attention(pf, c["id"], who, dict(c, people=len(people.humans(pf, c["id"]))))
+    return rows
 
 
 def view_agent(a, acct):
@@ -418,6 +463,12 @@ def tag(pf, ev):
             a = of_schedule(pf, pf.schedules.all().get(ev.get("schedule") or ""))
         if a:
             ev["_a"] = a
+        if cid and not str(cid).startswith("x:"):     # 被拉进群的人（#419）也收
+            from . import people
+            pmap = people.visible_map(pf)
+            p = pmap and (pmap.get(cid) or pmap.get(people.root(pf, cid)))
+            if p:
+                ev["_p"] = sorted(p)
     except Exception:
         pass
     return ev

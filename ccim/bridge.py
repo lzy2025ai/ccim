@@ -195,6 +195,9 @@ class Bridge:
                 prompt = f"（用户针对下面这条消息开了一个话题，接下来在话题里讨论它）\n「{root[:800]}」\n\n{prompt}"
         if paths:
             prompt += ("\n\n" if prompt else "") + "用户发来了文件，已保存到：\n" + "\n".join(paths)
+        if inc.speaker is not None:             # 多人群聊（#419）：这句按说话的人的权限跑
+            from .session import Speaker
+            prompt = Speaker(prompt, inc.speaker.get("fence"))
         if chat.busy and not queued:
             await self._ask_followup(chat, addr, prompt, text, reply_to, inc)
             return

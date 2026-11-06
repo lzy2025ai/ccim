@@ -172,7 +172,7 @@ class PlatformTests(unittest.TestCase):
         self.aid = agents.create(name="小助手")["id"]
         self.sent = []
 
-        async def fake_send(cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None):
+        async def fake_send(cid, text, files=(), ctx=None, refs=None, hidden=None, mark=None, **kw):
             self.sent.append((cid, text))
         pf.send = fake_send
 

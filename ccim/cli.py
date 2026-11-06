@@ -17,7 +17,7 @@ CAPS = ["handoff", "safe-restart", "ask", "weixin-handoff"]   # 这个版本的 
 EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")   # minimal 只有 Codex 有
 GLOBAL_KEYS = ("model", "effort", "codex_model", "codex_effort")
 CONFIG_KEYS = {"group": ("owner", "all"), "model": None, "effort": EFFORTS, "codex_model": None, "codex_effort": EFFORTS,
-               "reaction": None, "runtime": ("dev", "stable"), "agent": ("claude", "codex")}
+               "reaction": None, "runtime": ("dev", "stable"), "agent": registry.BASES}
 
 
 # ---------- 运行 ----------
@@ -179,7 +179,7 @@ def _need(project, single_ok=False, weixin_ok=False):
     return path, entry
 
 
-AGENT_NAMES = {"claude": "Claude Code", "codex": "Codex"}
+AGENT_NAMES = {"claude": "Claude Code", "codex": "Codex", "dsh": "DeepSeek Harness"}
 
 
 def _apply_agent(path, agent):
@@ -477,6 +477,8 @@ def cmd_resume(args):
     path, e = _need(project, single_ok=True, weixin_ok=True)
     if e.get("agent") == "codex":
         raise SystemExit("这个项目用的是 Codex，在终端里用 codex resume 接着聊。")
+    if e.get("agent") == "dsh":
+        raise SystemExit("这个项目用的是 DeepSeek Harness，没有这个功能。")
     found = [(w, c) for w, _, c in registry.all_chats(path)
              if c.get("session_id") and c["session_id"].startswith(prefix or "")]
     if not found:
@@ -1125,7 +1127,7 @@ def parser():
     p.add_argument("--feishu", dest="channel", action="store_const", const="feishu", help="用飞书（默认）")
     p.add_argument("--weixin", nargs="?", const="", metavar="微信号",
                    help="把当前目录加进微信（登录了好几个微信号时写上名字）")
-    p.add_argument("--agent", choices=("claude", "codex"), help="用哪个助手：claude（默认）或 codex")
+    p.add_argument("--agent", choices=registry.BASES, help="用哪个助手：claude（默认）、codex 或 dsh")
     p.add_argument("--yes", "-y", action="store_true", help="不问确认（比如在用户主目录接入）")
     p.add_argument("--model", help="这个项目默认用的模型，等于 ccim config model=…")
     p.add_argument("--effort", choices=EFFORTS, help="这个项目默认的思考深度，等于 ccim config effort=…")
@@ -1137,7 +1139,7 @@ def parser():
         if name == "start":
             s.add_argument("--always", action="store_true", help="常驻：开机登录后自动启动，意外退出自动重启")
         if name in ("start", "restart"):
-            s.add_argument("--agent", choices=("claude", "codex"), help="换用哪个助手：claude 或 codex")
+            s.add_argument("--agent", choices=registry.BASES, help="换用哪个助手：claude、codex 或 dsh")
             s.add_argument("--model", default=argparse.SUPPRESS, help="这个项目默认用的模型，等于 ccim config model=…")
             s.add_argument("--effort", choices=EFFORTS, default=argparse.SUPPRESS,
                            help="这个项目默认的思考深度，等于 ccim config effort=…")

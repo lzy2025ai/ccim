@@ -91,7 +91,7 @@ def clean(fields):
             out[k] = (v.strip() or None) if isinstance(v, str) else (v or None)
     if out.get("dir"):
         out["dir"] = os.path.realpath(os.path.expanduser(out["dir"]))
-    if "base" in out and out["base"] not in ("claude", "codex"):
+    if "base" in out and out["base"] not in registry.BASES:
         out["base"] = "claude"
     for k in ("pinned", "chrome"):
         if k in out:

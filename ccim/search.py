@@ -20,7 +20,7 @@ _CACHE = {}                                   # (底座, 会话) → ((大小, �
 
 
 def _ext_log(base, sid, cwd):
-    path = history.codex_file(sid) if base == "codex" else handoff.transcript_path(sid, cwd)
+    path = history.file_of(base, sid, cwd)
     try:
         st = os.stat(path) if path else None
     except OSError:
@@ -29,7 +29,7 @@ def _ext_log(base, sid, cwd):
     hit = _CACHE.get((base, sid))
     if sig and hit and hit[0] == sig:
         return hit[1]
-    rows = history.codex(sid, limit=100000) if base == "codex" else history.claude(sid, cwd, limit=100000)
+    rows = history.rows_of(base, sid, cwd, limit=100000)
     if sig:
         if len(_CACHE) > 500:
             _CACHE.clear()

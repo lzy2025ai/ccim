@@ -504,7 +504,7 @@ class Peers:
         guest = {m["id"] for m in machines if m.get("shared")}   # 别人共享的电脑：按访客要，缓存也分开（#154）
         key = lambda mid: f"{mid}|{account}" if mid in guest else mid
         hdr = lambda mid: self.guest_headers(account, mid) if mid in guest else None
-        extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"),
+        extra = {me: {"models": local.get("models"), "defaults": local.get("defaults"), "codex": local.get("codex"), "dsh": local.get("dsh"),
                       "home": local.get("home"), "ccim": local.get("ccim"), "perms": local.get("perms"), "global": local.get("global") or {},
                       "chat_more": local.get("chat_more")}}     # 这台还有多少更早的、已归档的对话没带上（#268）
         results, late, lock = {}, set(), threading.Lock()
@@ -587,7 +587,7 @@ class Peers:
                 continue
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
-            extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"),
+            extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"), "dsh": s.get("dsh"),
                               "home": s.get("home"), "ccim": s.get("ccim"), "perms": s.get("perms"), **({"guest": s["guest"]} if s.get("guest") else {}),
                               "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话
                               "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）、网页显示用的设置

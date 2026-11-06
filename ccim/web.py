@@ -55,6 +55,8 @@ def _settings(path):
 
 
 def _effective(path, settings, model=None, effort=None):
+    if settings.get("agent") == "dsh":
+        return {"model": "", "effort": "", "model_set": False, "effort_set": False}
     codex = settings.get("agent") == "codex"
     if codex:
         from .codex import defaults
@@ -129,6 +131,11 @@ def _codex():
     return bool(find_codex())
 
 
+def _dsh():
+    from .dsh import find_dsh
+    return bool(find_dsh())
+
+
 def _tilde(p):
     h = os.path.expanduser("~")
     return "~" + p[len(h):] if p == h or p.startswith(h + os.sep) else p
@@ -176,7 +183,7 @@ def restart(proc):
 def save_settings(path, changes):
     """改项目设置。飞书的登记和各微信号里这个项目的设置一起改，项目只有一份设置。
     正在运行、没在干活的进程重启生效；在干活的不打断，返回它们，网页提示稍后重启。"""
-    allowed = {"model": None, "effort": EFFORTS + CODEX_EFFORTS, "agent": ("claude", "codex"), "group": ("owner", "all")}
+    allowed = {"model": None, "effort": EFFORTS + CODEX_EFFORTS, "agent": registry.BASES, "group": ("owner", "all")}
     clean = {}
     for k, v in changes.items():
         if k not in allowed:
@@ -187,6 +194,8 @@ def save_settings(path, changes):
         clean[k] = None if (k == "agent" and v == "claude") or (k == "group" and v == "owner") else v
     if clean.get("agent") == "codex" and not _codex():
         raise Problem("这台电脑上还没装 Codex。装好 ChatGPT 桌面版后再切换。")
+    if clean.get("agent") == "dsh" and not _dsh():
+        raise Problem("这台电脑上还没装 DeepSeek Harness。")
     procs = []
     if registry.get(path):
         registry.update(path, **clean)
@@ -361,6 +370,8 @@ def connect(path, channel, agent, confirmed=False):
         raise Problem("选飞书或微信。")
     if agent == "codex" and not _codex():
         raise Problem("这台电脑上还没装 Codex。")
+    if agent == "dsh" and not _dsh():
+        raise Problem("这台电脑上还没装 DeepSeek Harness。")
     if channel == "feishu" and registry.get(path):
         raise Problem("这个项目已经接到飞书了。")
     if channel == "weixin" and weixin_hub.hubs_of(path):

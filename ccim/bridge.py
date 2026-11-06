@@ -67,6 +67,9 @@ class Bridge:
         if self.entry.get("agent") == "codex":
             from .codex import CodexChat
             return CodexChat
+        if self.entry.get("agent") == "dsh":
+            from .dsh import DshChat
+            return DshChat
         return Chat
 
     def chat(self, addr, chat_type, fork_from=None):

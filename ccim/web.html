@@ -1739,7 +1739,7 @@ const AVATARS = [["01-navigator","领航员"],["02-coder","程序员"],["03-desi
   ["21-capybara","慢慢"],["22-red-panda","栗栗"],["23-koala","考拉"],["24-tiger","小虎"],
   ["25-dragon","小龙"],["26-whale","蓝鲸"],["27-axolotl","六六"],["28-hedgehog","刺刺"],
   ["29-mushroom","菇菇"],["30-cloud","云朵"],["31-sun","暖阳"],["32-catbot","猫机"]];
-const BASE = {claude:"Claude Code", codex:"Codex"};
+const BASE = {claude:"Claude Code", codex:"Codex", dsh:"DeepSeek"};
 const CLAUDE_MODELS = [["opus","Opus","最强，复杂任务"],["sonnet","Sonnet","快，日常够用"],["haiku","Haiku","最快最省"],["fable","Fable",""]];
 const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
 const EFF_DESC = {minimal:"几乎不思考，最快", low:"快，适合简单的事", medium:"日常够用", high:"想得更周全", xhigh:"更深入", max:"最深入，最慢"};
@@ -2259,6 +2259,8 @@ const multi = () => (S.machines || []).length > 1;
 const machineOf = id => (S.machines || []).find(m => m.id === id);
 const sharedM = id => !!(machineOf(id) || {}).shared;     // 别人共享给我的电脑（#154）：只能用自己的那块
 const guestOf = id => ((S.machine_info || {})[id] || {}).guest || {};
+const hasDsh = id => !!(((S.machine_info || {})[id] || {}).dsh ?? S.dsh ?? {}).ready;
+const basesOf = id => noCodex(id) ? ["claude"] : ["claude", "codex"].concat(!sharedM(id) && hasDsh(id) ? ["dsh"] : []);
 const noCodex = id => sharedM(id) && !guestOf(id).codex;              // 主人没让用 Codex
 const canCreate = id => !sharedM(id) || guestOf(id).own !== false;     // 主人没让在这台上自己建 Agent
 let ctxMachine = null;            // 当前打开的东西在哪台电脑
@@ -2942,10 +2944,10 @@ async function doRewind(i){
 }
 function canFork(i, r, src = "log"){
   if (src === "elsewhere" || r.type !== "answer" || detail.busy) return false;
-  if (src === "earlier" || detail.readonly) return !!r.uuid && detail.base !== "codex";   // 终端、桌面端里的回答
+  if (src === "earlier" || detail.readonly) return !!r.uuid && detail.base === "claude";   // 终端、桌面端里的回答
   if (r.state !== "done") return false;
   const last = detail.log.map(x => x.type).lastIndexOf("answer");
-  return i === last || (!!r.fork && detail.base !== "codex");
+  return i === last || (!!r.fork && detail.base === "claude");
 }
 function userFiles(r){
   return r.files && r.files.length ? `<div class="files">${r.files.map(f => {
@@ -3367,7 +3369,7 @@ function drawChat(){
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
           <button class="chip" id="chip-perm" hidden onclick="chatPerm(event)"></button>
           ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
-          ${c.readonly || c.base === "codex" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
+          ${c.readonly || c.base !== "claude" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
           <button class="ctx-ring" id="ctx-ring" hidden onclick="ctxPop(event)"></button>
           <button class="send" id="send"></button>
         </div>
@@ -4113,7 +4115,7 @@ const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
 const isAudio = name => /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i.test(name || "");
 // Android 的浏览器：不限类型的选择框直接进文件管理器，只收图片视频才打开相册，所以先问选哪个（#234）
 function embedAdd(e){   // 右下角助理里（#294）：文件和知识库收在一个 + 里
-  const kb = !detail.readonly && detail.base !== "codex";
+  const kb = !detail.readonly && detail.base === "claude";
   if (!kb) return pickFiles(e);
   const pp = pop(e, `<button data-k="file">${ICON.clip}图片或文件</button><button data-k="kb">${ICON.kb}知识库</button>`);
   const at = {currentTarget: e.currentTarget, stopPropagation(){}};
@@ -4180,9 +4182,9 @@ function renderNewChat(){
           <div class="bar"><div class="opts">
             <button class="icon-btn" aria-label="添加图片或文件" onclick="pickFiles(event)">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
-            <span class="seg mini">${(noCodex(d.machine || S.me) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
-            <button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
-            <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
+            <span class="seg mini">${basesOf(d.machine || S.me).map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
+            ${d.base === "dsh" ? "" : `<button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
+            <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>`}
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
@@ -5955,7 +5957,7 @@ function formHtml(a){
   if (fd._autoDir) fd.dir = autoDir();
   const hasCodex = ((S.machine_info || {})[fd.machine] || {}).codex ?? S.codex;
   const machineRow = !a && multi() ? `<label>在哪台电脑</label><div>${dd("f-machine", S.machines.filter(m => canCreate(m.id)).map(m => [m.id, m.name + (m.me ? "（这台）" : ""), m.online ? "" : "离线，连上后才能在它上面建"]), fd.machine,
-    v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if (fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) fd.base = "claude"; redrawForm(); })}</div>` : "";
+    v => { fd.machine = v; ctxMachine = v; fd.dir = ""; fd.model = ""; if ((fd.base === "codex" && !((S.machine_info || {})[v] || {}).codex) || (fd.base === "dsh" && !basesOf(v).includes("dsh"))) fd.base = "claude"; redrawForm(); })}</div>` : "";
   fd._sealSet = fd._sealSet ?? !!(a && a.seal);
   return `<div class="form">${machineRow}
     <label>头像</label><div class="avatar-picker">
@@ -5968,9 +5970,9 @@ function formHtml(a){
     <label for="f-name">名字</label><input id="f-name" class="input" value="${esc(fd.name)}" placeholder="${fd._drafting ? "正在按对话起草…" : "比如：前端开发、周报助手"}" oninput="fd.name=this.value;if(!fd._sealSet){fd.seal=autoSeal(this.value);$('#f-seal').value=fd.seal};if(fd._autoDir){fd.dir=autoDir();$('#f-dir').value=tilde(fd.dir)};drawSeal()">
     <label for="f-role">角色说明</label><div><textarea id="f-role" class="textarea" placeholder="${fd._drafting ? "正在按对话起草…" : "它是谁、负责什么、有什么习惯和要求。比如：负责官网前端，用 Vue 3，改完必须跑 lint。"}" oninput="fd.role=this.value">${esc(fd.role || "")}</textarea>
       <div class="help">每次和它对话都会带上这段话，飞书、微信里也一样。</div></div>
-    <label>底座</label><div class="seg">${(fd.from_chat ? [fd.base || "claude"] : noCodex(fd.machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
-    <label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
-    <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>
+    <label>底座</label><div class="seg">${(fd.from_chat ? [fd.base || "claude"] : basesOf(fd.machine)).map(b => `<button class="${(fd.base || "claude") === b ? "on" : ""}" ${b === "codex" && !hasCodex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="fd.base='${b}';fd.model='';fd.effort='';redrawForm()">${BASE[b]}</button>`).join("")}</div>
+    ${fd.base === "dsh" ? "" : `<label>默认模型</label><div id="f-model-box">${dd("f-model", modelOpts(fd.base || "claude", "跟随全局设置", fd.model), fd.model || "", v => fd.model = v)}</div>
+    <label>默认思考深度</label><div>${dd("f-effort", effortOpts(fd.base || "claude", "跟随全局设置"), fd.effort || "", v => fd.effort = v)}</div>`}
     ${(fd.base || "claude") === "claude" ? `${sharedM(fd.machine) ? "" : `<label>Chrome 浏览器</label><div><div class="seg">${[[false, "不用"], [true, "可以用"]].map(([v, n]) => `<button class="${!!fd.chrome === v ? "on" : ""}" aria-pressed="${!!fd.chrome === v}" onclick="fd.chrome=${v};redrawForm()">${n}</button>`).join("")}</div>
       <div class="help">能操作你电脑上的 Chrome，直接用你已经登录的网站。</div></div>`}
       <label>平台 Skill</label><div>${skillRows()}</div>` : ""}
@@ -6955,13 +6957,15 @@ async function renderSettings(){
       <label>思考深度</label>${show(gs.codex_effort, `跟随 Codex 设置（${xe || "默认"}）`)}</div></div>` : ""}` : `<div class="sect"><h3>Claude Code</h3><div class="form">
       <label>模型</label>${dd("g-cm", modelOpts("claude", `跟随 Claude Code 设置（${modelName(cm)}）`, gs.model, gsMachine), gs.model, v => gs.model = v)}
       <label>思考深度</label>${dd("g-ce", effortOpts("claude", `跟随 Claude Code 设置（${ce || "默认"}）`), gs.effort, v => gs.effort = v)}</div></div>
+      ${(st.dsh || {}).ready ? `<div class="sect"><h3>DeepSeek</h3><div class="form">
+      <label for="g-dk">API Key</label><input id="g-dk" class="input" type="password" autocomplete="off" placeholder="${st.dsh.key ? "已填写，留空不改" : "sk-…"}" oninput="gs.dsh_key=this.value"></div></div>` : ""}
       ${st.codex ? `<div class="sect"><h3>Codex</h3><div class="form">
       <label>模型</label>${dd("g-xm", modelOpts("codex", `跟随 Codex 设置（${xm || "默认"}）`, gs.codex_model, gsMachine), gs.codex_model, v => gs.codex_model = v)}
       <label>思考深度</label>${dd("g-xe", effortOpts("codex", `跟随 Codex 设置（${xe || "默认"}）`), gs.codex_effort, v => gs.codex_effort = v)}</div></div>` : ""}
       <button class="btn primary" onclick="saveGlobal()">保存</button>`}</div></div>`;
 }
 async function saveGlobal(){
-  await act(() => api("/api/global", gs, gsMachine), multi() ? `已保存到「${(machineOf(gsMachine) || {}).name || "这台电脑"}」，新开的对话开始用` : "已保存，新开的对话开始用");
+  await act(() => api("/api/global", gs, gsMachine).finally(() => { gs.dsh_key = ""; }), multi() ? `已保存到「${(machineOf(gsMachine) || {}).name || "这台电脑"}」，新开的对话开始用` : "已保存，新开的对话开始用");
   await loadState();
 }
 
@@ -7232,15 +7236,15 @@ function quickAgent(opts){
       closeDialog(); rcpt = [id]; showMembers = true; await loadState(); await openProject(proj.id); toast(`「${name}」已拉进项目，现在可以 @ 它了`); }};
   let base = "claude", model = "", effort = "", machine = opts.machine || S.me;   // 默认建在这个对话所在的电脑上（#86）
   const hasCodex = () => (((S.machine_info || {})[machine] || {}).codex ?? S.codex);
-  const picks = () => `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model, machine), model, v => model = v)}</div>
+  const picks = () => base === "dsh" ? "" : `<label>默认模型</label><div>${dd("q-model", modelOpts(base, "跟随全局设置", model, machine), model, v => model = v)}</div>
       <label>默认思考深度</label><div>${dd("q-effort", effortOpts(base, "跟随全局设置"), effort, v => effort = v)}</div>`;
-  const bases = () => (noCodex(machine) ? ["claude"] : ["claude", "codex"]).map(b => `<button class="${base === b ? "on" : ""}" data-b="${b}" ${b === "codex" && !hasCodex() ? "disabled" : ""}>${BASE[b]}</button>`).join("");
+  const bases = () => basesOf(machine).map(b => `<button class="${base === b ? "on" : ""}" data-b="${b}" ${b === "codex" && !hasCodex() ? "disabled" : ""}>${BASE[b]}</button>`).join("");
   const machines = S.machines.filter(m => m.online || m.id === machine);
   dialog(opts.title, `<div class="form">
       ${multi() ? `<label>在哪台电脑</label><div>${dd("q-machine", machines.map(m => [m.id, m.name + (m.me ? "（这台）" : ""), ""]), machine, v => {
         if (v === machine) return;
         machine = v; model = "";
-        if (base === "codex" && !hasCodex()) { base = "claude"; effort = ""; }
+        if ((base === "codex" && !hasCodex()) || (base === "dsh" && !basesOf(machine).includes("dsh"))) { base = "claude"; effort = ""; }
         $("#q-dir").value = ""; $("#q-base").innerHTML = bases(); bindBase(); $("#q-picks").innerHTML = picks();
       })}</div>` : ""}
       <label for="q-name">名字</label><input id="q-name" class="input" placeholder="比如：设计、数据分析">

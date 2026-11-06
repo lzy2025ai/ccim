@@ -265,6 +265,8 @@ def _groups(agent):
     """[(分组, 名字, 目录, 能不能改)]"""
     from . import agents as agents_mod
     home = os.path.realpath(os.path.expanduser("~"))
+    if (agent.get("base") or "claude") == "dsh":
+        return []
     if (agent.get("base") or "claude") == "codex":
         return [("user", "这台电脑通用的", os.path.expanduser("~/.codex/skills"), True)]
     cwd = os.path.realpath(agents_mod.cwd(agent))

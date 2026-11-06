@@ -4506,6 +4506,8 @@ function boardMenu(e, id){           // 右上角的三点：快捷回复、打�
     + `<button onclick="closePop();finishOpen([${q(id)}])">标为已完成</button>`);
 }
 function pickOpen(id){ if (!BSEL) return; BSEL.has(id) ? BSEL.delete(id) : BSEL.add(id); renderBoard(true); }
+let waitOrder = localStorage.getItem("ccim.waitOrder") === "old" ? "old" : "new";   // 「等你处理」的排法，记在这台浏览器上
+function setWaitOrder(k){ waitOrder = k; localStorage.setItem("ccim.waitOrder", k); renderBoard(true); }
 function startPick(){ BSEL = new Set(); boardReply = null; renderBoard(true); }
 function endPick(){ BSEL = null; renderBoard(true); }
 function pickAll(ids){ BSEL = BSEL && BSEL.size === ids.length ? new Set() : new Set(ids); renderBoard(true); }
@@ -4797,12 +4799,13 @@ async function renderBoard(quick){
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
   const tops = withOpen().filter(c => isTop(c) && !c.archived);
-  // 等你批准、出错停下的在最上面；再是有新回答没看过的（红点），刚回答完的在上面；
-  // 其余看过的开得最久的在上面，让早该结束的对话一直摆在眼前（#390）
-  const rank = c => c.attention === "ask" ? 0 : c.attention === "err" ? 1 : c.attention || c.unread ? 2 : 3;
+  // 等你批准、出错停下的总在最上面（#390）。默认「最近回答」：有新回答没看过的（红点）在前，
+  // 再按最后回答从新到旧，刚做完的一眼看到；切到「开得最久」按开对话的时间从早到晚，方便清理拖着的老对话
+  const old = waitOrder === "old";
+  const rank = c => c.attention === "ask" ? 0 : c.attention === "err" ? 1 : !old && (c.attention || c.unread) ? 2 : 3;
   const cmp = (x, y) => x < y ? -1 : x > y ? 1 : 0;
   const wait = tops.filter(isOpen).sort((a, b) => rank(a) - rank(b)
-    || (rank(a) === 2 ? cmp(b.last_active || "", a.last_active || "") : cmp(openAt(a), openAt(b))));
+    || (old ? cmp(openAt(a), openAt(b)) : cmp(b.last_active || "", a.last_active || "")));
   const work = tops.filter(c => working(c) && !c.attention).sort((a, b) => (b.pin != null) - (a.pin != null));
   const st = boardStats || {heat: {}, agents: {}};
   const ags = Object.entries(st.agents || {}).filter(([id, v]) => agentOf(id) && v[agTab]).sort((a, b) => b[1][agTab] - a[1][agTab]).slice(0, 6);
@@ -4815,7 +4818,7 @@ async function renderBoard(quick){
   const ids = JSON.stringify(wait.map(c => c.id)).replace(/"/g, "&quot;");
   const tool = !wait.length ? "" : BSEL
     ? `<span class="sp"></span><span class="bpickbar"><button class="btn" onclick="pickAll(${ids})">${BSEL.size === wait.length ? "全不选" : "全选"}</button><button class="btn" onclick="endPick()">取消</button><button class="btn primary" ${BSEL.size ? "" : "disabled"} onclick="finishOpen([...BSEL])">标为已完成${BSEL.size ? `（${BSEL.size}）` : ""}</button></span>`
-    : `<span class="sp"></span><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
+    : `<span class="sp"></span><span class="rtabs" role="tablist" aria-label="排序">${[["new", "最近回答"], ["old", "开得最久"]].map(([k, t]) => `<button role="tab" aria-selected="${waitOrder === k}" class="${waitOrder === k ? "on" : ""}" onclick="setWaitOrder('${k}')">${t}</button>`).join("")}</span><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
   $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
     <div class="bgrid"><div class="bleft">
       ${kpiHtml(st)}

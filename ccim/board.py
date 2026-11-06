@@ -52,6 +52,7 @@ def summary(logs, cid):
             s["days"][day] = s["days"].get(day, 0) + 1
             s["hours"].setdefault(day, [0] * 24)[lt.tm_hour] += 1
             s["last_user"] = r.get("text") or ""
+            s["sched_last"] = bool(r.get("sched"))   # 最近一条是定时任务发的（#390）：发到普通对话、群聊里的也算
             s["user_ats"] = (s.get("user_ats") or [])[-1:] + [r.get("at") or 0]   # 最近两次提问的时间（#157）
             if not (r.get("sched") or r.get("from_chat")):    # 沟通了几轮（#390）：只数你自己发的，定时任务、别的对话转来的不算
                 s["rounds"] += 1
@@ -82,6 +83,13 @@ def attention(meta, summ):
 def unread(meta, summ):
     """回答还没打开看过（任务面板里点了「知道了」的也算，#65）。"""
     return bool(summ) and not meta.get("busy") and summ.get("answer_at", 0) > (meta.get("seen_at") or 0)
+
+
+def answered(meta, summ):
+    """算不算「等你处理」里的回答过（#390）：定时任务每次到点都会回答，它自己的对话你没说过话的不算；
+    发到普通对话、群聊里的，最近一条是定时任务发的也不算，你在里面回了话才算。"""
+    return (bool(summ.get("answer_at")) and not summ.get("sched_last")
+            and not (meta.get("schedule") and not summ.get("rounds")))
 
 
 def top_level(meta, cid):
@@ -176,13 +184,13 @@ def stats(pf, keep=None, everything=True, acct=None):
 
 def open_rows(pf, chats, keep=None):
     """任务面板「等你处理」要的（#390）：没标完成、没在干活、回答过的顶层对话，不管多久以前的都在，直到标完成。
-    定时任务的对话每次到点都会回答，你没在里面说过话的不算。整体状态里只带了最近一部分对话，这一栏要的自己给。"""
+    定时任务刚回答过的不算（见 answered）。整体状态里只带了最近一部分对话，这一栏要的自己给。"""
     rows = []
     for cid, m in chats.items():
         if not top_level(m, cid) or not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
             continue
         s = summary(pf.channel.logs, cid)
-        if not s.get("answer_at") or (m.get("schedule") and not s.get("rounds")):
+        if not answered(m, s):
             continue
         rows.append(pf.chat_view(cid))
     return rows

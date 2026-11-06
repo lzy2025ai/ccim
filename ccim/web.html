@@ -4392,6 +4392,8 @@ function appChip(r){
 
 // ================= 任务面板（#48） =================
 const isTop = c => !c.mention_of && !c.side_of && !c.project && (!c.schedule || c.listed) && !c.external;
+// 任务面板和角标算的对话：顶层的，加上群成员子对话里直接聊的那一轮（#417，群里 @ 它的那一轮算在群聊那一行）
+const onBoard = c => isTop(c) || !!(c.mention_of && c.direct);
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
 // 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
@@ -4402,11 +4404,11 @@ function seeOpen(){
   if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
 }
 addEventListener("visibilitychange", seeOpen);
-function waiting(){ return (S.chats || []).filter(c => isTop(c) && c.attention); }
+function waiting(){ return (S.chats || []).filter(c => onBoard(c) && c.attention); }
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");
-  const work = (S.chats || []).filter(c => isTop(c) && working(c) && !c.attention);   // 和任务面板「正在干活」同一口径
+  const work = (S.chats || []).filter(c => onBoard(c) && working(c) && !c.attention);   // 和任务面板「正在干活」同一口径
   if (b) {
     const k = n || work.length;
     b.hidden = !k;
@@ -4489,7 +4491,7 @@ function boardRow(c, kind){
   const side = wait ? [age, who].filter(Boolean).join(" · ") : who;
   const round = wait && c.rounds ? `<span class="bround" title="你发了 ${c.rounds} 次"><b>${c.rounds}</b><small>轮</small></span>` : wait ? `<span class="bround"></span>` : "";
   const row = `<a class="brow ${c.pin != null ? "starred" : ""} ${dot ? "fresh" : ""} ${kind === "work" ? "work" : "w"} ${kind === "work" && c.stall ? "stall" : ""} ${c.attention === "err" ? "err" : ""} ${replying ? "replying" : ""} ${picking ? "picking" : ""} ${picked ? "picked" : ""}" href="${boardHref(c)}"${picking ? ` onclick="event.preventDefault();pickOpen(${q(c.id)})" role="checkbox" aria-checked="${!!picked}"` : ""}>${kind === "work" ? ANTS : ""}${picking ? `<span class="bpick" aria-hidden="true">${picked ? ICON.check : ""}</span>` : ""}<span class="bico ${a ? "linked" : ""}">${iconOf(c, a, "sm")}${dot}</span>
-    <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.pin != null ? `<span class="bstar" title="置顶">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
+    <span class="bmain"><span class="btop"><span class="btitle" title="${esc(said)}">${esc(said)}</span>${c.mention_of ? `<span class="tag member">成员</span>` : ""}${c.pin != null ? `<span class="bstar" title="置顶">${ICON.star}</span>` : ""}${c.issue && c.issue.more ? `<span class="reason">还有 ${c.issue.more} 个</span>` : ""}${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}</span>
     <span class="bprog">${a ? `<span class="bagent ${prog ? "" : "solo"}">${esc(a.name)}</span>` : ""}${prog || (a ? "" : "&nbsp;")}</span></span>
     ${round}<span class="bside"><span class="btopr"><span class="bwhen">${wait ? when(c.last_active) : ""}</span>${more}</span><span class="bwho" title="${esc(side)}">${wait && age ? `${esc(age)}${who ? `<span class="bwho-x"> · ${esc(who)}</span>` : ""}` : esc(side)}</span></span>${btn ? `<span class="bmeta">${btn}</span>` : ""}</a>`;
   if (!replying) return row;
@@ -4798,7 +4800,7 @@ async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
-  const tops = withOpen().filter(c => isTop(c) && !c.archived);
+  const tops = withOpen().filter(c => onBoard(c) && !c.archived);
   // 等你批准、出错停下的总在最上面（#390）。默认「最近回答」：有新回答没看过的（红点）在前，
   // 再按最后回答从新到旧，刚做完的一眼看到；切到「开得最久」按开对话的时间从早到晚，方便清理拖着的老对话
   const old = waitOrder === "old";

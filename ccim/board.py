@@ -46,6 +46,8 @@ def summary(logs, cid):
         sid = (r.get("fork") or {}).get("sid")
         if sid and sid not in s["sids"]:
             s["sids"].append(sid)
+        if t == "user":
+            s["direct"] = not r.get("from_chat")     # 群成员的子对话：最近一轮是用户在子对话里直接说的（#409、#417）
         if t == "user" and not r.get("by"):
             lt = time.localtime(r.get("at") or 0)
             day = time.strftime("%Y-%m-%d", lt)

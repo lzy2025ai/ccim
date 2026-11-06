@@ -723,6 +723,7 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 
 .pop{position:fixed;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(29,34,43,.14);padding:6px;min-width:200px;overflow-y:auto;overscroll-behavior:contain}
 .pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;text-align:left}
+.pop button.ico svg{width:15px;height:15px;flex:none;color:var(--ink-2)}
 .pop a{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;color:inherit;text-decoration:none}
 .pop a:hover{background:var(--sunk)} .pop a > svg{width:13px;height:13px;margin-left:auto;color:var(--faint);flex:none}
 .pop.slash button.on{background:var(--sunk)}
@@ -3337,7 +3338,7 @@ function drawChat(){
       ${c.temp && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
-      ${notCreator() ? "" : `<button class="icon-btn" aria-label="更多" onclick="itemMenu(event,${q(c.id)},true)">${ICON.more}</button>`}
+      ${sideOk(c) ? `<button class="icon-btn" aria-label="更多" title="更多" onclick="headMenu(event)">${ICON.more}</button>` : ""}
     </div>
     ${extNotice(c)}
     ${groupPanel(c)}
@@ -4591,7 +4592,7 @@ let boardReply = null;               // 面板里正在回复的 {id, text}；�
 function boardMenu(e, id){           // 右上角的三点：快捷回复、打开、标为已完成（#273、#390）
   e.preventDefault(); e.stopPropagation();
   const c = withOpen().find(x => x.id === id);
-  pop(e, `<button onclick="closePop();openBoardReply(${q(id)})">快捷回复</button>`
+  pop(e, `<button class="ico" onclick="closePop();openBoardReply(${q(id)})">快捷回复</button>`
     + (c ? `<button onclick="closePop();location.hash=${q(boardHref(c))}">打开</button>` : "")
     + `<button onclick="closePop();finishOpen([${q(id)}])">标为已完成</button>`);
 }
@@ -5621,7 +5622,7 @@ function selTool(){
   if (i < 0) return;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
   const t = document.createElement("div"); t.className = "seltool";
-  const side = !detail.readonly && !detail.mention_of;
+  const side = sideOk(detail);
   t.innerHTML = `<button>${ICON.save}存到知识库</button><button>${ICON.quote}引用</button>${side ? `<button>${ICON.side}侧边对话</button>` : ""}`;
   t.style.left = Math.max(8, rect.left) + "px"; t.style.top = Math.max(8, rect.top - 40) + "px";
   t.addEventListener("mousedown", e => e.preventDefault());
@@ -7647,6 +7648,12 @@ async function openSide(quote){
   drawSide();
   if (fresh) await sideLoad();
   $("#side-in")?.focus();
+}
+// 对话页右上角的「⋯」（#430）：重命名、置顶这些在对话列表那一行的「⋯」里已经有了，这里只放侧边对话
+const sideOk = c => !!c && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
+function headMenu(e){
+  const on = SIDE && detail && SIDE.of === detail.id;
+  pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`, true);
 }
 function closeSide(){
   SIDE = null; drawSide();

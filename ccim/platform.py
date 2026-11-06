@@ -424,8 +424,13 @@ class WebChannel(Channel):
         sid = "sec-" + uuid.uuid4().hex[:10]
         fut = asyncio.get_running_loop().create_future()
         self.secrets[sid] = (chat_id, fut)
-        self._emit(chat_id, self.logs.append(chat_id, {"type": "secret", "id": sid, "command": command, "reason": reason,
-                                                       "state": "pending"}))
+        rec = {"type": "secret", "id": sid, "command": command, "reason": reason, "state": "pending"}
+        self._emit(chat_id, self.logs.append(chat_id, dict(rec)))
+        of = self.group_turn(chat_id)         # 群聊看不到子对话：卡片也放进群聊，不然用户没法授权，只能等到超时
+        if of and people.visible_map(self.platform).get(of):
+            of = None                         # 群里还有别的真人：命令和卡片不给他们看
+        if of:
+            self._emit(of, self.logs.append(of, dict(rec, sub=chat_id)))
         state, pw = "expired", None
         try:
             pw = await asyncio.wait_for(fut, timeout)
@@ -437,6 +442,8 @@ class WebChannel(Channel):
         finally:
             self.secrets.pop(sid, None)
             self._emit(chat_id, self.logs.append(chat_id, {"type": "secret", "id": sid, "state": state}))
+            if of:
+                self._emit(of, self.logs.append(of, {"type": "secret", "id": sid, "state": state}))
             pw = None
 
     def answer_secret(self, sid, password):

@@ -3875,7 +3875,7 @@ function chatAt(e){
   const list = group ? ms.map(agentOf).filter(Boolean)
     : S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
   if (!list.length && !crowded) return toast("还没有建好的 Agent，先去 Agent 页建一个");
-  const mainA = own ? agentOf(own) : null, mainName = mainA ? mainA.name : BASE[detail.base || "claude"];
+  const mainA = own ? agentOf(own) : null, mainName = mainA ? mainA.name : BASE[(detail && detail.base) || "claude"];   // 新对话页还没有 detail
   const callMain = crowded ? `<button data-main="1">${mainA ? seal(mainA, "sm", false) : iconOf(detail, null, "sm")}<span><div>${esc(mainName)}</div></span>${chatCall ? `<span class="ck">✓</span>` : ""}</button>` : "";
   const all = group && list.length > 1 ? `<button data-all="1"><span><div>所有 Agent</div><div class="desc">${list.length} 个 Agent</div></span></button>` : "";
   const humans = folks.length ? `<div class="sec">@ 群里的人</div>` + folks.map(h =>

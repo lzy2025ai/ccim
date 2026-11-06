@@ -64,6 +64,7 @@ class Turn(unittest.TestCase):
             chat = DshChat.__new__(DshChat)
             chat.b, chat.chat_id, chat.chat_type = B(), "c", "p2p"
             chat.session_id, chat.fork_from, chat.stopping, chat.proc, chat.turn = None, None, False, None, None
+            chat.as_fence = None
             chat.ccim_env = lambda: {"PATH": os.environ["PATH"]}
 
             async def tick(t, r): await asyncio.sleep(3600)

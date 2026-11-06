@@ -16,7 +16,7 @@ import asyncio, json, logging, os, shutil, time
 from .codex import NOTE, TOOL_WAIT, CodexChat
 from .progress import describe_tool, short
 from . import devices, registry
-from .session import SKILL_SHARE, Turn, _can_sync, _tools_ready, guest_of, prompt_note, role_note
+from .session import SKILL_SHARE, Turn, _can_sync, _tools_ready, prompt_note, role_note
 
 log = logging.getLogger("ccim.dsh")
 
@@ -124,7 +124,7 @@ class DshChat(CodexChat):
                 raise RuntimeError("这台电脑上还没装 DeepSeek Harness")
             if not key:
                 raise RuntimeError("还没填 DeepSeek API Key，去「设置」里填好再用")
-            if guest_of(self.b):
+            if self._guest():                 # 按这一轮说话的人算（#419）
                 raise RuntimeError("这台电脑现在只能用 Claude Code，去 Agent 设置里把底座换成 Claude Code")
             await _tools_ready()
             env = self.ccim_env()

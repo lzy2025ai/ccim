@@ -4452,8 +4452,10 @@ function withOpen(){                  // 整体状态里的对话加上「等你
   return S.chats.concat(((boardStats || {}).open || []).filter(c => !seen.has(c.id)));
 }
 const REASON = {ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
-// 等你处理（#390）：回答过、没在干活、没标完成的都在，看过也不走；定时任务的对话你没在里面说过话的不算（后台给 answered）
-const isOpen = c => !working(c) && !c.archived && (c.attention === "ask" || c.attention === "err" || (c.answered ?? !!c.attention));
+// 等你处理（#390）：回答过、没在干活、没标完成的都在，看过也不走；定时任务的对话你没在里面说过话的不算（后台给 answered）。
+// 没升级的电脑不给 answered（#413）：有回答摘要、不是定时任务的按回答过算
+const isOpen = c => !working(c) && !c.archived && (c.attention === "ask" || c.attention === "err"
+  || (c.answered ?? (!!c.attention || !c.schedule && !!c.brief)));
 const openAt = c => c.created || c.last_active || "";
 function openAge(c){                  // 开了多久
   const t = openAt(c) && new Date(openAt(c).replace(" ", "T"));

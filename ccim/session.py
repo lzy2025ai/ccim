@@ -697,7 +697,7 @@ class Chat:
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
-                               "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material",   # 只读
+                               "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material", "mcp__ccim__overview",   # 只读
                                "mcp__ccim__send_to_chat"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(hooks=[self._pre_tool])],
@@ -1280,6 +1280,7 @@ class Chat:
             if _searchable(chat):
                 tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
                 tools.append(_review_tool(chat, pf))   # 复盘：按日期范围拉所有对话的材料（#364）
+                tools.append(_overview_tool(chat, pf))   # 全局：等你处理、在干活、今天做完（#426）
                 if not guest_of(chat.b) and not chat.b.entry.get("lent"):
                     tools += _app_tools(chat, pf)      # 应用的数据接口、在对话右侧打开（#103）
         if _can_work(chat, pf) and not fenced:
@@ -1701,6 +1702,23 @@ def _review_tool(chat, pf):
         return {"content": [{"type": "text", "text": text}]}
 
     return review_material
+
+
+def _overview_tool(chat, pf):
+    """全局（#426）：这台电脑上用户的对话里，等你处理、在干活、今天做完的，和任务面板一个口径。"""
+    from . import board, share
+
+    @tool("overview", "看全局：这台电脑上用户所有的对话里，哪些等用户处理（等批准、出错停下、回答完还没标完成）、"
+          "哪些在干活（哪个 Agent、干了多久、正在做哪一步、卡住多久）、今天标为已完成的。"
+          "用户问现在都在忙什么、有什么要我处理、某件事做到哪了时先用它；每条带链接和 open_chat 的编号，要细看再 open_chat。",
+          {"type": "object", "properties": {}})
+    async def overview(args):
+        owners = share.owner_map(pf)
+        acct = owners.get(chat.chat_id)
+        text = board.overview(pf, lambda cid: owners.get(cid) == acct, acct, chat.chat_id)
+        return {"content": [{"type": "text", "text": text}]}
+
+    return overview
 
 
 def _app_tools(chat, pf):

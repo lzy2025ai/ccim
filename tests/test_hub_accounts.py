@@ -89,6 +89,55 @@ class HubAccountTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.member("太短", password="short")
 
+    def test_remember_device(self):
+        """记住这台设备（#421）：对得上的设备不用动态码；别的账号、改了密码、取消后都要重新输。"""
+        osec = self.owner()
+        aid, pw = self.member("家人")
+        dev = self.hub.remember_device(hubserver.OWNER)
+        tok = self.hub.login("1.1.1.1", "admin", "owner-password", "", dev)
+        self.assertEqual(self.hub.session_account(tok), hubserver.OWNER)
+        with self.assertRaises(hubserver.NeedCode):
+            self.hub.login("1.1.1.1", "admin", "owner-password", "", "not-a-device")
+        with self.assertRaises(PermissionError):                  # 记住了设备，密码照样要对
+            self.hub.login("1.1.1.1", "admin", "wrong-password", "", dev)
+        self.assertFalse(self.hub.device_ok(dev, aid))            # 别的账号用不了
+        self.assertEqual(self.hub.account_list()["my_devices"], 1)
+        self.hub.account_save(hubserver.OWNER, {"password": "owner-password-2"})
+        with self.assertRaises(hubserver.NeedCode):
+            self.hub.login("1.1.1.1", "admin", "owner-password-2", "", dev)
+        dev = self.hub.remember_device(hubserver.OWNER)
+        self.hub.account_save(hubserver.OWNER, {"forget_devices": True})
+        self.assertFalse(self.hub.device_ok(dev, hubserver.OWNER))
+        self.assertEqual(self.hub.account_list()["my_devices"], 0)
+
+    def test_remember_device_cookie(self):
+        """登录时勾了记住：发一个只给 /auth 用的 cookie，下次登录带上它就不用动态码。"""
+        osec = self.owner()
+        self.serve(hubserver.OWNER)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+        def login(body, cookie=""):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+            c.request("POST", "/auth/login", body=json.dumps(body).encode(),
+                      headers={"X-CCIM": "1", "Host": "127.0.0.1", "Content-Type": "application/json", "Cookie": cookie})
+            r = c.getresponse()
+            out = r.status, r.headers.get_all("Set-Cookie") or []
+            r.read()
+            c.close()
+            return out
+        st, cookies = login({"name": "admin", "password": "owner-password", "code": code(osec, 1), "remember": True})
+        self.assertEqual(st, 200)
+        dev = next(x for x in cookies if x.startswith("ccim_dev="))
+        self.assertIn("Path=/auth", dev)
+        self.assertIn("HttpOnly", dev)
+        st, _ = login({"name": "admin", "password": "owner-password"}, dev.split(";")[0])
+        self.assertEqual(st, 200)
+        st, _ = login({"name": "admin", "password": "owner-password"})
+        self.assertEqual(st, 401)
+
     def test_disable_expire_and_reset(self):
         self.owner()
         aid, pw = self.member("朋友")

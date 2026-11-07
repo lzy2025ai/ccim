@@ -2178,7 +2178,7 @@ class Platform:
         """各 Agent 在飞书、微信里的对话（terminal=True 时加上终端、桌面端里开的）。网页里接着聊过的不重复列。"""
         mine = set()                          # 网页对话自己的会话（接着别处聊出来的分支有新编号，原来那个照常列出）
         for c in self.chats().values():
-            mine |= {c.get("session_id"), c.get("codex_session_id")}
+            mine |= {c.get("session_id"), c.get("codex_session_id")} | set(c.get("left_sids") or [])   # 退回丢下的也不列（#434）
         rows = []
         for a_id, a in agents.all_agents().items():
             if aid and a_id != aid:
@@ -2520,6 +2520,8 @@ class Platform:
         if not plan:
             raise Problem("这条消息退不回去。")
         files_at, sid, at = plan
+        left = {m.get("session_id"), m.get("codex_session_id")} | {(r.get("fork") or {}).get("sid") for r in rows[index:]}
+        left -= {m.get("origin")}             # 接着终端、桌面端聊的：原来那个对话照常列
         c = self._bridge(cid).chat(cid, "p2p")
         try:
             await c.rewind(files_at if files else None, sid, at)
@@ -2529,8 +2531,22 @@ class Platform:
             raise Problem(f"退回失败：{e}")
         self.channel.logs.truncate(cid, index)
         self.channel.progress_of.pop(cid, None)
+        self._leave_sids(cid, left)
         r = rows[index]
         return {"text": r.get("text") or "", "files": r.get("files") or []}
+
+    def _leave_sids(self, cid, sids):
+        """退回丢下的会话（#434）：还留在 Agent 的工作目录里，记在对话上，Agent 的列表不再把它们当终端里的对话列出来。"""
+        chats = self.chats()
+        m = chats.get(cid)
+        if not m:
+            return
+        now = {m.get("session_id"), m.get("codex_session_id")}
+        old = m.get("left_sids") or []
+        add = [x for x in sids if x and x not in now and x not in old]
+        if add:
+            m["left_sids"] = (old + add)[-50:]
+            self.store.write(chats)
 
     async def peer_task(self, cid, aid, prompt, title, project, kind=None, of=None, shown=None, depth=0, side=False, of_machine=None):
         """别的电脑上的项目、群聊交给这台电脑的 Agent：在这里开（或接着）一个对话做，马上回一个编号，那边再来问结果。"""

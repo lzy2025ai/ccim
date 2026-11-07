@@ -4,10 +4,13 @@
 记到 ~/.ccim/rate.json；/usage 的原始输出里也有 Current session / Current week 两行，新开的会话有时还没拿到就没有。
 明细：用一个临时会话跑 Claude Code 自带的 /usage，按已知的句式翻成中文，认不出的原样保留。
 额度要在会话里发过请求才有：缓存超过 10 分钟就先用 haiku 问一句最短的话再跑 /usage。
-"""
-import json, os, re, time
 
-from . import registry
+Codex（#436）：没有接口，额度和上下文都读它的会话记录（~/.codex/sessions 下 rollout 文件里的 token_count 事件）。
+格式不是公开约定，读不到就当没有。
+"""
+import glob, json, os, re, time
+
+from . import history, registry
 
 WINDOWS = {"five_hour": "5 小时额度", "seven_day": "每周额度", "seven_day_opus": "每周额度（Opus）",
            "seven_day_sonnet": "每周额度（Sonnet）"}
@@ -55,6 +58,9 @@ def limit_lines(data=None):
         w = (data.get("windows") or {}).get(key)
         if not w or w.get("utilization") is None:
             continue
+        if w.get("resetsAt") and w["resetsAt"] < time.time():
+            out.append(f"**{name}**：已在 {_when(w['resetsAt'])} 重置")
+            continue
         line = f"**{name}**：已用 {round(w['utilization'] * 100)}%"
         if w.get("resetsAt"):
             line += f"，{_when(w['resetsAt'])} 重置"
@@ -62,9 +68,9 @@ def limit_lines(data=None):
     return out
 
 
-def short_status():
+def short_status(data=None):
     """给 /status 用的一行：「5 小时已用 5% · 每周已用 14%」。数据旧了注明是什么时候的；过了重置时间的不显示旧数字。"""
-    data = cached()
+    data = data or cached()
     if not data:
         return None
     w = data.get("windows") or {}
@@ -114,6 +120,87 @@ async def refresh(path, timeout=30):
         await asyncio.wait_for(ask(), timeout)
     except Exception:
         pass
+
+
+# ---------- Codex ----------
+
+CODEX_TAIL = 1 << 20       # token_count 在每次请求之后，读文件末尾就够了
+CODEX_FILES = 20           # 最近几个会话都没带额度（比如用 API Key 登录）就不再往前翻
+CODEX_WINDOWS = {300: "five_hour", 10080: "seven_day"}    # 窗口长度（分钟）→ 和 Claude 一样的键
+
+
+def _token_counts(path):
+    """rollout 文件末尾的 token_count 事件，新的在前。"""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - CODEX_TAIL))
+            lines = f.read().split(b"\n")
+    except OSError:
+        return
+    for line in reversed(lines):
+        if b'"token_count"' not in line:
+            continue
+        try:
+            p = json.loads(line).get("payload")
+        except (ValueError, AttributeError):
+            continue                          # 第一行可能被截断
+        if isinstance(p, dict) and p.get("type") == "token_count":
+            yield p
+
+
+def codex_context(thread_id):
+    """这个 Codex 对话的上下文占用，格式和 Claude 的一样；读不到返回 None。"""
+    path = history.codex_file(thread_id)
+    for p in _token_counts(path) if path else ():
+        info = p.get("info") or {}
+        used, limit = (info.get("last_token_usage") or {}).get("total_tokens"), info.get("model_context_window")
+        if used is not None and limit:
+            return {"used": used, "max": limit, "pct": round(used / limit * 100, 1), "at": registry.now()}
+    return None
+
+
+def _mtime(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0
+
+
+def _codex_windows(rate):
+    if rate.get("limit_id") not in (None, "codex"):
+        return {}
+    out = {}
+    for w in (rate.get("primary"), rate.get("secondary")):
+        key = CODEX_WINDOWS.get((w or {}).get("window_minutes"))
+        if key and w.get("used_percent") is not None:
+            out[key] = {"utilization": w["used_percent"] / 100, "resetsAt": w.get("resets_at")}
+    return out
+
+
+def codex_limits():
+    """最近一次 Codex 请求带回来的额度，形状和 rate.json 一样。账号的额度不分对话：桌面版、终端里用的也算，所以看最近改过的
+    记录，不看这个对话的（老对话接着聊时记录还在当初的日期目录下，按目录排不行）。没有返回 None。"""
+    files = glob.glob(os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl"))
+    for path in sorted(files, key=_mtime, reverse=True)[:CODEX_FILES]:
+        for p in _token_counts(path):
+            wins = _codex_windows(p.get("rate_limits") or {})
+            if wins:
+                return {"windows": wins, "at": _mtime(path)}
+    return None
+
+
+def codex_status():
+    data = codex_limits()
+    return short_status(data) if data else None
+
+
+def codex_report():
+    data = codex_limits()
+    if not data:
+        return "额度暂时查不到，聊一句之后再发 /usage 试试。"
+    age = time.time() - data["at"]
+    return "\n".join(limit_lines(data) + ([f"这是{_ago(age)}的数据。"] if age > STALE else []))
 
 
 # ---------- 明细翻译 ----------

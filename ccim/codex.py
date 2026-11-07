@@ -13,7 +13,7 @@ thread.started（对话编号）→ turn.started → item.started / item.complet
 import asyncio, glob, json, logging, os, re, signal, sys, time, tomllib
 
 from .progress import describe_tool, short
-from . import devices, registry, share
+from . import devices, registry, share, usage
 from .session import SKILL_SHARE, Chat, Turn, _can_sync, _tools_ready, guest_of, prompt_note, role_note
 
 log = logging.getLogger("ccim.codex")
@@ -150,6 +150,12 @@ class CodexChat(Chat):
         m, e = defaults(self.b.path)
         return self.model or m or "默认", self.effort or e or "默认", bool(self.model), bool(self.effort)
 
+    async def _context(self):
+        """这一轮的 exec 退出后记录已写完。要在 _finish 之前：群聊转回主对话时带的是这里记下的占用。"""
+        ctx = self.session_id and await asyncio.to_thread(usage.codex_context, self.session_id)
+        if ctx:
+            self._save_ctx(ctx)
+
     # ----- 一轮 -----
 
     async def _turn_inner(self, prompt, reply_to):
@@ -245,6 +251,7 @@ class CodexChat(Chat):
             t.steps = [s for s in t.steps if s != RECONNECT]   # 已经回答了，重连只是过程，不留在卡片上
         if result:
             result = await self._send_files(result)
+        await self._context()
         await self._finish(t, result, error, reply_to)
 
     async def _send_files(self, text):

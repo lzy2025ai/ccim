@@ -37,6 +37,7 @@ CODEX_HELP = """\
 /diary 内容　记一笔日记，不打断手头的事
 /restart　重启这个机器人
 /status　当前状态
+/usage　额度还剩多少
 /model 名字　换模型；/model 默认 回到默认
 /effort 等级　思考深度：minimal、low、medium、high、xhigh；/effort 默认 回到默认
 /help　显示这段说明
@@ -68,8 +69,12 @@ def _setting(chat):
     return f"**模型**：{_model_name(m)}　**思考深度**：{e}{follow}"
 
 
-async def _quota(path):
+async def _quota(path, agent=None):
     from . import usage
+    if agent == "codex":
+        return await asyncio.to_thread(usage.codex_status)
+    if agent == "dsh":
+        return None
     if usage.stale():                         # 缓存只在对话跑过一轮时更新，旧了先刷新
         await usage.refresh(path)
     return usage.short_status()
@@ -128,8 +133,9 @@ async def handle(bridge, chat, text, reply_to, sender=None):
                       else f"已记到 {r['date']} 的日记（{r['time']}）。")
         return True
 
-    codex = getattr(chat, "agent", None) in ("codex", "dsh")
-    if codex and cmd in ("/resume", "/usage"):
+    agent = getattr(chat, "agent", None)
+    codex = agent in ("codex", "dsh")
+    if cmd == "/resume" and codex or cmd == "/usage" and agent == "dsh":
         await say(f"这个项目用的是 {'Codex' if chat.agent == 'codex' else 'DeepSeek Harness'}，没有这个功能。")
         return True
     if cmd == "/help":
@@ -148,7 +154,7 @@ async def handle(bridge, chat, text, reply_to, sender=None):
             runtime.schedule_restart(bridge.home, delay=3, target=arg.lower() if arg.lower() in ("dev", "stable") else None)
     elif cmd == "/usage":
         from . import usage
-        await say(await usage.report(bridge.path))
+        await say(await asyncio.to_thread(usage.codex_report) if agent == "codex" else await usage.report(bridge.path))
     elif cmd == "/stop":
         await say("正在停下。" if await chat.stop() else "现在没有在做的事。")
     elif cmd in ("/skip", "/跳过"):
@@ -166,8 +172,8 @@ async def handle(bridge, chat, text, reply_to, sender=None):
         lines = [f"**项目**：{bridge.name}" + ("（Codex）" if codex else ""),
                  f"**状态**：{state}" + (f"，还有 {waiting} 条排队" if waiting else ""),
                  _setting(chat),
-                 *([f"**额度**：{q}"] if not codex and (q := await _quota(bridge.path)) else []),
-                 *([f"**上下文**：{_ctx(c)}"] if not codex and (c := bridge.saved(chat.chat_id).get("ctx")) else []),
+                 *([f"**额度**：{q}"] if (q := await _quota(bridge.path, agent)) else []),
+                 *([f"**上下文**：{_ctx(c)}"] if agent != "dsh" and (c := bridge.saved(chat.chat_id).get("ctx")) else []),
                  f"**对话**：{chat.session_id[:8] if chat.session_id else '新对话'}"]
         await say("\n".join(lines))
     elif cmd in ("/model", "/effort") and arg.lower() in ("默认", "default"):

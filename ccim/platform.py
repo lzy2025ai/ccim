@@ -2880,7 +2880,7 @@ def _handler(pf):
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
                 "/api/slash": lambda: {"skills": slash_skills(q, acct)},          # 输入 / 时列出的 Skill（#381）
-                "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or ""), timeout=90)},   # 新对话页的 /usage
+                "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or "", q.get("base")), timeout=90)},   # 新对话页的 /usage
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
                 "/api/diary/home": lambda: pf.diary_home_view(),         # 日记存在哪台电脑（#376）
                 "/api/diary/info": lambda: {"path": diary_mod.root(), "apps": diary_mod.apps()},   # 这台上的日记文件夹、能用什么打开
@@ -3172,8 +3172,10 @@ def slash_skills(q, acct):
     return slash.listing(os.path.expanduser(q.get("dir") or ""), a, acct or (a or {}).get("account"))
 
 
-async def usage_report(d):
+async def usage_report(d, base=None):
     from . import usage
+    if base == "codex":
+        return await asyncio.to_thread(usage.codex_report)
     d = os.path.expanduser(d)
     return await usage.report(d if d and os.path.isdir(d) else os.path.expanduser("~"))
 

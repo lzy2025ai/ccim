@@ -238,7 +238,7 @@ Claude Code 自己的设置（项目的 `.claude/settings*.json`，其次是 `~/
 
 - 它干活时再发的消息，会等手头这件做完再处理（Codex 不接受中途补充）；想停下用 `/stop`
 - 模型、思考深度、权限跟随 Codex 自己的设置（`~/.codex/config.toml`），项目说明写在 `AGENTS.md`
-- 没有 `/resume`、`/usage`，也不能从桌面端转过来（handoff）
+- 没有 `/resume`，也不能从桌面端转过来（handoff）；`/usage` 只有额度，没有用量明细
 
 ## 用微信
 

@@ -3911,7 +3911,7 @@ const SLASH = [
   ["/stop", "停下正在做的事"],
   ["/skip", "某一步卡住了：结束这一步，接着做"],
   ["/status", "当前状态"],
-  ["/usage", "额度和用量", "", "claude", true],
+  ["/usage", "额度和用量", "", "claude codex", true],
   ["/model", "换模型", "名字"],
   ["/effort", "换思考深度", "等级"],
   ["/review", "复盘：写下复盘哪段时间、看什么", "要求", "", true],   // 第五项：新对话页也能用（#364）
@@ -3941,7 +3941,7 @@ function slashTyped(again){
   const old = document.querySelector(".pop.slash:not(.ref)");
   const w = m ? m[1].toLowerCase() : "", c = slashCtx();
   const rank = n => (n.startsWith(w) ? 0 : 1);
-  const cmds = m ? SLASH.filter(([k, , , only, fresh]) => k.slice(1).includes(w) && (detail ? true : fresh) && (!only || c.base === only))
+  const cmds = m ? SLASH.filter(([k, , , only, fresh]) => k.slice(1).includes(w) && (detail ? true : fresh) && (!only || only.split(" ").includes(c.base)))
     .sort((x, y) => rank(x[0].slice(1)) - rank(y[0].slice(1))) : [];
   const sks = m ? slashSkills().filter(x => x.name.toLowerCase().includes(w)).sort((x, y) => rank(x.name.toLowerCase()) - rank(y.name.toLowerCase())) : [];
   const all = cmds.length + sks.length;
@@ -4279,8 +4279,8 @@ async function startTemp0(v, files){
     if (await sendDiary("", v, [], m0, false, files)) { $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); pendingFiles = []; saveFiles(); drawPending(); drawComposerState(); }
     return;
   }
-  if (/^\/usage\s*$/i.test(v) && draft.base === "claude") {
-    const r = await act(() => api(`/api/usage?dir=${encodeURIComponent(draft.dir || "")}`, undefined, m0));
+  if (/^\/usage\s*$/i.test(v) && draft.base !== "dsh") {
+    const r = await act(() => api(`/api/usage?dir=${encodeURIComponent(draft.dir || "")}&base=${encodeURIComponent(draft.base || "")}`, undefined, m0));
     $("#input").value = ""; draftText = ""; localStorage.removeItem(DRAFT + "new"); drawComposerState();
     return dialog("额度和用量", `<div class="answer">${md(r.text || "")}</div>`);
   }

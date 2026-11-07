@@ -914,9 +914,12 @@ class Chat:
         if u and u.get("maxTokens"):
             ctx = {"used": u.get("totalTokens") or 0, "max": u["maxTokens"], "pct": u.get("percentage") or 0,
                    "compact": u.get("autoCompactThreshold"), "at": registry.now()}
-            self.b.save(self.chat_id, ctx=ctx)
-            if getattr(self.b.channel, "context", None):
-                self.b.channel.context(self.chat_id, ctx)
+            self._save_ctx(ctx)
+
+    def _save_ctx(self, ctx):
+        self.b.save(self.chat_id, ctx=ctx)
+        if getattr(self.b.channel, "context", None):
+            self.b.channel.context(self.chat_id, ctx)
 
     async def _finish(self, t, result, error, reply_to):
         """这一轮结束：先发回答，再收尾工作中卡片。Claude Code 和 Codex 共用。"""

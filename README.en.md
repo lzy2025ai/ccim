@@ -239,7 +239,7 @@ It works much like Claude Code, with a few differences:
 
 - Messages sent while it's working wait until the current task is done (Codex doesn't take mid-task additions); use `/stop` to stop
 - Model, effort level and permissions follow Codex's own settings (`~/.codex/config.toml`); project instructions go in `AGENTS.md`
-- No `/resume`, `/usage`, or handoff from the desktop
+- No `/resume` or handoff from the desktop; `/usage` shows quota only, no breakdown
 
 ## Using WeChat
 

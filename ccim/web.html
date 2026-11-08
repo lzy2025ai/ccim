@@ -1704,6 +1704,124 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
 }
 .ws-ask{display:none}
 @media (max-width:760px){#main.ws-file .ws-ask{display:flex}}
+/* ---------- 塔台（#438）：今天各 Agent 的时间轴；右侧抽屉看当前对话、直接批准和回复；手机上是卡片列表 ---------- */
+.tower{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--paper)}
+.tw-head{display:flex;align-items:flex-end;gap:28px;padding:22px 28px 14px}
+.tw-head h1{font:600 24px/1.2 var(--song);margin:0}
+.tw-date{font-size:13px;color:var(--muted);margin-top:4px}
+.tw-head .sp{flex:1}
+.tw-stat{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:56px}
+.tw-stat b{font:600 26px/1.1 var(--song);color:var(--ink-2)}
+.tw-stat.wait b{color:var(--huang)} .tw-stat.work b{color:var(--lu)}
+.tw-stat span{font-size:12px;color:var(--muted);white-space:nowrap}
+.tw-body{flex:1;min-height:0;display:flex}
+.tw-main{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 28px 18px}
+.tw-board{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;--name:250px}
+.tw-axis{display:grid;grid-template-columns:var(--name) 1fr;border-bottom:1px solid var(--line);font-size:12px;color:var(--faint);height:34px;align-items:center}
+.tw-axis .cnt{padding:0 16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-track{position:relative;height:100%;margin-right:18px}
+.tw-hr{position:absolute;top:0;bottom:0;transform:translateX(-50%);display:flex;align-items:center;font:500 11.5px var(--mono);color:var(--muted)}
+.tw-scroll{flex:1;min-height:0;overflow:auto;position:relative}
+.tw-grp{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12px;color:var(--muted);background:#FAFAF7;border-bottom:1px solid var(--line)}
+.tw-grp i{width:7px;height:7px;border-radius:50%;background:var(--ok)} .tw-grp.off i{background:var(--faint)}
+.tw-grp .note{margin:0 0 0 auto;padding:0;max-width:none;font-size:12px;color:var(--faint)}
+.tw-row{display:grid;grid-template-columns:var(--name) 1fr;align-items:stretch;min-height:56px;border-bottom:1px solid var(--line);cursor:pointer;width:100%;text-align:left}
+.tw-row:hover{background:#FAFAF7}
+.tw-row.on{background:var(--qing-soft)}
+.tw-row.s-wait{box-shadow:inset 3px 0 0 var(--huang)}
+.tw-who{display:flex;align-items:center;gap:10px;padding:8px 12px 8px 16px;min-width:0}
+.tw-who .t{min-width:0;display:flex;flex-direction:column}
+.tw-who .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-who .st{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st.s-wait{color:#8A6A12;font-weight:500} .st.s-work{color:var(--lu)} .st.s-err{color:var(--bad)}
+.tw-lane{position:relative;margin-right:18px}
+.tw-b{position:absolute;top:50%;height:20px;margin-top:-10px;border-radius:4px;min-width:3px;overflow:hidden;white-space:nowrap;
+  font-size:11px;line-height:20px;padding:0 6px;color:#fff;font-weight:500;font-style:normal;text-overflow:clip}
+.tw-b.done,.tw-b.stopped{background:#C3C8BF;color:var(--ink-2)}
+.tw-b.work{background:var(--lu)}
+.tw-b.error{background:#C3C8BF;color:var(--ink-2);box-shadow:inset -4px 0 0 var(--zhu)}
+.tw-b.wait{background:repeating-linear-gradient(-45deg,#E2B94B 0 6px,#EDCB6E 6px 12px);color:#5E4708;z-index:1}
+.tw-b.plan{background:none;border:1.3px dashed var(--faint);color:var(--muted);height:18px;margin-top:-9px;line-height:15px;font-weight:400;border-radius:4px}
+.tw-b.thin{padding:0}
+.tw-b.plan.edge{left:auto;right:0;max-width:40%;text-overflow:ellipsis;border-right-style:solid;border-top-right-radius:0;border-bottom-right-radius:0}
+.tw-mini .tw-b.plan.edge{width:8px}
+.tw-now{position:absolute;top:0;bottom:0;width:0;border-left:1.5px solid var(--ink);pointer-events:none;z-index:2}
+.tw-now span{position:absolute;top:0;left:-21px;width:42px;text-align:center;font:600 10.5px/16px var(--mono);color:#fff;background:var(--ink);border-radius:3px}
+.tw-nowlayer{position:absolute;top:0;left:var(--name);right:18px;pointer-events:none;z-index:2}
+.tw-idle{display:flex;align-items:center;gap:6px;width:100%;padding:9px 16px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+.tw-idle:hover{color:var(--ink);background:#FAFAF7} .tw-idle svg{width:14px;height:14px}
+.tw-empty{padding:40px 20px;text-align:center;color:var(--faint);font-size:13px}
+.tw-legend{display:flex;flex-wrap:wrap;gap:18px;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.tw-legend span{display:inline-flex;align-items:center;gap:6px}
+.tw-legend i{display:inline-block;width:16px;height:9px;border-radius:2px}
+.tw-legend i.work{background:var(--lu)} .tw-legend i.wait{background:repeating-linear-gradient(-45deg,#E2B94B 0 3px,#EDCB6E 3px 6px)}
+.tw-legend i.done{background:#C3C8BF} .tw-legend i.error{background:var(--zhu)} .tw-legend i.plan{border:1.3px dashed var(--faint)}
+/* 右侧抽屉 */
+.tw-drawer{width:420px;flex:none;display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);min-height:0}
+.tw-dhead{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.tw-dhead .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.tw-dhead .nm{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-dhead .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-dhead .x{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted)} .tw-dhead .x:hover{background:var(--sunk);color:var(--ink)}
+.tw-dhead .x svg{width:16px;height:16px}
+.tw-dhead a.btn{text-decoration:none;color:var(--ink);flex:none}
+.tw-dbody{flex:1;min-height:0;overflow:auto;padding:16px 18px}
+.tw-steps{list-style:none;margin:0;padding:0;position:relative}
+.tw-steps li{display:grid;grid-template-columns:44px 14px minmax(0,1fr);gap:8px;align-items:start;padding:5px 0;font-size:13px;line-height:20px;position:relative}
+.tw-steps li .tm{font:11.5px/20px var(--mono);color:var(--faint);text-align:right}
+.tw-steps li .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--panel);margin-top:5.5px;justify-self:center;position:relative;z-index:1}
+.tw-steps li.cur .dot{border-color:var(--lu);background:var(--lu)} .tw-steps li.ask .dot{border-color:var(--huang);background:var(--huang)}
+.tw-steps li.err .dot{border-color:var(--zhu);background:var(--zhu)}
+.tw-steps::before{content:"";position:absolute;left:58.5px;top:12px;bottom:12px;width:1px;background:var(--line)}
+.tw-steps li .tx{min-width:0;overflow-wrap:anywhere;color:var(--ink-2)}
+.tw-steps li .tx b{font-weight:600;color:var(--ink)}
+.tw-steps li.more .tx{color:var(--faint)}
+.tw-ans{margin:10px 0 0 74px;font-size:13px;color:var(--ink-2);max-height:220px;overflow:hidden;position:relative}
+.tw-ans::after{content:"";position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(transparent,var(--panel))}
+.tw-ans.short::after{content:none}
+.tw-ans .answer{font-size:13px}
+.tw-card{margin:12px 0 0 74px}
+.tw-card .approve{margin:0}
+.tw-card .approve pre{color:var(--ink);overflow:auto}
+.tw-card .since{font-size:12px;color:#8A6A12;margin:2px 0 8px}
+.tw-dfoot{border-top:1px solid var(--line);padding:12px 84px 12px 14px}
+.tw-dfoot .box{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line-strong);border-radius:12px;padding:8px 8px 8px 12px;background:var(--panel)}
+.tw-dfoot .box:focus-within{border-color:var(--ink-2)}
+.tw-dfoot textarea{flex:1;border:0;outline:0;resize:none;background:none;min-height:22px;max-height:140px;line-height:22px}
+.tw-dfoot .send{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--qing);color:#fff;flex:none}
+.tw-dfoot .send svg{width:16px;height:16px}
+.tw-dfoot .send[disabled]{background:var(--line-strong);cursor:default}
+.tw-dnote{color:var(--faint);font-size:13px;padding:6px 0}
+/* 手机：卡片列表 */
+.tw-cards{flex:1;min-height:0;overflow:auto;padding:0 12px 20px}
+.tw-sec{font-size:12px;color:var(--muted);margin:14px 4px 8px;display:flex;align-items:center;gap:6px}
+.tw-sec .mach{margin-left:auto;color:var(--faint)}
+.tw-cd{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.tw-cd.s-wait{border-color:#E2B94B;background:#FFFBEF;box-shadow:0 0 0 1px #E2B94B}
+.tw-cd .top{display:flex;align-items:center;gap:10px;min-width:0}
+.tw-cd .t{min-width:0;display:flex;flex-direction:column}
+.tw-cd .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-cd .st{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-mini{position:relative;height:10px;margin-top:10px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.tw-mini .tw-b{height:10px;margin-top:-5px;border-radius:0;padding:0;font-size:0}
+.tw-mini .tw-b.plan{height:8px;margin-top:-4px;background:none}
+.tw-mini .tw-now{border-left-width:1.5px}
+.tw-cd .acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.tw-cd .acts .btn{justify-content:center;padding:9px 6px}
+.tw-cd .acts .btn.ink{background:var(--ink);border-color:var(--ink);color:#fff}
+.tw-cd .ask{font:12px/1.5 var(--mono);color:var(--ink-2);background:var(--panel);border:1px solid #EFE5C8;border-radius:8px;padding:6px 8px;margin-top:10px;
+  max-height:3em;overflow:hidden;white-space:pre-wrap;word-break:break-all}
+@media (max-width:1180px){.tw-drawer{width:360px}.tw-board{--name:200px}}
+@media (max-width:760px){
+  .tower{background:var(--paper)}
+  .tw-head{padding:16px 16px 6px;gap:18px;align-items:center}
+  .tw-head h1{font-size:22px}
+  .tw-stat{min-width:44px} .tw-stat b{font-size:22px}
+  .tw-drawer{position:fixed;inset:0;z-index:30;width:auto;border-left:0;padding-top:env(safe-area-inset-top)}
+  .tw-dfoot{padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+  .tw-dfoot textarea{font-size:16px}
+  .rail a{white-space:nowrap;min-width:0;letter-spacing:-.3px}
+}
 </style>
 
 </head>
@@ -1718,6 +1836,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
     <a href="#/apps" data-nav="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
     <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
+    <a href="#/tower" data-nav="tower"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5h7M8 12h10M5 17.5h6M15 17.5h4"/><path d="M14 3.5v17" stroke-width="1.4" stroke-dasharray="1.5 2"/></svg>塔台</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
     <a href="#/settings" data-nav="settings" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
@@ -2186,6 +2305,7 @@ function afterState(){
   }
   seeOpen(); renderList(); drawAttention();
   if (current.view === "board") renderBoard(true);
+  if (current.view === "tower" && !TW.parts) renderTower();
   const c = detail && chatById(detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
 }
@@ -2375,6 +2495,7 @@ function connectEvents(again){
 }
 function onEvent(ev){
     if (!EMBED) pocketForward(ev);
+    towerEvent(ev);
     if (ev.type === "idle") { refreshSoon(); return; }
     if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
     if (ev.type === "group") {            // 群成员、群聊说明改了（#15）
@@ -2557,7 +2678,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board" || current.view === "apps");
+    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -2586,6 +2707,7 @@ function route(){
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "apps") current.id ? openApp(current.id, current.sub) : renderApps();
   else if (current.view === "board") renderBoard();
+  else if (current.view === "tower") renderTower();
   else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
@@ -2626,7 +2748,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board" || current.view === "skills" || current.view === "apps") return;
+  if (current.view === "board" || current.view === "skills" || current.view === "apps" || current.view === "tower") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -4524,6 +4646,293 @@ async function markSeen(id, force){
   if (c) { if (c.attention !== "ask") c.attention = null; c.unread = false; drawAttention(); }
   try { await api("/api/chat/seen", {id}, ownerOf(id) || ctxMachine); } catch {}
 }
+// ================= 塔台（#438）：今天各 Agent 的时间轴 =================
+// 数据逐台取 /api/tower 再合起来（和任务面板一样）；推送来了节流着重取，抽屉里的对话单独取 /api/chat。
+let TW = {parts: null, at: 0, sel: null, auto: true, open: {}, det: null, reply: "", btns: [], busy: new Set(), loading: null, t: 0, dt: 0};
+const twNow = () => Date.now() / 1000;
+const twHM = ts => { const d = new Date(ts * 1000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+function twDur(sec){ const m = Math.round(sec / 60); return m < 60 ? `${m} 分` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; }
+function twLine(t){ return String(t || "").split("\n").map(x => x.trim()).find(x => x && !x.startsWith("```")) || ""; }
+function twMachines(){
+  return multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub) && !sharedM(m.id)) : [{id: S.me}];
+}
+function loadTower(){
+  if (TW.loading) return TW.loading;
+  const ms = twMachines();
+  TW.loading = Promise.all(ms.map(m => api0("/api/tower", undefined, m.id).then(d => ({mid: m.id, d})).catch(e => ({mid: m.id, error: e.message}))))
+    .then(parts => {
+      const t = twNow();
+      for (const p of parts) if (p.d) p.d.skew = t - p.d.now;   // 各台电脑的钟不一定准：按收到时本机的钟对齐
+      TW.parts = parts; TW.at = Date.now();
+      TW.busy = new Set(parts.flatMap(p => p.d ? p.d.rows.flatMap(r => r.focus && r.focus.busy ? [r.focus.id] : []) : []));
+    }).finally(() => { TW.loading = null; });
+  return TW.loading;
+}
+function towerEvent(ev){
+  if (current.view !== "tower" || !TW.parts) return;
+  const mine = TW.det && ev.chat === TW.det.id;
+  if (ev.type === "progress" && ev.state === "working" && TW.busy.has(ev.chat) && !mine) return;   // 干活中的进度很密：开始、结束才要重取
+  if (!["progress", "card", "answer", "idle", "secret", "user", "note", "brief"].includes(ev.type)) return;
+  if (mine) TW.detDirty = true;
+  if (TW.t) return;
+  TW.t = setTimeout(async () => {
+    TW.t = 0;
+    await loadTower().catch(() => {});
+    if (current.view !== "tower") return;
+    drawTower();
+    if (TW.detDirty) { TW.detDirty = false; twLoadDet(true); }
+  }, 1500);
+}
+setInterval(() => {
+  if (current.view !== "tower" || document.hidden || !TW.parts) return;
+  if (Date.now() - TW.at > 60000) loadTower().then(drawTower).catch(() => {});
+  else drawTower();
+}, 30000);
+
+function twAgent(id, mid){ return (S.agents || []).find(a => a.id === id && (!a.machine || a.machine === mid)) || agentOf(id); }
+const TW_ORDER = {wait: 0, work: 1, err: 2, done: 3, idle: 4};
+// 一台电脑的行：今天有动静的 + 今天有定时任务的；其余收进「今天没动静」
+function twRows(p){
+  const d = p.d, sk = d.skew || 0, now = twNow();
+  const rows = d.rows.map(r => {
+    const live = e => e >= d.now - 2;          // 后台算到「现在」的：跟着本机的钟往后长
+    const fix = ([a, b, k, t]) => [a + sk, live(b) && k === "work" ? now : b + sk, k, t];
+    return {...r, spans: r.spans.map(fix), waits: r.waits.map(([a, b]) => [a + sk, live(b) && r.waiting.length ? now : b + sk]),
+            waited: r.waited + (r.waiting.length ? Math.max(0, now - (d.now + sk)) : 0), mid: p.mid, key: r.agent || ""};
+  });
+  const plans = d.schedules.map(x => ({...x, at: x.at + sk}));
+  const has = new Set(rows.map(r => r.key));
+  for (const x of plans) for (const a of x.agents.length ? x.agents : [""]) {
+    if (a && !has.has(a) && twAgent(a, p.mid)) { has.add(a); rows.push({agent: a, key: a, state: "idle", spans: [], waits: [], waited: 0, waiting: [], ext: [], focus: null, last: 0, mid: p.mid}); }
+  }
+  rows.forEach(r => r.plans = plans.filter(x => (x.agents.length ? x.agents : [""]).includes(r.key)));
+  rows.sort((a, b) => TW_ORDER[a.state] - TW_ORDER[b.state] || (a.state === "wait" ? (a.waits.at(-1) || [0])[0] - (b.waits.at(-1) || [0])[0] : 0) || b.last - a.last
+    || (a.plans[0] || {at: 9e12}).at - (b.plans[0] || {at: 9e12}).at);
+  const idle = d.agents.filter(a => !has.has(a) && twAgent(a, p.mid));
+  return {rows, idle};
+}
+function twWindow(groups){
+  const now = twNow(), d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const day0 = d0.getTime() / 1000, day1 = day0 + 86400;
+  let lo = now - 3 * 3600, hi = now + 1.5 * 3600;
+  for (const g of groups) for (const r of g.rows) {
+    for (const s of r.spans.concat(r.waits)) lo = Math.min(lo, s[0]);
+  }
+  lo = Math.max(day0, Math.floor(lo / 3600) * 3600); hi = Math.min(day1, Math.ceil(hi / 3600) * 3600);
+  if (hi - lo < 6 * 3600) { hi = Math.min(day1, lo + 6 * 3600); lo = Math.max(day0, hi - 6 * 3600); }
+  return {lo, hi, now, pct: t => Math.max(0, Math.min(100, (t - lo) / (hi - lo) * 100))};
+}
+function twStatus(r){
+  const f = r.focus || {};
+  if (r.state === "wait") {
+    const c = r.waiting[0], more = r.waiting.length > 1 ? `（共 ${r.waiting.length} 个）` : "";
+    return (c.secret ? "等你输入开机密码" : `等你批准：${twLine(c.body) || c.title}`) + more;
+  }
+  if (r.state === "work") {
+    const e = r.ext[0], step = (f.busy && (f.steps || []).at(-1)) || (e && (e.steps || []).at(-1));
+    return (e && !f.busy ? `在${e.source}里 · ` : "") + (step || "在干活");
+  }
+  if (r.state === "err") { const t = (f.end_text || "").replace(/^出错了[：:]\s*/, ""); return "出错停下了" + (t ? `：${t}` : ""); }
+  if (r.state === "done") return `${twHM(f.last)} 做完 · ${f.brief || f.title || ""}`;
+  return r.plans.length ? `今天 ${twHM(r.plans[0].at)} 有定时任务「${r.plans[0].name}」` : "空闲";
+}
+function twBlocks(r, W, px){
+  const blk = (a, b, cls, label, tip) => {
+    const l = W.pct(a), w = Math.max(0, W.pct(b) - l), big = px && w / 100 * px > 56;
+    return `<i class="tw-b ${cls} ${big ? "" : "thin"}" style="left:${l}%;width:${w}%" title="${esc(tip)}">${big ? esc(label) : ""}</i>`;
+  };
+  const st = {done: "做完", stopped: "停下", error: "出错", work: "在干活"};
+  return r.spans.filter(s => s[1] > W.lo && s[0] < W.hi).map(([a, b, k, t]) => blk(a, b, k, t, `${twHM(a)}–${twHM(b)} ${st[k] || ""}${t ? " · " + t : ""}`)).join("")
+    + r.waits.filter(s => s[1] > W.lo && s[0] < W.hi).map(([a, b]) => blk(a, b, "wait", `等你 ${twDur(b - a)}`, `${twHM(a)} 起等你 ${twDur(b - a)}`)).join("")
+    + (r.plans.some(x => x.at >= W.hi) ? (x => `<i class="tw-b plan edge" title="${esc(`${twHM(x.at)} 定时任务「${x.name}」`)}">${px ? esc(`${twHM(x.at)} ${x.name}`) : ""}</i>`)(r.plans.find(x => x.at >= W.hi)) : "")
+    + r.plans.filter(x => x.at < W.hi).map(x => {
+      const l = W.pct(x.at), w = Math.max(0.6, W.pct(x.at + 1800) - l), big = px && w / 100 * px > 56;
+      return `<i class="tw-b plan ${big ? "" : "thin"}" style="left:${l}%;width:${w}%" title="${esc(`${twHM(x.at)} 定时任务「${x.name}」${x.every ? `（每 ${x.every} 分钟）` : ""}`)}">${big ? esc(x.name) : ""}</i>`;
+    }).join("");
+}
+const twNowLine = (W, label) => `<div class="tw-now" style="left:${W.pct(W.now)}%">${label ? `<span>${twHM(W.now)}</span>` : ""}</div>`;
+function twName(r){ const a = r.agent && twAgent(r.agent, r.mid); return a ? a.name : "临时对话"; }
+function twIcon(r){ const a = r.agent && twAgent(r.agent, r.mid); return a ? seal(a, "sm", false) : chatIcon(null, "sm"); }
+function twSel(mid, key){
+  TW.auto = false;
+  if (TW.sel && TW.sel.mid === mid && TW.sel.key === key && !narrow()) { TW.sel = null; TW.det = null; drawTower(); return; }
+  TW.sel = {mid, key}; TW.det = null; TW.reply = ""; drawTower(); twLoadDet();
+}
+function twRowOf(sel){
+  if (!sel || !TW.parts) return null;
+  const p = TW.parts.find(p => p.mid === sel.mid && p.d);
+  return p ? twRows(p).rows.find(r => r.key === sel.key) || null : null;
+}
+function renderTower(){
+  if (!TW.parts) {
+    $("#main").innerHTML = `<div class="tower"><div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div></div><div class="tw-empty">…</div></div>`;
+    loadTower().then(() => current.view === "tower" && drawTower()).catch(e => toast(e.message));
+    return;
+  }
+  if (Date.now() - TW.at > 20000) loadTower().then(() => current.view === "tower" && drawTower()).catch(() => {});
+  drawTower();
+}
+function twDate(){ const d = new Date(); return `${d.getMonth() + 1} 月 ${d.getDate()} 日 周${"日一二三四五六"[d.getDay()]}`; }
+function drawTower(){
+  if (current.view !== "tower" || !TW.parts) return;
+  TW.btns = [];
+  const groups = TW.parts.map(p => p.d ? {mid: p.mid, ...twRows(p)} : {mid: p.mid, error: p.error, rows: [], idle: []});
+  const all = groups.flatMap(g => g.rows), W = twWindow(groups);
+  const nWait = all.filter(r => r.state === "wait").length, nWork = all.filter(r => r.state === "work").length;
+  const waited = all.reduce((s, r) => s + r.waited, 0);
+  if (TW.auto && !TW.sel && !narrow()) {          // 刚打开：先把在等你的那个摊开
+    const r = all.find(r => r.state === "wait") || all.find(r => r.state === "work");
+    if (r) { TW.sel = {mid: r.mid, key: r.key}; twLoadDet(); }
+  }
+  TW.auto = false;
+  const head = `<div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div><span class="sp"></span>
+    <div class="tw-stat wait"><b>${nWait}</b><span>在等你</span></div><div class="tw-stat work"><b>${nWork}</b><span>在干活</span></div>
+    <div class="tw-stat"><b>${twDur(waited)}</b><span>今天等你</span></div></div>`;
+  const keep = $(".tw-scroll, .tw-cards"), top = keep ? keep.scrollTop : 0;
+  let body;
+  if (narrow()) body = twCards(groups, W);
+  else {
+    const board = $(".tw-board"), px = (board ? board.clientWidth : innerWidth - 76 - 56 - (TW.sel ? 420 : 0)) - (innerWidth <= 1180 ? 200 : 250) - 18;
+    const span = (W.hi - W.lo) / 3600, step = span > 14 ? 3 : span > 9 ? 2 : 1, hrs = [];
+    for (let t = W.lo; t <= W.hi; t += 3600 * step) hrs.push(t);
+    const nAgents = all.length + groups.reduce((s, g) => s + g.idle.length, 0);
+    const cnt = `${nAgents} 个 Agent${groups.length > 1 ? `，${groups.length} 台电脑` : ""}`;
+    const rowsHtml = groups.map(g => {
+      const m = machineOf(g.mid) || {}, gh = groups.length > 1 ? `<div class="tw-grp ${g.error ? "off" : ""}"><i></i>${esc(m.name || "这台电脑")}${g.error ? `<span class="note">${esc(g.error)}</span>` : ""}</div>` : "";
+      const rs = g.rows.map(r => {
+        const on = TW.sel && TW.sel.mid === r.mid && TW.sel.key === r.key;
+        return `<button class="tw-row s-${r.state} ${on ? "on" : ""}" onclick="twSel(${q(r.mid)},${q(r.key)})"><span class="tw-who">${twIcon(r)}<span class="t"><span class="nm">${esc(twName(r))}</span><span class="st s-${r.state}">${esc(twStatus(r))}</span></span></span>
+          <span class="tw-lane">${twBlocks(r, W, px)}</span></button>`;
+      }).join("");
+      const open = TW.open[g.mid], idle = g.idle.length ? `<button class="tw-idle" onclick="TW.open[${q(g.mid)}]=!TW.open[${q(g.mid)}];drawTower()">${open ? ICON.down : ICON.chev}今天没动静的 ${g.idle.length} 个 Agent</button>`
+        + (open ? g.idle.map(id => { const r = {agent: id, mid: g.mid, key: id, state: "idle", plans: []}; return `<div class="tw-row s-idle" style="cursor:default"><span class="tw-who">${twIcon(r)}<span class="t"><span class="nm">${esc(twName(r))}</span><span class="st">空闲</span></span></span><span class="tw-lane"></span></div>`; }).join("") : "") : "";
+      return gh + rs + idle;
+    }).join("");
+    body = `<div class="tw-main"><div class="tw-board"><div class="tw-axis"><span class="cnt">${esc(cnt)}</span><span class="tw-track">${hrs.map(t => `<span class="tw-hr" style="left:${W.pct(t)}%">${twHM(t)}</span>`).join("")}</span></div>
+      <div class="tw-scroll"><div class="tw-nowlayer" style="height:100%">${twNowLine(W, true)}</div>${rowsHtml || `<div class="tw-empty">还没有 Agent。</div>`}</div>
+      <div class="tw-legend"><span><i class="work"></i>在干活</span><span><i class="wait"></i>等你</span><span><i class="done"></i>做完了</span><span><i class="error"></i>出错</span><span><i class="plan"></i>排好的定时任务</span></div></div></div>`;
+  }
+  const dr = $("#tw-drawer"), keepDr = dr && TW.sel ? dr : null;
+  $("#main").innerHTML = `<div class="tower">${head}<div class="tw-body">${body}</div></div>`;
+  if (TW.sel) { $(".tw-body").append(keepDr || Object.assign(document.createElement("aside"), {id: "tw-drawer", className: "tw-drawer"})); drawTwDrawer(); }
+  const sc = $(".tw-scroll, .tw-cards");
+  if (sc && top) sc.scrollTop = top;
+  const nl = $(".tw-nowlayer");               // 竖线贯穿所有行：滚动区域里的内容有多高就多高
+  if (nl && sc) nl.style.height = Math.max(sc.scrollHeight, sc.clientHeight) + "px";
+}
+function twCards(groups, W){
+  const secs = [["wait", "等你的"], ["work", "在干活"], ["err", "出错了"], ["done", "今天做完的"], ["idle", "空闲"]];
+  const all = groups.flatMap(g => g.rows);
+  const card = r => {
+    const c = r.waiting && r.waiting[0];
+    let acts = "";
+    if (r.state === "wait" && c) {
+      const yes = !c.secret && c.buttons.find(b => b.style === "primary"), no = !c.secret && c.buttons.find(b => b.style === "danger");
+      acts = `<div class="acts">${yes ? `<span class="btn ink" role="button" onclick="event.stopPropagation();twAct(${twBtn(r.mid, c.chat, c.id, yes.value)})">${esc(yes.text)}</span>` : ""}${no ? `<span class="btn" role="button" onclick="event.stopPropagation();twAct(${twBtn(r.mid, c.chat, c.id, no.value)})">${esc(no.text)}</span>` : ""}<span class="btn" role="button">看详情</span></div>`;
+    }
+    return `<button class="tw-cd s-${r.state}" onclick="twSel(${q(r.mid)},${q(r.key)})"><span class="top">${twIcon(r)}<span class="t"><span class="nm">${esc(twName(r))}</span><span class="st s-${r.state}">${esc(twStatus(r))}</span></span></span>
+      ${r.state === "wait" && c && !c.secret && twCode(c.body) ? `<div class="ask">${esc(twCode(c.body))}</div>` : ""}
+      <div class="tw-mini">${twBlocks(r, W, 0)}${twNowLine(W)}</div>${acts}</button>`;
+  };
+  let out = "";
+  for (const [k, label] of secs) {
+    const rs = all.filter(r => r.state === k);
+    if (rs.length) out += `<div class="tw-sec">${label}</div>` + rs.map(card).join("");
+  }
+  const idle = groups.flatMap(g => g.idle.map(id => ({agent: id, mid: g.mid})));
+  if (idle.length) {
+    const open = TW.open._phone;
+    out += `<button class="tw-idle" style="border:0;padding:12px 4px" onclick="TW.open._phone=!TW.open._phone;drawTower()">${open ? ICON.down : ICON.chev}今天没动静的 ${idle.length} 个 Agent</button>`
+      + (open ? idle.map(r => `<div class="tw-cd"><span class="top">${twIcon(r)}<span class="t"><span class="nm">${esc(twName(r))}</span><span class="st">空闲</span></span></span></div>`).join("") : "");
+  }
+  const err = groups.filter(g => g.error).map(g => `<p class="tw-dnote">${esc((machineOf(g.mid) || {}).name || "")}：${esc(g.error)}</p>`).join("");
+  return `<div class="tw-cards">${out || `<div class="tw-empty">今天还没有 Agent 干过活。</div>`}${err}</div>`;
+}
+function twCode(t){ const m = /```\w*\n([\s\S]*?)```/.exec(t || ""); return m ? m[1].trim() : ""; }   // 审批卡片里的命令
+function twBtn(mid, chat, id, value){ TW.btns.push({mid, chat, id, value}); return TW.btns.length - 1; }
+async function twAct(i){
+  const b = TW.btns[i]; if (!b) return;
+  try { const r = await act(() => api("/api/chat/action", {id: b.chat, mid: b.id, value: b.value}, b.mid)); if (r && r.toast) toast(r.toast); } catch { return; }
+  setTimeout(async () => { await loadTower().catch(() => {}); drawTower(); if (TW.det && TW.det.id === b.chat) twLoadDet(true); }, 500);
+}
+async function twLoadDet(quiet){
+  const r = twRowOf(TW.sel), f = r && r.focus;
+  if (!f) { TW.det = null; drawTwDrawer(); return; }
+  const sel = TW.sel;
+  try {
+    const d = await api0(`/api/chat?id=${encodeURIComponent(f.id)}`, undefined, r.mid);
+    if (TW.sel !== sel) return;
+    TW.det = {id: f.id, mid: r.mid, d};
+  } catch (e) { if (!quiet) toast(e.message); }
+  drawTwDrawer();
+}
+function twCloseDrawer(){ TW.sel = null; TW.det = null; drawTower(); }
+function drawTwDrawer(){
+  const box = $("#tw-drawer"); if (!box) return;
+  const r = twRowOf(TW.sel);
+  if (!r) { box.remove(); return; }
+  const f = r.focus, det = TW.det && f && TW.det.id === f.id ? TW.det.d : null;
+  const m = multi() ? (machineOf(r.mid) || {}).name : "";
+  const head = `<div class="tw-dhead">${narrow() ? `<button class="x" aria-label="返回" onclick="twCloseDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>` : ""}${twIcon(r)}<span class="t"><span class="nm">${esc(twName(r))}</span><span class="sub">${esc([m, f && f.title].filter(Boolean).join(" · "))}</span></span>
+    ${f ? `<a class="btn" href="${boardHref({id: f.id, agent: r.agent})}">打开对话</a>` : ""}${narrow() ? "" : `<button class="x" aria-label="关闭" onclick="twCloseDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`}</div>`;
+  let body = "";
+  if (!f) {                                    // 只在飞书、微信里干活
+    body = r.ext.map(e => `<ol class="tw-steps">${e.asked ? `<li><span class="tm">${twHM(e.since)}</span><span class="dot"></span><span class="tx"><b>${esc(e.source)}里：</b>${esc(e.asked)}</span></li>` : ""}
+      ${(e.steps || []).map((s, i, a) => `<li class="${i === a.length - 1 ? "cur" : ""}"><span class="tm"></span><span class="dot"></span><span class="tx">${esc(s)}</span></li>`).join("")}</ol>`).join("")
+      || `<p class="tw-dnote">今天还没有对话。</p>`;
+  } else if (!det) body = `<p class="tw-dnote">…</p>`;
+  else body = twDetail(r, det);
+  const top = box.querySelector(".tw-dbody") ? box.querySelector(".tw-dbody").scrollTop : 0;
+  const footKey = f ? r.mid + "|" + f.id : "";
+  let foot = box.querySelector(".tw-dfoot");
+  if (!foot || foot.dataset.k !== footKey) {
+    foot = footKey ? `<div class="tw-dfoot" data-k="${esc(footKey)}"><div class="box"><textarea rows="1" placeholder="回复它" oninput="TW.reply=this.value;this.style.height='auto';this.style.height=this.scrollHeight+'px'" onkeydown="if(sendKey(event)){event.preventDefault();twReply()}">${esc(TW.reply)}</textarea><button class="send" aria-label="发送" onclick="twReply()">${ICON.up}</button></div></div>` : "";
+    box.innerHTML = head + `<div class="tw-dbody">${body}</div>` + foot;
+  } else {
+    box.querySelector(".tw-dhead").outerHTML = head;
+    box.querySelector(".tw-dbody").innerHTML = body;
+  }
+  if (top) box.querySelector(".tw-dbody").scrollTop = top;
+}
+function twDetail(r, d){
+  const log = d.log || [];
+  let u = -1;
+  for (let i = log.length - 1; i >= 0; i--) if (log[i].type === "user") { u = i; break; }
+  const user = u >= 0 ? log[u] : null, after = log.slice(u + 1);
+  const ans = [...after].reverse().find(x => x.type === "answer");
+  const running = d.busy && d.progress;
+  const steps = running ? d.progress.steps || [] : (ans && ans.steps) || [];
+  const li = (cls, tm, tx) => `<li class="${cls}"><span class="tm">${tm ? twHM(tm) : ""}</span><span class="dot"></span><span class="tx">${tx}</span></li>`;
+  let out = "";
+  if (user) out += li("", user.at, `<b>${user.sched ? "定时任务" : "你"}：</b>${esc((user.text || "").replace(/\s+/g, " ").slice(0, 160))}`);
+  const SHOW = 10, cut = Math.max(0, steps.length - SHOW);
+  if (cut) out += li("more", null, `前面还有 ${cut} 步`);
+  steps.slice(cut).forEach((s, i, a) => { out += li(running && i === a.length - 1 ? "cur" : "", null, esc(s)); });
+  const cards = after.filter(x => (x.type === "card" && x.buttons && x.buttons.length && (!x.color || x.color === "orange")) || (x.type === "secret" && x.state === "pending"));
+  let tail = "";
+  for (const c of cards) {
+    out += li("ask", c.at, `<b>${c.type === "secret" ? "要你输入开机密码" : "要你确认一个操作"}</b>`);
+    if (c.type === "secret") tail += `<div class="tw-card"><a class="btn primary" href="${boardHref({id: d.id, agent: r.agent})}">去输入</a></div>`;
+    else tail += `<div class="tw-card"><div class="approve"><div class="q">${esc((c.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(c.body || "")}</div>
+      <div class="since">已经等了 ${twDur(twNow() - c.at)}</div>
+      <div class="acts">${c.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick="twAct(${twBtn(r.mid, d.id, c.id, b.value)})">${esc(b.text)}</button>`).join("")}</div></div></div>`;
+  }
+  if (!running && ans) {
+    out += li(ans.state === "error" ? "err" : "", ans.at, `<b>${ans.state === "error" ? "出错停下了" : ans.state === "stopped" ? "停下了" : "做完了"}</b>${ans.elapsed ? `，用时 ${twDur(ans.elapsed)}` : ""}`);
+    if (ans.text) tail += `<div class="tw-ans ${ans.text.length < 300 ? "short" : ""}"><div class="answer">${md(ans.text)}</div></div>`;
+  }
+  return out ? `<ol class="tw-steps">${out}</ol>${tail}` : `<p class="tw-dnote">今天还没有对话。</p>`;
+}
+async function twReply(){
+  const r = twRowOf(TW.sel), f = r && r.focus, v = (TW.reply || "").trim();
+  if (!f || !v) return;
+  try { await act(() => api("/api/chat/send", {id: f.id, text: v, files: []}, r.mid)); } catch { return; }
+  TW.reply = "";
+  const t = document.querySelector(".tw-dfoot textarea"); if (t) { t.value = ""; t.style.height = "auto"; }
+  toast("已发给它");
+  setTimeout(async () => { await loadTower().catch(() => {}); drawTower(); twLoadDet(true); }, 800);
+}
+
 let boardStats = null, boardStatsAt = 0, BSEL = null;     // BSEL：「等你处理」多选时选中的对话编号
 async function loadBoardStats(){
   const ms = multi() ? (S.machines || []).filter(m => m.online && !(S.hub && m.hub)) : [{id: S.me}];

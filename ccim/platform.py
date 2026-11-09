@@ -2758,7 +2758,7 @@ def _handler(pf):
             if not self._guard():
                 return
             try:
-                self._send(200, fn() or {})
+                body = fn() or {}
             except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
@@ -2766,6 +2766,11 @@ def _handler(pf):
             except Exception as e:
                 log.exception("接口出错")
                 self._send(500, {"error": f"出错了：{e}"})
+            else:
+                try:
+                    self._send(200, body)
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):   # 对方等不及先断开了，接口本身没出错（#440）
+                    self._st, self.close_connection = 499, True
 
         def _remote(self, body=None):
             """网页要操作另一台电脑上的东西（X-Machine）：交给那台电脑执行。返回 True 表示已处理。"""
@@ -2890,7 +2895,7 @@ def _handler(pf):
                 "/api/app/list": lambda: apps_mod.data_list(q.get("id", ""), q.get("dir", "")),
                 "/api/app/read": lambda: apps_mod.data_read(q.get("id", ""), q.get("path", "")),
                 "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
-                "/api/agent": lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct),
+                "/api/agent": lambda: pf.shared.get(("agent", q.get("id", ""), acct), lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct)),   # 同时到的只算一次（#440）
                 "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct, at=q.get("at")),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),

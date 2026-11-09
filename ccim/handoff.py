@@ -15,16 +15,34 @@ REQUEST = "handoff.json"
 RESULT = "handoff.done.json"
 
 
+_PATHS = {}                     # (目录, 会话) → 对话记录的位置，或没找到时的 (None, 时刻)（#440）
+MISS_TTL = 30                   # 秒：别的项目目录里没找到的，这么久内不再把所有项目目录扫一遍
+
+
 def transcript_path(session_id, cwd=None):
     base = os.path.expanduser("~/.claude/projects")
+    key = (base, session_id)
+    hit = _PATHS.get(key)
+    if isinstance(hit, str):
+        if os.path.exists(hit):
+            return hit
+        _PATHS.pop(key, None)         # 文件搬走了，重新找
+        hit = None
     if cwd:
         p = os.path.join(base, os.path.realpath(cwd).replace("/", "-").replace(".", "-"), f"{session_id}.jsonl")
         if os.path.exists(p):
+            _PATHS[key] = p
             return p
+    if hit and time.time() - hit[1] < MISS_TTL:
+        return None
+    if len(_PATHS) > 20000:
+        _PATHS.clear()
     for d in os.listdir(base) if os.path.isdir(base) else []:
         p = os.path.join(base, d, f"{session_id}.jsonl")
         if os.path.exists(p):
+            _PATHS[key] = p
             return p
+    _PATHS[key] = (None, time.time())
     return None
 
 

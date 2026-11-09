@@ -20,7 +20,12 @@ KEYCHAIN_SERVICE = "ccim"
 
 
 def key(path):
-    return hashlib.sha1(os.path.realpath(path).encode()).hexdigest()[:12]
+    keys = getattr(_snap, "keys", None)       # 一次请求里同一个路径只解析一遍（#440）
+    if keys is None:
+        return hashlib.sha1(os.path.realpath(path).encode()).hexdigest()[:12]
+    if path not in keys:
+        keys[path] = hashlib.sha1(os.path.realpath(path).encode()).hexdigest()[:12]
+    return keys[path]
 
 
 def pdir(path):
@@ -53,12 +58,12 @@ _snap = threading.local()
 def snapshot():
     outer = getattr(_snap, "files", None) is not None
     if not outer:
-        _snap.files = {}
+        _snap.files, _snap.keys = {}, {}
     try:
         yield
     finally:
         if not outer:
-            _snap.files = None
+            _snap.files = _snap.keys = None
 
 
 def _json(path):

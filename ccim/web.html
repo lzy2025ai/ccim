@@ -797,6 +797,12 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .quote.noted .qt{-webkit-line-clamp:2}
 .bubble .bq-note{margin:0 0 10px;white-space:pre-wrap}
 .bubble .bq-lead{margin:0 0 8px;white-space:pre-wrap}
+.sched-bar{display:flex;align-items:center;gap:10px;padding:8px 24px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
+.sched-bar .sb-ico{color:var(--qing);display:inline-flex}.sched-bar .sb-ico svg{width:17px;height:17px}
+.sched-bar .sb-t{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.sched-bar .sb-t b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sched-bar .sb-m{display:flex;align-items:center;gap:10px;color:var(--muted);white-space:nowrap;flex:none}
+@media (max-width:760px){.sched-bar{padding:8px 12px;flex-wrap:wrap}.sched-bar .sb-t{flex-basis:100%}}
 .quote .icon-btn{margin-left:auto;width:22px;height:22px;flex:none}
 .rcpt{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;min-height:24px}
 .from-row .status{margin-left:6px}
@@ -2539,7 +2545,7 @@ function onEvent(ev){
     if (ev.rec_chat) rec.chat = ev.rec_chat;
     if (ev.type === "schedule") refreshSoon();   // 跑完了：侧栏「定时」的红点、列表跟着变（#447）
     if (sched && ev.type === "schedule" && ev.schedule === sched.id){
-      clearTimeout(window._st); window._st = setTimeout(() => { if (sched) openSchedule(sched.id); }, 300);
+      clearTimeout(window._st); window._st = setTimeout(() => { if (sched) refreshSched(); }, 300);
     }
     if (proj && ev.type === "project" && ev.project === proj.id){
       clearTimeout(window._pt); window._pt = setTimeout(() => { if (proj) openProject(proj.id, true); }, 300);
@@ -2916,6 +2922,7 @@ async function openChat(id){
     if (lastRestore && lastRestore.id === id && current.view === "chats" && current.id === id) {   // 记着的那个已经没了：照旧显示新对话页
       forgetChat(id); history.replaceState(null, "", lastRestore.back); route(); return;
     }
+    if (current.view === "schedules" && sched) { detail = null; drawSchedule(); return; }   // 定时任务的对话没了：显示任务详情（#449）
     $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return;
   }
   if (current.view === "chats" && current.id === id && !EMBED) detail.agent && !notCreator() ? forgetChat(id) : setLastChat({id, machine: ctxMachine});
@@ -3487,6 +3494,7 @@ function drawChat(){
       ${sideOk(c) ? `<button class="icon-btn" aria-label="更多" title="更多" onclick="headMenu(event)">${ICON.more}</button>` : ""}
     </div>
     ${extNotice(c)}
+    ${schedBar(c)}
     ${groupPanel(c)}
     <div class="chat-body">
     <aside class="ws-tree" id="ws-tree" aria-label="文件"></aside>
@@ -4755,7 +4763,7 @@ const schedTurn = c => !!c.sched_turn && c.attention !== "ask";
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
 // 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
-  && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id));
+  && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id) || schedOn(id));
 function seeOpen(){
   if (!detail || !viewing(detail.id)) return;
   const c = chatById(detail.id);
@@ -7951,10 +7959,39 @@ function runState(r){
            stopped: `<span class="status"><i></i>停下了</span>`, working: `<span class="status busy"><i></i>正在跑</span>`,
            lost: `<span class="status"><i></i>没跑完（ccim 重启过）</span>`, quiet: `<span class="status"><i></i>没有要告诉你的</span>`}[r.state] || "") + (r.catchup ? ` <span class="tag">补跑</span>` : "");
 }
+// 定时任务打开后右边就是它的对话（#449）：发到已有对话、群聊的是那个对话；交给 Agent「接着同一个对话」的是 s-任务-Agent，
+// 每次新开的是最近一次的；从没跑过、交给项目的没有对话，显示任务详情。运行记录在 #/schedules/<编号>/runs
+function schedChatId(s){
+  const t = s.target;
+  if (t.kind === "chat" || t.kind === "group") return t.id;
+  if (t.kind !== "agent" || !(s.runs || []).length) return null;
+  return s.session === "same" ? `s-${s.id}-${t.id}` : ((s.runs || []).find(r => r.chat) || {}).chat || null;
+}
+const schedMode = () => current.view === "schedules" && !!sched && current.id === sched.id && current.sub !== "runs";
+const schedOn = id => schedMode() && !!detail && detail.id === id && schedChatId(sched) === id;
+function schedBar(c){
+  if (!schedOn(c.id)) return "";
+  const s = sched;
+  const st = s.running ? `<span class="status busy"><i></i>正在跑</span>` : s.on ? `<span class="status on"><i></i>下次 ${esc(fmtTs(s.next_run))}</span>` : `<span class="status"><i></i>已暂停</span>`;
+  return `<div class="sched-bar" id="sched-bar"><span class="sb-ico">${ICON.clock}</span><span class="sb-t"><b title="${esc(s.prompt)}">${esc(s.name)}</b><span class="sb-m">${esc(freqText(s))}${st}</span></span>
+    <button class="btn" onclick="schedRun()" ${s.running ? "disabled" : ""}>立即跑一次</button><button class="btn" onclick="schedToggle()">${s.on ? "暂停" : "恢复"}</button>
+    <button class="icon-btn" aria-label="定时任务的更多操作" title="更多" onclick="schedMenu(event)">${ICON.more}</button></div>`;
+}
+async function refreshSched(){        // 跑了、暂停了：对话模式下只重画顶上那条，不重开对话
+  const id = sched && sched.id; if (!id) return;
+  let s; try { s = await api(`/api/schedule?id=${encodeURIComponent(id)}`); } catch { return; }
+  if (!sched || sched.id !== id) return;
+  const was = schedMode() && detail && schedChatId(sched) === detail.id;
+  sched = s;
+  if (was && schedChatId(s) === detail.id) { const b = $("#sched-bar"); if (b) b.outerHTML = schedBar(detail); }
+  else openSchedule(id);
+}
 async function openSchedule(id){
   try { sched = await api(`/api/schedule?id=${encodeURIComponent(id)}`); }
   catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个定时任务</h2><p>${esc(e.message)}</p></div>`; return; }
-  drawSchedule();
+  const cid = current.sub !== "runs" && schedChatId(sched);
+  if (cid) await openChat(cid);
+  else drawSchedule();
   const sm = schedSummary(id);
   if (sm && sm.unseen) { sm.unseen = false; drawAttention(); renderList(); api("/api/schedule/seen", {id}, sm.machine).catch(() => {}); }
 }
@@ -7968,6 +8005,7 @@ function drawSchedule(){
     <div class="agent-top">${schedMark(s)}
       <div class="grow"><h2>${esc(s.name)}</h2>
         <div class="row" style="margin-top:6px">${s.running ? `<span class="status busy"><i></i>正在跑</span>` : s.on ? `<span class="status on"><i></i>下次 ${esc(fmtTs(s.next_run))}</span>` : `<span class="status"><i></i>已暂停</span>`}<span class="tag">${esc(freqText(s))}</span>${mtag(mach, true)}</div></div>
+      ${current.sub === "runs" && schedChatId(s) ? `<a class="btn" href="#/schedules/${encodeURIComponent(s.id)}" style="text-decoration:none">回到对话</a>` : ""}
       <button class="btn" onclick="schedRun()" ${s.running ? "disabled" : ""}>立即跑一次</button>
       <button class="btn" onclick="schedToggle()">${s.on ? "暂停" : "恢复"}</button>
       <button class="icon-btn" aria-label="更多" onclick="schedMenu(event)">${ICON.more}</button>
@@ -7982,10 +8020,11 @@ function drawSchedule(){
         : `<p class="muted">还没跑过。可以先「立即跑一次」看看效果。</p>`}</div>
     </div></div>`;
 }
-async function schedRun(){ await act(() => api("/api/schedule/run", {id: sched.id}), "已开始，跑完结果会出现在这里"); openSchedule(sched.id); loadState(); }
-async function schedToggle(){ await act(() => api("/api/schedule/toggle", {id: sched.id, on: !sched.on}), sched.on ? "已暂停" : "已恢复"); await loadState(); openSchedule(sched.id); }
+async function schedRun(){ await act(() => api("/api/schedule/run", {id: sched.id}), schedMode() && detail ? "已开始" : "已开始，跑完结果会出现在这里"); refreshSched(); loadState(); }
+async function schedToggle(){ await act(() => api("/api/schedule/toggle", {id: sched.id, on: !sched.on}), sched.on ? "已暂停" : "已恢复"); await loadState(); refreshSched(); }
 function schedMenu(e){
-  pop(e, `<button onclick="closePop();location.hash='#/schedules/edit-'+encodeURIComponent(sched.id)">编辑</button><button onclick="closePop();schedDelete()">删除</button>`, true);
+  const runs = schedMode() && detail ? `<button onclick="closePop();location.hash='#/schedules/'+encodeURIComponent(sched.id)+'/runs'">运行记录</button>` : "";
+  pop(e, `<button onclick="closePop();location.hash='#/schedules/edit-'+encodeURIComponent(sched.id)">编辑</button>${runs}<button onclick="closePop();schedDelete()">删除</button>`, true);
 }
 async function schedDelete(){
   if (!await confirmBox(`删除「${sched.name}」？`, "以后不会再跑，运行记录也会删掉。", "删除")) return;

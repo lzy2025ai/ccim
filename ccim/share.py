@@ -25,7 +25,7 @@ GUEST_GET = {
     "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls", "/api/chat/people",
 }
 GUEST_POST = {
-    "/api/upload", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
+    "/api/upload", "/api/voice/prepare", "/api/voice/transcribe", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
     "/api/chat/delete", "/api/chat/mark", "/api/chat/seen", "/api/chat/dismiss", "/api/chat/kbs", "/api/chat/chapter",
     "/api/chat/fork", "/api/chat/rewind_preview", "/api/chat/rewind", "/api/chat/members", "/api/chat/note",
     "/api/chat/mention", "/api/chat/mention/stop", "/api/doc/save",

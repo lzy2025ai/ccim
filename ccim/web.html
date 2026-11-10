@@ -2837,6 +2837,7 @@ function moreBtn(c){
 const ANTS = `<svg class="ants" aria-hidden="true"><rect/></svg>`;
 // 群聊里被 @ 的成员在干活也算这个对话在干活（#192）；c.busy 只管主 Agent（输入框的停下按钮用它）
 const working = c => !!(c.busy || (c.crew || []).length);
+const showTag = c => c.attention && (c.attention === "ask" || !working(c));   // 列表第二行的提示：干活时只提示等批准
 const crewIds = c => [...new Set([...(c.busy && c.agent ? [c.agent] : []), ...(c.crew || []).map(x => x.agent)])];
 function crewText(c){             // 「ccim 在干活」「ccim 等 2 人在干活」
   const ids = crewIds(c), name = (agentOf(ids[0]) || {}).name || "成员";
@@ -2862,7 +2863,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
         ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${whenTag(c)}</span>
-          <span class="r2"><span class="sub">${c.attention && !working(c) ? `<span class="newtag ${c.attention}">${c.invite ? "邀请你加入" : c.at_me ? "有人 @ 你" : c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
+          <span class="r2"><span class="sub">${showTag(c) ? `<span class="newtag ${c.attention}">${c.invite ? "邀请你加入" : c.at_me ? "有人 @ 你" : c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
 const joinedOf = c => c.people_role === "in" || c.people_role === "invited";
@@ -4960,8 +4961,9 @@ function withOpen(){                  // 整体状态里的对话加上「等你
 const REASON = {ask: ["等你批准", "ask"], err: ["出错停下了", "err"]};
 // 等你处理（#390）：回答过、没在干活、没标完成的都在，看过也不走；定时任务的对话你没在里面说过话的不算（后台给 answered）。
 // 没升级的电脑不给 answered（#413）：有回答摘要、不是定时任务的按回答过算
-const isOpen = c => !working(c) && !c.archived && (c.attention === "ask" || c.attention === "err"
-  || (c.answered ?? (!!c.attention || !c.schedule && !!c.brief)));
+// 等批准的多半还在干活（这一轮停在批准上），不受「没在干活」限制，不然两栏都不显示它
+const isOpen = c => !c.archived && (c.attention === "ask" || (!working(c) && (c.attention === "err"
+  || (c.answered ?? (!!c.attention || !c.schedule && !!c.brief)))));
 const openAt = c => c.created || c.last_active || "";
 function openAge(c){                  // 开了多久
   const t = openAt(c) && new Date(openAt(c).replace(" ", "T"));

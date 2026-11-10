@@ -630,10 +630,11 @@ class Platform:
         summ = board_mod.summary(self.channel.logs, cid)
         rounds = summ.get("rounds") or 0
         crew = self.mentions.crew(cid)         # 群里被 @ 的成员在干活：和主 Agent 在干活一样，先不算等你处理（#192）
+        sched = bool(summ.get("sched_last"))   # 定时任务发起的那一轮（#447）：任务面板不算，你在里面回了话才算
         att = board_mod.attention(m, summ)
         return {"attention": None if crew and att != "ask" else att, "unread": board_mod.unread(m, summ),
                 "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew,
-                "rounds": rounds, "answered": board_mod.answered(m, summ)}
+                "rounds": rounds, "answered": board_mod.answered(m, summ), "sched_turn": sched}
 
     def _direct_turn(self, cid):
         """子对话里最近一轮是用户直接说的（不是群里 @ 它的）。"""
@@ -3050,6 +3051,7 @@ def _handler(pf):
                 "/api/project/stop": lambda: pf.run(pf.projects.stop(b("id"), b("task"), b("agent"))),
                 "/api/schedule/save": lambda: pf.call(pf.schedules.save, b("id"), b("fields") or {}),
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
+                "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
                 "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),

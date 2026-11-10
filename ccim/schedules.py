@@ -179,7 +179,7 @@ class Schedules:
             data[sid].update(f, next_run=nxt if data[sid].get("on", True) else None)
         else:
             sid = "s" + uuid.uuid4().hex[:8]
-            data[sid] = dict(f, on=True, next_run=nxt, created=registry.now())
+            data[sid] = dict(f, on=True, next_run=nxt, created=registry.now(), seen_at=time.time())
         self._write(data)
         self._emit(sid)
         return {"id": sid}
@@ -218,13 +218,32 @@ class Schedules:
             last = runs[-1]["state"] if runs else None
             if last == "working" and runs[-1]["id"] not in self.running:
                 last = "lost"
-            row = dict(s, id=sid, last_state=last, running=any(r.startswith(sid + ":") for r in self.running))
+            row = dict(s, id=sid, last_state=last, running=any(r.startswith(sid + ":") for r in self.running),
+                       unseen=self._unseen(s, runs, chats))
             if s["target"]["kind"] == "chat":     # 网页的对话列表分页了（#268），目标对话不一定在里面，头像、标题直接带上（#385）
                 c = chats.get(s["target"]["id"])
                 row["target_chat"] = {"agent": c.get("agent"), "title": c.get("title") or ""} if c else None
             out.append(row)
         out.sort(key=lambda r: (not r.get("on"), r.get("next_run") or 9e18))
         return out
+
+    @staticmethod
+    def _unseen(s, runs, chats):
+        """跑出了还没看的结果（#447）：最近一次跑完是完成或出错（没有新情况不出声的不算），晚于看过这个定时任务、也晚于看过它发结果的那个对话。"""
+        r = next((x for x in reversed(runs) if x.get("state") in ("done", "error", "quiet")), None)
+        if not r or r["state"] == "quiet":
+            return False
+        at = r.get("done_at") or r.get("at") or 0
+        seen = max(s.get("seen_at") or 0, (chats.get(r.get("chat") or "") or {}).get("seen_at") or 0)
+        return at > seen
+
+    def seen(self, sid):
+        data = self.all()
+        if sid in data:
+            data[sid]["seen_at"] = time.time()
+            self._write(data)
+            self._emit(sid)
+        return {}
 
     def detail(self, sid):
         s = self.get(sid)
@@ -237,6 +256,11 @@ class Schedules:
     # ----- 运行 -----
 
     def start(self):
+        data = self.all()                     # 第一次有「看过」（#447）：以前跑的都算看过，不然一上来全是红点
+        if any("seen_at" not in s for s in data.values()):
+            for s in data.values():
+                s.setdefault("seen_at", time.time())
+            self._write(data)
         self.loop_task = asyncio.create_task(self._loop())
 
     async def _loop(self):
@@ -305,6 +329,7 @@ class Schedules:
             upd.update(state="error", text=str(e))
         if upd.get("state") == "done" and is_quiet(upd.get("text")):
             upd.update(state="quiet", text="")
+        upd["done_at"] = time.time()
         self.pf.channel.logs.append(self._log(sid), upd)
         self._emit(sid)
         if upd.get("state") == "done" and s.get("deliver"):

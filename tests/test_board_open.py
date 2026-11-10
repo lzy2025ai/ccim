@@ -12,7 +12,7 @@ HTML = os.path.join(os.path.dirname(__file__), "..", "ccim", "web.html")
 def classify(chats):
     src = open(HTML, encoding="utf8").read()
     defs = [re.search(p, src, re.S | re.M).group(0) for p in
-            (r"^const working = .*?;$", r"^const showTag = .*?;", r"^const isOpen = .*?\)\)\)\);$")]
+            (r"^const working = .*?;$", r"^const schedTurn = .*?;$", r"^const showTag = .*?;", r"^const isOpen = .*?\)\)\)\);$")]
     work = re.search(r"const work = tops\.filter\((.*?)\)\.sort", src).group(1)
     js = "\n".join(defs) + f"""
 const work = {work};
@@ -32,6 +32,11 @@ class BoardOpenTests(unittest.TestCase):
 
     def test_ask_while_crew_working(self):
         self.check({"busy": False, "crew": [{"agent": "a"}], "attention": "ask"}, True, False, True)
+
+    def test_sched_turn(self):              # 定时任务发起的那一轮（#447）：两栏都不进，等批准的照常
+        self.check({"busy": True, "sched_turn": True, "attention": None}, False, False, False)
+        self.check({"sched_turn": True, "attention": "done", "answered": False}, False, False, True)
+        self.check({"busy": True, "sched_turn": True, "attention": "ask"}, True, False, True)
 
     def test_ask_idle(self):
         self.check({"attention": "ask"}, True, False, True)

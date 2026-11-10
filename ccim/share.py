@@ -31,7 +31,7 @@ GUEST_POST = {
     "/api/chat/mention", "/api/chat/mention/stop", "/api/doc/save",
     "/api/kb/lib/save", "/api/kb/lib/delete", "/api/kb/entry/save", "/api/kb/entry/delete", "/api/kb/entry/move",
     "/api/agent/save", "/api/agent/delete", "/api/agent/pin", "/api/agent/draft",
-    "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
+    "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/seen", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
     "/api/chat/continue", "/api/chat/people", "/api/chat/join",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",

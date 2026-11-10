@@ -26,6 +26,7 @@ from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
 from . import diary as diary_mod
+from . import tower as tower_mod
 from .schedules import is_quiet as schedules_quiet, listed
 from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_path
 
@@ -2875,6 +2876,7 @@ def _handler(pf):
                 "/api/board/material": lambda: _snapshot(lambda: {"material": board_mod.material(
                     pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False, acct=acct)}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
+                "/api/tower": lambda: _snapshot(lambda: tower_mod.today(pf)),     # 塔台（#438）：只读，访客不给
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: chat_detail(pf, q.get("id", ""), acct),
                 "/api/chat/people": lambda: pf.call(people.view, pf, q.get("id", ""), people.me(acct)),

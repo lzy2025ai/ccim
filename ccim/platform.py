@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import devices, docs, filesend, people, perf, share, tokens, workspace
+from . import devices, docs, filesend, people, perf, share, tokens, voice, workspace
 from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -2940,6 +2940,10 @@ def _handler(pf):
                 if self._guest("POST", u.path, {}, None)[1]:
                     return
                 return self._api(self._upload)
+            if u.path == "/api/voice/transcribe":        # 语音输入（#445）：录音是裸 PCM，不是 JSON
+                if self._guest("POST", u.path, {}, None)[1]:
+                    return
+                return self._api(self._voice)
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except ValueError:
@@ -2989,6 +2993,7 @@ def _handler(pf):
                 "/api/chat/join": lambda: pf.run(pf.set_people(b("id"), people.me(acct), join=bool(b("accept")))),
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
+                "/api/voice/prepare": lambda: voice.ENGINE.prepare(),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
@@ -3098,6 +3103,16 @@ def _handler(pf):
                 os.remove(key)
                 raise Problem("文件没传完，再试一次。")
             return {"key": key, "name": name, "size": n}
+
+        def _voice(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > voice.LIMIT:
+                self.close_connection = True
+                raise Problem("录音太长了，分几段说。")
+            data = self.rfile.read(n)
+            if len(data) < n:
+                raise Problem("录音没传完，再试一次。")
+            return voice.ENGINE.transcribe(data)
 
         def _file_ok(self, chat, path):
             """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。设备管理里的按它的范围（#100）。"""

@@ -703,6 +703,15 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .send{margin-left:auto;width:32px;height:32px;border-radius:9px;background:var(--qing);color:#fff;display:grid;place-items:center}
 .send:disabled{background:var(--line-strong);cursor:default}
 .send.stop{background:var(--ink)}
+.voice{display:inline-flex;align-items:center;gap:2px;flex:none}
+.bar .voice{margin-left:auto}
+.bar .voice ~ .send{margin-left:4px}
+.bar .voice ~ .ctx-ring[hidden]{display:none}
+.voice-rec{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:15px;background:#F7E1DC;color:var(--zhu);font-size:12.5px;font-variant-numeric:tabular-nums}
+.voice-rec i{width:8px;height:8px;border-radius:50%;background:var(--zhu);animation:voicePulse 1.2s ease-in-out infinite}
+.voice-rec:hover{filter:brightness(.97)}
+@keyframes voicePulse{50%{opacity:.35}}
+.voice-busy{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .ctx-ring{width:28px;height:32px;display:grid;place-items:center;border-radius:7px;flex:none;color:var(--qing)}
 .ctx-ring:hover{background:var(--sunk)}
 .ctx-ring.warn{color:var(--warn)} .ctx-ring.bad{color:var(--bad)}
@@ -1870,6 +1879,7 @@ const CLAUDE_MODELS = [["opus","Opus","最强，复杂任务"],["sonnet","Sonnet
 const EFFORTS = {claude:["low","medium","high","xhigh","max"], codex:["minimal","low","medium","high","xhigh"]};
 const EFF_DESC = {minimal:"几乎不思考，最快", low:"快，适合简单的事", medium:"日常够用", high:"想得更周全", xhigh:"更深入", max:"最深入，最慢"};
 const ICON = {
+  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg>',
   // 助理（#294）：气泡主体左右对称（3.5–20.5 × 4.5–17），尾巴小、在底边偏左；四角星对准主体的中心 (12, 10.75)，不是整个外框的中心
   pocket:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.3Q12.55 10.2 15.45 10.75Q12.55 11.3 12 14.2Q11.45 11.3 8.55 10.75Q11.45 10.2 12 7.3z" fill="currentColor" stroke-width="1"/></svg>',
   pocketSm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.6Q12.5 10.25 15.15 10.75Q12.5 11.25 12 13.9Q11.5 11.25 8.85 10.75Q11.5 10.25 12 7.6z" fill="currentColor" stroke-width="1.1"/></svg>',
@@ -3506,6 +3516,7 @@ function drawChat(){
           <button class="chip" id="chip-perm" hidden onclick="chatPerm(event)"></button>
           ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
           ${c.readonly || c.base !== "claude" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
+          ${c.readonly ? "" : micBtn("input")}
           <button class="ctx-ring" id="ctx-ring" hidden onclick="ctxPop(event)"></button>
           <button class="send" id="send"></button>
         </div>
@@ -4313,6 +4324,97 @@ async function addFiles(list){
     drawPending(); drawComposerState();
   }
 }
+// 语音输入（#445）：浏览器录成 16kHz 单声道 PCM，交给电脑上的离线识别，识别出的字填进输入框，不自动发
+let VOICE = {on: ""};
+const VOICE_MAX = 300;
+function micBtn(target){ return `<span class="voice" data-mic="${target}">${micInner(target)}</span>`; }
+function micInner(target){
+  const v = VOICE.on && VOICE.target === target ? VOICE : null;
+  if (v && v.on === "rec") {
+    const t = Math.floor((Date.now() - v.t0) / 1000);
+    return `<button class="voice-rec" aria-label="说完了，转成文字" title="说完了，转成文字（Esc 取消）" onclick="voiceStop(true)"><i></i>${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}</button>`
+      + `<button class="icon-btn" aria-label="取消录音" title="取消" onclick="voiceStop(false)">${ICON.x}</button>`;
+  }
+  if (v) return `<span class="voice-busy"><span class="spin"></span>${esc(v.note || "正在转成文字")}</span>`;
+  return `<button class="icon-btn" aria-label="语音输入" title="语音输入" onclick="voiceStart(${q(target)})">${ICON.mic}</button>`;
+}
+function drawMic(){ document.querySelectorAll("[data-mic]").forEach(el => { el.innerHTML = micInner(el.dataset.mic); }); }
+async function voiceStart(target){
+  if (VOICE.on) return;
+  if (!navigator.mediaDevices?.getUserMedia)
+    return toast(isSecureContext ? "这个浏览器用不了麦克风" : "这个网址用不了麦克风，换成 https 开头的地址再试");
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();                         // 在点击里建，iPhone 上才能出声
+  const machine = ctxMachine;
+  VOICE = {on: "wait", target, ctx, machine, where: location.hash, note: "正在打开麦克风"}; drawMic();
+  fetch("/api/voice/prepare", {method: "POST", headers: {"X-CCIM": "1", ...remoteHeader(machine)}, body: "{}"}).catch(() => {});
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}}); }
+  catch (e) {
+    ctx.close(); VOICE = {on: ""}; drawMic();
+    return toast(e.name === "NotAllowedError" ? "没有麦克风权限，在浏览器的网站设置里允许使用麦克风" : e.name === "NotFoundError" ? "没找到麦克风" : "打不开麦克风：" + e.message);
+  }
+  if (VOICE.ctx !== ctx) { stream.getTracks().forEach(t => t.stop()); ctx.close(); return; }   // 等权限时取消了
+  await ctx.resume().catch(() => {});
+  const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
+  node.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(node); node.connect(ctx.destination);
+  Object.assign(VOICE, {on: "rec", stream, src, node, chunks, t0: Date.now()});
+  VOICE.timer = setInterval(() => {
+    if (VOICE.on !== "rec") return;
+    if (Date.now() - VOICE.t0 >= VOICE_MAX * 1000) { toast("一次最多录 5 分钟，先转这一段"); voiceStop(true); } else drawMic();
+  }, 500);
+  drawMic();
+}
+function voiceRelease(v){
+  clearInterval(v.timer);
+  try { v.src && v.src.disconnect(); v.node && v.node.disconnect(); } catch (e) {}
+  v.stream && v.stream.getTracks().forEach(t => t.stop());
+  v.ctx && v.ctx.state !== "closed" && v.ctx.close().catch(() => {});
+}
+async function voiceStop(keep){
+  const v = VOICE; if (!v.on || v.on === "busy") return;
+  voiceRelease(v);
+  if (!keep || v.on !== "rec") { VOICE = {on: ""}; drawMic(); return; }
+  const pcm = voicePcm(v.chunks, v.ctx.sampleRate);
+  if (pcm.byteLength < 16000 * 2 * 0.4) { VOICE = {on: ""}; drawMic(); return toast("太短了，多说一会儿"); }
+  VOICE = {on: "busy", target: v.target, where: v.where, note: "正在转成文字"}; drawMic();
+  let text;
+  try {
+    for (;;) {
+      const r = await fetch("/api/voice/transcribe", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/octet-stream", ...remoteHeader(v.machine)}, body: pcm});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "识别失败，再试一次");
+      if (d.preparing) { VOICE.note = d.preparing.text || "正在准备语音识别"; drawMic(); continue; }
+      text = d.text || ""; break;
+    }
+  } catch (e) { toast(e.message); }
+  VOICE = {on: ""}; drawMic();
+  if (text === undefined) return;
+  if (!text) return toast("没听清，再说一次");
+  const ta = document.getElementById(v.target);
+  if (!ta || (v.target === "input" && location.hash !== v.where)) {
+    try { await navigator.clipboard.writeText(text); toast("识别好的文字已复制，可以粘贴到输入框"); } catch (e) { toast(text); }
+    return;
+  }
+  const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+  ta.value = ta.value.slice(0, a) + text + ta.value.slice(b);
+  ta.focus(); ta.setSelectionRange(a + text.length, a + text.length);
+  ta.dispatchEvent(new Event("input", {bubbles: true}));
+}
+function voicePcm(chunks, rate){
+  let n = 0; for (const c of chunks) n += c.length;
+  const all = new Float32Array(n); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  const k = rate / 16000, len = Math.floor(n / k), out = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    const a = Math.floor(i * k), b = Math.max(a + 1, Math.min(n, Math.floor((i + 1) * k)));
+    let sum = 0; for (let j = a; j < b; j++) sum += all[j];
+    out[i] = Math.max(-1, Math.min(1, sum / (b - a))) * 0x7fff;
+  }
+  return out.buffer;
+}
+addEventListener("keydown", e => { if (e.key === "Escape" && (VOICE.on === "rec" || VOICE.on === "wait")) { e.preventDefault(); e.stopImmediatePropagation(); voiceStop(false); } }, true);
+addEventListener("hashchange", () => { if (VOICE.on === "rec" || VOICE.on === "wait") voiceStop(false); });
 function dropZone(el){
   el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("drag"); });
   el.addEventListener("dragleave", () => el.classList.remove("drag"));
@@ -4350,6 +4452,7 @@ function renderNewChat(){
             ${d.base === "dsh" ? "" : `<button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>`}
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
+            ${micBtn("input")}
             <button class="send" aria-label="发送" onclick="startTemp()">${ICON.up}</button>
           </div>
         </div>
@@ -8199,7 +8302,7 @@ function drawSide(){
       <div class="side-rcpt" id="side-rcpt">${sideRcpt()}</div>
       <div class="skc-box" id="side-box"><button class="icon-btn side-at" aria-label="@ 其他 Agent" title="请别的 Agent 看看" onclick="sideAt(event)">@</button>
       <textarea id="side-in" rows="1" placeholder="${SIDE.busy && !(SIDE.to || []).length ? "补充说明，它做完这一步就会看到" : SIDE.quote ? "关于这段，想问什么" : "想问什么"}" aria-label="侧边对话"></textarea>
-      <button class="send ${SIDE.busy ? "stop" : ""}" aria-label="${SIDE.busy ? "停下" : "发送"}" onclick="${SIDE.busy ? "sideStop()" : "sideSend()"}">${SIDE.busy ? ICON.stop : ICON.up}</button></div></div>`;
+      ${micBtn("side-in")}<button class="send ${SIDE.busy ? "stop" : ""}" aria-label="${SIDE.busy ? "停下" : "发送"}" onclick="${SIDE.busy ? "sideStop()" : "sideSend()"}">${SIDE.busy ? ICON.stop : ICON.up}</button></div></div>`;
   const b = $("#side-body"); b.scrollTop = b.scrollHeight;
   const ta = $("#side-in"); ta.value = typed; sideFit();
   if (focus) { ta.focus(); ta.setSelectionRange(...focus); }

@@ -782,6 +782,12 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .meta-r{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--faint);margin-top:4px}
 .quote{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 10px;margin-bottom:6px;background:var(--paper);border-radius:0 8px 8px 0}
 .quote.in-box{margin:8px 10px 0}
+.quote .qbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.quote .qnote{width:100%;border:0;border-top:1px dashed var(--line);background:transparent;resize:none;font:inherit;font-size:13.5px;color:var(--ink);padding:5px 0 1px;outline:none;line-height:1.5;max-height:120px}
+.quote .qnote::placeholder{color:var(--faint)}
+.quote.noted .qt{-webkit-line-clamp:2}
+.bubble .bq-note{margin:0 0 10px;white-space:pre-wrap}
+.bubble .bq-lead{margin:0 0 8px;white-space:pre-wrap}
 .quote .icon-btn{margin-left:auto;width:22px;height:22px;flex:none}
 .rcpt{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;min-height:24px}
 .from-row .status{margin-left:6px}
@@ -3610,8 +3616,8 @@ function gripInput(){
   };
   g.ondblclick = () => { inputH = 0; localStorage.removeItem("ccim.inputH"); fitInput(); };
 }
-// 引用：放在输入框上面，发送时拼到消息前面
-let quotes = {id: null, list: []};
+// 引用：放在输入框上面，发送时拼到消息前面。引用了两段及以上时每段下面能写针对它的话（#443），发出去是「引用 → 它的话」依次排
+let quotes = {id: null, list: []};      // list：[{text, note}]
 const quoteList = () => detail && quotes.id === detail.id ? quotes.list : [];
 function addQuote(text){
   const input = $("#input"); if (!input || !text) return;
@@ -3620,24 +3626,52 @@ function addQuote(text){
     return input.focus();
   }
   if (quotes.id !== detail.id) quotes = {id: detail.id, list: []};
-  quotes.list.push(text); drawQuotes(); drawComposerState(); input.focus();
+  if (quotes.list.length === 1 && !quotes.list[0].note && input.value.trim()) {   // 第二段进来：输入框里已经写的是针对第一段的
+    quotes.list[0].note = input.value.trim(); input.value = ""; saveDraft();
+  }
+  quotes.list.push({text, note: ""}); drawQuotes(); drawComposerState();
+  if (quotes.list.length > 1) $(`#quotes .qnote[data-k="${quotes.list.length - 1}"]`)?.focus(); else input.focus();
 }
-function dropQuote(k){ quotes.list.splice(k, 1); drawQuotes(); drawComposerState(); $("#input")?.focus(); }
+function dropQuote(k){
+  quotes.list.splice(k, 1);
+  const one = quotes.list.length === 1 && quotes.list[0], i = $("#input");
+  if (one && one.note && i) { i.value = [one.note.trim(), i.value.trim()].filter(Boolean).join("\n\n"); one.note = ""; saveDraft(); }   // 只剩一段：它的话回到输入框
+  drawQuotes(); drawComposerState(); i?.focus();
+}
+function quoteNote(el){ const x = quotes.list[+el.dataset.k]; if (x) x.note = el.value; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
 function drawQuotes(){
   const el = $("#quotes"); if (!el) return;
-  el.innerHTML = quoteList().map((t, k) => `<div class="quote in-box"><span class="qt">${esc(t)}</span><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="dropQuote(${k})">${ICON.x}</button></div>`).join("");
+  const qs = quoteList(), many = qs.length > 1;
+  el.innerHTML = qs.map((x, k) => `<div class="quote in-box ${many ? "noted" : ""}"><div class="qbody"><span class="qt">${esc(x.text)}</span>${many
+    ? `<textarea class="qnote" data-k="${k}" rows="1" placeholder="针对这段说…" aria-label="针对这段引用说的话" oninput="quoteNote(this)" onkeydown="if(sendKey(event)){event.preventDefault();sendChat()}">${esc(x.note || "")}</textarea>` : ""}</div><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="dropQuote(${k})">${ICON.x}</button></div>`).join("");
+  el.querySelectorAll(".qnote").forEach(t => { if (t.value) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } });
 }
-const withQuotes = (qs, v) => [...qs.map(t => t.split("\n").map(l => "> " + l).join("\n")), v].filter(Boolean).join("\n\n");
-// 发出去的消息：开头的引用画成引用块
+// 引用拼成「> 引用」+ 针对它的话；qs 里可以是文字（侧边对话）或 {text, note}。
+// 有哪段写了话（#443）：输入框里写的放最前面，后面是「引用 → 它的话」依次排，免得最后一段的话和总的话连在一起分不清
+const withQuotes = (qs, v) => {
+  const ps = qs.map(x => {
+    const t = typeof x === "string" ? x : x.text, n = typeof x === "string" ? "" : (x.note || "").trim();
+    return {q: t.split("\n").map(l => "> " + l).join("\n") + (n ? "\n\n" + n : ""), n};
+  });
+  const noted = ps.some(p => p.n);
+  return (noted ? [v, ...ps.map(p => p.q)] : [...ps.map(p => p.q), v]).filter(Boolean).join("\n\n");
+};
+// 发出去的消息：引用画成引用块。开头就是引用的（老格式）：后面最后那段是总的话；引用前面有话的（#443）：
+// 那是总的话，每段引用后面的话都是针对它的，紧跟在它下面
 function userText(t){
-  const ls = (t || "").split("\n"), out = []; let k = 0;
-  while (k < ls.length && /^>/.test(ls[k])) {
-    const b = [];
-    while (k < ls.length && /^>/.test(ls[k])) b.push(ls[k++].replace(/^> ?/, ""));
-    out.push(`<div class="bq">${esc(b.join("\n"))}</div>`);
-    while (k < ls.length && !ls[k].trim()) k++;
+  const ls = (t || "").split("\n");
+  if (!ls.some(l => /^>/.test(l))) return esc(t);
+  const segs = []; let k = 0;
+  while (k < ls.length) {
+    const quote = /^>/.test(ls[k]), b = [];
+    while (k < ls.length && /^>/.test(ls[k]) === quote) b.push(quote ? ls[k++].replace(/^> ?/, "") : ls[k++]);
+    const txt = b.join("\n").trim();
+    if (quote || txt) segs.push({quote, txt});
   }
-  return out.length ? out.join("") + esc(ls.slice(k).join("\n")) : esc(t);
+  const lead = segs.length && !segs[0].quote;
+  return segs.map((g, i) => g.quote ? `<div class="bq">${esc(g.txt)}</div>`
+    : i === 0 ? `<div class="bq-lead">${esc(g.txt)}</div>`
+    : lead || i < segs.length - 1 ? `<div class="bq-note">${esc(g.txt)}</div>` : esc(g.txt)).join("");
 }
 async function sendChat(){
   const typed = $("#input").value.trim(), files = pendingFiles.filter(f => f.key), qs = quoteList().slice(), v = withQuotes(qs, typed);

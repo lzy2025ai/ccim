@@ -17,6 +17,7 @@ from . import registry
 CMD = re.compile(r"^/(diary|日记)(?=\s|$)\s*", re.I)
 HEAD = re.compile(r"^## (\d{1,2}:\d{2})(?: · (.*))?$")
 LINKED = re.compile(r"^\[(.*)\]\((https?://\S+)\)$")     # 「记在哪」带链接的写法
+FROM = "来自 "      # 标题下第一行「来自 记在哪」：记在哪写在正文里，不放进标题（#467，老日记写在标题的 · 后面）
 READ_DAYS = 62            # diary_read 一次最多读几天
 READ_MAX = 40000          # 一次最多给助手多少字
 SEARCH_MAX = 40           # 搜索最多给几条
@@ -69,11 +70,11 @@ def add(text, where, now=None, link=None, files=None):
     d, t = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
     f = os.path.join(root(), d + ".md")
     where = " ".join((where or "").split())
-    label = f" · [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · {where}" if where else ""
+    label = f"{FROM}[{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f"{FROM}{where}" if where else ""
     with _lock:
         os.makedirs(root(), exist_ok=True)
-        body = "\n\n".join(x for x in [text] + (_save_files(files, now) if files else []) if x)
-        block = f"## {t}{label}\n\n{body}\n"
+        body = "\n\n".join(x for x in [label, text] + (_save_files(files, now) if files else []) if x)
+        block = f"## {t}\n\n{body}\n"
         try:
             with open(f, encoding="utf-8") as fh:
                 old = fh.read()
@@ -413,6 +414,10 @@ def _entries(d):
             if lk:
                 where, link = lk.group(1), lk.group(2)
             cur = {"time": m.group(1), "where": where, "link": link, "lines": []}
+        elif cur["time"] and not cur["where"] and not "".join(cur["lines"]).strip() and ln.startswith(FROM):   # 新写法：标题下第一行
+            where = ln[len(FROM):].strip()
+            lk = LINKED.match(where)
+            cur["where"], cur["link"] = (lk.group(1), lk.group(2)) if lk else (where, "")
         else:
             cur["lines"].append(ln)
     out.append(cur)

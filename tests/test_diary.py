@@ -36,7 +36,7 @@ class DiaryFileTests(unittest.TestCase):
         f = os.path.join(self.tmp.name, "Documents", "ccim-日记", "2026-10-31.md")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
-        self.assertEqual(text, "## 14:32 · 飞书 · proj\n\n和客户开会，定了方案\n\n## 21:32\n\n晚上看书\n")
+        self.assertEqual(text, "## 14:32\n\n来自 飞书 · proj\n\n和客户开会，定了方案\n\n## 21:32\n\n晚上看书\n")
         today = datetime.date(2026, 10, 31)
         r = diary.read(today=today)
         self.assertIn("和客户开会", r)
@@ -63,8 +63,8 @@ class DiaryFileTests(unittest.TestCase):
         f = os.path.join(self.tmp.name, "Documents", "ccim-日记", "2026-10-31.md")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
-        self.assertIn("## 14:32 · [小助手「周计划」](https://hub.example/#/agents/a1/c1?m=d-1)\n", text)
-        self.assertIn("## 14:32 · [原对话](http://127.0.0.1:8978/#/chats/c2?m=d-2)\n", text)
+        self.assertIn("## 14:32\n\n来自 [小助手「周计划」](https://hub.example/#/agents/a1/c1?m=d-1)\n", text)
+        self.assertIn("## 14:32\n\n来自 [原对话](http://127.0.0.1:8978/#/chats/c2?m=d-2)\n", text)
         es = diary._entries("2026-10-31")
         self.assertEqual([(e["where"], e["link"]) for e in es],
                          [("小助手「周计划」", "https://hub.example/#/agents/a1/c1?m=d-1"),

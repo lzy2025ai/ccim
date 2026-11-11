@@ -40,6 +40,7 @@ PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}    # 添加到主屏幕用（#17）
 STATIC.update({f"/avatars/{name}.webp": "image/webp" for name in agents.AVATARS})
+STATIC.update({f"/companies/{name}.webp": "image/webp" for name in companies_mod.AVATARS})   # 公司头像（#459）
 
 
 def static_file(path):

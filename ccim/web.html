@@ -584,6 +584,8 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 /* 一人公司（#454） */
 .cmark{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font:700 17px var(--song)}
 .cmark.sm{width:26px;height:26px;border-radius:7px;font-size:12px}
+.cmark.pic{overflow:hidden;background:var(--sunk)}.cmark.pic img{width:100%;height:100%;object-fit:cover;display:block}
+.co-av-prev{gap:12px;align-items:center}.co-av-grid{margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(64px,1fr))}
 .tag.co{color:#fff}
 .mchips{display:flex;gap:8px;padding:14px 32px 0;flex-wrap:wrap}
 .mchips button{display:flex;align-items:center;gap:6px;font-size:13px;padding:5px 12px;border-radius:16px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
@@ -6442,7 +6444,13 @@ const companies = () => (S.companies || []).filter(c => !c.machine || c.machine 
 const coById = id => companies().find(c => c.id === id) || null;
 const coOf = aid => companies().find(c => (c.members || []).includes(aid)) || null;
 const coColor = c => CO_COLORS[c && c.color] || CO_COLORS.qing;
-const coMark = (c, cls = "") => `<span class="cmark ${cls}" style="background:${coColor(c)}" aria-hidden="true">${esc([...(c.name || "?")][0])}</span>`;
+// 公司头像（#459）：内置图片，和 companies.AVATARS 顺序一致；没选的用颜色块加名字第一个字
+const CO_AVATARS = [["01-tower","小楼"],["02-lighthouse","灯塔"],["03-rocket","火箭"],["04-workshop","工坊"],["05-study","书房"],
+  ["06-laboratory","实验室"],["07-sailboat","帆船"],["08-balloon","热气球"],["09-castle","城堡"],["10-greenhouse","温室"],
+  ["11-telescope","望远镜"],["12-factory","工厂"],["13-cafe","咖啡馆"],["14-studio","画室"],["15-postoffice","邮局"],["16-cabin","山间小屋"]];
+const coAvOk = id => CO_AVATARS.some(([k]) => k === id);
+const coMark = (c, cls = "") => c && coAvOk(c.avatar) ? `<span class="cmark pic ${cls}" aria-hidden="true"><img src="/companies/${c.avatar}.webp" alt="" decoding="async"></span>`
+  : `<span class="cmark ${cls}" style="background:${coColor(c)}" aria-hidden="true">${esc([...(c && c.name || "?")][0])}</span>`;
 const coTag = aid => { const c = coOf(aid); return c ? `<span class="tag co" style="background:${coColor(c)}">${esc(c.name)}</span>` : ""; };
 const coMembers = c => (c.members || []).map(agentOf).filter(Boolean);
 let agentsTab = (() => { try { return localStorage.getItem("ccim.agentsTab") || "machines"; } catch { return "machines"; } })();
@@ -6468,19 +6476,36 @@ function companyCards(){
   }).join("");
   return `<div class="cogrid">${cards}<button class="cocard add" onclick="newCompany()">${ICON.plus}新建公司</button></div>`;
 }
+let coFd = null;                 // 编辑中的公司头像和颜色
+function coFreeAvatar(){         // 新建公司默认挑一个别的公司没用的图片头像
+  const used = new Set(companies().map(c => c.avatar)), free = CO_AVATARS.filter(([id]) => !used.has(id));
+  const pool = free.length ? free : CO_AVATARS;
+  return pool[Math.floor(Math.random() * pool.length)][0];
+}
+function coAvHtml(){
+  const pic = !!coFd.avatar, prev = {name: ($("#co-name") || {}).value || coFd.name || "新", color: coFd.color, avatar: coFd.avatar};
+  return `<div class="row co-av-prev">${coMark(prev)}<div class="seg" aria-label="头像类型"><button type="button" class="${pic ? "on" : ""}" aria-pressed="${pic}" onclick="coPickAv(coFd.avatar || coFd.last || CO_AVATARS[0][0])">图片头像</button>
+      <button type="button" class="${pic ? "" : "on"}" aria-pressed="${!pic}" onclick="coPickAv(null)">文字头像</button></div></div>
+    ${pic ? `<div class="avatar-grid co-av-grid" aria-label="选择公司头像">${CO_AVATARS.map(([id, nm]) => `<button type="button" class="avatar-choice ${coFd.avatar === id ? "on" : ""}" aria-label="${nm}" aria-pressed="${coFd.avatar === id}" onclick="coPickAv('${id}')"><img src="/companies/${id}.webp" alt="" width="48" height="48" decoding="async"><span>${nm}</span></button>`).join("")}</div>` : ""}`;
+}
+function coPickAv(id){ if (id) coFd.last = id; coFd.avatar = id; $("#co-av").innerHTML = coAvHtml(); }
+function coPickColor(k){ coFd.color = k; document.querySelectorAll(".co-colors .co-sw").forEach(b => b.classList.toggle("on", b.dataset.c === k)); $("#co-av").innerHTML = coAvHtml(); }
 function coDialog(c){
   const col = (c && c.color) || Object.keys(CO_COLORS).find(k => !companies().some(x => x.color === k)) || "qing";
-  dialog(c ? "编辑公司" : "新建公司", `<label class="flabel">名字</label><input id="co-name" class="input" maxlength="20" value="${esc(c ? c.name : "")}" placeholder="比如：接单项目">
-    <label class="flabel">颜色</label><div class="co-colors">${Object.entries(CO_COLORS).map(([k, v]) => `<button type="button" class="co-sw ${k === col ? "on" : ""}" data-c="${k}" aria-label="颜色" onclick="document.querySelectorAll('.co-colors .co-sw').forEach(b=>b.classList.toggle('on',b===this))"><i style="background:${v}"></i></button>`).join("")}</div>
+  coFd = {name: c ? c.name : "", color: col, avatar: c ? (coAvOk(c.avatar) ? c.avatar : null) : coFreeAvatar()};
+  dialog(c ? "编辑公司" : "新建公司", `<label class="flabel">名字</label><input id="co-name" class="input" maxlength="20" value="${esc(c ? c.name : "")}" placeholder="比如：接单项目" oninput="if(!coFd.avatar)$('#co-av').innerHTML=coAvHtml()">
+    <label class="flabel">头像</label><div id="co-av"></div>
+    <label class="flabel">颜色</label><div class="co-colors">${Object.entries(CO_COLORS).map(([k, v]) => `<button type="button" class="co-sw ${k === col ? "on" : ""}" data-c="${k}" aria-label="颜色" onclick="coPickColor('${k}')"><i style="background:${v}"></i></button>`).join("")}</div>
     <label class="flabel">公司说明</label><textarea id="co-note" class="textarea" rows="5" placeholder="这个公司做什么、项目在哪、怎么交付。公司里的 Agent 干活时都会看到">${esc(c ? c.note : "")}</textarea>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveCompany(${c ? q(c.id) : "null"})">${c ? "保存" : "新建"}</button>`);
+  $("#co-av").innerHTML = coAvHtml();
   const el = $("#co-name"); el.focus(); el.select();
 }
 function newCompany(){ coDialog(null); }
 async function saveCompany(id){
-  const name = $("#co-name").value.trim(), note = $("#co-note").value, color = (document.querySelector(".co-colors .co-sw.on") || {}).dataset?.c;
+  const name = $("#co-name").value.trim(), note = $("#co-note").value, color = coFd.color, avatar = coFd.avatar || "";
   if (!name) return $("#co-name").focus();
-  const r = await act(() => api("/api/company/save", {id, fields: {name, note, color}}, S.me), id ? "已保存" : "已新建");
+  const r = await act(() => api("/api/company/save", {id, fields: {name, note, color, avatar}}, S.me), id ? "已保存" : "已新建");
   closeDialog();
   if (!id) { pendingJoin && await joinCompany(pendingJoin, r.id, true); pendingJoin = null; agentsTab = "company"; try { localStorage.setItem("ccim.agentsTab", "company"); } catch {} }
   await loadState();

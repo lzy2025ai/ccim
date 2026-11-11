@@ -1478,7 +1478,9 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .pending .thumb button svg{width:12px;height:12px}
 .pending .thumb img,#thread .files img,#thread img.sentimg,#thread .answer img{cursor:zoom-in}
 .lightbox{position:fixed;inset:0;z-index:80;background:rgba(15,18,24,.9);display:flex;overflow:auto;overscroll-behavior:contain}
-.lightbox img{margin:auto;max-width:94vw;max-height:92vh;object-fit:contain;border-radius:4px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.lightbox img{margin:auto;max-width:94vw;max-height:92vh;object-fit:contain;border-radius:4px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+/* 图片下垫灰白棋盘格：透明区域能看出来，不透明的图把格子盖住，显示不变 */
+.lightbox img,img.sentimg,.cl-main img,.files .shot img,.pending .thumb img{background-color:#fff;background-image:linear-gradient(45deg,#E3E3E3 25%,transparent 25%,transparent 75%,#E3E3E3 75%),linear-gradient(45deg,#E3E3E3 25%,transparent 25%,transparent 75%,#E3E3E3 75%);background-size:16px 16px;background-position:0 0,8px 8px}
 .lightbox img.can{cursor:zoom-in}
 .lightbox img.full{max-width:none;max-height:none;cursor:zoom-out}
 .lightbox video{margin:auto;max-width:94vw;max-height:92vh;border-radius:4px;background:#000;box-shadow:0 10px 40px rgba(0,0,0,.4)}

@@ -6339,7 +6339,7 @@ function agentCard(a){
 // 公司存在打开网页的这台电脑上（S.companies）。建了第一个公司后 AI 员工页顶上是「所有电脑」「一人公司」两个标签，
 // 具体哪台电脑放到「所有电脑」下面一层。进到公司（#/companies/<公司>[/group | /<Agent>[/<对话>]]）像飞书：左边公司大群和员工，右边聊天。
 const CO_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", zhu: "var(--zhu)", lu: "var(--lu)", dai: "var(--dai)", huang: "var(--huang)"};
-const companies = () => (S.companies || []);
+const companies = () => (S.companies || []).filter(c => !c.machine || c.machine === S.me);   // 公司存在当前那台电脑上
 const coById = id => companies().find(c => c.id === id) || null;
 const coOf = aid => companies().find(c => (c.members || []).includes(aid)) || null;
 const coColor = c => CO_COLORS[c && c.color] || CO_COLORS.qing;

@@ -587,6 +587,8 @@ class Peers:
                 continue
             for k in ("agents", "chats", "projects", "schedules"):
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
+            out.setdefault("companies", [])       # 一人公司（#454）：标上在哪台，网页只显示当前那台的（服务器上打开时全是别的电脑）
+            out["companies"] += [dict(x, machine=m["id"]) for x in s.get("companies") or []]
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"), "dsh": s.get("dsh"),
                               "home": s.get("home"), "ccim": s.get("ccim"), "perms": s.get("perms"), **({"guest": s["guest"]} if s.get("guest") else {}),
                               "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话

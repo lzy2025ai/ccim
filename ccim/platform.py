@@ -25,6 +25,7 @@ from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
+from . import companies as companies_mod
 from . import diary as diary_mod
 from . import tower as tower_mod
 from .schedules import is_quiet as schedules_quiet, listed
@@ -1009,7 +1010,8 @@ class Platform:
                 key += "|sideat" + ("-far" if m.get("remote_project") else "")
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": a.get("role"), "chrome": a.get("chrome") and not viewer,
+                     "effort": a.get("effort"), "role": (a.get("role") or "") + companies_mod.note_for(self, a["id"]),
+                     "chrome": a.get("chrome") and not viewer,
                      "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
         else:
@@ -1169,7 +1171,8 @@ class Platform:
         m = self.meta(cid)
         crowd = not m.get("mention_of") and not m.get("side_of") and cid in people.visible_map(self)
         person = people.label(self, cid, who or people.OWNER) if crowd else None
-        if crowd and people.quiet(self, cid) and not call and not logged:   # 多人群里没 @ Agent：只记下，下次 @ 它时带上
+        if (crowd and people.quiet(self, cid) or m.get("company")) and not call and not logged:
+            # 多人群里没 @ Agent、公司大群里没 @ 人（#454）：只记下，下次 @ 它时带上
             mid = "u-" + uuid.uuid4().hex[:10]
             shown = [{"name": f["name"], "size": f.get("size"), "path": os.path.realpath(f["key"])} for f in files]
             self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": mid, "text": text, "files": shown,
@@ -1814,7 +1817,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
+                "listed": listed(cid, m), "company": m.get("company"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -2760,7 +2763,8 @@ def _handler(pf):
                 return
             try:
                 body = fn() or {}
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, ValueError) as e:
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, companies_mod.Problem,
+                    ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -3050,6 +3054,9 @@ def _handler(pf):
                 "/api/project/choose": lambda: pf.projects.choose(b("id"), b("task"), b("agent")),
                 "/api/project/stop": lambda: pf.run(pf.projects.stop(b("id"), b("task"), b("agent"))),
                 "/api/schedule/save": lambda: pf.call(pf.schedules.save, b("id"), b("fields") or {}),
+                "/api/company/save": lambda: pf.call(companies_mod.save, pf, b("id"), b("fields") or {}),   # 一人公司（#454）
+                "/api/company/join": lambda: pf.call(companies_mod.join, pf, b("agent"), b("company")),
+                "/api/company/delete": lambda: pf.call(companies_mod.delete, pf, b("id")),
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
                 "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
@@ -3439,7 +3446,7 @@ def state(pf, acct=None):
     return share.filter_state(pf, {
         "ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()],
         "chats": chats, "chat_more": more,
-        "projects": pf.projects.summary(), "schedules": pf.schedules.summary(),
+        "projects": pf.projects.summary(), "schedules": pf.schedules.summary(), "companies": companies_mod.view(pf),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
@@ -3514,6 +3521,7 @@ def delete_agent(pf, aid):
         console.disconnect(path, kind, proc)
     for pid in list(pf.projects.all()):       # 从它在的项目里移出
         pf.call(pf.projects.member, pid, None, aid)
+    pf.call(companies_mod.forget_agent, pf, aid)   # 从它在的公司里移出（#454）
     agents.remove(aid)
     return {}
 

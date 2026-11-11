@@ -546,6 +546,54 @@ body.doc-only .docpane{left:0;width:auto;border-left:0;box-shadow:none}
 .sec-head{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:var(--faint)}
 .sec-head b{font:600 15px var(--song);color:var(--ink)}
 .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+/* 一人公司（#454） */
+.cmark{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font:700 17px var(--song)}
+.cmark.sm{width:26px;height:26px;border-radius:7px;font-size:12px}
+.tag.co{color:#fff}
+.mchips{display:flex;gap:8px;padding:14px 32px 0;flex-wrap:wrap}
+.mchips button{display:flex;align-items:center;gap:6px;font-size:13px;padding:5px 12px;border-radius:16px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+.mchips button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.mchips .n,.mchips .me{font-size:12px;opacity:.7}
+.cogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.cocard{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px 20px;display:flex;flex-direction:column;gap:12px;text-decoration:none;color:inherit;text-align:left;transition:border-color .15s,box-shadow .15s}
+.cocard:hover{border-color:var(--line-strong);box-shadow:0 4px 14px rgba(29,34,43,.06)}
+.cocard .h{display:flex;gap:12px;align-items:center}.cocard .t{min-width:0}
+.cocard .nm{font:600 18px/1.3 var(--song)}
+.cocard .ds{font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.cocard .ppl{display:flex;align-items:center;padding-left:6px}
+.cocard .ppl .seal{box-shadow:0 0 0 2px var(--panel);margin-left:-6px}
+.cocard .ppl span{font-size:12px;color:var(--muted);margin-left:10px}
+.cocard .f{display:flex;gap:12px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.cocard .f .run{color:#7A6216}.cocard .f .wait{color:var(--zhu)}.cocard .f .when{margin-left:auto}
+.cocard.add{border-style:dashed;background:transparent;align-items:center;justify-content:center;flex-direction:row;color:var(--muted);min-height:150px;font-size:14px}
+.cocard.add svg,.co-add svg,.co-pick .add svg{width:16px;height:16px;flex:none}.cocard.add{gap:6px;white-space:nowrap;min-height:0;align-self:stretch}
+.cogrid{align-items:start}
+.flabel{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}.flabel:first-child{margin-top:0}
+.co-colors{display:flex;gap:8px}
+.co-colors .co-sw{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;border:1.5px solid transparent;padding:0}
+.co-colors .co-sw.on{border-color:var(--ink-2)}
+.co-colors .co-sw i{display:block;width:18px;height:18px;border-radius:50%}
+.co-pick{display:flex;flex-direction:column;gap:2px;max-height:50vh;overflow:auto;margin:0 -6px}
+.co-pick button{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;text-align:left}
+.co-pick button:hover,.co-pick button.on{background:var(--sunk)}
+.co-pick .ck{margin-left:auto;color:var(--qing)}.co-pick .desc{margin-left:auto;font-size:12px;color:var(--faint)}
+.co-pick .add{color:var(--muted)}
+.co-head{flex-direction:column;align-items:stretch;gap:10px}
+.co-title{display:flex;align-items:center;gap:10px}.co-title b{font:600 17px var(--song);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-item{display:flex;align-items:center;gap:10px}
+.co-item .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.co-item .r1{display:flex;align-items:center;gap:6px;min-width:0}.co-item .r1 .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-item .sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gav{width:34px;height:34px;border-radius:8px;display:grid;grid-template-columns:1fr 1fr;gap:1px;overflow:hidden;flex:none;background:var(--line)}
+.gav .seal{width:100%;height:100%;border-radius:0;padding:0}
+.av-wrap{position:relative;flex:none;display:inline-flex}
+.sdot{position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-radius:50%;border:2px solid var(--panel);background:var(--lu)}
+.sdot.busy{background:var(--huang)}.sdot.wait{background:var(--zhu)}
+.co-sec{font-size:12px;color:var(--faint);padding:12px 14px 4px}
+.co-add{color:var(--muted);font-size:13px;gap:8px;display:flex;align-items:center;width:100%}
+.co-bar{display:flex;align-items:center;gap:10px;padding:8px 24px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted)}
+.co-bar .grow{flex:1}
+
 .ccard{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px 16px 12px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:border-color .15s,box-shadow .15s;text-decoration:none;color:inherit;text-align:left}
 .ccard:hover{border-color:var(--line-strong);box-shadow:0 6px 18px rgba(29,34,43,.07)}
 .ccard.off{background:#FAFAF8}
@@ -2613,6 +2661,7 @@ function phoneMain(){
   if (!current.id) return false;
   if (current.view === "agents" && current.id !== "new") return !!current.sub;   // 进了 Agent 先看它的对话列表
   if (current.view === "kb") return !!current.sub;                                 // 进了知识库先看条目列表
+  if (current.view === "companies") return !!current.sub;                          // 进了公司先看大群和员工
   return true;
 }
 // 列表收起时的气泡（#220）：竖屏、手机上指着找回列表的按钮；关掉或点过那个按钮就不再出现
@@ -2709,7 +2758,7 @@ function route(){
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
-  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === current.view));
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === (current.view === "companies" ? "agents" : current.view)));
   if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) { document.querySelector(".app").classList.remove("ws-mode"); document.documentElement.classList.remove("ws-dark"); }
   closePop();
   if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
@@ -2717,6 +2766,7 @@ function route(){
   if (current.view !== "projects") proj = null;
   if (current.view !== "schedules") sched = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
+  else if (current.view === "companies") openCompany();
   else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
   else if (current.view === "agents") {
     // 从别处进来：先显示上次那份列表，再重新取（这期间终端里可能新开了对话，#95）
@@ -2780,6 +2830,7 @@ function renderList(){
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
   else if (current.view === "schedules") renderScheduleList();
+  else if (current.view === "companies") renderCompanySide();
   else if (current.view === "settings") renderSettingsList();
   else renderChatList();
 }
@@ -2896,7 +2947,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
 const joinedOf = c => c.people_role === "in" || c.people_role === "invited";
 function renderChatList(){
   const rows = chatFilter ? searchRows().filter(c => !c.agent || joinedOf(c))     // 和 Agent 的对话在 Agent 里；被拉进别人的群的在这里（#419）
-    : allChats().filter(c => (!c.agent || joinedOf(c)) && (!c.pocket || c.expanded || c.pin != null || c.id === current.id));   // 挂件里的：放大过的才列出（#326）
+    : allChats().filter(c => (!c.agent || joinedOf(c)) && !c.company && (!c.pocket || c.expanded || c.pin != null || c.id === current.id));   // 挂件里的：放大过的才列出（#326）
   $("#list").innerHTML = `
     <div class="list-head"><h1>对话</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/chats/new" style="text-decoration:none">${ICON.plus}新对话</a></div>
     <label class="search">${ICON.search}<input placeholder="搜索对话" aria-label="搜索对话" value="${esc(chatFilter)}" oninput="searchChats(this.value);this.focus();this.setSelectionRange(this.value.length,this.value.length)"></label>
@@ -2929,6 +2980,7 @@ async function openChat(id){
     if (current.view === "schedules" && sched) { detail = null; drawSchedule(); return; }   // 定时任务的对话没了：显示任务详情（#449）
     $("#main").innerHTML = `<div class="empty"><h2>打不开这个对话</h2><p>${esc(e.message)}</p></div>`; return;
   }
+  if (!(current.view === "chats" || current.view === "schedules" || current.view === "companies" || current.view === "agents" && current.sub)) return;   // 等它的时候已经去了别的页（#454）
   if (current.view === "chats" && current.id === id && !EMBED) detail.agent && !notCreator() ? forgetChat(id) : setLastChat({id, machine: ctxMachine});
   if (detail.agent && current.view === "chats" && !notCreator()) {   // 和 Agent 的对话：到 Agent 页里看（左边是它的对话列表）；被拉进别人的群（#419）留在对话页
     history.replaceState(null, "", `#/agents/${encodeURIComponent(detail.agent)}/${encodeURIComponent(id)}`);
@@ -3400,6 +3452,10 @@ function inviteBar(c){
 let showGroup = (() => { try { return localStorage.getItem("ccim.groupPanel") !== "0"; } catch { return true; } })();
 function toggleGroup(on){ showGroup = on; try { localStorage.setItem("ccim.groupPanel", on ? "1" : "0"); } catch {} drawChat(); }
 function groupHead(c){
+  if (c.company) {                       // 公司大群（#454）：成员跟着公司走，不在这里拉人
+    const co = coById(c.company), ms = (c.members || []).map(agentOf).filter(Boolean);
+    return `<span class="stack" style="margin-right:2px">${ms.slice(0, 5).map(x => seal(x, "sm", false)).join("")}</span>${co ? `<button class="btn" onclick="coDialog(coById(${q(co.id)}))">公司说明</button>` : ""}`;
+  }
   if (c.readonly || c.invite || !c.agent && !c.temp) return "";
   const ms = c.members || [], hs = humansIn(c.people_view);
   const n = (c.agent ? ms.length + 1 : 0) + (hs.length > 1 ? hs.length : 0);
@@ -3409,6 +3465,7 @@ function groupHead(c){
 }
 function groupPanel(c){
   const ms = c.members || [], pv = c.people_view, hs = humansIn(pv);
+  if (c.company) { $("#main").classList.remove("with-panel"); return ""; }   // 公司大群：成员在左边公司列表里
   if (!showGroup || !ms.length && hs.length < 2 && !(pv && pv.people.length) || c.readonly || c.invite) { $("#main").classList.remove("with-panel"); return ""; }
   setTimeout(() => $("#main").classList.add("with-panel"));
   const home = ctxMachine || S.me;
@@ -3485,20 +3542,21 @@ async function reloadChat(){
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
   const host = (c.members || []).length ? "主持：" : "";   // 群聊：不 @ 人时由谁回复（#359）
+  const co = c.company && coById(c.company);   // 公司大群（#454）：头部是公司，不是临时对话
   $("#main").innerHTML = `
-    <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${a ? seal(a) : chatIcon(c)}
+    <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${co ? coMark(co) : a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name" title="${esc(c.title)}">${esc(c.title)}</div>
-        <div class="meta">${a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${host}${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">${host}临时对话</span>`}
-        <span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}
-        ${c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
+        <div class="meta">${co ? `<span class="muted" style="font-size:13px">你和 ${(c.members || []).length} 个 Agent</span>` : a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${host}${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">${host}临时对话</span>`}
+        ${co ? "" : `<span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}`}
+        ${co ? "" : c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${wsHead(c)}
-      ${c.temp && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
+      ${c.temp && !co && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
       ${sideOk(c) ? `<button class="icon-btn" aria-label="更多" title="更多" onclick="headMenu(event)">${ICON.more}</button>` : ""}
     </div>
     ${extNotice(c)}
-    ${schedBar(c)}
+    ${schedBar(c)}${coBar(c)}
     ${groupPanel(c)}
     <div class="chat-body">
     <aside class="ws-tree" id="ws-tree" aria-label="文件"></aside>
@@ -3538,7 +3596,7 @@ function drawChat(){
     </div></div></div>`;
   wsMount(c);
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow(); drawQuotes(); gripInput();
-  if (notCreator()) document.querySelector(".composer")?.classList.add("member");   // 模型、知识库这些设置归建群的人（#419）
+  if (notCreator() || c.company) document.querySelector(".composer")?.classList.add("member");   // 模型、知识库这些设置归建群的人（#419）；公司大群自己不回答（#454）
   if (c.invite) { inviteBar(c); return; }
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
@@ -3561,7 +3619,7 @@ function drawComposerState(){
   $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : "交代件事")
     : listTo() && chatRcpt.includes(listTo()) ? `给 ${agentOf(listTo()).name} 发消息`
     : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
-    : (PV() || {}).quiet ? "发到群里，@ 谁就交给谁回答"
+    : (PV() || {}).quiet || c.company ? "发到群里，@ 谁就交给谁回答"
     : (c.members || []).length ? `给 ${c.agent_name} 发消息，@ 叫群里其他 Agent` : `给 ${c.agent_name || BASE[c.base]} 发消息`;
   if (c.readonly) { $("#chip-model").style.display = $("#chip-effort").style.display = "none"; }
   $("#chip-model").innerHTML = `${esc(EMBED && !c.model ? "默认模型" : modelName(c.model))}${c.model_custom ? "" : "<span class='dflt'>默认</span>"}${EMBED ? "" : ICON.down}`;
@@ -3744,7 +3802,7 @@ async function sendChat(){
     return;
   }
   const refs = chatRefs, at = chatPeople, call = chatCall; chatRefs = []; chatPeople = []; chatCall = false; drawChatRcpt();
-  const quiet = (PV() || {}).quiet && !call;      // 多人群聊里没 @ Agent（#419）：只是说给群里的人听，Agent 不回答
+  const quiet = ((PV() || {}).quiet || detail.company) && !call;   // 多人群聊里没 @ Agent（#419）、公司大群里没 @ 人（#454）：只记下，Agent 不回答
   const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), refs, sending: true, at: Date.now() / 1000,
                 ...(PV() ? {person: {id: PV().me}} : {}), ...(at.length ? {at_people: at} : {})};
   detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
@@ -4767,7 +4825,7 @@ const schedTurn = c => !!c.sched_turn && c.attention !== "ask";
 // 正开着的对话（网页在前台）回答完了就算看过，不进「等你处理」（#88）
 // 切到任务面板等别的页面时 detail 还留着，要看路由上是不是正显示着这个对话（#92）
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
-  && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id) || schedOn(id));
+  && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id) || schedOn(id) || coOn(id));
 function seeOpen(){
   if (!detail || !viewing(detail.id)) return;
   const c = chatById(detail.id);
@@ -5125,7 +5183,7 @@ function openAge(c){                  // 开了多久
   const h = (Date.now() - t) / 3600000;
   return h < 1 ? "刚开" : h < 24 ? `开了 ${Math.floor(h)} 小时` : `开了 ${Math.floor(h / 24)} 天`;
 }
-function boardHref(c){ return c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
+function boardHref(c){ return c.company ? `#/companies/${encodeURIComponent(c.company)}/group` : c.agent ? `#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`; }
 function boardRow(c, kind){
   // 一行两层：左边「你说的话 / Agent 汇报的进度」，右边「时间 / 哪台电脑」（#119）
   // 群聊：头像和名字用在干活的、或最后回答的那个成员（#192）
@@ -6258,11 +6316,11 @@ function machineSections(items, card, addLabel, addHref){
   }).join("");
 }
 let cardFilter = "";
-function overviewHtml(title, items, body, newJs){
+function overviewHtml(title, items, body, newJs, tabs, extra){
   return `<div class="overview"><div class="ov-head"><h1>${title}</h1><span class="grow"></span>
       <label class="search">${ICON.search}<input placeholder="搜索${title}" aria-label="搜索${title}" value="${esc(cardFilter)}" oninput="cardFilter=this.value.toLowerCase();route();const i=document.querySelector('.ov-head input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></label>
-      ${newJs ? `<button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title.startsWith("Agent") ? " Agent" : title}</button>` : ""}</div>
-    ${machineTabs(items)}<div class="ov-body">${body}</div></div>`;
+      ${extra || ""}${newJs ? `<button class="btn primary" onclick="${newJs}">${ICON.plus}新建${title.startsWith("Agent") ? " Agent" : title}</button>` : ""}</div>
+    ${tabs ?? machineTabs(items)}<div class="ov-body">${body}</div></div>`;
 }
 function agentCard(a){
   const off = (machineOf(a.machine || S.me) || {online: true}).online === false;
@@ -6271,20 +6329,165 @@ function agentCard(a){
   return `<a class="ccard ${off ? "off" : ""}" href="#/agents/${encodeURIComponent(a.id)}" oncontextmenu="agentMenu(event,${q(a.id)})">
     ${a.shared ? "" : `<button class="more" aria-label="更多操作" title="更多操作" onclick="event.preventDefault();agentMenu(event,${q(a.id)})">${ICON.more}</button>
     <button class="pin ${a.pinned ? "on" : ""}" aria-label="${a.pinned ? "取消置顶" : "置顶"}" title="${a.pinned ? "取消置顶" : "置顶"}" onclick="event.preventDefault();event.stopPropagation();pinAgent(${q(a.id)},${!a.pinned})">${ICON.star}</button>`}
-    <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${a.shared ? `<span class="tag">共享</span>` : ""}${ch}</div></div></div>
+    <div class="top">${seal(a, "", false)}<div class="t"><div class="nm">${esc(a.name)}</div><div class="meta"><span class="tag">${BASE[a.base || "claude"]}</span>${coTag(a.id)}${a.shared ? `<span class="tag">共享</span>` : ""}${ch}</div></div></div>
     <div class="role">${esc(a.role || "还没写角色说明")}</div>
     <span class="path">${esc(a.dir ? tilde(a.dir, a.machine) : "自己的工作区")}</span>
     <div class="foot"><span class="grow">${waitOf(a.id) ? `<span class="wait"><i></i>${waitOf(a.id)} 个对话等你</span>` : st}</span><span>${when(a.last_active)}</span>${off ? "" : `<span class="go">对话</span>`}</div></a>`;
+}
+// ================= 一人公司（#454） =================
+// 公司存在打开网页的这台电脑上（S.companies）。建了第一个公司后 AI 员工页顶上是「所有电脑」「一人公司」两个标签，
+// 具体哪台电脑放到「所有电脑」下面一层。进到公司（#/companies/<公司>[/group | /<Agent>[/<对话>]]）像飞书：左边公司大群和员工，右边聊天。
+const CO_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", zhu: "var(--zhu)", lu: "var(--lu)", dai: "var(--dai)", huang: "var(--huang)"};
+const companies = () => (S.companies || []);
+const coById = id => companies().find(c => c.id === id) || null;
+const coOf = aid => companies().find(c => (c.members || []).includes(aid)) || null;
+const coColor = c => CO_COLORS[c && c.color] || CO_COLORS.qing;
+const coMark = (c, cls = "") => `<span class="cmark ${cls}" style="background:${coColor(c)}" aria-hidden="true">${esc([...(c.name || "?")][0])}</span>`;
+const coTag = aid => { const c = coOf(aid); return c ? `<span class="tag co" style="background:${coColor(c)}">${esc(c.name)}</span>` : ""; };
+const coMembers = c => (c.members || []).map(agentOf).filter(Boolean);
+let agentsTab = (() => { try { return localStorage.getItem("ccim.agentsTab") || "machines"; } catch { return "machines"; } })();
+function setAgentsTab(t){ agentsTab = t; try { localStorage.setItem("ccim.agentsTab", t); } catch {} route(); }
+const coTabOn = () => companies().length > 0 && agentsTab === "company";
+function agentsTabs(){        // 有公司时：「所有电脑」「一人公司」，电脑放到「所有电脑」下面一层
+  const top = `<div class="mtabs" role="tablist"><button class="mtab ${coTabOn() ? "" : "on"}" onclick="setAgentsTab('machines')">所有电脑 <span class="n">${S.agents.length}</span></button>
+    <button class="mtab ${coTabOn() ? "on" : ""}" onclick="setAgentsTab('company')">一人公司 <span class="n">${companies().length}</span></button></div>`;
+  if (coTabOn() || !multi()) return top;
+  if (machineTab !== "all" && !machineOf(machineTab)) machineTab = "all";
+  const n = id => S.agents.filter(x => id === "all" || (x.machine || S.me) === id).length;
+  return top + `<div class="mchips"><button class="${machineTab === "all" ? "on" : ""}" onclick="setMachineTab('all')">全部 <span class="n">${n("all")}</span></button>
+    ${S.machines.map(m => `<button class="${machineTab === m.id ? "on" : ""}" onclick="setMachineTab(${q(m.id)})"><i class="mdot ${m.online ? "" : "off"}"></i>${esc(m.name)}${m.me ? `<span class="me">这台</span>` : ""} <span class="n">${n(m.id)}</span></button>`).join("")}</div>`;
+}
+function companyCards(){
+  const cards = companies().map(c => {
+    const ms = coMembers(c), run = ms.filter(a => a.busy).length, wait = ms.reduce((n, a) => n + waitOf(a.id), 0);
+    const g = c.group && chatById(c.group), gw = g && g.attention ? 1 : 0;
+    const st = [run ? `<span class="run">${run} 个在干活</span>` : "", wait + gw ? `<span class="wait">${wait + gw} 个等你处理</span>` : ""].filter(Boolean).join("") || "<span>都空闲</span>";
+    return `<a class="cocard" href="#/companies/${encodeURIComponent(c.id)}"><div class="h">${coMark(c)}<div class="t"><div class="nm">${esc(c.name)}</div>${c.note ? `<div class="ds">${esc(c.note)}</div>` : ""}</div></div>
+      <div class="ppl">${ms.slice(0, 8).map(a => seal(a, "sm", false)).join("")}<span>${ms.length ? `${ms.length} 个 Agent` : "还没有 Agent"}</span></div>
+      <div class="f">${st}${c.group_active ? `<span class="when">公司大群 ${esc(when(c.group_active))}</span>` : ""}</div></a>`;
+  }).join("");
+  return `<div class="cogrid">${cards}<button class="cocard add" onclick="newCompany()">${ICON.plus}新建公司</button></div>`;
+}
+function coDialog(c){
+  const col = (c && c.color) || Object.keys(CO_COLORS).find(k => !companies().some(x => x.color === k)) || "qing";
+  dialog(c ? "编辑公司" : "新建公司", `<label class="flabel">名字</label><input id="co-name" class="input" maxlength="20" value="${esc(c ? c.name : "")}" placeholder="比如：接单项目">
+    <label class="flabel">颜色</label><div class="co-colors">${Object.entries(CO_COLORS).map(([k, v]) => `<button type="button" class="co-sw ${k === col ? "on" : ""}" data-c="${k}" aria-label="颜色" onclick="document.querySelectorAll('.co-colors .co-sw').forEach(b=>b.classList.toggle('on',b===this))"><i style="background:${v}"></i></button>`).join("")}</div>
+    <label class="flabel">公司说明</label><textarea id="co-note" class="textarea" rows="5" placeholder="这个公司做什么、项目在哪、怎么交付。公司里的 Agent 干活时都会看到">${esc(c ? c.note : "")}</textarea>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="saveCompany(${c ? q(c.id) : "null"})">${c ? "保存" : "新建"}</button>`);
+  const el = $("#co-name"); el.focus(); el.select();
+}
+function newCompany(){ coDialog(null); }
+async function saveCompany(id){
+  const name = $("#co-name").value.trim(), note = $("#co-note").value, color = (document.querySelector(".co-colors .co-sw.on") || {}).dataset?.c;
+  if (!name) return $("#co-name").focus();
+  const r = await act(() => api("/api/company/save", {id, fields: {name, note, color}}, S.me), id ? "已保存" : "已新建");
+  closeDialog();
+  if (!id) { pendingJoin && await joinCompany(pendingJoin, r.id, true); pendingJoin = null; agentsTab = "company"; try { localStorage.setItem("ccim.agentsTab", "company"); } catch {} }
+  await loadState();
+  if (!id && current.view !== "agents") location.hash = `#/companies/${encodeURIComponent(r.id)}`; else route();
+}
+let pendingJoin = null;           // 在「加入公司」里新建公司：建好后把这个 Agent 放进去
+function companyPick(aid){         // Agent 的「⋯ → 加入公司」：一个 Agent 只在一个公司
+  const a = agentOf(aid), cur = coOf(aid);
+  if (!a) return;
+  dialog(`把「${a.name}」放进公司`, `<div class="co-pick">${companies().map(c => `<button class="${cur && cur.id === c.id ? "on" : ""}" onclick="joinCompany(${q(aid)},${q(c.id)})">${coMark(c, "sm")}<span>${esc(c.name)}</span>${cur && cur.id === c.id ? `<span class="ck">✓</span>` : ""}</button>`).join("")}
+    <button class="add" onclick="closeDialog();pendingJoin=${q(aid)};newCompany()">${ICON.plus}<span>新建公司</span></button></div>`,
+    `${cur ? `<button class="btn" style="margin-right:auto" onclick="joinCompany(${q(aid)},null)">移出「${esc(cur.name)}」</button>` : ""}<button class="btn" onclick="closeDialog()">取消</button>`);
+}
+async function joinCompany(aid, coid, quiet){
+  await act(() => api("/api/company/join", {agent: aid, company: coid}, S.me), quiet ? undefined : coid ? "已放进公司" : "已移出公司");
+  if (quiet) return;
+  closeDialog(); await loadState(); route();
+}
+function companyMenu(e, id){
+  const c = coById(id); if (!c) return;
+  const b = (js, label, cls = "") => `<button class="${cls}" onclick="closePop();${js}">${label}</button>`;
+  pop(e, [b(`coDialog(coById(${q(id)}))`, "编辑公司"), b(`addToCompany(${q(id)})`, "把 Agent 拉进来"), b(`deleteCompany(${q(id)})`, "删除公司", "danger")].join(""), true);
+}
+async function deleteCompany(id){
+  const c = coById(id); if (!c) return;
+  if (!await confirmBox(`删除「${c.name}」？`, "里面的 Agent 和它们的对话都还在，只是不再属于这个公司；公司大群会移到已完成。", "删除")) return;
+  await act(() => api("/api/company/delete", {id}, S.me), "已删除");
+  await loadState(); location.hash = "#/agents";
+}
+function addToCompany(coid){       // 把已有的 Agent 拉进公司
+  const c = coById(coid); if (!c) return;
+  const rest = S.agents.filter(a => !a.shared && !(c.members || []).includes(a.id));
+  dialog(`拉进「${c.name}」`, rest.length ? `<div class="co-pick">${rest.map(a => { const o = coOf(a.id);
+      return `<button onclick="joinCompany(${q(a.id)},${q(coid)})">${seal(a, "sm", false)}<span>${esc(a.name)}</span>${o ? `<span class="desc">在「${esc(o.name)}」</span>` : ""}</button>`; }).join("")}</div>` : `<p class="muted">所有 Agent 都在这个公司里了。</p>`,
+    `<button class="btn" onclick="closeDialog()">关闭</button>`);
+}
+function newInCompany(coid){       // 在公司里新建 Agent：建好直接属于这个公司
+  ctxMachine = S.me; agentDraftFrom = {machine: S.me, company: coid}; location.hash = "#/agents/new";
+}
+// ---- 进到公司：左边公司大群和员工，右边聊天 ----
+const coRoute = () => current.view === "companies";
+function coTarget(){               // 右边该打开的：{group} | {agent, chat}
+  if (current.sub === "group" || !current.sub) return {group: true};
+  return {agent: current.sub, chat: current.tab || null};
+}
+function coLast(aid){              // 这个 Agent 最近的对话（不含它在群里被 @ 的子对话）
+  return (S.chats || []).filter(c => c.agent === aid && !c.mention_of && !c.side_of && !c.archived && !c.company && !c.project)
+    .sort((x, y) => (y.last_active || "") > (x.last_active || "") ? 1 : -1)[0] || null;
+}
+function renderCompanySide(){
+  const c = coById(current.id);
+  if (!c) { $("#list").innerHTML = `<div class="list-head"><a class="back" href="#/agents">${ICON.left}一人公司</a></div>`; return; }
+  const t = coTarget(), g = c.group && chatById(c.group), ms = coMembers(c);
+  const gav = `<span class="gav">${ms.slice(0, 4).map(a => seal(a, "sm", false)).join("") || coMark(c, "sm")}</span>`;
+  const row = a => { const l = coLast(a.id), w = waitOf(a.id);
+    const dot = a.busy ? "busy" : w ? "wait" : "";
+    return `<a class="item co-item ${t.agent === a.id ? "on" : ""}" href="#/companies/${encodeURIComponent(c.id)}/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">
+      <span class="av-wrap">${seal(a, "", false)}${dot ? `<i class="sdot ${dot}"></i>` : ""}</span><span class="t"><span class="r1"><span class="title">${esc(a.name)}</span><span class="when">${esc(when(a.last_active))}</span></span>
+      <span class="sub">${esc(a.busy ? (a.doing || "干活中") : w ? `${w} 个对话等你` : (l && (l.brief || l.title)) || a.role || BASE[a.base || "claude"])}</span></span></a>`; };
+  $("#list").innerHTML = `<div class="list-head co-head"><a class="back" href="#/agents" onclick="setAgentsTabQuiet('company')">${ICON.left}一人公司</a>
+      <div class="co-title">${coMark(c, "sm")}<b>${esc(c.name)}</b><button class="icon-btn" aria-label="公司的更多操作" title="更多" onclick="companyMenu(event,${q(c.id)})">${ICON.more}</button></div></div>
+    <div class="scroll">
+      <a class="item co-item ${t.group && (current.sub || !narrow()) ? "on" : ""}" href="#/companies/${encodeURIComponent(c.id)}/group" style="text-decoration:none;color:inherit">${gav}
+        <span class="t"><span class="r1"><span class="title">${g && g.attention ? `<span class="udot"></span>` : ""}<b>${esc(c.name)} 大群</b></span><span class="when">${esc(when((g && g.last_active) || c.group_active))}</span></span>
+        <span class="sub">${esc((g && g.brief) || `你和 ${ms.length} 个 Agent`)}</span></span></a>
+      <div class="co-sec">员工 ${ms.length}</div>${ms.map(row).join("")}
+      <button class="item co-add" onclick="addToCompany(${q(c.id)})">${ICON.plus}把 Agent 拉进来</button>
+      <button class="item co-add" onclick="newInCompany(${q(c.id)})">${ICON.plus}在这里新建 Agent</button></div>`;
+}
+function setAgentsTabQuiet(t){ agentsTab = t; try { localStorage.setItem("ccim.agentsTab", t); } catch {} }
+async function openCompany(){
+  const c = coById(current.id);
+  if (!c) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个公司</h2><p>可能已经删了。</p><a class="btn" href="#/agents">回到 AI 员工</a></div>`; return; }
+  const t = coTarget();
+  if (t.group) {
+    if (narrow() && !current.sub) return;              // 手机上先看公司里的列表
+    if (c.group) return openChat(c.group);
+    $("#main").innerHTML = `<div class="empty"><h2>${esc(c.name)} 大群</h2><p>正在准备。</p></div>`; return;
+  }
+  const a = agentOf(t.agent);
+  if (!a) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个 Agent</h2></div>`; return; }
+  const cid = t.chat || (coLast(a.id) || {}).id;
+  if (cid) return openChat(cid);
+  $("#main").innerHTML = `<div class="empty"><h2>${esc(a.name)}</h2><p>${esc(a.role || "还没和它聊过。")}</p><button class="btn primary" onclick="startCoChat(${q(c.id)},${q(a.id)})">${ICON.plus}和它开个新对话</button></div>`;
+}
+async function startCoChat(coid, aid){
+  const {id} = await act(() => api("/api/chat/new", {agent: aid}, (agentOf(aid) || {}).machine || S.me));
+  await loadState();
+  location.hash = `#/companies/${encodeURIComponent(coid)}/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
+}
+const coOn = id => coRoute() && !!detail && detail.id === id;
+function coBar(c){                 // 公司里打开 Agent 的对话：顶上一条，去它的全部对话、新开一个
+  if (!coRoute() || c.company || !c.agent) return "";
+  return `<div class="co-bar">${esc((agentOf(c.agent) || {}).name || "")} 最近的对话<span class="grow"></span>
+    <button class="btn" onclick="startCoChat(${q(current.id)},${q(c.agent)})">${ICON.plus}新对话</button><a class="btn" href="#/agents/${encodeURIComponent(c.agent)}/${encodeURIComponent(c.id)}" style="text-decoration:none">它的全部对话</a></div>`;
 }
 function renderAgentCards(listOnly){
   if (listOnly) return;
   const rows = S.agents.filter(a => !cardFilter || a.name.toLowerCase().includes(cardFilter))
     .sort((x, y) => (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || ((y.last_active || "") > (x.last_active || "") ? 1 : -1));
   const addable = (S.machines || [{id: S.me, online: true}]).filter(m => m.online && canCreate(m.id) && (machineTab === "all" || !multi() || m.id === machineTab));
-  const body = S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
+  const body = coTabOn() ? companyCards() : S.agents.length ? machineSections(rows, agentCard, m => `在「${m.name || "这台电脑"}」上新建 Agent`, newOnAgents)
     : `<div class="empty" style="margin-top:10vh"><h2>你的 Agent</h2><p>每个 Agent 有自己的角色、底座和工作目录，可以长期用，也可以接到飞书、微信，在手机上找到它。</p>
       ${addable.length ? `<div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">${addable.map(m => `<button class="btn primary" onclick="${newOnAgents(m.id)}">${ICON.plus}${multi() ? `在「${esc(m.name || "这台电脑")}」上新建 Agent` : "新建 Agent"}</button>`).join("")}</div>` : ""}</div>`;
-  $("#main").innerHTML = overviewHtml("AI 员工", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null);
+  const own = !S.guest;                  // 一人公司只给电脑主人（#454）
+  $("#main").innerHTML = overviewHtml("AI 员工", S.agents, body, (S.machines || [{id: S.me}]).some(m => canCreate(m.id)) ? "newOn('agents')" : null,
+    companies().length ? agentsTabs() : undefined, own ? `<button class="btn" onclick="newCompany()">${ICON.plus}新建公司</button>` : "");
 }
 function newOnAgents(mid){ return `newOn('agents',${q(mid)})`; }
 function newOn(view, mid){
@@ -6306,6 +6509,7 @@ function agentMenu(e, id){
     b(`agentTab='edit';location.hash=${q("#/agents/" + encodeURIComponent(id) + "/settings")};if(current.sub==='settings')renderAgent(${q(id)})`, "编辑"),
     b(`renameAgent(${q(id)})`, "重命名"),
     b(`pinAgent(${q(id)},${!a.pinned})`, a.pinned ? "取消置顶" : "置顶"),
+    S.guest ? "" : b(`companyPick(${q(id)})`, coOf(id) ? "换公司" : "加入公司"),
     b(`deleteAgent(${q(id)},${q(a.name)})`, "删除", "danger"),
   ].join(""));
 }
@@ -6590,6 +6794,11 @@ async function saveAgent(id){
     const apply = await applyBox(r.count);
     if (!apply) return;
     r = await act(() => api("/api/agent/save", {id, fields: {...fields, confirmed: true, apply}}, where));
+  }
+  if (!id && fd.company && r.id) {       // 在公司里新建的（#454）：直接放进这个公司
+    try { await api("/api/company/join", {agent: r.id, company: fd.company}, S.me); } catch {}
+    toast("已新建"); agentTab = "overview"; await loadState();
+    location.hash = `#/companies/${encodeURIComponent(fd.company)}/${encodeURIComponent(r.id)}`; return;
   }
   toast(id ? "已保存" : r.chat ? "已保存为 Agent，这个对话归到它名下了" : "已新建");
   agentTab = "overview"; await loadState();
@@ -8254,7 +8463,7 @@ async function openSide(quote){
   $("#side-in")?.focus();
 }
 // 对话页右上角的「⋯」（#430）：重命名、置顶这些在对话列表那一行的「⋯」里已经有了，这里只放侧边对话
-const sideOk = c => !!c && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
+const sideOk = c => !!c && !c.company && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
 function headMenu(e){
   const on = SIDE && detail && SIDE.of === detail.id;
   pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`, true);

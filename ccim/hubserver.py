@@ -518,7 +518,7 @@ font:15px/1.6 -apple-system,"PingFang SC","Hiragino Sans GB",sans-serif}
 .box{width:min(380px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px 26px}
 h1{font:600 22px "Songti SC","STSong",serif;margin:0 0 4px}p{color:var(--muted);margin:0 0 18px;font-size:13.5px}
 label{display:block;font-size:13px;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid #C9CDC4;border-radius:10px;font:inherit;font-size:16px;outline:none}
-input:focus{border-color:var(--qing)}button{width:100%;margin-top:20px;padding:11px;border:0;border-radius:10px;background:var(--qing);color:#fff;font:inherit;cursor:pointer}
+input:focus{border-color:var(--qing)}button{width:100%;margin-top:20px;padding:11px;border:0;border-radius:10px;background:var(--qing);color:#fff;font:inherit;cursor:pointer}button:disabled{opacity:.6;cursor:default}
 .err{color:var(--bad);font-size:13px;min-height:20px;margin-top:10px}.qr{width:200px;margin:6px auto}.qr svg{width:100%;height:auto}
 code{font:12px "SF Mono",Menlo,monospace;word-break:break-all;color:var(--muted)}
 .ck{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;color:var(--muted);cursor:pointer}.ck input{width:16px;height:16px;margin:0;accent-color:var(--qing)}
@@ -537,11 +537,16 @@ LOGIN_BODY = """<h1>ccim</h1><p>登录后使用你的 Agent。</p>
 <label class="ck"><input id="rem" type="checkbox" checked><span>记住这台设备，90 天内登录不用再输动态码</span></label></div>
 <button>登录</button><div class="err" id="err"></div></form>"""
 LOGIN_SCRIPT = """(nmbox.hidden ? pw : nm).focus();
+const btn = document.querySelector("#f button");
 document.getElementById("f").onsubmit = async e => { e.preventDefault();
+  if (btn.disabled) return;
+  btn.disabled = true;
   const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
-    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked})});
-  const d = await r.json().catch(() => ({}));
-  if (r.ok) { location.href = "/" + location.hash; return; }
+    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked})}).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {error: "连不上服务器，稍后再试"};
+  // 登录页就在 / 上时跳到同一个地址，有的手机浏览器不重新加载（带 # 时按规范也不加载），停在登录页（#460）
+  if (r && r.ok) { if (location.pathname === "/") location.reload(); else location.assign("/" + location.hash); return; }
+  btn.disabled = false;
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
   err.textContent = d.error || "出错了"; code.value = ""; };"""
 

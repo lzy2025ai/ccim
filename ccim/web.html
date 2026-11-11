@@ -56,6 +56,40 @@ body{overflow:hidden}
 .rail a:hover{background:var(--sunk);color:var(--ink)}
 .rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
 .rail .spacer{flex:1}
+.rail .rmore{display:none}
+.lanes{padding:14px 36px 40px}
+.lrow{display:grid;grid-template-columns:170px repeat(3,minmax(0,1fr));gap:12px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
+.lrow.lhead{border-top:0;padding:4px 0 8px}
+.lcol-h{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.lcol-h i{width:7px;height:7px;border-radius:50%}
+.lcol-h .n,.lcell-t{color:var(--muted);font-weight:400}
+.lwho{display:flex;align-items:center;gap:9px;min-width:0;color:var(--ink);text-decoration:none;padding-top:4px}
+.lwho .nm{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lwho-x{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--sunk);color:var(--muted)}
+.lwho-x svg{width:16px;height:16px}
+.lcell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lcell-t{display:none;font-size:12px}
+.lcard{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:9px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lc);text-decoration:none;color:var(--ink);min-width:0}
+.lcard:hover{border-color:var(--lc)}
+.lcard.l-work{--lc:var(--warn)}.lcard.l-wait{--lc:var(--zhu)}.lcard.l-done{--lc:var(--lu);opacity:.8}.lcard.stall{--lc:var(--stuck)}
+.lcard .lt{font-size:13px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lcard .lt .reason{margin-right:5px}
+.lcard .ls{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lmore{font-size:12px;color:var(--muted);padding-left:4px}
+@media (max-width:760px){.lanes{padding:6px 14px 30px}.lrow{grid-template-columns:minmax(0,1fr);gap:8px}.lrow.lhead{display:none}
+  .lcell:not(:has(.lcard)){display:none}.lcell-t{display:block}}
+.bmodes-h{display:flex;align-items:center;gap:6px}
+.bmodes a{padding:3px 12px;border-radius:6px;font-size:13px;color:var(--muted);text-decoration:none}
+.bmodes a.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.bmodes a:hover:not(.on){color:var(--ink)}
+.scrim.msheet{place-items:end stretch}
+.msheet-box{background:var(--panel);border-radius:16px 16px 0 0;padding:14px 12px calc(14px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;animation:msheet .18s ease-out}
+@keyframes msheet{from{transform:translateY(24px);opacity:.4}}
+.mitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0 10px;border-radius:12px;color:var(--ink);text-decoration:none;font-size:12.5px}
+.mitem svg{width:24px;height:24px;color:var(--muted)}
+.mitem.on,.mitem.on svg{color:var(--qing)}
+.mitem.on{background:var(--sunk)}
+.mitem .nbadge{right:calc(50% - 22px);top:6px}
 
 .list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .list-head{padding:18px 16px 10px;display:flex;align-items:center;justify-content:space-between}
@@ -1364,6 +1398,10 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   .rail .brand,.rail .unfold,.app.list-off .rail .unfold,.rail .spacer{display:none}
   .rail a{width:auto;flex:1;padding:6px 0 4px;font-size:11px;border-radius:10px}
   .rail a.on{box-shadow:none;background:none}
+  .rail a.mi{display:none}
+  .rail .rmore{display:flex;flex:1;flex-direction:column;align-items:center;gap:3px;padding:6px 0 4px;font-size:11px;border-radius:10px;color:var(--muted);background:none;border:0;font-family:inherit}
+  .rail .rmore svg{width:20px;height:20px}
+  .rail .rmore.on{color:var(--qing)}
   .list,.app.list-off .list{position:static;display:flex;width:auto;height:calc(100dvh - env(safe-area-inset-top));box-shadow:none;border-right:0;
     padding-bottom:calc(64px + env(safe-area-inset-bottom))}
   .list .fold{display:none}
@@ -1781,6 +1819,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
 /* ---------- 塔台（#438）：今天各 Agent 的时间轴；右侧抽屉看当前对话、直接批准和回复；手机上是卡片列表 ---------- */
 .tower{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--paper)}
 .tw-head{display:flex;align-items:flex-end;gap:28px;padding:22px 28px 14px}
+.tower .bmodes-h{padding:22px 28px 0}.tower .bmodes-h + .tw-head{padding-top:12px}.tower .bmodes-h + .tw-head h1{font-size:18px}
 .tw-head h1{font:600 24px/1.2 var(--song);margin:0}
 .tw-date{font-size:13px;color:var(--muted);margin-top:4px}
 .tw-head .sp{flex:1}
@@ -1907,13 +1946,13 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/schedules" data-nav="schedules" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时<span class="nbadge" id="nav-sched-n" hidden></span></a>
     <a href="#/agents" data-nav="agents" onclick="return navAgents(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
-    <a href="#/kb" data-nav="kb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
-    <a href="#/apps" data-nav="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
-    <a href="#/skills" data-nav="skills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>Skill</a>
-    <a href="#/tower" data-nav="tower"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5h7M8 12h10M5 17.5h6M15 17.5h4"/><path d="M14 3.5v17" stroke-width="1.4" stroke-dasharray="1.5 2"/></svg>塔台</a>
+    <a href="#/kb" data-nav="kb" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/apps" data-nav="apps" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
+    <a href="#/skills" data-nav="skills" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>共享 Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
-    <a href="#/settings" data-nav="settings" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
+    <a href="#/settings" data-nav="settings" class="has-badge mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
+    <button class="rmore has-badge" id="nav-more" onclick="openMore()" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>更多<span class="nbadge" id="nav-more-n" hidden></span></button>
   </nav>
   <button class="pback" id="pback" aria-label="返回" onclick="phoneBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>
   <section class="list" id="list"></section>
@@ -2317,6 +2356,19 @@ addEventListener("keydown", e => {   // 只关最上面那层
   else if (!top && DOC) closeDoc();
   else if (!top && SIDE) closeSide();
 });
+// 手机底栏的「更多」（#464）：底部弹出收起来的那几个入口，点外面、Esc、换页都关
+function openMore(){
+  document.querySelector(".msheet")?.remove();
+  const items = [...document.querySelectorAll(".rail a.mi")].map(a => {
+    const c = a.cloneNode(true); c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+    c.className = "mitem" + (a.classList.contains("on") ? " on" : ""); c.removeAttribute("data-nav"); return c.outerHTML;
+  }).join("");
+  const el = document.createElement("div");
+  el.className = "scrim msheet";
+  el.innerHTML = `<div class="msheet-box" role="dialog" aria-label="更多">${items}</div>`;
+  el.onclick = e => { if (e.target === el || e.target.closest(".mitem")) el.remove(); };
+  document.body.appendChild(el);
+}
 const DD = {};
 function dd(id, opts, value, onpick){
   DD[id] = {opts, value, onpick};
@@ -2759,7 +2811,10 @@ function route(){
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
-  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === (current.view === "companies" ? "agents" : current.view)));
+  const navOn = current.view === "companies" ? "agents" : current.view === "tower" ? "board" : current.view;   // 塔台是任务面板的一种看法（#464）
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === navOn));
+  $("#nav-more")?.classList.toggle("on", !!document.querySelector(`.rail a.mi[data-nav="${navOn}"]`));
+  document.querySelector(".msheet")?.remove();
   if (!WS || WS.chat !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) { document.querySelector(".app").classList.remove("ws-mode"); document.documentElement.classList.remove("ws-dark"); }
   closePop();
   if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
@@ -4852,6 +4907,8 @@ function drawAttention(){
     sb.hidden = !d; sb.textContent = d;
     sb.parentElement.href = devCount() ? "#/settings/dev" : oldMachines().length ? "#/settings/machines" : "#/settings";   // 有要处理的直接进那一页
   }
+  const mb = $("#nav-more-n");   // 手机底栏收进「更多」的入口里有红点，「更多」上也亮（#464）
+  if (mb) { const k = [...document.querySelectorAll(".rail a.mi .nbadge")].filter(x => !x.hidden).reduce((t, x) => t + (parseInt(x.textContent) || 0), 0); mb.hidden = !k; mb.textContent = k > 99 ? "99+" : k; }
   document.title = (n ? `(${n}) ` : "") + "ccim";
 }
 async function markSeen(id, force){
@@ -4979,7 +5036,7 @@ function twRowOf(sel){
 }
 function renderTower(){
   if (!TW.parts) {
-    $("#main").innerHTML = `<div class="tower"><div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div></div><div class="tw-empty">…</div></div>`;
+    $("#main").innerHTML = `<div class="tower"><div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("tower")}</div><div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div></div><div class="tw-empty">…</div></div>`;
     loadTower().then(() => current.view === "tower" && drawTower()).catch(e => toast(e.message));
     return;
   }
@@ -4999,7 +5056,7 @@ function drawTower(){
     if (r) { TW.sel = {mid: r.mid, key: r.key}; twLoadDet(); }
   }
   TW.auto = false;
-  const head = `<div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div><span class="sp"></span>
+  const head = `<div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("tower")}</div><div class="tw-head"><div><h1>今天</h1><div class="tw-date">${twDate()}</div></div><span class="sp"></span>
     <div class="tw-stat wait"><b>${nWait}</b><span>在等你</span></div><div class="tw-stat work"><b>${nWork}</b><span>在干活</span></div>
     <div class="tw-stat"><b>${twDur(waited)}</b><span>今天等你</span></div></div>`;
   const keep = $(".tw-scroll, .tw-cards"), top = keep ? keep.scrollTop : 0;
@@ -5515,10 +5572,52 @@ function finCard(st){   // 已完成（#369）：今天、近 7 天、近 30 天
     <div class="fin-bars" onclick="const d=event.target.dataset.d;if(d)location.hash='#/board/day/'+d">${bars}</div>
     <div class="haxis"><span>${+days[0].slice(5, 7)}月${+days[0].slice(8)}日</span><span>今天</span></div></div>`;
 }
+// 任务面板的几种看法（#464）：概览是默认，塔台不常用，收在这里切过去
+function boardModes(on){
+  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["lanes", "泳道", "#/board/lanes"], ["tower", "塔台", "#/tower"]].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}</a>`).join("")}</span>`;
+}
+// 泳道（#464）：类名带 l- 前缀，全局有 .wait 的样式（任务面板的红点）。每个 Agent 一行，分「正在干活 / 等你处理 / 今天完成」三列，看谁手上压着事。
+// 口径和概览一样（正在干活、等你处理）；今天完成 = 标了已完成、今天还有动静的（状态里没有标完成的时间）
+function renderLanes(){
+  const today = ymd(new Date());
+  const all = withOpen().filter(onBoard);
+  const cols = [["work", "正在干活", "var(--warn)", c => !c.archived && working(c) && !c.attention && !schedTurn(c)],
+    ["wait", "等你处理", "var(--zhu)", isOpen], ["done", "今天完成", "var(--lu)", c => c.archived && (c.last_active || "").slice(0, 10) === today]];
+  const lanes = new Map();
+  for (const c of all) {
+    const k = cols.findIndex(x => x[3](c));
+    if (k < 0) continue;
+    const key = c.agent && agentOf(c.agent) ? c.agent : "";
+    if (!lanes.has(key)) lanes.set(key, [[], [], []]);
+    lanes.get(key)[k].push(c);
+  }
+  const rows = [...lanes.entries()].sort((a, b) => b[1][1].length - a[1][1].length || b[1][0].length - a[1][0].length || b[1][2].length - a[1][2].length
+    || (a[0] ? 0 : 1) - (b[0] ? 0 : 1));
+  const tot = [0, 1, 2].map(i => rows.reduce((n, [, v]) => n + v[i].length, 0));
+  const card = (c, k) => {
+    const said = c.issue ? `#${c.issue.n} ${c.issue.title || c.title}` : c.ask && !c.ask.startsWith("/") ? c.ask : c.title;
+    const r = REASON[c.attention];
+    const sub = k === "work" ? (c.stall ? stallText(c.stall, true) : esc(c.doing ? "正在" + c.doing : "干活中")) : esc(c.brief || "");
+    return `<a class="lcard l-${k} ${c.stall && k === "work" ? "stall" : ""}" href="${boardHref(c)}"><span class="lt">${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}${esc(said || "新对话")}</span>${sub ? `<span class="ls">${sub}</span>` : ""}</a>`;
+  };
+  const cell = (list, k) => {
+    const show = k === "done" ? list.slice(0, 5) : list;
+    return show.map(c => card(c, k)).join("") + (list.length > show.length ? `<span class="lmore">还有 ${list.length - show.length} 个</span>` : "");
+  };
+  const top = $(".board") ? $(".board").scrollTop : 0;
+  $("#main").innerHTML = `<div class="board"><div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("lanes")}</div>
+    <div class="lanes">${rows.length ? `<div class="lrow lhead"><span></span>${cols.map(([, t, color], i) => `<span class="lcol-h"><i style="background:${color}"></i>${t}<span class="n">${tot[i]}</span></span>`).join("")}</div>`
+      + rows.map(([id, v]) => { const a = id ? agentOf(id) : null; return `<div class="lrow">
+        <a class="lwho" ${a ? `href="#/agents/${encodeURIComponent(id)}"` : ""}>${a ? seal(a, "sm", false) : `<span class="lwho-x">${ICON.more}</span>`}<span class="nm">${esc(a ? a.name : "其他对话")}</span></a>
+        ${cols.map(([k, t], i) => `<div class="lcell l-${k}"><span class="lcell-t">${t} ${v[i].length}</span>${cell(v[i], k)}</div>`).join("")}</div>`; }).join("")
+      : `<p class="bempty">现在没有在干活、等你处理或今天完成的事。</p>`}</div></div>`;
+  if (top) $(".board").scrollTop = top;
+}
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
+  if (current.id === "lanes") return renderLanes();
   const tops = withOpen().filter(c => onBoard(c) && !c.archived);
   // 等你批准、出错停下的总在最上面（#390）。默认「最近回答」：有新回答没看过的（红点）在前，
   // 再按最后回答从新到旧，刚做完的一眼看到；切到「开得最久」按开对话的时间从早到晚，方便清理拖着的老对话
@@ -5540,7 +5639,7 @@ async function renderBoard(quick){
   const tool = !wait.length ? "" : BSEL
     ? `<span class="sp"></span><span class="bpickbar"><button class="btn" onclick="pickAll(${ids})">${BSEL.size === wait.length ? "全不选" : "全选"}</button><button class="btn" onclick="endPick()">取消</button><button class="btn primary" ${BSEL.size ? "" : "disabled"} onclick="finishOpen([...BSEL])">标为已完成${BSEL.size ? `（${BSEL.size}）` : ""}</button></span>`
     : `<span class="sp"></span><span class="rtabs" role="tablist" aria-label="排序">${[["new", "最近回答"], ["old", "开得最久"]].map(([k, t]) => `<button role="tab" aria-selected="${waitOrder === k}" class="${waitOrder === k ? "on" : ""}" onclick="setWaitOrder('${k}')">${t}</button>`).join("")}</span><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
-  $("#main").innerHTML = `<div class="board"><div class="bhead"><h1>任务面板</h1></div>
+  $("#main").innerHTML = `<div class="board"><div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("board")}</div>
     <div class="bgrid"><div class="bleft">
       ${kpiHtml(st)}
       ${work.length ? sec("正在干活", "var(--warn)", work.length, work.map(c => boardRow(c, "work")).join("")) : ""}
@@ -5754,7 +5853,7 @@ async function renderSkills(){
       <button class="ccard add" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`
     : `<div class="empty" style="margin-top:40px"><h2>还没有 Skill</h2><p>${sharedM(S.me) ? "装在这里的 Skill，你自己的 Agent 在 ccim 里对话时都能用。" : "装在这里的 Skill，各台电脑上的 Agent 在 ccim 里对话时都能用。"}</p>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>`;
-  skContent().innerHTML = `<div class="overview"><div class="ov-head"><h1>Skill</h1><span class="grow"></span>
+  skContent().innerHTML = `<div class="overview"><div class="ov-head"><h1>共享 Skill</h1><span class="grow"></span>
       <button class="btn" onclick="marketsMenu(event)">逛 Skill 市场${ICON.down}</button>
       <button class="btn primary" onclick="installSkill()">${ICON.plus}安装 Skill</button></div>
     <div class="ov-sub">${syncLine()}</div><div class="ov-body">${body}</div></div>`;

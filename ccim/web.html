@@ -57,6 +57,27 @@ body{overflow:hidden}
 .rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
 .rail .spacer{flex:1}
 .rail .rmore{display:none}
+.lanes{padding:14px 36px 40px}
+.lrow{display:grid;grid-template-columns:170px repeat(3,minmax(0,1fr));gap:12px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
+.lrow.lhead{border-top:0;padding:4px 0 8px}
+.lcol-h{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.lcol-h i{width:7px;height:7px;border-radius:50%}
+.lcol-h .n,.lcell-t{color:var(--muted);font-weight:400}
+.lwho{display:flex;align-items:center;gap:9px;min-width:0;color:var(--ink);text-decoration:none;padding-top:4px}
+.lwho .nm{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lwho-x{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--sunk);color:var(--muted)}
+.lwho-x svg{width:16px;height:16px}
+.lcell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lcell-t{display:none;font-size:12px}
+.lcard{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:9px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lc);text-decoration:none;color:var(--ink);min-width:0}
+.lcard:hover{border-color:var(--lc)}
+.lcard.l-work{--lc:var(--warn)}.lcard.l-wait{--lc:var(--zhu)}.lcard.l-done{--lc:var(--lu);opacity:.8}.lcard.stall{--lc:var(--stuck)}
+.lcard .lt{font-size:13px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lcard .lt .reason{margin-right:5px}
+.lcard .ls{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lmore{font-size:12px;color:var(--muted);padding-left:4px}
+@media (max-width:760px){.lanes{padding:6px 14px 30px}.lrow{grid-template-columns:minmax(0,1fr);gap:8px}.lrow.lhead{display:none}
+  .lcell:not(:has(.lcard)){display:none}.lcell-t{display:block}}
 .bmodes-h{display:flex;align-items:center;gap:6px}
 .bmodes a{padding:3px 12px;border-radius:6px;font-size:13px;color:var(--muted);text-decoration:none}
 .bmodes a.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
@@ -5553,12 +5574,50 @@ function finCard(st){   // 已完成（#369）：今天、近 7 天、近 30 天
 }
 // 任务面板的几种看法（#464）：概览是默认，塔台不常用，收在这里切过去
 function boardModes(on){
-  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["tower", "塔台", "#/tower"]].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}</a>`).join("")}</span>`;
+  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["lanes", "泳道", "#/board/lanes"], ["tower", "塔台", "#/tower"]].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}</a>`).join("")}</span>`;
+}
+// 泳道（#464）：类名带 l- 前缀，全局有 .wait 的样式（任务面板的红点）。每个 Agent 一行，分「正在干活 / 等你处理 / 今天完成」三列，看谁手上压着事。
+// 口径和概览一样（正在干活、等你处理）；今天完成 = 标了已完成、今天还有动静的（状态里没有标完成的时间）
+function renderLanes(){
+  const today = ymd(new Date());
+  const all = withOpen().filter(onBoard);
+  const cols = [["work", "正在干活", "var(--warn)", c => !c.archived && working(c) && !c.attention && !schedTurn(c)],
+    ["wait", "等你处理", "var(--zhu)", isOpen], ["done", "今天完成", "var(--lu)", c => c.archived && (c.last_active || "").slice(0, 10) === today]];
+  const lanes = new Map();
+  for (const c of all) {
+    const k = cols.findIndex(x => x[3](c));
+    if (k < 0) continue;
+    const key = c.agent && agentOf(c.agent) ? c.agent : "";
+    if (!lanes.has(key)) lanes.set(key, [[], [], []]);
+    lanes.get(key)[k].push(c);
+  }
+  const rows = [...lanes.entries()].sort((a, b) => b[1][1].length - a[1][1].length || b[1][0].length - a[1][0].length || b[1][2].length - a[1][2].length
+    || (a[0] ? 0 : 1) - (b[0] ? 0 : 1));
+  const tot = [0, 1, 2].map(i => rows.reduce((n, [, v]) => n + v[i].length, 0));
+  const card = (c, k) => {
+    const said = c.issue ? `#${c.issue.n} ${c.issue.title || c.title}` : c.ask && !c.ask.startsWith("/") ? c.ask : c.title;
+    const r = REASON[c.attention];
+    const sub = k === "work" ? (c.stall ? stallText(c.stall, true) : esc(c.doing ? "正在" + c.doing : "干活中")) : esc(c.brief || "");
+    return `<a class="lcard l-${k} ${c.stall && k === "work" ? "stall" : ""}" href="${boardHref(c)}"><span class="lt">${r ? `<span class="reason ${r[1]}">${r[0]}</span>` : ""}${esc(said || "新对话")}</span>${sub ? `<span class="ls">${sub}</span>` : ""}</a>`;
+  };
+  const cell = (list, k) => {
+    const show = k === "done" ? list.slice(0, 5) : list;
+    return show.map(c => card(c, k)).join("") + (list.length > show.length ? `<span class="lmore">还有 ${list.length - show.length} 个</span>` : "");
+  };
+  const top = $(".board") ? $(".board").scrollTop : 0;
+  $("#main").innerHTML = `<div class="board"><div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("lanes")}</div>
+    <div class="lanes">${rows.length ? `<div class="lrow lhead"><span></span>${cols.map(([, t, color], i) => `<span class="lcol-h"><i style="background:${color}"></i>${t}<span class="n">${tot[i]}</span></span>`).join("")}</div>`
+      + rows.map(([id, v]) => { const a = id ? agentOf(id) : null; return `<div class="lrow">
+        <a class="lwho" ${a ? `href="#/agents/${encodeURIComponent(id)}"` : ""}>${a ? seal(a, "sm", false) : `<span class="lwho-x">${ICON.more}</span>`}<span class="nm">${esc(a ? a.name : "其他对话")}</span></a>
+        ${cols.map(([k, t], i) => `<div class="lcell l-${k}"><span class="lcell-t">${t} ${v[i].length}</span>${cell(v[i], k)}</div>`).join("")}</div>`; }).join("")
+      : `<p class="bempty">现在没有在干活、等你处理或今天完成的事。</p>`}</div></div>`;
+  if (top) $(".board").scrollTop = top;
 }
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
+  if (current.id === "lanes") return renderLanes();
   const tops = withOpen().filter(c => onBoard(c) && !c.archived);
   // 等你批准、出错停下的总在最上面（#390）。默认「最近回答」：有新回答没看过的（红点）在前，
   // 再按最后回答从新到旧，刚做完的一眼看到；切到「开得最久」按开对话的时间从早到晚，方便清理拖着的老对话

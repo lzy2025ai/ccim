@@ -3597,6 +3597,11 @@ async function reloadChat(){
   drawChat(); if (keep) $("#input").value = keep;
   loadState();                           // Agent 的对话列表由 loadState 在后台刷新，不清空
 }
+function chanTags(c, a){   // 这个 Agent 接了微信、飞书（#463）：网页私聊的头部标出来，点了去 Agent 设置
+  if (!a || (c.members || []).length || (c.source && c.source !== "网页")) return "";
+  return (a.channels || []).map(ch => { const k = ch.kind === "weixin" ? "weixin" : "feishu", n = k === "weixin" ? "微信" : "飞书", off = !["online", "connecting"].includes(ch.state);
+    return `<a class="tag ${k}" href="#/agents/${encodeURIComponent(a.id)}" title="${esc(`已接到${n}${ch.bot ? `「${ch.bot}」` : ""}${off ? "，现在没在运行" : ""}`)}">${n}${off ? " · 离线" : ""}</a>`; }).join("");
+}
 function drawChat(){
   const c = detail, a = c.agent ? agentOf(c.agent) : null;
   const host = (c.members || []).length ? "主持：" : "";   // 群聊：不 @ 人时由谁回复（#359）
@@ -3605,7 +3610,7 @@ function drawChat(){
     <div class="chat-head">${linkTrail.length ? `<button class="icon-btn lback" aria-label="返回" title="返回" onclick="linkBack()">${ICON.left}</button>` : ""}${co ? coMark(co) : a ? seal(a) : chatIcon(c)}
       <div class="grow"><div class="name" title="${esc(c.title)}">${esc(c.title)}</div>
         <div class="meta">${co ? `<span class="muted" style="font-size:13px">你和 ${(c.members || []).length} 个 Agent</span>` : a ? `<a class="muted" style="font-size:13px" href="#/agents/${encodeURIComponent(a.id)}">${host}${esc(a.name)}</a>` : `<span class="muted" style="font-size:13px">${host}临时对话</span>`}
-        ${co ? "" : `<span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${forkFrom(c)}${splitFrom(c)}`}
+        ${co ? "" : `<span class="tag">${BASE[c.base]}</span>${mtag(ctxMachine)}${srcTag(c.source === "网页" ? "" : c.source)}${chanTags(c, a)}${forkFrom(c)}${splitFrom(c)}`}
         ${co ? "" : c.dir ? `<span class="path">${esc(tilde(c.dir))}</span>` : a ? `<span class="muted" style="font-size:12px">它自己的工作区</span>` : `<span class="muted" style="font-size:12px">没有工作目录</span>`}</div></div>
       ${wsHead(c)}
       ${c.temp && !co && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}

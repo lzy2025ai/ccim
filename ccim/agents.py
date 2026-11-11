@@ -165,6 +165,37 @@ def linked_paths(aid):
     return out
 
 
+CHANNEL_LABEL = {"feishu": "飞书", "weixin": "微信"}
+
+
+def channels_of(aid):
+    """这个 Agent 接上的渠道，一种一个：[(feishu / weixin, 进程登记的路径)]。"""
+    out = []
+    for kind, proc, _ in linked_paths(aid):
+        if kind not in [k for k, _ in out]:
+            out.append((kind, proc))
+    return out
+
+
+def notify_owner(aid, text, kinds=None):
+    """往主人和这个 Agent 的飞书 / 微信私聊里发一句话（#463）。由那个渠道的进程每秒取走发出。
+    kinds 不写就发到接上的所有渠道。返回 [(渠道名, 状态)]：sent 已交给进程，offline 进程没在运行（启动后再发），no_owner 还没认主人。"""
+    from . import runtime, web
+    a = get(aid) or {}
+    out = []
+    for kind, proc in channels_of(aid):
+        if kinds and kind not in kinds:
+            continue
+        if not (registry.get(proc) or {}).get("owner_open_id"):
+            out.append((CHANNEL_LABEL[kind], "no_owner"))
+            continue
+        # 一个微信号可能管着好几个 Agent，开头写上是谁说的
+        msg = f"【{a.get('name') or 'Agent'}】{text}" if kind == "weixin" else text
+        runtime.post_note(proc, runtime.OWNER, msg)
+        out.append((CHANNEL_LABEL[kind], "sent" if web._proc(proc)["state"] in ("online", "connecting", "error") else "offline"))
+    return out
+
+
 def for_path(path):
     """项目目录对应的 Agent（飞书、微信登记里的 agent_id）。"""
     path = os.path.realpath(path)

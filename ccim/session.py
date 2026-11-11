@@ -698,13 +698,13 @@ class Chat:
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material", "mcp__ccim__overview",   # 只读
-                               "mcp__ccim__send_to_chat"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
+                               "mcp__ccim__send_to_chat", "mcp__ccim__notify_user"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(hooks=[self._pre_tool])],
                        "PermissionDenied": [HookMatcher(hooks=[self._denied], timeout=approval.TIMEOUT + 30)],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + notify_note(_notify_kinds(self)) + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1297,6 +1297,8 @@ class Chat:
             # Codex 不给：转交的目标是 Claude Code 的会话
             if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not lent and not side and chat.agent == "claude":
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
+            if _notify_kinds(chat):
+                tools.append(_notify_user(chat))      # Agent 接了飞书、微信：能主动给主人发一条（#463）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
         else:                                 # 其他对话（不管哪个底座）：只能看平台 Skill，用户要求时把自己的某个 Skill 共享上去（#276）
@@ -1977,6 +1979,59 @@ def _send_to_chat(chat, pf):
                "error": f"转交过去了，但它出错了：{out}"}.get(state, f"{state}：{out}")
         return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if state in ("open", "error") else {})}
     return send_to_chat
+
+
+def _notify_kinds(chat):
+    """平台上主人和 Agent 的私聊（含定时任务）里，这个 Agent 接上的飞书、微信（#463）。别的对话（飞书、微信里的、访客、侧边对话）不给。"""
+    e = chat.b.entry
+    pf = getattr(chat.b.channel, "platform", None)
+    if not (pf and e.get("agent_id") and chat.chat_type == "p2p" and chat.chat_id in pf.chats()):
+        return []
+    if e.get("helper") or e.get("lent") or e.get("side") or chat.fenced() or chat._guest():
+        return []
+    try:
+        from . import agents
+        return [k for k, _ in agents.channels_of(e["agent_id"])]
+    except Exception:
+        log.debug("读不到 Agent 接的渠道", exc_info=True)
+        return []
+
+
+def notify_note(kinds):
+    if not kinds:
+        return ""
+    from .agents import CHANNEL_LABEL
+    names = "、".join(CHANNEL_LABEL[k] for k in kinds)
+    return (f"\n- 你还接了{names}：用户在{names}里和你私聊是另外的对话，和这里不通，这里的回答{names}上收不到。"
+            f"用户要你有情况时提醒、你在盯着某件事（定时任务、监听）发现要用户处理时，用 mcp__ccim__notify_user 发到{names}，"
+            "一条写清楚是什么事、要用户做什么；不用打开微信、飞书的客户端去发。")
+
+
+def _notify_user(chat):
+    from .agents import CHANNEL_LABEL
+    kinds = _notify_kinds(chat)
+    names = "、".join(CHANNEL_LABEL[k] for k in kinds)
+    @tool("notify_user", f"给用户发一条{names}消息（发到用户和你的{names}私聊），用户在手机上能马上看到。"
+          "用户要你有情况时提醒、或者你盯着的事有结果要用户处理时用；普通回答照常写在这里，不要每轮都发。"
+          "channel 不写就发到接上的所有渠道。",
+          {"type": "object", "properties": {"text": {"type": "string", "description": "要发的话，写清楚是什么事、要用户做什么，对方看不到这个对话"},
+                                             "channel": {"type": "string", "enum": kinds, "description": "只发到哪个渠道：" +
+                                                         "、".join(f"{k}（{CHANNEL_LABEL[k]}）" for k in kinds)}},
+           "required": ["text"]})
+    async def notify_user(args):
+        text = (args.get("text") or "").strip()
+        if not text:
+            return _err("text 是空的。")
+        from . import agents
+        ch = args.get("channel")
+        res = await asyncio.to_thread(agents.notify_owner, chat.b.entry["agent_id"], text[:1500], [ch] if ch else None)
+        if not res:
+            return _err("没有接上这个渠道，没发出去。")
+        how = {"sent": "已发出", "offline": "那边没在运行，等它启动后发出，告诉用户去 Agent 设置里启动",
+               "no_owner": "还没有人认领这个机器人，没发出去"}
+        msg = "；".join(f"{n}：{how[st]}" for n, st in res)
+        return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if all(st == "no_owner" for _, st in res) else {})}
+    return notify_user
 
 
 def kb_note(kbs):

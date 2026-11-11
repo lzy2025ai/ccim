@@ -586,6 +586,9 @@ def _notes(path):
     return d
 
 
+OWNER = "owner"            # post_note 的 chat 写这个：发到主人的私聊（#463）
+
+
 def post_note(path, chat, text):
     """让 path 这个 ccim 进程往 chat 里发一句话（它每秒取一次；没在运行就等下次启动）。"""
     import uuid

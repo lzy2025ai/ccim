@@ -42,9 +42,16 @@ async def _after_restart(path, channel, log):
         log.exception("重启后的说明出错")
 
 
-async def _note(channel, cid, text, log):
+async def _note(channel, cid, text, log, path=None):
     try:
-        await channel.send_text(cid, text)
+        if cid == runtime.OWNER:              # Agent 主动通知主人（#463）：发到主人的私聊
+            owner = (registry.get(path) or {}).get("owner_open_id") if path else None
+            if not owner:
+                log.warning("还没认主人，通知没发出去")
+                return
+            await channel.send_to_user(owner, text)
+        else:
+            await channel.send_text(cid, text)
     except Exception:
         log.warning("回报没发出去（%s）", cid, exc_info=True)
 
@@ -102,7 +109,7 @@ async def _serve(path, entry, secret, mode):
                 for task in asks.take(path):  # agent 派的任务（ccim ask）
                     bridge.ask(task)
                 for cid, text in runtime.take_notes(path):   # 后台做完的事回报给发起的对话（#146）
-                    asyncio.create_task(_note(channel, cid, text, log))
+                    asyncio.create_task(_note(channel, cid, text, log, path))
                 req = handoff.take(path)      # Claude Code 那边要把对话转过来（ccim handoff）
                 if req:
                     try:

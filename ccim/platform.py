@@ -3394,14 +3394,14 @@ def agent_view(pf, aid, detail=False):
 
 def _agent_chats(pf, aid):
     """Agent 页左边列表里它的网页对话。它当群主的群聊就是它自己的对话；只是成员的（含别的电脑上的群、侧边对话里被 @ 的）
-    列它在里面的子对话（#409，取代 #359 的列群聊本身），标题用群名，带 member。"""
+    列它在里面的子对话（#409，取代 #359 的列群聊本身），标题用群名（自己改过名的用自己的），带 member。"""
     rows = []
     for cid, c in pf.chats().items():
         if c.get("agent") != aid:
             continue
         v = pf.chat_view(cid)
-        if c.get("mention_of"):
-            v.update(member=True, title=v["group"]["title"])
+        if c.get("mention_of"):               # 子对话自己改过名的用自己的名字（#409 第二轮），没改过的用群名
+            v.update(member=True, title=v["title"] if c.get("title_set") else v["group"]["title"])
         rows.append(v)
     return rows
 
@@ -3432,7 +3432,7 @@ def agent_recent(pf, aid, acct=None, n=5, at=None):
         r = pf.chat_view(cid)
         if x:
             r["of"] = {"id": x, "title": (chats.get(x) or {}).get("title") or "对话"}
-            r.update(member=True, title=r["group"]["title"], here=x == at)
+            r.update(member=True, title=r["title"] if (chats.get(cid) or {}).get("title_set") else r["group"]["title"], here=x == at)
         rows.append(r)
     return {"rows": rows, "total": len(picks)}
 

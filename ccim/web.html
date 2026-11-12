@@ -53,6 +53,9 @@ body{overflow:hidden}
 .rail a{width:60px;padding:9px 0 7px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;
   color:var(--muted);text-decoration:none;font-size:12px}
 .rail a svg{width:20px;height:20px}
+.rail-me{width:24px;height:24px;border-radius:50%;background:#8A8F87;color:#fff;font-size:12px;line-height:24px;text-align:center;flex:none}
+.rail-nm{max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mitem .rail-me{width:28px;height:28px;line-height:28px;font-size:13px}.mitem .rail-nm{max-width:72px}
 .rail a:hover{background:var(--sunk);color:var(--ink)}
 .rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
 .rail .spacer{flex:1}
@@ -1971,7 +1974,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/skills" data-nav="skills" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>共享 Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
-    <a href="#/opc" data-nav="opc" class="mi" id="nav-opc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 20V6l7-3 7 3v14"/><path d="M3 20h18M9.5 9.5h1M13.5 9.5h1M9.5 13h1M13.5 13h1M10.5 20v-3.5h3V20"/></svg>一人公司</a>
+    <a href="#/opc" data-nav="opc" class="mi" id="nav-opc"><span class="rail-me" aria-hidden="true">我</span><span class="rail-nm">我</span></a>
     <a href="#/settings" data-nav="settings" class="has-badge mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
     <button class="rmore has-badge" id="nav-more" onclick="openMore()" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>更多<span class="nbadge" id="nav-more-n" hidden></span></button>
   </nav>
@@ -2446,7 +2449,7 @@ function afterState(){
   if (!S._split) {                       // 一人公司的员工（#470）不在 AI 员工里：单独放，别处的选择、列表都看不到它们
     S.staff = (S.agents || []).filter(a => a.staff); S.agents = (S.agents || []).filter(a => !a.staff); S._split = true;
   }
-  const no = $("#nav-opc"); if (no) no.hidden = !!S.guest;
+  const no = $("#nav-opc"); if (no) { no.hidden = !!S.guest; const me = opcMe(); no.querySelector(".rail-me").textContent = [...me][0]; no.querySelector(".rail-nm").textContent = me; }
   opcAfterState();
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
@@ -2823,7 +2826,7 @@ function route(){
       localStorage.setItem("ccim.agentChats", JSON.stringify(m));
     }
   } catch {}
-  if (current.view === "opc" && !current.id && !narrow() && opc()) current.id = "group";   // 电脑上进来先开大群
+  if (current.view === "opc" && !current.id && !narrow() && opc() && (opc().group || opcMs().length)) current.id = "group";   // 电脑上进来先开大群
   if (current.view === "agents" && current.id && (S.staff || []).some(a => a.id === current.id)) {   // 员工的对话在一人公司里看（#470）
     history.replaceState(null, "", `#/opc/${encodeURIComponent(current.id)}`); current = {view: "opc", id: current.id, sub: null, tab: null};
   }
@@ -2836,7 +2839,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower" || current.view === "opc" && !opc());
+    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -6478,9 +6481,10 @@ function agentCard(a){
 // 侧栏里独立的入口，像公司 IM：左边公司大群和成员（真人和 AI 员工都是成员），右边聊天。公司只有一个，存在当前那台电脑上（S.opc / S.opcs）。
 // 路由 #/opc[/group | /org | /<成员>]。员工背后是带 staff 的 Agent（S.staff，不在 AI 员工页），每人一个固定的对话窗口。
 const opc = () => S.guest ? null : (S.opcs && S.opcs[S.me]) || S.opc || null;
+const opcMe = () => (S.account && S.account.name) || (opc() || {}).me || "我";   // 登录的这个人：入口和左上角显示的是他
 const opcMs = () => (opc() || {}).members || [];
 const opcM = id => opcMs().find(m => m.id === id) || null;
-const opcJob = m => m.title || (m.kind === "human" ? "同事" : "员工");
+const opcJob = m => m.title || (m.kind === "human" ? "好友" : "员工");
 const opcLine = m => `${opcJob(m)}，向${m.boss && opcM(m.boss) ? opcM(m.boss).name : "我"}汇报`;
 const opcPersonAv = (name, size = "") => `<span class="seal ${size} one" style="--c:#8A8F87" aria-hidden="true"><span>${esc([...(name || "?")][0])}</span></span>`;
 const opcAv = (m, size = "") => m.kind === "human" ? opcPersonAv(m.name, size) : seal(agentOf(m.id) || {seal: [...(m.name || "?")][0]}, size, false);
@@ -6508,21 +6512,21 @@ function opcRows(){
       <span class="av-wrap">${opcAv(m)}${busy ? `<i class="sdot busy"></i>` : ""}</span><span class="t"><span class="r1"><span class="title">${wait ? `<span class="udot"></span>` : ""}${esc(m.name)}${m.title ? `<span class="otag">${esc(m.title)}</span>` : ""}</span><span class="when">${esc(when(at(m)))}</span></span>
       <span class="sub">${esc(sub)}</span></span></a>`; };
   const gname = `${o.name} 大群`;
-  const grow = hit(gname) ? `<a class="item co-item ${current.id === "group" ? "on" : ""}" href="#/opc/group" style="text-decoration:none;color:inherit">${opcMark()}
+  const grow = (o.group || opcMs().length) && hit(gname) ? `<a class="item co-item ${current.id === "group" ? "on" : ""}" href="#/opc/group" style="text-decoration:none;color:inherit">${opcMark()}
       <span class="t"><span class="r1"><span class="title">${g && (g.attention || g.unread) ? `<span class="udot"></span>` : ""}${esc(gname)}</span><span class="when">${esc(when((g && g.last_active) || o.group_active))}</span></span>
       <span class="sub">${esc((g && g.brief) || `${opcMs().length + 1} 人`)}</span></span></a>` : "";
   if (f && !grow && !ms.length) return `<p class="muted" style="padding:12px 16px;font-size:13px">没找到「${esc(f)}」</p>`;
-  return grow + ms.map(row).join("") + (f ? "" : `<button class="item co-add" onclick="opcAddMenu(event)">${ICON.plus}招人</button>`);
+  return grow + ms.map(row).join("") + (f ? "" : `<button class="item co-add" onclick="opcAddMenu(event)">${ICON.plus}添加</button>`);
 }
 function renderOpcSide(){
   const o = opc();
   if (!o) { $("#list").innerHTML = ""; return; }
-  if (!$("#opc-rows")) $("#list").innerHTML = `<div class="list-head co-head"><div class="co-title">${opcMark("sm")}<b id="opc-nm"></b>
-      <button class="icon-btn" aria-label="招人" title="招人" onclick="opcAddMenu(event)">${ICON.plus}</button>
-      <button class="icon-btn" aria-label="公司的更多操作" title="更多" onclick="opcMenu(event)">${ICON.more}</button></div></div>
-    <label class="search">${ICON.search}<input placeholder="搜成员、群" aria-label="搜成员、群" value="${esc(opcFilter)}" oninput="opcFilter=this.value.trim().toLowerCase();renderOpcSide()"></label>
+  if (!$("#opc-rows")) $("#list").innerHTML = `<div class="list-head co-head"><div class="co-title"><span id="opc-av"></span><b id="opc-nm"></b>
+      <button class="icon-btn" aria-label="添加" title="添加" onclick="opcAddMenu(event)">${ICON.plus}</button>
+      <button class="icon-btn" aria-label="更多操作" title="更多" onclick="opcMenu(event)">${ICON.more}</button></div></div>
+    <label class="search">${ICON.search}<input placeholder="搜索" aria-label="搜索" value="${esc(opcFilter)}" oninput="opcFilter=this.value.trim().toLowerCase();renderOpcSide()"></label>
     <div class="scroll" id="opc-rows"></div>`;
-  $("#opc-nm").textContent = o.name;
+  $("#opc-nm").textContent = opcMe(); $("#opc-av").innerHTML = opcPersonAv(opcMe(), "sm");
   $("#opc-rows").innerHTML = opcRows();
 }
 function opcMenu(e){
@@ -6531,18 +6535,18 @@ function opcMenu(e){
 }
 function opcAddMenu(e){
   const b = (js, label, desc) => `<button onclick="closePop();${js}"><span><div>${label}</div><div class="desc">${desc}</div></span></button>`;
-  pop(e, b("opcForm(null)", "招一个 AI 员工", "有岗位、有上级，一个固定的对话窗口") + b("opcInvite()", "请同事进来", "有这台电脑账号的真人"), true);
+  pop(e, b("opcForm(null)", "创建 Agent 员工", "有岗位、有上级，一个固定的对话窗口") + b("opcInvite()", "加好友", "已经有账号的人"), true);
 }
 // ---- 右边 ----
 async function openOpc(){
   const o = opc();
   ctxMachine = S.me; opcSidePhone = false;
-  if (!o) {
-    $("#main").innerHTML = `<div class="empty"><h2>开一家一人公司</h2><p>招 AI 员工，定岗位和上下级。每个员工一个固定的对话窗口，全公司一个大群，规章说一次大家都照办。</p>
-      <div class="opc-new"><input id="opc-name" class="input" style="width:200px" maxlength="20" placeholder="公司名字" aria-label="公司名字" onkeydown="if(event.key==='Enter'&&!event.isComposing)opcCreate()"><button class="btn primary" onclick="opcCreate()">开公司</button></div></div>`;
+  if (!o) return;
+  if (!current.id) {                                     // 手机上先看列表；电脑上还没有人：从这里开始
+    if (!narrow()) $("#main").innerHTML = `<div class="empty"><h2>还没有人可以聊</h2><p>创建 Agent 员工，给它岗位和上级；或者加好友，一起在群里聊。</p>
+      <div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap"><button class="btn primary" onclick="opcForm(null)">创建 Agent 员工</button><button class="btn" onclick="opcInvite()">加好友</button></div></div>`;
     return;
   }
-  if (!current.id) return;                               // 手机上先看列表
   if (current.id === "org") return renderOpcOrg();
   if (current.id === "group") {
     if (o.group) return openChat(o.group);
@@ -6552,11 +6556,11 @@ async function openOpc(){
     return;
   }
   const m = opcM(current.id);
-  if (!m) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个人</h2><p>可能已经离开公司了。</p><a class="btn" href="#/opc/group" style="text-decoration:none">去公司大群</a></div>`; return; }
+  if (!m) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个人</h2><p>可能已经被删除了。</p><a class="btn" href="#/opc" style="text-decoration:none">回到列表</a></div>`; return; }
   if (m.kind === "human") {
     $("#main").innerHTML = `<div class="empty">${opcPersonAv(m.name, "lg")}<h2 style="margin-top:14px">${esc(m.name)}</h2><p>${esc(opcLine(m))}</p>
       <div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap"><a class="btn primary" href="#/opc/group" style="text-decoration:none">去大群找他</a>
-      <button class="btn" onclick="opcForm(opcM(${q(m.id)}))">编辑</button><button class="btn" onclick="opcFire(${q(m.id)})">请走</button></div></div>`;
+      <button class="btn" onclick="opcForm(opcM(${q(m.id)}))">编辑</button><button class="btn" onclick="opcFire(${q(m.id)})">删除好友</button></div></div>`;
     return;
   }
   let cid = m.chat;
@@ -6585,10 +6589,10 @@ function renderOpcOrg(){
     return `<li><a class="org-n" href="#/opc/${encodeURIComponent(m.id)}"${wait ? ` aria-label="${esc(m.name)}，有新回答"` : ""}>${wait ? `<i class="obadge"></i>` : ""}
       <span class="hd"><span class="av-wrap">${opcAv(m)}${busy ? `<i class="sdot busy"></i>` : ""}</span><span class="t"><b>${esc(m.name)}</b><span>${esc(opcJob(m))}</span></span></span>
       <span class="say">${esc(say)}</span></a>${sub(m.id)}</li>`; };
-  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>${esc(o.name)}</h1><span class="grow"></span>
-      <button class="btn" onclick="opcSettings()">公司规章</button><button class="btn primary" onclick="opcAddMenu(event)">${ICON.plus}招人</button></div>
-    <div class="ov-body"><ul class="org"><li><div class="org-n me"><span class="hd">${opcPersonAv("我")}<span class="t"><b>我</b><span>老板</span></span></span></div>${sub("")}</li></ul>
-      ${opcMs().length ? "" : `<p class="muted" style="margin-top:20px">还没有员工，先招一个。</p>`}</div></div>`;
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>${esc(o.name || "组织架构")}</h1><span class="grow"></span>
+      <button class="btn" onclick="opcSettings()">公司规章</button><button class="btn primary" onclick="opcAddMenu(event)">${ICON.plus}添加</button></div>
+    <div class="ov-body"><ul class="org"><li><div class="org-n me"><span class="hd">${opcPersonAv(opcMe())}<span class="t"><b>${esc(opcMe())}</b><span>老板</span></span></span></div>${sub("")}</li></ul>
+      ${opcMs().length ? "" : `<p class="muted" style="margin-top:20px">还没有成员，先添加一个。</p>`}</div></div>`;
 }
 // ---- 档案（员工的窗口）、成员（大群） ----
 function opcPanel(c){
@@ -6627,7 +6631,7 @@ function opcBossOpts(self){ return [["", "我", "老板"]].concat(opcMs().filter
 function opcForm(m){
   const human = !!m && m.kind === "human", a = m && !human ? agentOf(m.id) || {} : {};
   OH = {id: m ? m.id : null, human, boss: m && opcM(m.boss) ? m.boss : "", avatar: m ? a.avatar || null : freeAvatar(), model: a.model || ""};
-  dialog(m ? `编辑「${m.name}」` : "招一个 AI 员工", `${human ? "" : `<label class="flabel" for="oh-name">名字</label><input id="oh-name" class="input" maxlength="20" value="${esc(m ? m.name : "")}" placeholder="比如：小林">`}
+  dialog(m ? `编辑「${m.name}」` : "创建 Agent 员工", `${human ? "" : `<label class="flabel" for="oh-name">名字</label><input id="oh-name" class="input" maxlength="20" value="${esc(m ? m.name : "")}" placeholder="比如：小林">`}
     <label class="flabel" for="oh-title">岗位</label><input id="oh-title" class="input" maxlength="20" value="${esc(m ? m.title : "")}" placeholder="比如：产品经理">
     <label class="flabel">直属上级</label><div>${dd("oh-boss", opcBossOpts(OH.id), OH.boss, v => OH.boss = v)}</div>
     ${human ? "" : `<label class="flabel" for="oh-role">岗位说明</label><textarea id="oh-role" class="textarea" rows="5" placeholder="负责什么、怎么干活、交付什么">${esc(a.role || "")}</textarea>
@@ -6650,29 +6654,30 @@ async function opcSave(){
 async function opcInvite(){
   let ppl = [];
   try { ppl = (await api0("/api/opc/people", undefined, S.me)).people || []; } catch (e) { return toast(e.message); }
-  if (!ppl.length) return dialog("请同事进来", `<p>还没有可以请的人。先在「设置 → 账号」里给同事开一个账号。</p>`,
+  if (!ppl.length) return dialog("加好友", `<p>还没有可以加的人。先在「设置 → 账号」里给对方开一个账号。</p>`,
     `<button class="btn" onclick="closeDialog()">知道了</button>${S.hub ? "" : `<a class="btn primary" href="#/settings/accounts" onclick="closeDialog()" style="text-decoration:none">去开账号</a>`}`);
   OH = {account: ppl[0].id, boss: ""};
-  dialog("请同事进来", `<div class="co-pick">${ppl.map(p => `<button type="button" class="${p.id === OH.account ? "on" : ""}" onclick="OH.account=${q(p.id)};document.querySelectorAll('.co-pick button').forEach(b=>b.classList.toggle('on',b===this))">${personAv(p.name)}<span>${esc(p.name)}</span></button>`).join("")}</div>
+  dialog("加好友", `<div class="co-pick">${ppl.map(p => `<button type="button" class="${p.id === OH.account ? "on" : ""}" onclick="OH.account=${q(p.id)};document.querySelectorAll('.co-pick button').forEach(b=>b.classList.toggle('on',b===this))">${personAv(p.name)}<span>${esc(p.name)}</span></button>`).join("")}</div>
     <label class="flabel" for="oh-title">岗位</label><input id="oh-title" class="input" maxlength="20" placeholder="比如：设计师">
     <label class="flabel">直属上级</label><div>${dd("oh-boss", opcBossOpts(null), "", v => OH.boss = v)}</div>`,
-    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="opcInviteSave()">请进公司</button>`);
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="opcInviteSave()">加好友</button>`);
 }
 async function opcInviteSave(){
-  const r = await act(() => api("/api/opc/hire", {fields: {account: OH.account, title: $("#oh-title").value.trim(), boss: OH.boss}}, S.me), "已请进公司和大群");
+  const r = await act(() => api("/api/opc/hire", {fields: {account: OH.account, title: $("#oh-title").value.trim(), boss: OH.boss}}, S.me), "已加为好友");
   closeDialog(); await loadState();
   opcGo(`#/opc/${encodeURIComponent(r.id)}`);
 }
 async function opcFire(id){
   const m = opcM(id); if (!m) return;
   const subs = opcMs().some(x => x.boss === id);
-  if (!await confirmBox(`请走「${m.name}」？`, (m.kind === "human" ? "他会离开公司和大群。" : "和这位员工的对话会移到已完成。") + (subs ? "他的下级改为向他的上级汇报。" : ""), "请走")) return;
-  await act(() => api("/api/opc/fire", {id}, S.me), "已请走");
+  const human = m.kind === "human";
+  if (!await confirmBox(human ? `删除好友「${m.name}」？` : `请走「${m.name}」？`, (human ? "对方会离开大群。" : "和这位员工的对话会移到已完成。") + (subs ? "原来向这位汇报的人，改为向上一级汇报。" : ""), human ? "删除" : "请走")) return;
+  await act(() => api("/api/opc/fire", {id}, S.me), human ? "已删除" : "已请走");
   await loadState(); opcGo(narrow() ? "#/opc" : "#/opc/group");
 }
 function opcSettings(){
   const o = opc(); if (!o) return;
-  dialog("公司名字和规章", `<label class="flabel" for="os-name">名字</label><input id="os-name" class="input" maxlength="20" value="${esc(o.name)}">
+  dialog("公司名字和规章", `<label class="flabel" for="os-name">名字</label><input id="os-name" class="input" maxlength="20" value="${esc(o.name || opcMe() + "的公司")}">
     <label class="flabel" for="os-rules">公司规章</label><textarea id="os-rules" class="textarea" rows="12" placeholder="全公司都要照办的规矩，比如：每天收工前在大群里说一下今天的进展。每个员工干活时都会看到">${esc(o.rules || "")}</textarea>`,
     `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="opcSettingsSave()">保存</button>`);
 }

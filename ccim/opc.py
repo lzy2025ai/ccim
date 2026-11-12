@@ -43,10 +43,9 @@ def _name(pf, mid, m):
 
 
 def view(pf):
-    """给网页：公司和成员（按进公司的先后）。没建公司是 None。"""
+    """给网页：登录的这个人、公司和成员（按进来的先后）。还没加过人时公司是空的（没名字、没大群），不用先建。"""
+    from . import people
     c = get(pf)
-    if not c:
-        return None
     chats = pf.chats()
     g = chats.get(c.get("group") or "") or {}
     live = lambda cid: cid if cid in chats and not chats[cid].get("archived") else None
@@ -54,7 +53,8 @@ def view(pf):
            "boss": m.get("boss") or "", "chat": live(m.get("chat")), "account": m.get("account")}
           for mid, m in sorted((c.get("members") or {}).items(), key=lambda x: x[1].get("created") or "")]
     return {"name": c.get("name") or "", "rules": c.get("rules") or "", "group": live(c.get("group")),
-            "group_active": g.get("last_active"), "members": ms}
+            "group_active": g.get("last_active"), "members": ms,
+            "me": people.owner_name()}
 
 
 # ---------- 员工的系统提示 ----------
@@ -139,15 +139,20 @@ def _sync_group(pf, c):
         pf.store.write(chats)
 
 
+def _default_name():
+    from . import people
+    return f"{people.owner_name()}的公司"[:20]
+
+
 def save(pf, fields):
-    """建公司，或改名字、规章。"""
+    """改公司名字、规章；还没有公司就顺手建上（名字没给用「谁的公司」）。"""
     c = get(pf)
     new = not c
     if "name" in fields or new:
         name = " ".join(str(fields.get("name") or "").split())[:20]
-        if not name:
+        if not name and not new:
             raise Problem("给公司起个名字。")
-        c["name"] = name
+        c["name"] = name or _default_name()
     if "rules" in fields:
         c["rules"] = str(fields.get("rules") or "").strip()[:8000]
     if new:
@@ -210,9 +215,9 @@ def window(pf, mid):
 
 def hire(pf, fields):
     """加一个成员。AI 员工：name、title、role（岗位说明）、boss、avatar、base、model、effort；真人：account、title、boss。"""
+    if not get(pf):                          # 第一次加人：公司不用先建
+        save(pf, {})
     c = get(pf)
-    if not c:
-        raise Problem("先建公司。")
     ms = c.setdefault("members", {})
     title = " ".join(str(fields.get("title") or "").split())[:20]
     if fields.get("account"):

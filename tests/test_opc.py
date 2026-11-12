@@ -37,9 +37,9 @@ class OpcTests(unittest.TestCase):
     def test_flow(self):
         from ccim import opc, platform
         pf = self.pf
-        self.assertIsNone(opc.view(pf))
-        with self.assertRaises(opc.Problem):
-            pf.call(opc.hire, pf, {"name": "小林"})
+        v = opc.view(pf)                     # 还没加过人：不用先建公司
+        self.assertEqual((v["members"], v["group"], v["name"]), ([], None, ""))
+        self.assertTrue(v["me"])
         gid = pf.call(opc.save, pf, {"name": "琼光科技", "rules": "每天收工前在大群说进展"})["group"]
         g = pf.chats()[gid]
         self.assertEqual((g["company"], g["title"], g.get("agent")), ("opc", "琼光科技 大群", None))
@@ -105,6 +105,15 @@ class OpcTests(unittest.TestCase):
         pf.call(opc.save, pf, {"rules": "周五不上线"})
         self.assertIn("周五不上线", opc.note_for(pf, dev))
         self.assertEqual(opc.view(pf)["name"], "琼光科技")
+
+    def test_hire_without_company(self):
+        from ccim import opc, people
+        pf = self.pf
+        mid = pf.call(opc.hire, pf, {"name": "小林"})["id"]      # 第一次加人顺手把公司、大群建上
+        v = opc.view(pf)
+        self.assertEqual(v["name"], f"{people.owner_name()}的公司"[:20])
+        self.assertTrue(v["group"])
+        self.assertEqual([m["id"] for m in v["members"]], [mid])
 
     def test_human_member(self):
         from ccim import opc, people

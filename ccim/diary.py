@@ -15,7 +15,14 @@ import datetime, json, os, platform as _platform, re, secrets, shutil, subproces
 from . import registry
 
 CMD = re.compile(r"^/(diary|日记)(?=\s|$)\s*", re.I)
-HEAD = re.compile(r"^## (\d{1,2}:\d{2})(?: · (.*))?$")
+# 每条开头一行：「**时:分** · 来自 记在哪」，用正文字号（#467）；老日记是「## 时:分 · 记在哪」的标题，照样认
+HEAD = re.compile(r"^(?:## (\d{1,2}:\d{2})(?: · (.*))?|\*\*(\d{1,2}:\d{2})\*\*(?: · 来自 (.*))?)$")
+
+
+def _head(ln):
+    """这一行是某条的开头：返回 (时间, 记在哪)，不是返回 None。"""
+    m = HEAD.match(ln)
+    return (m.group(1) or m.group(3), (m.group(2) or m.group(4) or "").strip()) if m else None
 LINKED = re.compile(r"^\[(.*)\]\((https?://\S+)\)$")     # 「记在哪」带链接的写法
 READ_DAYS = 62            # diary_read 一次最多读几天
 READ_MAX = 40000          # 一次最多给助手多少字
@@ -69,11 +76,11 @@ def add(text, where, now=None, link=None, files=None):
     d, t = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
     f = os.path.join(root(), d + ".md")
     where = " ".join((where or "").split())
-    label = f" · [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · {where}" if where else ""
+    label = f" · 来自 [{where.replace('[', '(').replace(']', ')') or '原对话'}]({link})" if link else f" · 来自 {where}" if where else ""
     with _lock:
         os.makedirs(root(), exist_ok=True)
         body = "\n\n".join(x for x in [text] + (_save_files(files, now) if files else []) if x)
-        block = f"## {t}{label}\n\n{body}\n"
+        block = f"**{t}**{label}\n\n{body}\n"
         try:
             with open(f, encoding="utf-8") as fh:
                 old = fh.read()
@@ -81,8 +88,8 @@ def add(text, where, now=None, link=None, files=None):
             old = ""
         pos, off = None, 0
         for ln in old.splitlines(keepends=True):     # 第一条比它晚的标题
-            m = HEAD.match(ln.rstrip("\r\n"))
-            if m and _minutes(m.group(1)) > _minutes(t):
+            h = _head(ln.rstrip("\r\n"))
+            if h and _minutes(h[0]) > _minutes(t):
                 pos = off
                 break
             off += len(ln)
@@ -405,14 +412,14 @@ def _entries(d):
         return []
     out, cur = [], {"time": "", "where": "", "link": "", "lines": []}
     for ln in lines:
-        m = HEAD.match(ln)
-        if m:
+        h = _head(ln)
+        if h:
             out.append(cur)
-            where, link = (m.group(2) or "").strip(), ""
+            where, link = h[1], ""
             lk = LINKED.match(where)
             if lk:
                 where, link = lk.group(1), lk.group(2)
-            cur = {"time": m.group(1), "where": where, "link": link, "lines": []}
+            cur = {"time": h[0], "where": where, "link": link, "lines": []}
         else:
             cur["lines"].append(ln)
     out.append(cur)

@@ -43,7 +43,7 @@ class FileTests(Base):
         diary.add("中午（补写的）", "", d.replace(hour=12))
         self.assertEqual([e["time"] for e in diary._entries("2026-10-31")], ["09:05", "12:00", "14:00", "20:00"])
         self.assertEqual(self.day("2026-10-31"),
-                         "## 09:05 · 飞书 · p\n\n早上（补写的）\n\n## 12:00\n\n中午（补写的）\n\n## 14:00\n\n下午\n\n## 20:00\n\n晚上\n")
+                         "**09:05** · 来自 飞书 · p\n\n早上（补写的）\n\n**12:00**\n\n中午（补写的）\n\n**14:00**\n\n下午\n\n**20:00**\n\n晚上\n")
 
     def test_append_after_hand_edit_without_newline(self):
         os.makedirs(diary.root())
@@ -174,7 +174,7 @@ class PeerTests(Base):
                                      "http://127.0.0.1:8000/#/agents/a1/c1?m=d-1")
         self.assertEqual(r, {"date": "2026-10-31", "time": "09:05"})
         self.assertEqual(got[0][0], "/api/diary/add")
-        self.assertIn("## 09:05 · [小助手「周计划」](http://127.0.0.1:7000/#/agents/a1/c1?m=d-1)", self.day("2026-10-31"))
+        self.assertIn("**09:05** · 来自 [小助手「周计划」](http://127.0.0.1:7000/#/agents/a1/c1?m=d-1)", self.day("2026-10-31"))
 
     def test_offline_then_flush(self):
         """存日记的那台不在线：先存着，连上后按原来的时间补写。"""
@@ -191,7 +191,7 @@ class PeerTests(Base):
         pf.peers.diary_home = lambda: "m1"
         for it in items:
             Platform.diary_write(pf, it["text"], it["where"], it["at"], it.get("link"))
-        self.assertIn("## 22:10\n\n离线时记的", self.day("2026-10-30"))
+        self.assertIn("**22:10**\n\n离线时记的", self.day("2026-10-30"))
         self.assertIn("离线时记的", Platform.diary_query(pf, "read", {"start": "2026-10-30"})["text"])
 
     def test_files_through_hub_and_pending(self):

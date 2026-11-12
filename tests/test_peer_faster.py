@@ -141,15 +141,15 @@ class PeerFasterTests(unittest.TestCase):
         out = p.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
         self.assertEqual([c["id"] for c in out["chats"]], ["new"])
 
-    def test_companies_tagged_with_machine(self):
-        """服务器上打开时（#454）：各台电脑的公司带上在哪台，不丢。"""
+    def test_opc_kept_per_machine(self):
+        """服务器上打开时：各台电脑的一人公司都带上，按电脑分开（#470）。"""
         p = peers.Peers(fake_pf())
         p.me = {"id": "me", "name": "这台"}
         p.machines = lambda account=None: [{"id": "me", "me": True, "online": True}, {"id": "m2", "me": False, "online": True}]
-        p.cache = {"m2": {"companies": [{"id": "co-1", "name": "接单项目"}]}}
+        p.cache = {"m2": {"opc": {"name": "接单公司", "members": []}}}
         p.cache_at = {"m2": time.time()}
         out = p.merged_state({"agents": [], "chats": [], "projects": [], "schedules": []})
-        self.assertEqual(out["companies"], [{"id": "co-1", "name": "接单项目", "machine": "m2"}])
+        self.assertEqual(out["opcs"]["m2"], {"name": "接单公司", "members": []})
 
 
 if __name__ == "__main__":

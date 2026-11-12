@@ -25,7 +25,7 @@ from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
-from . import companies as companies_mod
+from . import opc
 from . import diary as diary_mod
 from . import tower as tower_mod
 from .schedules import is_quiet as schedules_quiet, listed
@@ -537,6 +537,10 @@ class Platform:
         from .peers import Peers
         self.peers = Peers(self)
         self.peers.start()
+        try:                                  # 老的一人公司（#454）收掉（只做一次）
+            opc.migrate(self)
+        except Exception:
+            log.exception("收掉老的一人公司出错")
         try:                                  # 项目复制成群聊（只做一次）
             from . import groups
             groups.migrate_projects(self)
@@ -1011,7 +1015,7 @@ class Platform:
                 key += "|sideat" + ("-far" if m.get("remote_project") else "")
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": (a.get("role") or "") + companies_mod.note_for(self, a["id"]),
+                     "effort": a.get("effort"), "role": (a.get("role") or "") + opc.note_for(self, a["id"]),
                      "chrome": a.get("chrome") and not viewer,
                      "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
@@ -1818,7 +1822,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "company": m.get("company"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
+                "listed": listed(cid, m), "company": m.get("company"), "staff": m.get("staff"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -2764,7 +2768,7 @@ def _handler(pf):
                 return
             try:
                 body = fn() or {}
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, companies_mod.Problem,
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem,
                     ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
@@ -2903,6 +2907,8 @@ def _handler(pf):
                 "/api/ws/ls": lambda: pf.ws_call(q.get("chat", ""), workspace.ls, q.get("path", ""), q.get("hidden") == "1"),
                 "/api/agent": lambda: pf.shared.get(("agent", q.get("id", ""), acct), lambda: share.filter_agent_chats(pf, agent_view(pf, q.get("id", ""), detail=True), acct)),   # 同时到的只算一次（#440）
                 "/api/agent/recent": lambda: agent_recent(pf, q.get("id", ""), acct, at=q.get("at")),
+                "/api/opc/memory": lambda: pf.call(opc.memory, pf, q.get("id", "")),   # 一人公司（#470）
+                "/api/opc/people": lambda: pf.call(opc.candidates, pf),
                 "/api/project": lambda: pf.call(pf.projects.detail, q.get("id", "")),
                 "/api/project/diff": lambda: pf.projects.diff(q.get("id", ""), q.get("task", ""), q.get("agent", "")),
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
@@ -3055,9 +3061,11 @@ def _handler(pf):
                 "/api/project/choose": lambda: pf.projects.choose(b("id"), b("task"), b("agent")),
                 "/api/project/stop": lambda: pf.run(pf.projects.stop(b("id"), b("task"), b("agent"))),
                 "/api/schedule/save": lambda: pf.call(pf.schedules.save, b("id"), b("fields") or {}),
-                "/api/company/save": lambda: pf.call(companies_mod.save, pf, b("id"), b("fields") or {}),   # 一人公司（#454）
-                "/api/company/join": lambda: pf.call(companies_mod.join, pf, b("agent"), b("company")),
-                "/api/company/delete": lambda: pf.call(companies_mod.delete, pf, b("id")),
+                "/api/opc/save": lambda: pf.call(opc.save, pf, b("fields") or {}),   # 一人公司（#470）
+                "/api/opc/hire": lambda: pf.call(opc.hire, pf, b("fields") or {}),
+                "/api/opc/edit": lambda: pf.call(opc.edit, pf, b("id"), b("fields") or {}),
+                "/api/opc/fire": lambda: pf.call(opc.fire, pf, b("id")),
+                "/api/opc/open": lambda: pf.call(opc.window, pf, b("id")),
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
                 "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
@@ -3447,7 +3455,7 @@ def state(pf, acct=None):
     return share.filter_state(pf, {
         "ccim": dict(upgrade.status(), **({"dev": pf.dev.badge()} if pf.dev else {})), "agents": [agent_view(pf, aid) for aid in agents.all_agents()],
         "chats": chats, "chat_more": more,
-        "projects": pf.projects.summary(), "schedules": pf.schedules.summary(), "companies": companies_mod.view(pf),
+        "projects": pf.projects.summary(), "schedules": pf.schedules.summary(), "opc": opc.view(pf),
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
@@ -3522,7 +3530,7 @@ def delete_agent(pf, aid):
         console.disconnect(path, kind, proc)
     for pid in list(pf.projects.all()):       # 从它在的项目里移出
         pf.call(pf.projects.member, pid, None, aid)
-    pf.call(companies_mod.forget_agent, pf, aid)   # 从它在的公司里移出（#454）
+    pf.call(opc.forget_agent, pf, aid)   # 是一人公司的员工就从公司里拿掉（#470）
     agents.remove(aid)
     return {}
 

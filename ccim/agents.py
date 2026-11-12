@@ -22,7 +22,7 @@ AVATARS = ("01-navigator", "02-coder", "03-designer", "04-writer", "05-researche
            "25-dragon", "26-whale", "27-axolotl", "28-hedgehog",
            "29-mushroom", "30-cloud", "31-sun", "32-catbot")
 FIELDS = ("name", "seal", "color", "avatar", "base", "model", "effort", "role", "dir", "pinned", "chrome", "skills_off",
-          "account")   # account：共享电脑上访客建的（#154）
+          "account", "staff")   # account：共享电脑上访客建的（#154）；staff：一人公司的员工（#470），不出现在 AI 员工页
 SYNCED = {"base": "agent", "model": "model", "effort": "effort", "role": "role", "chrome": "chrome"}   # Agent 字段 → 登记里的字段
 
 
@@ -93,7 +93,7 @@ def clean(fields):
         out["dir"] = os.path.realpath(os.path.expanduser(out["dir"]))
     if "base" in out and out["base"] not in registry.BASES:
         out["base"] = "claude"
-    for k in ("pinned", "chrome"):
+    for k in ("pinned", "chrome", "staff"):
         if k in out:
             out[k] = bool(out[k])
     if "skills_off" in out:                   # 平台 Skill 里这个 Agent 不挂的（#101）

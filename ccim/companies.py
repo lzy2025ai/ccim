@@ -10,6 +10,10 @@ import uuid
 from . import agents, registry
 
 COLORS = ("qing", "zhe", "zhu", "lu", "dai", "huang")
+# 内置公司头像（#459），图片在 static/companies/；顺序和网页里的选项一致，新增的往后追加编号
+AVATARS = ("01-tower", "02-lighthouse", "03-rocket", "04-workshop", "05-study", "06-laboratory", "07-sailboat",
+           "08-balloon", "09-castle", "10-greenhouse", "11-telescope", "12-factory", "13-cafe", "14-studio",
+           "15-postoffice", "16-cabin")
 
 
 class Problem(Exception):
@@ -46,7 +50,8 @@ def view(pf):
     out = []
     for coid, c in sorted(all_(pf).items(), key=lambda x: x[1].get("created") or ""):
         g = chats.get(c.get("group") or "") or {}
-        out.append({"id": coid, "name": c["name"], "color": c.get("color") or "qing", "note": c.get("note") or "",
+        out.append({"id": coid, "name": c["name"], "color": c.get("color") or "qing",
+                    "avatar": c.get("avatar") if c.get("avatar") in AVATARS else None, "note": c.get("note") or "",
                     "members": list(c.get("members") or []), "group": c.get("group") if g else None,
                     "group_active": g.get("last_active")})
     return out
@@ -56,7 +61,8 @@ def _clean(fields):
     name = " ".join(str(fields.get("name") or "").split())[:20]
     color = fields.get("color") if fields.get("color") in COLORS else None
     note = str(fields.get("note") or "").strip()[:4000]
-    return name, color, note
+    avatar = fields.get("avatar") if fields.get("avatar") in AVATARS else None   # 空就是文字头像
+    return name, color, note, avatar
 
 
 def _group(pf, coid, c):
@@ -97,8 +103,8 @@ def _sync_group(pf, c, title=False):
 
 
 def save(pf, coid, fields):
-    """新建（coid 为空）或改名、换颜色、改说明。返回 {id, group}。"""
-    name, color, note = _clean(fields)
+    """新建（coid 为空）或改名、换颜色、换头像、改说明。返回 {id, group}。"""
+    name, color, note, avatar = _clean(fields)
     data = all_(pf)
     if coid:
         c = data.get(coid)
@@ -113,13 +119,15 @@ def save(pf, coid, fields):
             c["color"] = color
         if "note" in fields:
             c["note"] = note
+        if "avatar" in fields:
+            c["avatar"] = avatar
     else:
         if not name:
             raise Problem("给公司起个名字。")
         coid = "co-" + uuid.uuid4().hex[:8]
         used = {x.get("color") for x in data.values()}
         c = data[coid] = {"name": name, "color": color or next((k for k in COLORS if k not in used), COLORS[0]),
-                          "note": note, "members": [], "created": registry.now()}
+                          "note": note, "avatar": avatar, "members": [], "created": registry.now()}
         renamed = False
     _group(pf, coid, c)
     _write(pf, data)

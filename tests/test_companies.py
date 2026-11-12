@@ -74,6 +74,21 @@ class CompanyTests(unittest.TestCase):
         self.assertTrue(pf.chats()[r2["group"]].get("archived"))
         self.assertEqual([c["id"] for c in companies.view(pf)], [coid])
 
+    def test_avatar(self):
+        """公司头像（#459）：只认内置的，空就是文字头像，不传不动。"""
+        from ccim import companies
+        pf = self.pf
+        coid = pf.call(companies.save, pf, None, {"name": "接单项目", "avatar": "03-rocket"})["id"]
+        av = lambda: companies.view(pf)[0]["avatar"]
+        self.assertEqual(av(), "03-rocket")
+        pf.call(companies.save, pf, coid, {"note": "改说明"})
+        self.assertEqual(av(), "03-rocket")
+        pf.call(companies.save, pf, coid, {"avatar": "../../etc/x"})
+        self.assertIsNone(av())
+        pf.call(companies.save, pf, coid, {"avatar": "16-cabin"})
+        pf.call(companies.save, pf, coid, {"avatar": ""})
+        self.assertIsNone(av())
+
     def test_name_required(self):
         from ccim import companies
         with self.assertRaises(companies.Problem):

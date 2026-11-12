@@ -56,6 +56,7 @@ class OpcTests(unittest.TestCase):
         self.assertEqual(pf.chats()[cid]["agent"], pm)
         self.assertEqual(pf.call(opc.window, pf, pm)["chat"], cid)
         self.assertEqual(pf.chat_view(cid)["staff"], pm)
+        self.assertIn(cid, [c["id"] for c in pf.chat_head()[0]])   # 没在干活也带在整体状态里：列表、架构图要它的最新一句
         # 档案
         d = agents.workspace(pm)
         self.assertIn("@记忆.md", open(os.path.join(d, "CLAUDE.md"), encoding="utf-8").read())

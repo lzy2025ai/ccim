@@ -1945,6 +1945,8 @@ class Platform:
             return True
         if t[2] is None:
             return False
+        if (m.get("staff") or m.get("company")) and not m.get("archived"):   # 一人公司的窗口、大群：成员列表和架构图要它的最新一句（#470）
+            return True
         if self._stall(t[1]) or self.mentions.crew(t[1]):
             return True
         summ = board_mod.summary(self.channel.logs, t[1])

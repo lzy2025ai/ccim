@@ -5,7 +5,7 @@ Mac 们照旧用 peers.py 的方式主动连过来（/peer/* 由 Peers 自己的
 部署时前面放 nginx：HTTPS（IP 证书）、把 /peer/ 转给 PEER_PORT、其余转给这里，所以两个服务都只听 127.0.0.1。
 
 登录：密码（scrypt）+ 手机验证器动态码（TOTP，RFC 6238）。第一次打开要用设置链接（setup-token 文件里的一次性口令）设密码、绑验证器。
-登录后发一个 Cookie（HttpOnly、Secure、SameSite=Strict，30 天），服务器只存它的摘要。接口还要带 X-CCIM 头（别的网站发不过来）。
+登录后发一个 Cookie（HttpOnly、Secure、SameSite=Lax，30 天），服务器只存它的摘要。接口还要带 X-CCIM 头（别的网站发不过来）。
 账号（#154）：accounts.json，主人是 OWNER（老的 auth.json 迁过来，账号名 admin；登录时账号名留空也算主人），
 主人在「设置 → 账号」建别的账号：账号名 + 密码（默认生成）、有效期、要不要动态码（要的话给对方一次性链接去绑验证器）。
 电脑归加入它的账号（peers.json 的 account），网页、转交、推送都只给这个账号的电脑；电脑之间的调用、推送也只在同一个账号内（peers.py）。
@@ -255,6 +255,12 @@ class Hub:
         if v["acct"] != OWNER and not self.accounts_on():
             return None
         return v["acct"] if self.active(self.account(v["acct"])) else None
+
+    def session_left(self, tok):
+        """这个登录还剩几秒，没有返回 0。"""
+        v = _load("sessions.json", {}).get(hashlib.sha256((tok or "").encode()).hexdigest())
+        exp = v if isinstance(v, (int, float)) else (v or {}).get("exp", 0)
+        return max(0, int(exp - time.time()))
 
     def session_ok(self, tok):
         return bool(self.session_account(tok))
@@ -619,7 +625,8 @@ def _handler(hub):
 
         def _set_cookie(self, tok, age=SESSION_DAYS * 86400):
             secure = "; Secure" if self._https() else ""
-            return {"Set-Cookie": f"ccim_hub={tok}; Path=/; HttpOnly; SameSite=Strict; Max-Age={age}{secure}"}
+            # Lax：从桌面图标、别的 App 打开首页时也带上（Strict 不带，已登录也会显示登录页，#473）；会改数据的请求另要 X-CCIM 头
+            return {"Set-Cookie": f"ccim_hub={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age={age}{secure}"}
 
         def _body(self):
             n = int(self.headers.get("Content-Length") or 0)
@@ -662,8 +669,10 @@ def _handler(hub):
                                           "text/html; charset=utf-8")
                     body = LOGIN_BODY if hub.accounts_on() else LOGIN_BODY.replace('<div id="nmbox">', '<div id="nmbox" hidden>')
                     return self._send(200, _page(body, LOGIN_SCRIPT), "text/html; charset=utf-8")
-                with open(PAGE, "rb") as f:
-                    return self._send(200, f.read(), "text/html; charset=utf-8")
+                with open(PAGE, "rb") as f:   # 顺手重发一次 cookie：老的是 Strict，换成 Lax，剩余时间不变（#473）
+                    left = hub.session_left(self._cookie())
+                    return self._send(200, f.read(), "text/html; charset=utf-8",
+                                      self._set_cookie(self._cookie(), left) if left else None)
             if not u.path.startswith("/api/"):
                 return self._send(404, {"error": "not found"})
             if not self._authed():

@@ -564,27 +564,54 @@ DONE_MAX = 80
 def material(pf, start, end, keep=None, local=True, acct=None):
     """start～end 这几天的复盘材料（#364，以前只有一天）：这段时间完成了哪些对话（#369），
     每个对话的标题、谁、什么时候、是否已完成、一句话进度、这几天我说的话、最后的回答。
+    侧边对话（#478）挂在主对话下面：它们标题都叫「侧边对话」、open_chat 打不开，单独列出来认不出是哪件事。
     local：给这台电脑上的 Agent 用，带 open_chat 的编号（别的电脑上的对话它打不开）。"""
     from .agents import get as agent_get
     multi = start != end
-    found = []
     chats = pf.chats()
-    for cid, m in chats.items():
-        if not _counted(cid, m, keep) or m.get("mention_of") or m.get("review"):
-            continue
+
+    def ok(cid, m):
+        return _counted(cid, m, keep) and not m.get("mention_of") and not m.get("review")
+
+    def spans_in(cid):
         spans = summary(pf.channel.logs, cid).get("spans") or {}
-        days = sorted(d for d in spans if start <= d <= end)
-        if days:
-            found.append((min(spans[d][0] for d in days), max(spans[d][1] for d in days), len(days), cid, m))
+        return {d: spans[d] for d in spans if start <= d <= end}
+
+    sides = {}                                # 主对话 → [(起, 止, 侧边对话, 各天)]
+    for cid, m in chats.items():
+        of = m.get("side_of")
+        if of and of in chats and ok(cid, m) and ok(of, chats[of]):
+            sp = spans_in(cid)
+            if sp:
+                sides.setdefault(of, []).append((min(a for a, _ in sp.values()), max(b for _, b in sp.values()), cid, sp))
+    found = []
+    for cid, m in chats.items():
+        if not ok(cid, m) or m.get("side_of") in chats:   # 侧边对话跟着主对话走；主对话不算的（复盘对话等）它也不算
+            continue
+        own, sub = spans_in(cid), sorted(sides.get(cid) or [])
+        every = list(own.values()) + [v for x in sub for v in x[3].values()]
+        if every:
+            n_days = len(set(own) | {d for x in sub for d in x[3]})
+            found.append((min(a for a, _ in every), max(b for _, b in every), n_days, cid, m, sub))
     found.sort(key=lambda x: x[0])
+
+    def talk(cid, n_ask, ask_len, ans_len):
+        """这段时间我说的话（最后 n_ask 句）和最后的回答，几行。"""
+        rows = [x for x in pf.channel.logs.read(cid)
+                if start <= time.strftime("%Y-%m-%d", time.localtime(x.get("at") or x.get("done_at") or 0)) <= end]
+        asks = [ask_preview(x.get("text")) for x in rows if x.get("type") == "user" and not x.get("by") and x.get("text")]
+        ans = next((x.get("text") for x in reversed(rows) if x.get("type") == "answer" and x.get("text")), "")
+        out = []
+        if len(asks) > n_ask:
+            out.append(f"（这几天我说了 {len(asks)} 句，下面是最后 {n_ask} 句）" if multi else f"（我说了 {len(asks)} 句，下面是最后 {n_ask} 句）")
+        out += [f"我说：{t[:ask_len]}" for t in asks[-n_ask:]]
+        if ans:
+            out.append("最后的回答：" + " ".join(ans.split())[:ans_len])
+        return out
 
     def build(n_ask, ask_len, ans_len):
         out = []
-        for first, last, n_days, cid, m in found:
-            rows = [x for x in pf.channel.logs.read(cid)
-                    if start <= time.strftime("%Y-%m-%d", time.localtime(x.get("at") or x.get("done_at") or 0)) <= end]
-            asks = [ask_preview(x.get("text")) for x in rows if x.get("type") == "user" and not x.get("by") and x.get("text")]
-            ans = next((x.get("text") for x in reversed(rows) if x.get("type") == "answer" and x.get("text")), "")
+        for first, last, n_days, cid, m, sub in found:
             a = agent_get(m["agent"]) if m.get("agent") else None
             head = f"### {m.get('title') or '新对话'}（{a['name'] if a else '临时对话'}，{_clock(first, multi)}–{_clock(last, multi)}"
             head += f"，聊了 {n_days} 天）" if n_days > 1 else "）"
@@ -595,11 +622,14 @@ def material(pf, start, end, keep=None, local=True, acct=None):
                 part.append(f"open_chat id={cid}")
             if m.get("brief"):
                 part.append(f"进度：{m['brief']}")
-            if len(asks) > n_ask:
-                part.append(f"（这几天我说了 {len(asks)} 句，下面是最后 {n_ask} 句）" if multi else f"（我说了 {len(asks)} 句，下面是最后 {n_ask} 句）")
-            part += [f"我说：{t[:ask_len]}" for t in asks[-n_ask:]]
-            if ans:
-                part.append("最后的回答：" + " ".join(ans.split())[:ans_len])
+            mine = talk(cid, n_ask, ask_len, ans_len)
+            if not mine and sub:
+                mine = ["（这段时间主对话里没有新内容，只在侧边对话里问过）"]
+            part += mine
+            for i, (s0, s1, sc, _) in enumerate(sub):
+                part.append(f"#### 侧边对话{f' {i + 1}' if len(sub) > 1 else ''}（{_clock(s0, multi)}–{_clock(s1, multi)}，"
+                            "在这个对话旁边另开问的，打不开，以这里为准）")
+                part += talk(sc, n_ask, ask_len, ans_len)
             out.append("\n".join(part))
         return out
 

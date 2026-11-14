@@ -416,7 +416,7 @@ def filter_state(pf, st, acct):
         st["projects"] = []
         st["opc"] = None                      # 一人公司只给电脑主人（#470）
         st["global"] = {k: v for k, v in (st.get("global") or {}).items()     # 主人设的默认模型，只给它看（#154）
-                        if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}
+                        if k in ("model", "effort", "codex_model", "codex_effort", "archive_days", "kb")}   # kb：知识库开关跟着主人（#477）
         st["ccim"] = {k: v for k, v in (st.get("ccim") or {}).items() if k != "dev"}   # 开发页只给电脑主人
         st.pop("perms", None)
         st["guest"] = {"root": root(acct), "codex": bool(g.get("codex")), "own": bool(g.get("own", True))}
@@ -514,7 +514,7 @@ def allowed_dirs(acct, cwd=None):
     sk = os.path.join(registry.HOME, "skills")      # 主人的平台 Skill、会话挂的插件目录、它自己装的那份（别的访客的不给）
     out = [root(acct), cwd, os.path.join(sk, "lib"), os.path.join(sk, "views"), os.path.join(sk, "guests", acct)]
     out += [a.get("dir") for a in agents.all_agents().values() if of_agent(a) == acct]
-    out += [os.path.join(kb.root(), x["id"]) for x in kb.libs() if (x.get("account") or None) == acct]
+    out += [os.path.join(kb.root(), x["id"]) for x in (kb.libs() if kb.enabled() else []) if (x.get("account") or None) == acct]
     return sorted({os.path.realpath(p) for p in out if p})
 
 

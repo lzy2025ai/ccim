@@ -7,6 +7,12 @@
   叫别的电脑马上来）问在线的其他电脑要清单（/api/kb/manifest），比自己新的用 /api/kb/export 拉过来（`wanted` / `apply`），后改的算数；
   服务器只转发。网页读写本机这份（S.me）。挂到对话：对话 meta 的 kbs → WebChannel.kbs_of → `Chat._connect` 里 add_dirs + `kb_note`
   （只有 Claude Code）；改了挂哪些要 reconnect。条目的 source 记来源对话（machine、chat、at），网页按 at 找到那条消息定位（`doJump`）
+  开关（#477）：设置 →「对话」里的「知识库」，默认关，存在全局设置 kb=on（`kb.enabled()`），和工作区一样每台电脑各存一份、网页一起改
+  （`/api/kb_on`）；经总控、访客看到的 global 要带上这个键（peers.PAGE_GLOBAL、share 里访客的过滤），不然那边永远是关的。
+  关着时只是不露、不给：数据照存照同步，对话 meta 的 kbs 不动，打开就恢复。网页藏侧栏 / 手机「更多」入口（nav 默认 hidden，
+  拿到状态后 `drawKbNav` 再放出来，免得闪一下）、#/kb 路由跳回对话、回答下和选中文字浮条的「存到知识库」、输入框和右下角助理 + 里的
+  知识库、新对话页的「挂知识库」；后端 `_connect` 不加 add_dirs、不拼 kb_note，访客沙箱也不放知识库目录。
+  开关改了，挂着知识库、正开着的会话标 reconnect，下一条消息起按新开关来（不然要等进程重开才变）。
 - `ccim/skills.py`：平台 Skill（#101）。~/.ccim/skills/lib/<名字>/ + meta/<名字>.json（来源 github / upload / local、停用、修改时间），
   删除记 _tombstones.json；同步复用知识库那套（`_kb_sync_loop` 里第二组，/api/skills/manifest、export，整个 Skill 打成 tar.gz）。
   挂载：`Chat._connect` 按 `b.entry["agent_id"]` 取 Agent，`plugin_for` 生成 views/<Agent>/ 本地插件（plugin.json 名字 platform，skills/ 下软链到 lib，

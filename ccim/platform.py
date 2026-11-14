@@ -799,6 +799,16 @@ class Platform:
             pass
         return {"kbs": ids}
 
+    def set_kb_on(self, on):
+        """知识库开关（#477），每台电脑各存一份。挂了知识库、正开着的对话下一条消息起重连，按新开关带不带知识库。"""
+        registry.set_global(kb="on" if on else None)
+        mounted = {cid for cid, m in self.chats().items() if m.get("kbs")}
+        for b in list(self.bridges.values()):
+            for addr, c in list(b.chats.items()):
+                if addr in mounted:
+                    c.reconnect = True
+        return {"kb": on}
+
     # ----- 已完成的对话到期清理（#26；#369 以前叫归档） -----
 
     async def _cleanup_loop(self):
@@ -3010,6 +3020,7 @@ def _handler(pf):
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
+                "/api/kb_on": lambda: pf.call(pf.set_kb_on, bool(b("on"))),
                 "/api/diary_cards": lambda: set_diary_cards(bool(b("on"))),
                 "/api/diary_style": lambda: set_diary_style(str(b("value") or "")),
                 # 日记存在哪台电脑（#376）：add / query 是飞书、微信的进程和别的电脑转来的（here），open 在这台上打开日记文件夹

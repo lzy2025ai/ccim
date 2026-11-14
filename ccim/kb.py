@@ -21,6 +21,11 @@ def root():
     return os.path.join(registry.HOME, "kb")
 
 
+def enabled():
+    """设置里打开了知识库才用（#477），默认关。关着时数据照存照同步，只是网页不露入口、不交给 Agent。"""
+    return registry.global_config().get("kb") == "on"
+
+
 def _lib_dir(lib):
     if not re.fullmatch(r"k[0-9a-f]{8,}", lib or ""):
         raise ValueError("找不到这个知识库。")

@@ -992,6 +992,7 @@ a.org-n:hover{border-color:var(--qing);box-shadow:0 0 0 3px color-mix(in srgb,va
 .avatar-choice:focus-visible{outline:2px solid var(--qing);outline-offset:2px}
 .avatar-text{margin-top:16px}
 .avatar-text[hidden],.avatar-grid[hidden]{display:none}
+.rail a[hidden]{display:none!important}
 
 /* ---------- Agent ---------- */
 /* 设备管理（#100） */
@@ -1969,7 +1970,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <a href="#/chats" data-nav="chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/></svg>对话</a>
     <a href="#/schedules" data-nav="schedules" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>定时<span class="nbadge" id="nav-sched-n" hidden></span></a>
     <a href="#/agents" data-nav="agents" onclick="return navAgents(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 10h6M9 14h4"/></svg>AI 员工</a>
-    <a href="#/kb" data-nav="kb" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
+    <a href="#/kb" data-nav="kb" class="mi" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>知识库</a>
     <a href="#/apps" data-nav="apps" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>
     <a href="#/skills" data-nav="skills" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>共享 Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
@@ -2383,7 +2384,7 @@ addEventListener("keydown", e => {   // 只关最上面那层
 // 手机底栏的「更多」（#464）：底部弹出收起来的那几个入口，点外面、Esc、换页都关
 function openMore(){
   document.querySelector(".msheet")?.remove();
-  const items = [...document.querySelectorAll(".rail a.mi")].map(a => {
+  const items = [...document.querySelectorAll(".rail a.mi:not([hidden])")].map(a => {
     const c = a.cloneNode(true); c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
     c.className = "mitem" + (a.classList.contains("on") ? " on" : ""); c.removeAttribute("data-nav"); return c.outerHTML;
   }).join("");
@@ -2459,6 +2460,7 @@ function afterState(){
     const aid = current.id;                // 300 毫秒后可能已经跳到别的对话（#/chats/<对话>），要记下现在是哪个 Agent
     clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(aid), 300);   // 它的对话列表（含终端里的）单独拉
   }
+  drawKbNav();
   seeOpen(); renderList(); drawAttention();
   if (current.view === "board") renderBoard(true);
   if (current.view === "tower" && !TW.parts) renderTower();
@@ -2809,6 +2811,7 @@ function route(){
     history.replaceState(null, "", EMBED_HASH); parent.pocketGo(to); return;
   }
   lastRestore = null;
+  if (/^#\/kb(\/|\?|$)/.test(location.hash) && !kbEnabled()) history.replaceState(null, "", "#/chats");   // 设置里关了知识库（#477）
   if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
   if (location.hash === "#/chats/new") forgetChat();
   const [hpath, hq] = location.hash.split("?");
@@ -3193,7 +3196,7 @@ function msgActs(src, i, r){
   const ref = `${q(src)},${i}`;
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
-  if (r.type === "answer" && r.text) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
+  if (r.type === "answer" && r.text && kbEnabled()) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
   if (notCreator()) return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
@@ -3684,7 +3687,7 @@ function drawChat(){
           <button class="chip" id="chip-effort" onclick="chatEffort(event)"></button>
           <button class="chip" id="chip-perm" hidden onclick="chatPerm(event)"></button>
           ${c.readonly || (c.members || []).length ? "" : `<button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button>`}
-          ${c.readonly || c.base !== "claude" ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
+          ${c.readonly || c.base !== "claude" || !kbEnabled() ? "" : `<button class="chip" onclick="pickKbs(event)">${ICON.kb}知识库${ICON.down}</button>`}`}</div>
           ${c.readonly ? "" : micBtn("input")}
           <button class="ctx-ring" id="ctx-ring" hidden onclick="ctxPop(event)"></button>
           <button class="send" id="send"></button>
@@ -4460,7 +4463,7 @@ const isVideo = name => /\.(mp4|m4v|mov|webm)$/i.test(name || "");
 const isAudio = name => /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i.test(name || "");
 // Android 的浏览器：不限类型的选择框直接进文件管理器，只收图片视频才打开相册，所以先问选哪个（#234）
 function embedAdd(e){   // 右下角助理里（#294）：文件和知识库收在一个 + 里
-  const kb = !detail.readonly && detail.base === "claude";
+  const kb = !detail.readonly && detail.base === "claude" && kbEnabled();
   if (!kb) return pickFiles(e);
   const pp = pop(e, `<button data-k="file">${ICON.clip}图片或文件</button><button data-k="kb">${ICON.kb}知识库</button>`);
   const at = {currentTarget: e.currentTarget, stopPropagation(){}};
@@ -4607,7 +4610,7 @@ function renderNewChat(){
       <div class="where-row">
         ${multi() ? `<button class="wchip" onclick="pickMachine(event)" title="在哪台电脑上干活">${ICON.monitor}<span>${esc((machineOf(d.machine) || {}).name || "")}</span>${ICON.down}</button>` : ""}
         <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(dirLabel(d.dir, d.machine)) : "不选工作目录"}</span>${ICON.down}</button>
-        ${d.base === "claude" ? `${(d.kbs || []).map(k => `<span class="wchip kbm">${ICON.kb}<span>${esc(kbName(k))}</span><button aria-label="取下" onclick="draft.kbs=draft.kbs.filter(x=>x!==${q(k)});renderNewChat()">${ICON.x}</button></span>`).join("")}
+        ${d.base === "claude" && kbEnabled() ? `${(d.kbs || []).map(k => `<span class="wchip kbm">${ICON.kb}<span>${esc(kbName(k))}</span><button aria-label="取下" onclick="draft.kbs=draft.kbs.filter(x=>x!==${q(k)});renderNewChat()">${ICON.x}</button></span>`).join("")}
         <button class="wchip add" onclick="pickKbs(event,true)">${ICON.plus}<span>挂知识库</span></button>` : ""}
       </div>
       <div class="composer" style="margin:0;padding:0">
@@ -4725,7 +4728,7 @@ async function startTemp0(v, files){
   if (isReview(v) && chatRcpt.length) return startReviewWith(chatRcpt[0], v, files);   // 选了 Agent：就是和它的对话（#364）
   const m = draft.machine || S.me;
   const {id} = await act(() => api("/api/chat/new", {temp: {base: draft.base, model: draft.model, effort: draft.effort, dir: draft.dir}}, m));
-  if (draft.base === "claude" && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
+  if (draft.base === "claude" && kbEnabled() && (draft.kbs || []).length) { await act(() => api("/api/chat/kbs", {id, kbs: draft.kbs}, m)); draft.kbs = []; }
   const to = chatRcpt; closePop();
   await act(() => to.length ? api("/api/chat/mention", {id, text: v, files, to}, m) : api("/api/chat/send", {id, text: v, files}, m));
   pendingFiles = []; saveFiles(); chatRcpt = []; draftText = ""; localStorage.removeItem(DRAFT + "new");
@@ -6194,6 +6197,11 @@ function skillRows(){   // Agent 设置里：挂哪些平台 Skill
 }
 
 // ================= 知识库（#27） =================
+const kbEnabled = () => (S.global || {}).kb === "on";   // 设置里打开了才露出来（#477），默认关
+function drawKbNav(){
+  const a = document.querySelector('.rail a[data-nav="kb"]'); if (a) a.hidden = !kbEnabled();
+  if (!kbEnabled() && current.view === "kb") location.hash = "#/chats";
+}
 let kbCache = null, kbOpen = null, kbFilter = "";
 const KB_COLORS = {qing: "var(--qing)", zhe: "var(--zhe)", lu: "var(--lu)", zhu: "var(--zhu)", dai: "var(--dai)", huang: "var(--huang)"};
 const kbApi = (path, body) => api(path, body, S.me);       // 每台电脑都有一份完整的，读写本机这份，自动同步到其他电脑
@@ -6400,6 +6408,7 @@ function selTool(){
   t.addEventListener("mousedown", e => e.preventDefault());
   const [sv, qt, ask] = t.querySelectorAll("button");
   sv.onclick = () => { t.remove(); saveToKb("log", i, text); };
+  if (!kbEnabled()) sv.remove();
   qt.onclick = () => { t.remove(); addQuote(text); };
   if (ask) ask.onclick = () => { t.remove(); getSelection().removeAllRanges(); openSide(text); };
   document.body.append(t);
@@ -6425,7 +6434,7 @@ async function pickKbs(e, forDraft){
 }
 function drawKbRow(){
   const el = $("#kbrow"); if (!el || !detail) return;
-  const ks = detail.kbs || [];
+  const ks = kbEnabled() ? detail.kbs || [] : [];
   if (ks.length && !kbCache) { kbLibs().then(drawKbRow).catch(() => {}); return; }
   el.innerHTML = ks.map(k => `<span class="kbm">${ICON.kb}${esc(kbName(k))}<button aria-label="取下" onclick="unmountKb(${q(k)})">${ICON.x}</button></span>`).join("");
 }
@@ -7815,13 +7824,17 @@ function renderChatSettings(){
   const wsOn = !!(ro ? shared : S.global || {}).workspace;
   const dyOn = (ro ? shared : S.global || {}).diary_cards !== "off";
   const dyStyle = (ro ? shared : S.global || {}).diary_style || "";
+  const kbOn = (ro ? shared : S.global || {}).kb === "on";
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow"><h2>对话</h2></div></div>
     <div class="pane"><div class="sect"><h3>已完成的对话</h3>
-      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">标为已完成后，多久没有新消息就清理<div class="muted" style="font-size:12.5px">存进知识库的内容、任务面板里的完成统计会保留</div></div>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">标为已完成后，多久没有新消息就清理<div class="muted" style="font-size:12.5px">${kbOn ? "存进知识库的内容、" : ""}任务面板里的完成统计会保留</div></div>
         <div class="seg" role="radiogroup">${opts.map(([v, l]) => `<button role="radio" aria-checked="${cur === v}" class="${cur === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setArchiveDays('${v}')"`}>${l}</button>`).join("")}</div></div>
     </div><div class="sect"><h3>工作区</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">在对话旁边看文件、改文件<div class="muted" style="font-size:12.5px">打开后，对话的三点菜单里有「打开工作区」</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${wsOn === v}" class="${wsOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setWorkspace(${v})"`}>${l}</button>`).join("")}</div></div>
+    </div><div class="sect"><h3>知识库</h3>
+      <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">存下有用的回答，挂到对话里用</div>
+        <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${kbOn === v}" class="${kbOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setKbOn(${v})"`}>${l}</button>`).join("")}</div></div>
     </div><div class="sect"><h3>日记</h3>
       <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">聊天里显示日记<div class="muted" style="font-size:12.5px">在对话里发「/diary 内容」记一笔</div></div>
         <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${dyOn === v}" class="${dyOn === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryCards(${v})"`}>${l}</button>`).join("")}</div></div>
@@ -7892,6 +7905,13 @@ async function setArchiveDays(v){
   let fail = 0;
   for (const mid of targets) { try { await api("/api/archive_days", {value: v}, mid); } catch { fail++; } }
   toast(fail ? "有电脑没连上，那台下次再改" : "已保存");
+  await loadState(); renderChatSettings();
+}
+async function setKbOn(on){   // 知识库开关（#477）：和工作区一样每台电脑各存一份，一起改
+  const targets = multi() ? (S.machines || []).filter(m => m.online && !m.shared).map(m => m.id) : [S.me];
+  let fail = 0;
+  for (const mid of targets) { try { await api("/api/kb_on", {on}, mid); } catch { fail++; } }
+  toast(fail ? "有电脑没连上，那台下次再改" : on ? "已打开" : "已关闭");
   await loadState(); renderChatSettings();
 }
 async function setWorkspace(on){

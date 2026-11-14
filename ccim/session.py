@@ -670,7 +670,7 @@ class Chat:
         tries = [(self.session_id, False)] if self.session_id else [(self.fork_from, True)] if self.fork_from else []
         snapshots = bool(getattr(self.b.channel, "live", False))   # 网页里能退回：记下文件快照，让它回显我们发的消息（带编号）
         from . import kb
-        kbs = kb.dirs(getattr(self.b.channel, "kbs_of", lambda c: [])(self.chat_id))    # 挂在这个对话上的知识库（#27）
+        kbs = kb.dirs(getattr(self.b.channel, "kbs_of", lambda c: [])(self.chat_id)) if kb.enabled() else []   # 挂在这个对话上的知识库（#27），设置里关了就不给（#477）
         from . import agents, skills
         aid = self.b.entry.get("agent_id")
         try:                                  # 平台上装的 Skill（#101）：这个 Agent 没去掉的都挂上

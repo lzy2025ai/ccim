@@ -145,7 +145,7 @@ body{overflow:hidden}
 .tag.feishu{background:#E4ECF7;color:#2F5A93} .tag.weixin{background:#E3F1E7;color:#2E6E45} .tag.term{background:#ECE9E3;color:#5E5547}
 .tag.web{background:var(--qing-soft);color:var(--qing)}
 .tag.member{background:color-mix(in srgb,var(--zhe) 14%,transparent);color:var(--zhe)}
-.tag.member.here{background:var(--qing-soft);color:var(--qing)}   /* 卡片里它在当前这个群的子会话（#456） */
+.av-task .ds .here{color:var(--qing);font-weight:600}   /* 卡片里它在当前这个群的子会话（#456） */
 .path{font:12px/1.4 var(--mono);color:var(--muted)}
 .muted{color:var(--muted)}
 .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
@@ -3133,7 +3133,7 @@ function avCard(aid){
   const a = agentOf(aid), got = avGot[aid], cs = got ? got.rows : null;
   const ds = c => [c.of && !c.member ? (c.of.title === c.title ? "被 @" : `在「${c.of.title}」里被 @`) : "", c.brief || ""].filter(Boolean).join(" · ");
   return `<div class="av-card-h">${seal(a, "sm", false)}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span></div>`
-    + (!cs ? `<p class="muted av-empty">正在取…</p>` : cs.length ? cs.map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span>${c.member ? `<span class="tag member ${c.here ? "here" : ""}">${c.here ? (c.group && c.group.side ? "当前侧边对话" : "当前群聊") : c.group && c.group.side ? "侧边对话" : "成员"}</span>` : ""}<span class="when">${when(c.last_active)}</span></span>${ds(c) ? `<span class="ds">${esc(ds(c))}</span>` : ""}</a>`).join("")
+    + (!cs ? `<p class="muted av-empty">正在取…</p>` : cs.length ? cs.map(c => `<a class="av-task" href="${boardHref(c)}" onclick="avClose()"><span class="tt">${working(c) ? `<span class="spin"></span>` : ""}<span class="title">${esc(c.title)}</span>${c.member ? `<span class="tag member">${c.group && c.group.side ? "侧边对话" : "成员"}</span>` : ""}<span class="when">${when(c.last_active)}</span></span>${ds(c) || c.here ? `<span class="ds">${c.here ? `<span class="here">${c.group && c.group.side ? "当前侧边对话" : "当前群聊子会话"}</span>${ds(c) ? " · " : ""}` : ""}${esc(ds(c))}</span>` : ""}</a>`).join("")
       : `<p class="muted av-empty">还没有任务</p>`)
     + `<a class="av-all" href="#/agents/${encodeURIComponent(aid)}" onclick="avClose()">查看全部${got && got.total > cs.length ? ` ${got.total} 条` : ""}</a>`;
 }

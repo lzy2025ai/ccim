@@ -1278,13 +1278,33 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .doc-edit{text-align:right;font-size:12.5px;color:var(--muted);max-width:760px;margin:-6px auto 14px;padding:0 22px}
 #main.ws .doc-edit{padding:0 14px}
 .doc-edit button{color:var(--qing)}
-.sidepane .skc-head{padding-top:max(10px,env(safe-area-inset-top))}
-.side-av{background:var(--qing)}
-.sidepane .skc-foot .quote{margin-bottom:6px}
-#side-box{position:relative}
-#side-box .side-at{flex:none;width:30px;height:30px;font-size:15px;color:var(--ink-2)}
-.side-rcpt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
-.side-rcpt:empty{display:none}
+/* 侧边栏（#476）：顶部一个侧边对话一个标签，下面嵌着那个对话的对话页；左边的竖线拖动改宽度 */
+.sd-head{flex:none;display:flex;align-items:center;gap:2px;padding:8px 8px 6px 10px;padding-top:max(8px,env(safe-area-inset-top));position:relative}
+.sd-head.scrolled::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.sd-head>.icon-btn{flex:none}
+.sd-head>.icon-btn:disabled{opacity:.35;cursor:default}
+.sd-tabs{flex:1;min-width:0;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-right:4px}
+.sd-tabs::-webkit-scrollbar{display:none}
+.sd-tab{display:flex;align-items:center;min-width:64px;max-width:180px;flex:0 1 auto;border-radius:8px;color:var(--muted)}
+.sd-tab:hover{background:var(--sunk);color:var(--ink-2)}
+.sd-tab.on{background:var(--qing-soft);color:var(--ink)}
+.sd-tab>button[role=tab]{flex:1;display:flex;align-items:center;gap:6px;min-width:0;padding:6px 2px 6px 10px;font-size:13px;color:inherit}
+.sd-tab.on>button[role=tab]{font-weight:600}
+.sd-tab .tt{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.sd-tab .spin{flex:none}
+.sd-x{flex:none;width:22px;height:22px;display:grid;place-items:center;border-radius:6px;color:var(--muted);margin-right:3px;visibility:hidden}
+.sd-x:hover{background:var(--line);color:var(--ink)}
+.sd-tab:hover .sd-x,.sd-tab.on .sd-x{visibility:visible}
+.sd-x svg{width:12px;height:12px}
+.sd-msg{padding:16px}
+.sd-msg[hidden]{display:none}
+.sd-body{flex:1;min-height:0;display:flex}
+.sd-body iframe{flex:1;border:0;width:100%;min-height:0;background:var(--panel);color-scheme:normal}
+.sd-drag{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:2;touch-action:none}
+.sd-drag:hover::after,body.sd-dragging .sd-drag::after{content:"";position:absolute;left:3px;top:0;bottom:0;width:2px;background:var(--qing);opacity:.6}
+body.sd-dragging{cursor:col-resize;user-select:none}
+body.sd-dragging iframe{pointer-events:none}
+@media (max-width:760px){.sd-drag{display:none}.sd-x{visibility:visible}}
 .work-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-decoration:none;color:var(--ink)}
 .work-card:hover{border-color:var(--qing)}
 .work-card .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -1294,10 +1314,9 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .work-out{margin-top:10px}
 .msg>.work-card{max-width:480px}
 .work-out .sentimg{max-width:100%}
-.sidepane .skc-msg.me .bubble .bq{font-size:13px}
 .docpane{position:fixed;top:0;right:0;bottom:0;width:var(--doc-w);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 34px rgba(29,34,43,.12);z-index:15;display:flex;flex-direction:column}
 body{--doc-w:min(52vw,780px)}
-body.side-open{--doc-w:min(36vw,460px)}
+body.side-open{--doc-w:var(--side-w,min(36vw,460px))}
 @media (min-width:1280px){body.doc-open .app{margin-right:var(--doc-w)}body.doc-open .docpane{box-shadow:none}}
 .doc-top{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);min-height:56px}
 .doc-top .nm{flex:1;min-width:0;font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2169,7 +2188,7 @@ let fpTimer = 0;
 function fpCtx(el){
   const s = el.closest("[data-fpchat]");   // 群里被 @ 的 Agent 的回答：按它自己那个对话的目录认（#400）
   if (s) return {chat: s.dataset.fpchat, mid: s.dataset.fpmid || (el.closest("#sidepane") ? SIDE && SIDE.mid || ctxMachine : ctxMachine)};
-  if (el.closest("#sidepane")) return SIDE && SIDE.id ? {chat: SIDE.id, mid: SIDE.mid || ctxMachine} : null;
+  if (el.closest("#sidepane")) return SIDE && SIDE.cur ? {chat: SIDE.cur, mid: SIDE.mid || ctxMachine} : null;
   return el.closest("#main") && detail && detail.id && detail.id !== "new" ? {chat: detail.id, mid: ctxMachine} : null;
 }
 function fpScan(){
@@ -2619,11 +2638,12 @@ function connectEvents(again){
     lost = false;
     refreshSoon();
     if (detail && !starting && !(detail.log || []).some(r => r.sending)) reloadChat().catch(() => {});
-    pocketForward({type: "resync"});    // 右下角助理里嵌着的对话页也重新取一次（#294）
+    pocketForward({type: "resync"});    // 右下角助理、侧边栏里嵌着的对话页也重新取一次（#294）
+    sideForward({type: "resync"});
   };
 }
 function onEvent(ev){
-    if (!EMBED) pocketForward(ev);
+    if (!EMBED) { pocketForward(ev); sideForward(ev); }
     towerEvent(ev);
     if (ev.type === "idle") { refreshSoon(); return; }
     if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
@@ -2638,11 +2658,7 @@ function onEvent(ev){
     }
     pocketEvent(ev);
     if (SKC && ev.chat === SKC.id) { skcEvent(ev); return; }   // Skill 助手（#116）
-    if (SIDE && ev.chat === SIDE.id) { sideEvent(ev); return; }   // 侧边对话（#196）
-    if (SIDE && SIDE.log && ev.type === "progress" && String(ev.chat || "").startsWith(`m-${SIDE.id}-`)) {   // 侧边对话里被 @ 的（#290）
-      if (ev.state === "working") SIDE.subs[ev.chat] = ev; else delete SIDE.subs[ev.chat];
-      drawSide(); return;
-    }
+    if (sideTabEvent(ev)) return;         // 侧边对话（#196）：嵌着的页面自己处理（sideForward），这里只管标签
     if (ev.type === "drop") {             // 定时任务这次没什么要说的：对话里那条任务去掉（#122）
       if (detail && detail.id === ev.chat) { detail.log = detail.log.filter(r => r.id !== ev.id); drawThread(); }
       return;
@@ -2780,7 +2796,7 @@ function restoreHash(){
 function route(){
   if (EMBED && location.hash !== EMBED_HASH) {   // 面板里点到别处（单独聊、站内链接）：交给外面的页面打开
     const to = location.hash;
-    history.replaceState(null, "", EMBED_HASH); parent.pocketGo(to); return;
+    history.replaceState(null, "", EMBED_HASH); EMBED_SIDE ? parent.sideGo(to) : parent.pocketGo(to); return;
   }
   lastRestore = null;
   if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
@@ -3161,6 +3177,7 @@ function msgActs(src, i, r){
   const ref = `${q(src)},${i}`;
   const btns = [`<button onclick="copyMsg(this,${ref})" title="复制">${ICON.copy}复制</button>`];
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
+  if (EMBED_SIDE && r.type === "answer" && r.text) btns.push(`<button onclick="quoteMain(this,${ref})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.type === "answer" && r.text) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
   if (notCreator()) return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
@@ -3359,7 +3376,7 @@ function drawThread(){
   for (const v of t.querySelectorAll("video[data-k]")){
     const old = vids.get(v.dataset.k); if (old){ v.replaceWith(old); vids.delete(v.dataset.k); }
   }
-  if (EMBED && !detail.log.length && !detail.progress && !(detail.earlier || []).length) t.innerHTML = pocketEmpty();
+  if (EMBED && !detail.log.length && !detail.progress && !(detail.earlier || []).length) t.innerHTML = EMBED_SIDE ? sideEmpty() : pocketEmpty();
   if (near) t.scrollTop = t.scrollHeight;
   if (EMBED) pkScrolled(t);
   drawToc();
@@ -3679,7 +3696,7 @@ function drawChat(){
 }
 function drawComposerState(){
   const c = detail; if (!c || !$("#send")) return;
-  $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : "交代件事")
+  $("#input").placeholder = c.readonly ? "在这里接着聊" : EMBED ? (c.busy ? "补充说明" : EMBED_SIDE ? "想问什么、要做什么" : "交代件事")
     : listTo() && chatRcpt.includes(listTo()) ? `给 ${agentOf(listTo()).name} 发消息`
     : c.busy ? "补充说明，它做完当前这一步就会看到；/queue 排到后面"
     : (PV() || {}).quiet || c.company ? "发到群里，@ 谁就交给谁回答"
@@ -4298,6 +4315,7 @@ function mentionActs(i, r, live){
   const btns = [];
   if (r.text) btns.push(`<button onclick="copyMsg(this,'log',${i})" title="复制">${ICON.copy}复制</button>`,
                         `<button onclick="quoteMsg(this,'log',${i})" title="引用到输入框">${ICON.quote}引用</button>`);
+  if (r.text && EMBED_SIDE) btns.push(`<button onclick="quoteMain(this,'log',${i})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
   return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
@@ -4352,12 +4370,13 @@ async function copyCode(btn){   // 消息里代码块右上角的「复制」（
   btn.innerHTML = `${ICON.check}已复制`;
   setTimeout(() => { btn.innerHTML = `${ICON.copy}复制`; }, 1500);
 }
-function quoteMsg(btn, src, i){
+function quotePick(btn, src, i){
   const box = btn.closest(".msg"), sel = getSelection();
   const picked = sel && !sel.isCollapsed && box.contains(sel.anchorNode) ? sel.toString() : "";   // 选中了一段就只引用这段
-  const text = (picked || msgText(src, i)).trim();
-  addQuote(text);
+  return (picked || msgText(src, i)).trim();
 }
+function quoteMsg(btn, src, i){ addQuote(quotePick(btn, src, i)); }
+function quoteMain(btn, src, i){ parent.sideToMain(quotePick(btn, src, i)); }   // 侧边栏里嵌着的（#476）：放进主对话的输入框
 async function forkAt(i, src = "log"){
   const r = (src === "earlier" ? detail.earlier : detail.log)[i] || {};
   const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
@@ -7756,8 +7775,19 @@ function renderChatSettings(){
       ${dyOn ? `<div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:220px">日记样式</div>
         <div class="seg" role="radiogroup">${DIARY_STYLES.map(([v, l]) => `<button role="radio" aria-checked="${dyStyle === v}" class="${dyStyle === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryStyle('${v}')"`}>${l}</button>`).join("")}</div></div>` : ""}
       ${ro ? "" : `<div id="diary-where">${diaryWhere()}</div>`}
-    </div>${ro ? "" : pocketSettings()}</div></div>`;
+    </div>${ro ? "" : sideSettings() + pocketSettings()}</div></div>`;
   if (!ro) loadDiaryWhere();
+}
+function sideSettings(){   // 侧边对话同时开着的标签最多几个（#476），存在 S.me 那台
+  const n = sideMax();
+  return `<div class="sect"><h3>侧边对话</h3>
+    <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">同时打开的标签</div>
+      <div class="seg" role="radiogroup">${[2, 3, 4, 5, 6].map(v => `<button role="radio" aria-checked="${n === v}" class="${n === v ? "on" : ""}" onclick="setSideTabs(${v})">${v} 个</button>`).join("")}</div></div></div>`;
+}
+async function setSideTabs(v){
+  const r = await act(() => api("/api/side_tabs", {value: v}, S.me));
+  S.global = {...(S.global || {}), side_tabs: r.side_tabs};
+  renderChatSettings();
 }
 // 日记存在哪台电脑、哪个文件夹，用什么打开（#376）。DYW：{home, info, off}，info 是存日记那台的 {path, apps}
 let DYW = null;
@@ -8579,18 +8609,22 @@ function mdInline(s, assets = {}){
   return fmt(esc(s)).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]).replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n]);
 }
 
-// ---- 侧边对话（#196）：主对话在干活、不想打断它时，在右侧另开一个对话问问题 ----
-let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, id, log, progress, busy, quote, error, to（@ 了谁）, subs（被 @ 的进度）}
-const SIDE_AV = `<span class="skc-av side-av">${ICON.side}</span>`;
+// ---- 侧边对话（#196）：主对话在干活、不想打断它时，在右侧另开对话 ----
+// #476：一个主对话可以有多个侧边对话，顶部一个标签一个（同时开着的有上限，设置里改）；关掉标签不删对话，进「历史」。
+// 面板里嵌的就是那个侧边对话的对话页（?embed=side，和右下角助理同一套），附件、斜杠命令、模型、语音、@ 都和对话页一样；
+// 嵌着的页面不连推送，外层 onEvent 转给它（sideForward）。换标签只改它的 #（pkGo），不重新加载。
+let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, tabs: [{id, title, busy}]（开着的）, closed（历史）, cur, src（嵌着的页面在哪个）, error, quote, old（那台电脑还不认多标签）}
+const sideMax = () => +((S.global || {}).side_tabs) || 3;
+const sideTitle = t => t.title || "新的侧边对话";
 async function openSide(quote){
   const c = detail; if (!c) return;
   if (DOC && !DOC.ws) { await closeDoc(); if (DOC) return; }
   const fresh = !SIDE || SIDE.of !== c.id;
-  if (fresh) SIDE = {of: c.id, mid: ctxMachine};
+  if (fresh) SIDE = {of: c.id, mid: ctxMachine, tabs: null, closed: [], cur: null};
   if (quote) SIDE.quote = quote;
   drawSide();
-  if (fresh) await sideLoad();
-  $("#side-in")?.focus();
+  if (fresh) await sideList();
+  else { sideQuoteIn(); sideWin()?.pkFocus(); }
 }
 // 对话页右上角的「⋯」（#430）：重命名、置顶这些在对话列表那一行的「⋯」里已经有了，这里只放侧边对话
 const sideOk = c => !!c && !c.company && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
@@ -8601,48 +8635,166 @@ function headMenu(e){
 function closeSide(){
   SIDE = null; drawSide();
 }
-async function sideLoad(fresh){
+async function sideList(){
   const s = SIDE; if (!s) return;
   try {
-    const {id} = await api("/api/chat/side", {id: s.of, fresh: !!fresh}, s.mid);
-    const d = await api(`/api/chat?id=${encodeURIComponent(id)}`, undefined, s.mid);
+    const r = await api("/api/chat/sides", {id: s.of}, s.mid);
     if (SIDE !== s) return;
-    Object.assign(s, {id, log: d.log || [], progress: d.progress || null, busy: !!d.busy, error: null, subs: d.sub_progress || {}});
-  } catch (e) { if (SIDE === s) s.error = e.message; }
+    Object.assign(s, {tabs: r.open || [], closed: r.closed || [], error: null});
+  } catch (e) {
+    if (SIDE !== s) return;
+    try {                                   // 那台电脑还是旧版本：只有一个侧边对话
+      const {id} = await api("/api/chat/side", {id: s.of}, s.mid);
+      if (SIDE !== s) return;
+      Object.assign(s, {tabs: [{id, title: ""}], closed: [], old: true, error: null});
+    } catch { s.error = e.message; drawSide(); return; }
+  }
+  if (!s.tabs.length) return sideNew(true);
+  if (!s.tabs.some(t => t.id === s.cur)) s.cur = s.tabs[s.tabs.length - 1].id;
   drawSide();
 }
-async function sideNew(){
-  if (!SIDE) return;
-  const busy = SIDE.busy || (SIDE.log || []).some(r => r.type === "mention" && r.state === "queued");
-  if (busy && !await confirmBox("开一个新的侧边对话？", "还有回答没写完，会被停下。", "开新的")) return;
-  Object.assign(SIDE, {id: null, log: null, progress: null, busy: false, error: null, to: [], subs: {}});
-  drawSide(); await sideLoad(true); $("#side-in")?.focus();
+async function sideNew(first){
+  const s = SIDE; if (!s || s.busyNew) return;
+  if (!first && (s.tabs || []).length >= sideMax()) return toast(`最多同时开 ${sideMax()} 个，先关掉一个`);
+  s.busyNew = true;
+  try {
+    const {id} = await api("/api/chat/side", {id: s.of, fresh: true}, s.mid);
+    if (SIDE !== s) return;
+    s.tabs = [...(s.tabs || []), {id, title: ""}]; s.cur = id; s.error = null;
+  } catch (e) { if (SIDE !== s) return; if (first) s.error = e.message; else toast(e.message); }
+  finally { s.busyNew = false; }
+  drawSide();
 }
-function sideRec(r, i){
-  if (r.type === "user") return `<div class="skc-msg me ${r.sending ? "sending" : ""}"><div class="bubble">${r.to && r.to.length ? chipsOf(r.to) + " " : ""}${userText(r.text)}</div></div>`;
-  if (r.type === "mention") {   // 侧边对话里 @ 的 Agent（#290）
-    const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
-    const first = SIDE.log.find(x => x.type === "mention" && x.chat === r.chat && x.state === "queued");
-    const live = r.state === "queued" && first && first.id === r.id ? SIDE.subs[r.chat] || null : null;
-    const acts = live || r.state === "queued" ? `<div class="msg-acts" style="opacity:1"><button onclick="sideStopAt(${q(r.id)})">停下</button></div>`
-      : `<div class="msg-acts">${r.text ? `<button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
-          <button onclick="sideQuote(${i})" title="引用到主对话的输入框">${ICON.quote}引用到主对话</button>` : ""}
-          <button onclick="sideAsk(${q(r.agent)})">接着问它</button></div>`;
-    const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
-    return `<div class="skc-msg"><div class="from-row">${seal(a, "sm", false)}<b>${esc(a.name)}</b>${r.machine && r.machine !== (SIDE.mid || S.me) ? whereTag(r.agent, SIDE.mid || S.me) : ""}${stateLabel(r, live)}</div>
-      ${fpScope(r, replyBody(r, live))}${files ? `<div class="work-out">${files}</div>` : ""}${acts}</div>`;
+function sideTab(id){
+  if (!SIDE || SIDE.cur === id) return;
+  SIDE.cur = id; drawSide();
+}
+async function sideCloseTab(id, e){
+  if (e) e.stopPropagation();
+  const s = SIDE; if (!s) return;
+  const i = s.tabs.findIndex(t => t.id === id); if (i < 0) return;
+  let r;
+  try { r = await api("/api/chat/side/close", {id}, s.mid); } catch (err) { return toast(err.message); }
+  if (SIDE !== s) return;
+  const [t] = s.tabs.splice(i, 1);
+  if (!r.dropped) s.closed = [{...t, busy: false}, ...s.closed.filter(x => x.id !== id)];
+  if (s.cur === id) s.cur = (s.tabs[i] || s.tabs[i - 1] || {}).id || null;
+  if (!s.tabs.length) return closeSide();
+  drawSide();
+}
+function sideHistory(e){
+  const s = SIDE; if (!s) return;
+  const pp = pop(e, `<div class="sec">关掉的侧边对话</div>` + s.closed.map(t =>
+    `<button data-sd="${esc(t.id)}"><span><div>${esc(sideTitle(t))}</div><div class="desc">${esc(when(t.last_active || t.created) || "")}</div></span></button>`).join(""), true);
+  pp.querySelectorAll("[data-sd]").forEach(b => b.onclick = () => { closePop(); sideReopen(b.dataset.sd); });
+}
+async function sideReopen(id){
+  const s = SIDE; if (!s) return;
+  if (s.tabs.length >= sideMax()) return toast(`最多同时开 ${sideMax()} 个，先关掉一个`);
+  try { await api("/api/chat/side/close", {id, closed: false}, s.mid); } catch (e) { return toast(e.message); }
+  if (SIDE !== s) return;
+  const t = s.closed.find(x => x.id === id) || {id, title: ""};
+  s.closed = s.closed.filter(x => x.id !== id);
+  s.tabs.push(t); s.cur = id; drawSide();
+}
+function sideWin(){   // 嵌着的对话页（启动完了才算）
+  try { const w = $("#sidepane iframe")?.contentWindow; return w && w.pkReady ? w : null; } catch { return null; }
+}
+function sideForward(ev){ if (SIDE) try { sideWin()?.pkEvent(structuredClone(ev)); } catch {} }
+function sideTabEvent(ev){   // 标签上的标题、在干活的圈
+  const t = SIDE && (SIDE.tabs || []).find(x => x.id === ev.chat); if (!t) return false;
+  if (ev.type === "progress") t.busy = ev.state === "working";
+  else if (ev.type === "user" && !t.title && ev.text) t.title = ev.text.replace(/^(?:>[^\n]*(?:\n|$))*/, "").trim().split(/\s+/).join(" ").slice(0, 30);
+  else return true;
+  drawSideHead();
+  return true;
+}
+function sideGo(hash){ location.hash = hash; }   // 嵌着的页面里点到别处：在主窗口打开
+function sideToMain(text){   // 侧边对话里的「引用到主对话」
+  if (!SIDE || !detail || detail.id !== SIDE.of || !text) return;
+  addQuote(text.trim());
+  if (narrow()) closeSide();
+}
+function sideQuoteIn(){   // 选中主对话里的一段点「侧边对话」：等嵌着的页面开到这个标签，放进它的输入框
+  const s = SIDE; if (!s || !s.quote) return;
+  const w = sideWin();
+  if (!w || w.pkChat() !== s.cur || !w.document.querySelector("#input")) return setTimeout(() => SIDE === s && sideQuoteIn(), 150);
+  w.addQuote(s.quote); s.quote = null; w.pkFocus();
+}
+function drawSideHead(){
+  const s = SIDE, h = $("#sd-head"); if (!s || !h) return;
+  const tabs = s.tabs || [];
+  h.innerHTML = `<div class="sd-tabs" role="tablist">${tabs.map(t => `<div class="sd-tab ${t.id === s.cur ? "on" : ""}" title="${esc(sideTitle(t))}">
+      <button role="tab" aria-selected="${t.id === s.cur}" onclick="sideTab(${q(t.id)})">${t.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(sideTitle(t))}</span></button>
+      ${s.old ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
+    ${s.old ? "" : `<button class="icon-btn" title="新的侧边对话" aria-label="新的侧边对话" onclick="sideNew()">${ICON.plus}</button>
+    <button class="icon-btn" title="历史" aria-label="历史" ${s.closed.length ? "" : "disabled"} onclick="sideHistory(event)">${ICON.clock}</button>`}
+    <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button>`;
+  h.querySelector(".sd-tab.on")?.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+function drawSide(){
+  let el = $("#sidepane");
+  document.body.classList.toggle("side-open", !!SIDE);
+  if (!SIDE) { el?.remove(); if (!DOC) document.body.classList.remove("doc-open"); return; }
+  if (!el) {
+    el = document.createElement("aside"); el.id = "sidepane"; el.className = "docpane sidepane"; el.setAttribute("aria-label", "侧边对话");
+    el.innerHTML = `<div class="sd-drag" aria-hidden="true"></div><div class="sd-head" id="sd-head"></div><div class="sd-msg" id="sd-msg"></div><div class="sd-body" id="sd-body"></div>`;
+    document.body.append(el);
+    sideDrag(el.querySelector(".sd-drag"));
   }
-  if (r.type === "work") return workCard(r, "skc-msg", SIDE.mid || S.me);   // 被 @ 的 Agent 新开对话去做（#290）
-  if (r.type === "answer" || r.type === "note") return `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>
-    ${stepsHtml(r.steps)}${r.text ? `<div class="answer">${md(r.text)}</div>` : ""}
-    ${r.text ? `<div class="msg-acts"><button onclick="sideCopy(this,${i})" title="复制">${ICON.copy}复制</button>
-      <button onclick="sideQuote(${i})" title="引用到主对话的输入框">${ICON.quote}引用到主对话</button></div>` : ""}</div>`;
-  if (r.type === "card") {
-    if (!(r.buttons && r.buttons.length) || r.color && r.color !== "orange") return `<div class="skc-msg"><div class="card-done">${esc(r.title || r.note || "")}</div></div>`;
-    return `<div class="skc-msg"><div class="approve"><div class="q">${esc((r.title || "").replace(/ · .*$/, ""))}</div><div class="answer" style="font-size:13px">${md(r.body)}</div>
-      <div class="acts">${r.buttons.map(b => `<button class="btn ${b.style === "primary" ? "primary" : b.style === "danger" ? "danger" : ""}" onclick='sideAct(${JSON.stringify(r.id)},${esc(JSON.stringify(b.value))})'>${esc(b.text)}</button>`).join("")}</div></div></div>`;
+  document.body.classList.add("doc-open");
+  sideWidth();
+  drawSideHead();
+  const s = SIDE, msg = $("#sd-msg");
+  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur ? `<div class="doc-loading">…</div>` : "";
+  msg.hidden = !msg.innerHTML;
+  if (!s.cur || s.error) return;
+  if (s.src !== s.cur) {
+    s.src = s.cur;
+    const w = sideWin();
+    if (w) w.pkGo(s.cur, s.mid);
+    else {
+      let f = $("#sd-body iframe");
+      if (!f) { f = document.createElement("iframe"); f.title = "侧边对话"; $("#sd-body").append(f); }
+      const u = new URLSearchParams(location.search); u.set("embed", "side");
+      if (s.mid) u.set("m", s.mid); else u.delete("m");
+      f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(s.cur)}`;
+    }
   }
-  return "";
+  sideQuoteIn();
+  const focus = () => { const w = sideWin(); if (!SIDE || SIDE !== s) return; if (w && w.pkChat() === s.cur) w.pkFocus(); else setTimeout(focus, 150); };
+  if (!narrow()) focus();
+}
+// 主对话和侧边栏之间的竖线拖动改宽度（#476），记在这台电脑的浏览器里；手机上侧边栏占满一屏，不用
+const SIDE_W = "ccim.sideW";
+function sideClamp(w){   // 主对话至少留 440 宽（左边的导航、列表另算）
+  const left = $("#main")?.getBoundingClientRect().left || 0;
+  return Math.round(Math.max(320, Math.min(w, innerWidth - left - 440, 960)));
+}
+function sideWidth(){
+  const w = +(localStorage.getItem(SIDE_W) || 0);
+  if (w && !narrow()) document.body.style.setProperty("--side-w", sideClamp(w) + "px");
+  else document.body.style.removeProperty("--side-w");
+}
+function sideDrag(h){
+  h.onpointerdown = e => {
+    if (narrow() || e.button) return;
+    e.preventDefault(); h.setPointerCapture(e.pointerId);
+    document.body.classList.add("sd-dragging");
+    let w = 0;
+    h.onpointermove = ev => { w = sideClamp(innerWidth - ev.clientX); document.body.style.setProperty("--side-w", w + "px"); };
+    h.onpointerup = h.onpointercancel = () => {
+      h.onpointermove = h.onpointerup = h.onpointercancel = null;
+      document.body.classList.remove("sd-dragging");
+      if (w) try { localStorage.setItem(SIDE_W, w); } catch {}
+    };
+  };
+  h.ondblclick = () => { try { localStorage.removeItem(SIDE_W); } catch {} sideWidth(); };   // 双击回到默认宽度
+}
+addEventListener("resize", () => { if (SIDE) sideWidth(); });
+function sideEmpty(){   // 嵌在侧边栏里、还没说过话
+  return `<div class="pk-empty"><h3>有疑问，或者要顺手做点事</h3><div class="pk-sugg">${["它现在在做什么，做到哪一步了", "刚才那条回答是什么意思", "照现在的做法，有什么要注意的"]
+    .map(t => `<button onclick="pocketFill(${q(t)})"><span>${esc(t)}</span>${ICON.chev}</button>`).join("")}</div></div>`;
 }
 // 被 @ 的 Agent 新开对话去做的进度卡片：侧边对话（#290）、群聊（#359）共用
 function workCard(r, cls, mid){
@@ -8656,134 +8808,14 @@ function workFiles(fs, chat){
   return (fs || []).map(f => { const src = fileUrl(chat, f.path);
     return isImg(f.name) ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(f.name)}"></a>` : isAudio(f.name) ? audioHtml(src, f.name) : fileChip(src, f.name); }).join("");
 }
-async function sideCopy(btn, i){
-  try { await navigator.clipboard.writeText(SIDE.log[i].text || ""); btn.innerHTML = `${ICON.check}已复制`; setTimeout(() => btn.innerHTML = `${ICON.copy}复制`, 1500); }
-  catch { toast("复制不了"); }
-}
-function sideQuote(i){
-  if (!detail || detail.id !== SIDE.of) return;
-  addQuote((SIDE.log[i].text || "").trim());
-  if (narrow()) closeSide();
-}
-function drawSide(){
-  let el = $("#sidepane");
-  document.body.classList.toggle("side-open", !!SIDE);
-  if (!SIDE) { el?.remove(); if (!DOC) document.body.classList.remove("doc-open"); return; }
-  if (!el) { el = document.createElement("aside"); el.id = "sidepane"; el.className = "docpane sidepane"; el.setAttribute("aria-label", "侧边对话"); document.body.append(el); }
-  document.body.classList.add("doc-open");
-  const old = $("#side-in"), typed = old ? old.value : "";
-  const focus = old && document.activeElement === old ? [old.selectionStart, old.selectionEnd] : null;   // 回答在刷新时，正在打的字不丢焦点
-  const head = `<div class="skc-head">${SIDE_AV}<div class="t"><b>侧边对话</b><span>主对话接着做，不会被打断</span></div>
-    <button class="icon-btn" title="新的侧边对话" aria-label="新的侧边对话" onclick="sideNew()">${ICON.plus}</button>
-    <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button></div>`;
-  if (SIDE.error) { el.innerHTML = head + `<div class="skc-body"><p class="muted">${esc(SIDE.error)}</p></div>`; return; }
-  if (!SIDE.log) { el.innerHTML = head + `<div class="skc-body"><div class="doc-loading">…</div></div>`; return; }
-  const p = SIDE.progress, last = p && p.steps[p.steps.length - 1];
-  const empty = !SIDE.log.length && !p ? `<div class="skc-empty">${SIDE_AV}<h3>有疑问，在这里问</h3>
-      <p>它看得到主对话聊过的内容和正在做的进度，只回答问题，不动文件。打 @ 可以请别的 Agent 一起看。</p>
-      ${SIDE.quote ? "" : ["它现在在做什么，做到哪一步了", "刚才那条回答是什么意思", "照现在的做法，有什么要注意的"]
-        .map(t => `<button onclick="sideSend(${q(t)})">${esc(t)}</button>`).join("")}</div>` : "";
-  const liveHead = `<span class="spin"></span>${p && p.retry ? "网络不稳，正在重试" : last ? "正在" + esc(last) : "思考中"}`;
-  el.innerHTML = head + `<div class="skc-body" id="side-body">${empty}${SIDE.log.map(sideRec).join("")}
-      ${p ? `<div class="skc-msg"><div class="from-row">${SIDE_AV}<b>侧边对话</b></div>${p.steps.length ? stepsHtml(p.steps, false, liveHead) : `<div class="steps"><button>${liveHead}</button></div>`}
-        ${stallBar(p, SIDE.id, SIDE.mid)}${p.text ? `<div class="answer cursor">${md(p.text)}</div>` : ""}</div>` : ""}</div>
-    <div class="skc-foot">${SIDE.quote ? `<div class="quote in-box"><span class="qt">${esc(SIDE.quote)}</span><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="SIDE.quote=null;drawSide()">${ICON.x}</button></div>` : ""}
-      <div class="side-rcpt" id="side-rcpt">${sideRcpt()}</div>
-      <div class="skc-box" id="side-box"><button class="icon-btn side-at" aria-label="@ 其他 Agent" title="请别的 Agent 看看" onclick="sideAt(event)">@</button>
-      <textarea id="side-in" rows="1" placeholder="${SIDE.busy && !(SIDE.to || []).length ? "补充说明，它做完这一步就会看到" : SIDE.quote ? "关于这段，想问什么" : "想问什么"}" aria-label="侧边对话"></textarea>
-      ${micBtn("side-in")}<button class="send ${SIDE.busy ? "stop" : ""}" aria-label="${SIDE.busy ? "停下" : "发送"}" onclick="${SIDE.busy ? "sideStop()" : "sideSend()"}">${SIDE.busy ? ICON.stop : ICON.up}</button></div></div>`;
-  const b = $("#side-body"); b.scrollTop = b.scrollHeight;
-  const ta = $("#side-in"); ta.value = typed; sideFit();
-  if (focus) { ta.focus(); ta.setSelectionRange(...focus); }
-  ta.onkeydown = e => { if (sendKey(e)) { e.preventDefault(); sideSend(); } };
-  ta.oninput = e => {
-    sideFit();
-    if (e.data === "@" || e.data === "＠") setTimeout(() => sideAt({currentTarget: $("#side-box"), stopPropagation(){}}), 0);
-    const s = el.querySelector(".send");
-    if (SIDE.busy && s) { const has = !!ta.value.trim(); s.classList.toggle("stop", !has); s.innerHTML = has ? ICON.up : ICON.stop; s.onclick = has ? () => sideSend() : sideStop; }
-  };
-}
-function sideFit(){ const ta = $("#side-in"); if (!ta) return; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight + 2, 220) + "px"; }
-async function sideSend(text){
-  const ta = $("#side-in"), typed = (text || (ta ? ta.value : "")).trim();
-  if (!typed || !SIDE || !SIDE.id) return;
-  const qs = SIDE.quote ? [SIDE.quote] : [], v = withQuotes(qs, typed);
-  if (ta) ta.value = "";
-  if (DIARY.test(typed)) {
-    const s = SIDE; s.quote = null;
-    if (!await sendDiary(s.id, typed, qs, s.mid)) { s.quote = qs[0] || null; if (ta && !ta.value) { ta.value = typed; sideFit(); } }
-    return;
-  }
-  SIDE.quote = null;
-  const to = text ? [] : SIDE.to || [];
-  if (to.length) {                    // @ 了其他 Agent：它们在侧边栏里回答（#290）
-    const s = SIDE; s.to = [];
-    s.log.push({type: "user", text: v, to, sending: true}); drawSide();
-    try { await api("/api/chat/mention", {id: s.id, text: v, files: [], to}, s.mid); }
-    catch (e) { toast(e.message); if (SIDE !== s) return; s.log = s.log.filter(r => !r.sending); s.to = to; s.quote = qs[0] || null; drawSide();
-      const t = $("#side-in"); if (t && !t.value) { t.value = typed; sideFit(); } }
-    return;
-  }
-  SIDE.log.push({type: "user", text: v, sending: true});
-  if (!SIDE.busy) SIDE.progress = {steps: [], text: ""};
-  SIDE.busy = true; drawSide();
-  try { await api("/api/chat/send", {id: SIDE.id, text: v, files: []}, SIDE.mid); }
-  catch (e) { toast(e.message); SIDE.log = SIDE.log.filter(r => !r.sending); SIDE.busy = false; SIDE.progress = null; SIDE.quote = qs[0] || null; drawSide();
-    const t = $("#side-in"); if (t && !t.value && !text) { t.value = typed; sideFit(); } }
-}
-async function sideStop(){ if (SIDE && SIDE.id) await act(() => api("/api/chat/stop", {id: SIDE.id}, SIDE.mid)); }
-async function sideStopAt(rid){ if (SIDE) await act(() => api("/api/chat/mention/stop", {rid}, SIDE.mid), "正在停下"); }
-// 侧边对话里 @ 其他 Agent（#290）：和主对话输入框的 @ 一样选人，被 @ 的只看不改，在侧边栏里回答
-function sideAgents(){
-  const main = detail && detail.id === SIDE.of ? detail : null, own = main && main.agent, here = SIDE.mid || S.me;
-  return S.agents.filter(a => a.id !== own && (own || (a.machine || S.me) === here));   // 临时对话只能 @ 同一台电脑上的
-}
-function sideRcpt(){
-  return (SIDE.to || []).map(r => atChip(r, `SIDE.to=SIDE.to.filter(x=>x!==${q(r)});$('#side-rcpt').innerHTML=sideRcpt()`)).join("");
-}
-function sideAt(e){
-  if (!SIDE || !SIDE.id) return;
-  const list = sideAgents(), here = SIDE.mid || S.me;
-  if (!list.length) return toast("还没有别的 Agent，先去 Agent 页建一个");
-  SIDE.to = SIDE.to || [];
-  const pp = pop(e, `<div class="sec">请谁看看</div>` + list.map(a =>
-    `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)} ${whereTag(a.id, here)}</div><div class="desc">${BASE[a.base || "claude"]}${a.busy ? "，正在干活" : ""}</div></span>${SIDE.to.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""));
-  pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
-    const m = b.dataset.m;
-    SIDE.to = SIDE.to.includes(m) ? SIDE.to.filter(x => x !== m) : [...SIDE.to, m];
-    const ck = b.querySelector(".ck"); if (ck) ck.remove(); else b.insertAdjacentHTML("beforeend", `<span class="ck">✓</span>`);
-    const i = $("#side-in"); if (i && /[@＠]$/.test(i.value)) i.value = i.value.slice(0, -1);   // 打的 @ 换成上面的标签
-    $("#side-rcpt").innerHTML = sideRcpt();
-    closePop(); i?.focus();   // 选一个就关，要多个再打 @，和主对话输入框一样（#323、#351）
-  });
-  const done = () => { removeEventListener("click", done); $("#side-in")?.focus(); };
-  setTimeout(() => addEventListener("click", done, {once: true}), 0);
-}
-function sideAsk(aid){
-  if (!SIDE) return;
-  SIDE.to = [aid]; drawSide(); $("#side-in")?.focus();
-}
-async function sideAct(mid, value){ await act(() => api("/api/chat/action", {id: SIDE.id, mid, value}, SIDE.mid)); }
-function sideEvent(ev){   // 推送：进度、记录
-  if (!SIDE.log) return;
-  const rec = {...ev}; delete rec.chat; delete rec.rec_chat;
-  if (ev.rec_chat) rec.chat = ev.rec_chat;
-  if (ev.type === "progress") { SIDE.progress = ev.state === "working" ? ev : null; SIDE.busy = ev.state === "working"; }
-  else if (ev.type === "user") { const i = SIDE.log.findIndex(r => r.sending && r.text === ev.text); i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec); }
-  else if (["answer", "note", "card", "mention", "work"].includes(ev.type)) {
-    const i = ["card", "mention", "work"].includes(ev.type) ? SIDE.log.findIndex(r => r.type === ev.type && r.id === ev.id) : -1;
-    if (ev.type === "mention" && ev.state !== "queued" && rec.chat) delete SIDE.subs[rec.chat];
-    i >= 0 ? SIDE.log[i] = rec : SIDE.log.push(rec);
-    if (ev.type === "answer") SIDE.progress = null;
-  } else return;
-  drawSide();
-}
-
 // ---- 右下角的助理（#294）：哪个页面都能叫出来，临时问一句、交代件事、@ 别的 Agent，不用离开手头的页面 ----
 // 面板里嵌的就是这个对话的对话页（?embed=pocket，html.embed 按 400 宽重新排、去掉头部），@、模型、文件、审批都和对话页同一套。
 // 嵌着的页面不另连推送、不另取整体状态（同一个域名的连接数有限，开几个标签页就会占满）：外层收到的推送转给它（pkEvent），
 // 整体状态直接用外层的 S（同源，pkState）。页面空闲时就把面板建好，收起只是藏起来；换对话只改它的 #（pkGo），不重新加载。
-const EMBED = new URLSearchParams(location.search).get("embed") === "pocket" && window.parent !== window;
+const EMBED_KIND = window.parent !== window ? new URLSearchParams(location.search).get("embed") : null;
+const EMBED_SIDE = EMBED_KIND === "side";      // 侧边栏里嵌的（#476），和助理同一套
+const EMBED = EMBED_KIND === "pocket" || EMBED_SIDE;
+if (EMBED_SIDE) ctxMachine = new URLSearchParams(location.search).get("m") || null;
 let EMBED_HASH = EMBED ? location.hash : null;
 if (EMBED) document.documentElement.classList.add("embed");
 const POCKET = {open: false, id: null, src: null, busy: false, unread: false, subs: new Set(), synced: false, idle: false};
@@ -8896,7 +8928,8 @@ window.pkS = () => S;                      // let 声明的不在 window 上：�
 if (EMBED) {                                // 外层调这几个
   window.pkEvent = ev => ev.type === "resync" ? (refreshSoon(), detail && reloadChat().catch(() => {})) : onEvent(ev);
   window.pkState = () => { S = parent.pkS(); afterState(); };
-  window.pkGo = id => { EMBED_HASH = `#/chats/${encodeURIComponent(id)}`; location.hash = EMBED_HASH; };
+  window.pkGo = (id, mid) => { if (EMBED_SIDE) ctxMachine = mid || null; EMBED_HASH = `#/chats/${encodeURIComponent(id)}`; location.hash = EMBED_HASH; };
+  window.pkChat = () => detail && detail.id;
   window.pkFocus = () => $("#input")?.focus();
   const dark = () => document.documentElement.classList.toggle("pk-dark", parent.document.documentElement.classList.contains("ws-dark"));
   dark(); new MutationObserver(dark).observe(parent.document.documentElement, {attributes: true, attributeFilter: ["class"]});
@@ -8914,12 +8947,12 @@ function pocketEmpty(){
 }
 function pkScrolled(t){   // 右下角助理里：对话往上翻过，面板头部下面才出现分隔线
   if (!t.pkOn) { t.pkOn = true; t.addEventListener("scroll", () => pkScrolled(t), {passive: true}); }
-  parent.document.getElementById("pk-head")?.classList.toggle("scrolled", t.scrollTop > 2);
+  parent.document.getElementById(EMBED_SIDE ? "sd-head" : "pk-head")?.classList.toggle("scrolled", t.scrollTop > 2);
 }
 function pocketFill(t){ const i = $("#input"); if (!i) return; i.value = t; i.focus(); i.dispatchEvent(new Event("input")); drawComposerState(); }
 addEventListener("keydown", e => {
   if (e.key !== "Escape" || e.isComposing || document.querySelector(".pop,.scrim")) return;
-  if (EMBED) parent.pocketClose();
+  if (EMBED) EMBED_SIDE ? parent.closeSide() : parent.pocketClose();
   else if (POCKET.open) pocketClose();
 }, true);
 addEventListener("resize", () => drawPocket());

@@ -83,26 +83,24 @@ HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "- 回答用中文，简短。")}}
 # 侧边对话（#196）：主对话干活时，在侧栏里另开一个对话问问题，不打断它
 SIDE_ROLE = ("\n\n## 侧边对话\n"
-             "你在「侧边对话」里：用户的主对话可能正在干活，用户不想打断它，来这里问问题。你是从主对话分出来的，知道之前聊过的内容；"
-             "用户消息前面括号里是平台自动附上的（不是用户贴的）：主对话在那之后的新进展、正在进行的那一轮做到哪了。\n"
-             "- 你只能看、不能动：可以读文件、搜索、跑只看不改的命令（git status、git log、查日志等）；"
-             "不删改文件、不装东西、不提交推送、不启动或停止进程，用户明确要求也不做，现在不做、以后也不做。\n"
-             "- 命令在这里报没权限、没登录、读不到配置时，可能是侧边对话的限制，先别下结论说工具坏了、登录过期了；"
-             "照实说在这里跑不了，请用户回主对话做，或 @ 一个 Agent 去做。\n"
-             "- 用户要你动手时，说明这里只能问问题，请他回主对话说，可以把要对主对话说的话写好给他。\n"
-             "- 想请别的 Agent 来看看、或让它去动手，用户在这里的输入框打 @ 选它就行（它也只能看，要动手会新开它自己的对话去做）。\n"
+             "你在「侧边对话」里：用户的主对话可能正在干活，用户不想打断它，在旁边另开了你。你是从主对话分出来的，知道之前聊过的内容，"
+             "和主对话在同一个目录里，能读能改、能跑命令。\n"
+             "用户消息前面括号里是平台自动附上的（不是用户贴的）：主对话在那之后的新进展、正在进行的那一轮做到哪了、正在改哪些文件。\n"
+             "- 主对话正在改的文件，你不要动；要改同一个文件，先跟用户说，等主对话这一轮做完再改。\n"
+             "- 主对话在干活时，不做影响整个目录的事：提交、推送、切分支、rebase、stash、重启服务或 ccim。确实需要，先问用户。\n"
+             "- 你改了哪些文件、跑了哪些命令，平台会在主对话下一轮开头告诉它。\n"
+             "- 想请别的 Agent 来看看或帮忙，用户在这里的输入框打 @ 选它就行。\n"
              "- 回答简短。")
-# 侧边对话里被 @ 的 Agent（#290）：和侧边对话一样只读，要动手就新开自己的对话去做
+# 侧边对话里被 @ 的 Agent（#290）：和侧边对话一样能动手；大一点的活可以新开自己的对话去做
 SIDE_AT_ROLE = ("\n\n## 在侧边对话里被 @\n"
-                "用户在某个对话旁边开了侧边对话，在侧边对话里 @ 了你，请你看看、出出主意。消息前面括号里是平台附上的主对话和侧边对话的内容，"
+                "用户在某个对话旁边开了侧边对话，在侧边对话里 @ 了你。消息前面括号里是平台附上的主对话和侧边对话的内容，"
                 "主对话里的人看不到你在这里说的话。\n"
-                "- 你在这里只能看、不能动：可以读文件、搜索、跑只看不改的命令；不删改文件、不装东西、不提交推送、不启动或停止进程。\n")
-SIDE_AT_WORK = ("- 需要动手的事（改代码、提 PR、跑长任务），或者用户让你去做（比如「去改吧」）：先在回答里用一句话说要新开对话去做，"
+                "- 你能读能改、能跑命令。主对话正在改的文件不要动；主对话在干活时不做提交、推送、切分支、重启这类影响整个目录的事，确实需要先问用户。\n")
+SIDE_AT_WORK = ("- 活比较大（改一批代码、提 PR、跑长任务），或者用户让你另开对话去做：先在回答里用一句话说要新开对话去做，"
                 "再调用 start_work 新开一个你自己的对话去做。text 要写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里。"
                 "调用后这一轮简短收尾；侧边栏里有卡片显示进度，那边做完后结果会作为一条新消息交给你，由你在这里向用户汇报。\n"
-                "- 只看不改的事，命令在这里被拦下了（报没权限、没登录、读不到配置）：这是侧边对话的限制，不是那个工具真出了问题。"
-                "不要只回一句做不了，也照上面的办法新开对话去做。\n- 回答简短。")
-SIDE_AT_FAR = ("- 需要动手的事（改代码、提 PR、跑长任务）：在这里做不了，请用户直接和你开一个对话去做，可以把要交代的话写好给用户。\n"
+                "- 回答简短。")
+SIDE_AT_FAR = ("- 活比较大（改一批代码、提 PR、跑长任务）：请用户直接和你开一个对话去做，可以把要交代的话写好给用户。\n"
                "- 回答简短。")
 SIDE_CTX = 6000                                                    # 每次带上的主对话新进展，最多这么多字
 MERGED = ("card", "reply", "run", "mention", "secret", "edit", "work")           # 记录里会被更新的：同一个 id 后来的覆盖前面的（edit：工作区连着自动保存，#206）
@@ -1005,9 +1003,9 @@ class Platform:
             lent = bool(viewer and viewer != a.get("account"))   # 主人共享给访客的 Agent：访客的对话单独一个 Bridge
             if lent:
                 key += "#" + viewer
-            if m.get("side_of"):              # 侧边对话（#196）：只读，单独一个 Bridge
+            if m.get("side_of"):              # 侧边对话（#196）：单独一个 Bridge（角色说明不同，和主对话并行干活）
                 key += "|side"
-            elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）：也只读
+            elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）
                 key += "|sideat" + ("-far" if m.get("remote_project") else "")
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
@@ -1231,6 +1229,8 @@ class Platform:
             text = f"[用户在你于{where}的子会话里直接跟你说的，群里其他人看不到这段]\n{text}"
         if m.get("side_of") and text:          # 侧边对话：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
+        elif text and not m.get("mention_of") and not m.get("side_at"):   # 主对话：带上侧边对话动过的文件、跑过的命令（#476）
+            text = self._side_news(cid) + text
         if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
             from .search import short
             text = "（用户指了你以前的这些对话，和这次说的有关，用 open_chat 读，不用再搜：" + \
@@ -1469,16 +1469,38 @@ class Platform:
         self.store.write(chats)
         return cid
 
-    async def side_chat(self, cid, fresh=False):
-        """侧边对话（#196）：这个对话的侧边对话，一个对话一个，不进对话列表；没有或 fresh 就从主对话最后一条回答处分一个新的。"""
+    def _side_ok(self, cid):
         m = self.meta(cid)
         if m.get("side_of") or m.get("helper") or m.get("mention_of") or cid.startswith("x:"):
             raise Problem("这个对话不能开侧边对话。")
-        old = [c for c, x in self.chats().items() if x.get("side_of") == cid]
-        if old and not fresh:
-            return old[0]
-        for c in old:
-            await self._drop_side(c)
+        return m
+
+    def sides(self, cid):
+        """这个对话的侧边对话（#476：一个对话可以有多个）：开着的（标签）和关掉的（历史），各按开的先后排。"""
+        self._side_ok(cid)
+        busy = self.channel.progress_of
+
+        def title(c, x):                  # 以前开的都叫「侧边对话」：取第一句提问
+            t = x.get("title") or ""
+            if t == "侧边对话" and not x.get("title_set"):
+                first = next((r for r in self.channel.logs.read(c) if r.get("type") == "user" and r.get("text")), None)
+                t = title_text(first["text"])[:30] if first else ""
+            return t
+        rows = [{"id": c, "title": title(c, x), "created": x.get("created"), "last_active": x.get("last_active"),
+                 "busy": c in busy, "closed": bool(x.get("side_closed"))}
+                for c, x in self.chats().items() if x.get("side_of") == cid]
+        rows.sort(key=lambda r: r.get("created") or "")
+        return {"open": [r for r in rows if not r["closed"]],
+                "closed": sorted([r for r in rows if r["closed"]], key=lambda r: r.get("last_active") or "", reverse=True)}
+
+    async def side_chat(self, cid, fresh=False):
+        """侧边对话（#196）：不进对话列表，跟着主对话删。fresh 就另开一个（#476：以前的不删，留在标签或历史里）；
+        否则接着用最近开着的那个，一个都没有才新开。从主对话最后一条回答处分出来。"""
+        m = self._side_ok(cid)
+        if not fresh:
+            cur = self.sides(cid)["open"]
+            if cur:
+                return cur[-1]["id"]
         rows = self.channel.logs.read(cid)
         base = self._effective(m)["base"]
         sid = m.get(registry.sid_key(base))
@@ -1492,7 +1514,7 @@ class Platform:
             if f.get("at"):
                 fork, at, upto = f.get("sid") or sid, f["at"], done[-1] + 1
         t = m.get("temp")
-        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, title="侧边对话",
+        new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None,
                             account=share.chat_owner(self, cid))
         chats = self.chats()
         rec = chats[new]
@@ -1506,6 +1528,22 @@ class Platform:
                 rec[k] = m[k]
         self.store.write(chats)
         return new
+
+    async def side_close(self, sid, closed=True):
+        """关掉 / 重新打开侧边对话的标签（#476）。关掉不删，进历史；还没说过话的直接删掉，免得历史里一串空的。"""
+        m = self.meta(sid)
+        if not m.get("side_of"):
+            raise Problem("这不是侧边对话。")
+        if closed and not self.channel.logs.read(sid) and sid not in self.channel.progress_of:
+            await self._drop_side(sid)
+            return {"dropped": True}
+        chats = self.chats()
+        if sid in chats:
+            chats[sid]["side_closed"] = bool(closed) or None
+            if not closed:
+                chats[sid]["last_active"] = registry.now()
+            self.store.write(chats)
+        return {}
 
     async def _drop_side(self, c):
         try:
@@ -1550,7 +1588,68 @@ class Platform:
         now = "正在进行的这一轮：" + ("已经做了 " + "；".join(steps[-15:]) if steps else "刚开始")
         if (p.get("text") or "").strip():
             now += "\n正在写的回答：" + p["text"].strip()[-1500:]
+        files = list(dict.fromkeys((p.get("writing") or []) + (p.get("changed") or []) + (p.get("created") or [])))
+        if files:                             # 侧边对话能动手了（#476）：告诉它主对话在动哪些文件，别撞上
+            now += "\n主对话这一轮正在改的文件（不要动）：" + "、".join(self._short_path(cid, f) for f in files[-30:])
+        now += "\n主对话还在干活：不要提交、推送、切分支、rebase、stash，不要重启服务；确实需要先问用户。"
         return now
+
+    def _short_path(self, cid, path):
+        """写给 Agent 看的文件名：在对话目录里的写相对路径，别的写全路径。"""
+        try:
+            root = os.path.realpath(self.chat_dir(cid))
+        except Exception:
+            return path
+        rp = os.path.realpath(path)
+        return os.path.relpath(rp, root) if rp.startswith(root + os.sep) else path
+
+    def _side_news(self, cid):
+        """主对话发消息时带上的（#476）：它的侧边对话（和在里面被 @ 的）上次之后改了哪些文件、跑了哪些命令，正在做的也带上。
+        各侧边对话看到哪，记在主对话 meta 的 side_seen（侧边对话 → 记录条数）。"""
+        chats = self.chats()
+        sides = [c for c, x in chats.items() if x.get("side_of") == cid]
+        sides += [c for c, x in chats.items() if x.get("side_at") and x.get("mention_of") in sides]
+        if not sides:
+            return ""
+        seen = dict((chats.get(cid) or {}).get("side_seen") or {})
+        parts = []
+        for c in sides:
+            rows = self.channel.logs.read(c)
+            files, runs = [], []
+            for r in rows[seen.get(c, 0):]:
+                if r.get("type") != "answer":
+                    continue
+                for f in r.get("changed") or []:
+                    files.append(f.get("path") if isinstance(f, dict) else f)
+                for st in r.get("steps") or []:
+                    st = str(st)
+                    if st.startswith(("运行：", "用管理员权限执行")):
+                        runs.append(st.split("：", 1)[-1])
+                    elif st.startswith("修改 ") and not r.get("changed"):
+                        files.append(st[3:])
+            p = self.channel.progress_of.get(c)
+            if p:
+                files += (p.get("writing") or []) + (p.get("changed") or []) + (p.get("created") or [])
+            seen[c] = len(rows)
+            files = [self._short_path(cid, f) for f in dict.fromkeys(f for f in files if f)]
+            runs = list(dict.fromkeys(runs))
+            if not files and not runs:
+                continue
+            x = chats.get(c) or {}
+            who = (f"侧边对话里被 @ 的 {(agents.get(x.get('agent')) or {}).get('name') or 'Agent'}" if x.get("side_at")
+                   else f"侧边对话「{x.get('title') or '侧边对话'}」")
+            line = who + ("（正在做）" if p else "") + "："
+            if files:
+                line += "改了 " + "、".join(files[-30:])
+            if runs:
+                line += ("；" if files else "") + "跑了 " + "；".join(r[:80] for r in runs[-15:])
+            parts.append(line)
+        if cid in chats:
+            chats[cid]["side_seen"] = seen
+            self.store.write(chats)
+        if not parts:
+            return ""
+        return "（平台自动附上的：用户在侧边对话里让别的会话动过这些，改之前先看一眼最新内容）\n" + "\n".join(parts) + "\n\n——\n\n"
 
     def work(self, src, text, title=None):
         """被 @ 的 Agent 要动手：新开一个它自己的对话去做。侧边对话里被 @ 的（#290）、群聊里被 @ 的成员（#359）都走这里。
@@ -1827,7 +1926,7 @@ class Platform:
                 "stall": self._stall(cid), "bg": self.channel.bg_of.get(cid) or [],
                 "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"),
                 "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m),
-                "perm_ok": not (share.chat_owner(self, cid) or m.get("side_of") or m.get("side_at") or m.get("helper"))}
+                "perm_ok": not (share.chat_owner(self, cid) or m.get("helper"))}
 
     def _group_of(self, m):
         """群成员的子对话在哪个群里（#409）：网页标「成员」/「侧边对话」，点「在群聊里 @ 的」跳过去。"""
@@ -2574,7 +2673,7 @@ class Platform:
             chats[cid] = {"type": "p2p", "agent": aid, "title": title, "remote_project": True,
                           "created": registry.now(), "last_active": registry.now(),
                           **({"mention_of": of} if kind == "mention" else {"project": project}),
-                          **({"side_at": True} if side and kind == "mention" else {})}   # 侧边对话里被 @ 的（#290）：只读
+                          **({"side_at": True} if side and kind == "mention" else {})}   # 侧边对话里被 @ 的（#290）
         if kind == "mention" and of_machine:  # 群聊在哪台电脑上：子对话里点「在 xx 群聊 @ 了它」跳过去（#409）
             chats[cid]["mention_machine"] = of_machine
         self.store.write(chats)
@@ -2970,6 +3069,9 @@ def _handler(pf):
                 "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
                 "/api/pocket/settings": lambda: set_pocket(body),
                 "/api/chat/side": lambda: {"id": pf.run(pf.side_chat(b("id"), bool(b("fresh"))))},
+                "/api/chat/sides": lambda: pf.sides(b("id")),
+                "/api/chat/side/close": lambda: pf.run(pf.side_close(b("id"), b("closed") is not False)),
+                "/api/side_tabs": lambda: set_side_tabs(b("value")),
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
                 "/api/chat/stop": lambda: {"stopped": pf.run(pf.stop_chat(b("id")))},
                 "/api/chat/skip": lambda: {"skipped": pf.run(pf.skip_step(b("id")))},
@@ -3451,7 +3553,7 @@ def state(pf, acct=None):
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
-        "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @ 时只读，#290）
+        "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @，#290）
         "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
 
 
@@ -3603,6 +3705,20 @@ def delete_at(m, days):
         except ValueError:
             pass
     return max(m.get("archived_at") or time.time(), last) + days * 86400
+
+
+SIDE_TABS = 3                                                    # 侧边对话同时开着的标签，默认几个（#476）
+
+
+def set_side_tabs(v):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        raise Problem("没有这个选项。")
+    if not 1 <= n <= 8:
+        raise Problem("没有这个选项。")
+    registry.set_global(side_tabs=None if n == SIDE_TABS else n)
+    return {"side_tabs": n}
 
 
 def set_workspace(on):

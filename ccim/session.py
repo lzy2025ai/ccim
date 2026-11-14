@@ -433,9 +433,9 @@ class Chat:
         return bool(self.as_fence) and self.as_fence != guest_of(self.b)
 
     def perm_ok(self):
-        """能放开权限的对话：访客的 Agent、借出的、侧边对话、Skill 助手不行，限制保持不变。"""
+        """能放开权限的对话：访客的 Agent、借出的、Skill 助手不行，限制保持不变。侧边对话和主对话一样（#476）。"""
         e = self.b.entry
-        return not (guest_of(self.b) or e.get("side") or e.get("lent") or e.get("helper"))
+        return not (guest_of(self.b) or e.get("lent") or e.get("helper"))
 
     async def set_perm(self, perm=None, once=None, turn_free=None):
         """网页上切换权限：不用重连，下一步操作就按新的来。"""
@@ -682,17 +682,14 @@ class Chat:
         if guest:                             # 共享电脑上访客的 Agent：圈在它的文件夹里（#154）
             from . import share
             sandbox, rules = share.fence(guest, self.b.path)
-        if self.b.entry.get("side"):          # 侧边对话（#196）：命令也只能看不能写
-            from . import share
-            sandbox = share.read_only(sandbox if guest else None, self.b.path)
         for resume, fork in tries + [(None, False)]:
-            opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {"sandbox": sandbox} if self.b.entry.get("side") else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
+            opts = ClaudeAgentOptions(**({"sandbox": sandbox, "settings": json.dumps(rules)} if guest else {}),enable_file_checkpointing=snapshots, add_dirs=[d for _, d in kbs],
                 extra_args={**({"replay-user-messages": None} if snapshots else {}), **({"chrome": None} if self.b.entry.get("chrome") else {})},   # chrome：Agent 设置里开了才接 Chrome 扩展
                 fork_session=fork, resume_session_at=self.fork_at if fork else None,
                 cwd=self.b.path, permission_mode="auto" if self.fenced() else PERM_MODE.get(self.perm, "auto"), can_use_tool=self._can_use_tool,
                 setting_sources=["user", "project", "local"], model=self.model, effort=self.effort,
                 resume=resume, mcp_servers={"ccim": self._tools()}, env=self.ccim_env(),
-                disallowed_tools=["AskUserQuestion"] + CRON_TOOLS + (SIDE_OFF if self.b.entry.get("side") else []),
+                disallowed_tools=["AskUserQuestion"] + CRON_TOOLS,
                 allowed_tools=["mcp__ccim__list_chats", "mcp__ccim__read_chat",    # 只读，不用每次批准
                                "mcp__ccim__run_as_admin",                           # 它自己会让用户确认，不再弹审批
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
@@ -704,7 +701,7 @@ class Chat:
                        "PermissionDenied": [HookMatcher(hooks=[self._denied], timeout=approval.TIMEOUT + 30)],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest or self.b.entry.get("side") else SCHEDULE + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + notify_note(_notify_kinds(self)) + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest else ("" if self.b.entry.get("side") else SCHEDULE) + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + notify_note(_notify_kinds(self)) + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1276,10 +1273,11 @@ class Chat:
 
         tools = [send_file, send_chatlog]
         pf = getattr(chat.b.channel, "platform", None)
-        side = chat.b.entry.get("side")      # 侧边对话（#196）：只回答问题，不 @ 人、不转交
+        side = chat.b.entry.get("side")      # 侧边对话（#196）：@ 人走输入框，不给 ask_agent、不转交
         fenced = chat.fenced()               # 被拉进群的访客叫的这一轮（#419）：只留发文件，别的都是主人的
-        if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not side and not fenced:
-            tools += _ask_agent(chat, pf)       # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
+        if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not fenced:
+            if not side:
+                tools += _ask_agent(chat, pf)   # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
                 tools += _search_tools(chat, pf)   # 搜以前的对话：Agent 搜它参与过的（#180），助理搜所有助理对话（#294）
                 tools.append(_review_tool(chat, pf))   # 复盘：按日期范围拉所有对话的材料（#364）
@@ -1307,15 +1305,14 @@ class Chat:
 
 
 DIARY_TOOLS = ["mcp__ccim__diary_read", "mcp__ccim__diary_search"]   # 只读
-SIDE_OFF = ["Write", "Edit", "MultiEdit", "NotebookEdit"]           # 侧边对话（#196）不能改文件
 APP_TOOLS = [f"mcp__ccim__app_{n}" for n in ("list", "query", "save", "delete", "open")]   # 应用的数据有 git 记录，能退回
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__share_skill_to_platform"]
 
 
 def _can_sync(chat):
-    """能把自己的 Skill 共享到平台（#276）：访客（只能从 GitHub 装）、借给访客的、侧边对话、助手都不给。"""
+    """能把自己的 Skill 共享到平台（#276）：访客（只能从 GitHub 装）、借给访客的、助手都不给。"""
     e = chat.b.entry
-    return not (chat._guest() or e.get("lent") or e.get("side") or e.get("helper"))
+    return not (chat._guest() or e.get("lent") or e.get("helper"))
 
 
 def _skill_tools(chat, full=True, sync=False):
@@ -1616,12 +1613,11 @@ def _diary_tools():
 
 
 def _searchable(chat):
-    """平台上的对话（Skill 助手、侧边对话除外）：有 search_chats / open_chat（#180）。
+    """平台上的对话（Skill 助手除外）：有 search_chats / open_chat（#180）。
     Agent 的对话搜它参与过的；没选 Agent 的（助理，#294）搜所有助理对话。"""
     pf = getattr(chat.b.channel, "platform", None)
     m = pf.chats().get(chat.chat_id) if pf else None
-    return bool(m is not None and (m.get("agent") or not m.get("mention_of")) and not chat.b.entry.get("helper")
-                and not chat.b.entry.get("side"))
+    return bool(m is not None and (m.get("agent") or not m.get("mention_of")) and not chat.b.entry.get("helper"))
 
 
 def _search_tools(chat, pf):

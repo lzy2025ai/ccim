@@ -414,7 +414,7 @@ def filter_state(pf, st, acct):
     if acct:
         g = guest(acct)
         st["projects"] = []
-        st["companies"] = []                  # 一人公司只给电脑主人（#454）
+        st["opc"] = None                      # 一人公司只给电脑主人（#470）
         st["global"] = {k: v for k, v in (st.get("global") or {}).items()     # 主人设的默认模型，只给它看（#154）
                         if k in ("model", "effort", "codex_model", "codex_effort", "archive_days")}
         st["ccim"] = {k: v for k, v in (st.get("ccim") or {}).items() if k != "dev"}   # 开发页只给电脑主人

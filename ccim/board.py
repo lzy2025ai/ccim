@@ -90,6 +90,8 @@ def unread(meta, summ):
 def answered(meta, summ):
     """算不算「等你处理」里的回答过（#390）：定时任务每次到点都会回答，它自己的对话你没说过话的不算；
     发到普通对话、群聊里的，最近一条是定时任务发的也不算，你在里面回了话才算。"""
+    if meta.get("staff") or meta.get("company"):   # 一人公司里员工的窗口、大群一直开着（#470）：有没看的回答才算
+        return unread(meta, summ)
     return (bool(summ.get("answer_at")) and not summ.get("sched_last")
             and not (meta.get("schedule") and not summ.get("rounds")))
 

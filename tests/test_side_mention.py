@@ -60,7 +60,7 @@ class SideMentionTests(unittest.TestCase):
                           "text": "配图建议用落叶", "done_at": 1})
         return cid
 
-    def test_mention_in_side_is_read_only_and_stays_out_of_main(self):
+    def test_mention_in_side_stays_out_of_main(self):
         pf = self.pf
         main = self.group()
         before = len(pf.channel.logs.read(main))

@@ -8787,11 +8787,17 @@ async function sideNew(first){
   const s = SIDE; if (!s || s.busyNew) return;
   if (!first && (s.tabs || []).length >= sideMax()) return toast(`最多同时开 ${sideMax()} 个，先关掉一个`);
   s.busyNew = true;
+  const prev = s.cur, tmp = {id: "~new", title: "", busy: true, temp: true};   // 先把标签放上去（#484），建好再换成真的
+  s.tabs = [...(s.tabs || []), tmp]; s.cur = tmp.id; drawSide();
   try {
     const {id} = await api("/api/chat/side", {id: s.of, fresh: true}, s.mid);
     if (SIDE !== s) return;
-    s.tabs = [...(s.tabs || []), {id, title: ""}]; s.cur = id; s.error = null;
-  } catch (e) { if (SIDE !== s) return; if (first) s.error = e.message; else toast(e.message); }
+    s.tabs = s.tabs.map(t => t === tmp ? {id, title: ""} : t); s.cur = id; s.error = null;
+  } catch (e) {
+    if (SIDE !== s) return;
+    s.tabs = s.tabs.filter(t => t !== tmp); s.cur = prev;
+    if (first) s.error = e.message; else toast(e.message);
+  }
   finally { s.busyNew = false; }
   drawSide();
 }
@@ -8856,7 +8862,7 @@ function drawSideHead(){
   const tabs = s.tabs || [];
   h.innerHTML = `<div class="sd-tabs" role="tablist">${tabs.map(t => `<div class="sd-tab ${t.id === s.cur ? "on" : ""}" title="${esc(sideTitle(t))}">
       <button role="tab" aria-selected="${t.id === s.cur}" onclick="sideTab(${q(t.id)})">${t.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(sideTitle(t))}</span></button>
-      ${s.old ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
+      ${s.old || t.temp ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
     ${s.old ? "" : `<button class="icon-btn" title="新的侧边对话" aria-label="新的侧边对话" onclick="sideNew()">${ICON.plus}</button>
     <button class="icon-btn" title="历史" aria-label="历史" ${s.closed.length ? "" : "disabled"} onclick="sideHistory(event)">${ICON.clock}</button>`}
     <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button>`;
@@ -8884,10 +8890,11 @@ function drawSide(){
   document.body.classList.add("doc-open");
   sideWidth();
   drawSideHead();
-  const s = SIDE, msg = $("#sd-msg");
-  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur ? `<div class="doc-loading">…</div>` : "";
+  const s = SIDE, msg = $("#sd-msg"), temp = String(s.cur || "").startsWith("~");
+  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur || temp ? `<div class="doc-loading">…</div>` : "";
   msg.hidden = !msg.innerHTML;
-  if (!s.cur || s.error) return;
+  $("#sd-body").style.visibility = temp ? "hidden" : "";
+  if (!s.cur || s.error || temp) return;
   if (s.src !== s.cur) {
     s.src = s.cur;
     const w = sideWin();

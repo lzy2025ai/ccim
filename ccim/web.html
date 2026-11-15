@@ -4960,7 +4960,8 @@ function seeOpen(){
   if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
 }
 addEventListener("visibilitychange", seeOpen);
-function waiting(){ return (S.chats || []).filter(c => onBoard(c) && c.attention && !schedTurn(c)); }
+// 和「等你处理」同一口径（#486）：只数列表里会显示的，不然旧版本的电脑少回传字段时，角标有数字、列表里找不到
+function waiting(){ return (S.chats || []).filter(c => onBoard(c) && c.attention && !schedTurn(c) && isOpen(c)); }
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
   const n = waiting().length, b = $("#nav-board-n");

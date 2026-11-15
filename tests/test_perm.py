@@ -106,8 +106,12 @@ class PermTests(unittest.IsolatedAsyncioTestCase):
         r = await c._pre_tool(BASH, "t1", None)
         self.assertEqual(r["hookSpecificOutput"]["permissionDecision"], "deny")
 
-    async def test_guest_side_lent_cannot(self):
-        for entry in ({"guest": "acc"}, {"side": True}, {"lent": True}, {"helper": "skill"}):
+    async def test_side_can(self):                                      # 侧边对话和主对话一样（#476）
+        c, _ = make_chat({"side": True})
+        self.assertTrue(c.perm_ok())
+
+    async def test_guest_lent_cannot(self):
+        for entry in ({"guest": "acc"}, {"lent": True}, {"helper": "skill"}):
             c, _ = make_chat(entry)
             c.perm = "free"
             await c.set_perm(perm="free")

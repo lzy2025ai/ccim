@@ -132,8 +132,6 @@ class DshChat(CodexChat):
             run = {**os.environ, **env, "DSH_HOME": os.path.join(ROOT, "home"), "DEEPSEEK_API_KEY": key,
                    "PATH": os.path.dirname(node) + os.pathsep + env["PATH"]}
             run.pop("DSH_PERMISSION_MODE", None)
-            if self.b.entry.get("side"):      # 侧边对话：只读
-                run["DSH_PERMISSION_MODE"] = "read-only"
             args = [node, os.path.realpath(exe), "--profile", "headless", "--patch", patch_file(), "--json"]
             text = prompt
             if self.session_id:

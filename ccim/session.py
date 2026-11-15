@@ -1472,6 +1472,8 @@ def _ask_agent(chat, pf):
 
     @tool("ask_agent", "找平台上的 Agent 问话或派活（名字用 platform_agents 列出的）。发给别的 Agent：在当前对话里替用户 @ 它，"
           "用户看得到，它看得到这个对话之前的内容；发给你自己（to 写「自己」）：新开一个你自己的对话去做这件事，适合能独立做完的事。"
+          "你是群聊里被 @ 的成员时，发给这个群的主 Agent 就是在群里 @ 它、把事交给它接着做：它会马上在群里处理，不等它的回答，"
+          "所以 text 要写清楚来龙去脉和要它做什么。"
           "wait 为 true（默认）时等回答完把回答交给你（最多 20 分钟）；为 false 时发出去就返回，做完后结果作为一条新消息交给你。"
           "只在用户要你找别人、或者确实需要别的 Agent 帮忙时用；派出去的对话最多再往下派一层。",
           {"type": "object", "properties": {"to": {"type": "array", "items": {"type": "string"}, "description": "Agent 的名字；给自己派活写「自己」"},
@@ -1499,13 +1501,16 @@ def _ask_agent(chat, pf):
         rows = _visible_agents(pf, acct)
         names = {}
         self_too = False
+        boss = None                           # 群里被 @ 的成员找本群的主 Agent：在群里 @ 它，交给它接着做（#488）
         for n in to:
             n = (n or "").strip().lstrip("@")
             hit = [r for r in rows if n in (r[0], r[1])]
             if n in SELF_NAMES or (hit and hit[0][0] == me):
                 self_too = True
             elif hit and hit[0][0] == (pf.chats().get(m.get("mention_of")) or {}).get("agent"):
-                return _err(f"{hit[0][1]}就是这个群聊的主 Agent，要对它说的直接写在回答里。")
+                if pf.mentions.asked_by(chat.chat_id, cur) == hit[0][0]:   # 主 Agent 正等着这一轮的回答，再起一轮就重复了
+                    return _err(f"这件事就是{hit[0][1]}交给你的，它在等你的回答：要对它说的直接写在回答里，答完它就收到了。")
+                boss = hit[0]
             elif not hit:
                 return _err(f"平台上没有「{n}」，先用 platform_agents 看看有谁。")
             elif not hit[0][3]:
@@ -1517,6 +1522,9 @@ def _ask_agent(chat, pf):
             wait = True
         jobs = []                             # (名字, future)，future 的结果是 (state, 回答)
         try:
+            if boss:                          # 不等：主 Agent 可能正忙，或者在等别人
+                pf.to_main(chat.chat_id, text, depth + 1)
+                jobs.append((boss[1], None))
             if names:
                 outer = m.get("mention_of") or chat.chat_id   # 被 @ 的成员找人：在外层群聊里 @
                 r = await pf.mentions.send(outer, text, list(names), by=me or ASSISTANT, depth=depth + 1)
@@ -1528,10 +1536,13 @@ def _ask_agent(chat, pf):
                 jobs.append(("你新开的对话", asyncio.ensure_future(task.future)))
         except Exception as e:
             return _err(str(e))
-        if wait:
-            await asyncio.wait([f for _, f in jobs], timeout=ASK_WAIT)
+        if wait and any(f for _, f in jobs):
+            await asyncio.wait([f for _, f in jobs if f], timeout=ASK_WAIT)
         parts, later = [], []
         for name, f in jobs:
+            if f is None:
+                parts.append(f"【{name}】已经在群里交给它了，它会接着处理，回答在群里，不会交回给你。")
+                continue
             if not f.done():
                 later.append((name, f))
                 parts.append(f"【{name}】{'还没做完' if wait else '已经发出去了'}，做完后结果会作为一条新消息交给你。")

@@ -1807,6 +1807,27 @@ class Platform:
         self._bridge(cid).chat(cid, "p2p").submit(task)
         return cid, task
 
+    def to_main(self, sub, text, depth):
+        """群里被 @ 的成员把一件事交给本群的主 Agent（ask_agent 找主 Agent，#488）：群里记成它 @ 主 Agent 的一句话，
+        主 Agent 跑一轮处理，回答在群里。不等它答完（主 Agent 可能正忙）。depth 是这一轮算第几层派出来的。在主循环里调。"""
+        from . import groups
+        from .session import Task
+        sm = self.meta(sub)
+        cid, aid = sm["mention_of"], sm.get("agent")
+        main = (self.chats().get(cid) or {}).get("agent")
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
+                                                               "files": [], "to": [main], "by": aid}))
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["last_active"] = registry.now()
+            self.store.write(chats)
+        name = self.mentions._agent_name(aid)
+        task = Task(groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) +
+                    f"[群成员「{name}」在群里 @ 了你，把下面这件事交给你接着处理。它不等你的回答，你的回答群里的人都看得到] {text}")
+        task.depth = depth
+        self._bridge(cid).chat(cid, "p2p").submit(task)
+        return task
+
     def deliver(self, cid, text):
         """把一段话作为新的一轮交给对话 cid（派出去的活做完了，结果交回发起的对话，#179）。不记成用户说的。"""
         from .session import Task

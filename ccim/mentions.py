@@ -40,6 +40,7 @@ class Mentions:
         self.tasks = {}                       # mention id → (子对话, session.Task)
         self.waiters = {}                     # mention id → future，对话里的助手自己 @ 别人时等回答（ask_agent 工具）
         self.joined = {}                      # mention id → [(补充那条消息, 成员, session.Task, 原话)]：补充进它这一轮的 @（#304）
+        self.asker = {}                       # mention id → 谁用 ask_agent 派的（Agent 编号），对方在等它的回答（#488）
 
     @staticmethod
     def sub(cid, aid):
@@ -196,6 +197,7 @@ class Mentions:
             t.add_done_callback(self.pf.background.discard)
             if by:
                 self.waiters[rid] = asyncio.get_running_loop().create_future()
+                self.asker[rid] = by
         return {"id": mid, "rids": rids}
 
     def _chat(self, sub):
@@ -312,7 +314,13 @@ class Mentions:
                 out.append({"agent": aid, "doing": steps[-1]})
         return out
 
+    def asked_by(self, sub, task):
+        """子对话 sub 正在做的这一轮（task）是不是群里哪个 Agent 用 ask_agent 派来的：是就返回它的编号，
+        这一轮的回答会自动交回给它（#488）。"""
+        return next((self.asker[r] for r, (s, t) in self.tasks.items() if s == sub and t is task and r in self.asker), None)
+
     def _settle(self, cid, upd):
+        self.asker.pop(upd["id"], None)
         chats = self.pf.chats()
         if upd.get("ctx") and upd.get("agent") and cid in chats:
             chats[cid].setdefault("member_ctx", {})[upd["agent"]] = upd["ctx"]

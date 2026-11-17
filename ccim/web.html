@@ -1318,6 +1318,7 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .sd-x:hover{background:var(--line);color:var(--ink)}
 .sd-tab:hover .sd-x,.sd-tab.on .sd-x{visibility:visible}
 .sd-x svg{width:12px;height:12px}
+.sidepane.off{visibility:hidden;pointer-events:none;transform:translateX(100%)}   /* 收起时留着嵌着的页面，下次打开不用重新加载（#484） */
 .sd-msg{padding:16px}
 .sd-msg[hidden]{display:none}
 .sd-body{flex:1;min-height:0;display:flex}
@@ -2460,7 +2461,10 @@ function loadState(){
 }
 async function fetchState(){
   const t0 = performance.now();
-  if (EMBED && parent.pkS) { await parent.loadState(); S = parent.pkS(); return afterState(); }   // 右下角助理里：用外面页面的（#294）
+  if (EMBED && parent.pkS) {   // 右下角助理、侧边对话里：用外面页面的（#294）；刚启动时外面已经取好了就直接用（#484）
+    if (booted || !parent.pkS()._split) await parent.loadState();
+    S = parent.pkS(); return afterState();
+  }
   S = await api("/api/state");
   perfMark("state", S.hub ? "取整体状态（经总控）" : "取整体状态", performance.now() - t0);
   afterState();
@@ -2827,6 +2831,7 @@ function route(){
     const to = location.hash;
     history.replaceState(null, "", EMBED_HASH); EMBED_SIDE ? parent.sideGo(to) : parent.pocketGo(to); return;
   }
+  if (EMBED && location.hash === SIDE_WARM) return;   // 提前建好的侧边对话页（#484）：等外层 pkGo 再打开对话
   lastRestore = null;
   if (/^#\/kb(\/|\?|$)/.test(location.hash) && !kbEnabled()) history.replaceState(null, "", "#/chats");   // 设置里关了知识库（#477）
   if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
@@ -3107,6 +3112,7 @@ async function openChat(id){
   const rk = id + "|" + (current.view === "agents" ? current.id : "");   // 同一个群从不同 Agent 的列表打开，默认发给谁不一样（#359）
   if (fresh || rk !== rcptKey) { rcptKey = rk; toOff = null; chatRcpt = defaultRcpt(); }
   drawChat(); doJump(); markSeen(id);
+  if (sideOk(detail)) sideIdle();
   if (!quiet) perfMark("chat", "打开对话", performance.now() - t0, {ctx: {chat: id, machine: (machineOf(ctxMachine) || {}).name || "", msgs: (detail.log || []).length}});
 }
 async function openOn(id){            // 列表里没有它（更早的、别的电脑上的，#268）：这台找不到就挨台电脑再找
@@ -6423,6 +6429,7 @@ function selTool(){
   const rect = sel.getRangeAt(0).getBoundingClientRect();
   const t = document.createElement("div"); t.className = "seltool";
   const side = sideOk(detail);
+  if (side) sideWarm();
   t.innerHTML = `<button>${ICON.save}存到知识库</button><button>${ICON.quote}引用</button>${side ? `<button>${ICON.side}侧边对话</button>` : ""}`;
   t.style.left = Math.max(8, rect.left) + "px"; t.style.top = Math.max(8, rect.top - 40) + "px";
   t.addEventListener("mousedown", e => e.preventDefault());
@@ -8713,7 +8720,11 @@ async function openSide(quote){
   const c = detail; if (!c) return;
   if (DOC && !DOC.ws) { await closeDoc(); if (DOC) return; }
   const fresh = !SIDE || SIDE.of !== c.id;
-  if (fresh) SIDE = {of: c.id, mid: ctxMachine, tabs: null, closed: [], cur: null};
+  if (fresh) {
+    SIDE = {of: c.id, mid: ctxMachine, tabs: null, closed: [], cur: null};
+    const pre = SIDE_PRE && SIDE_PRE.of === c.id && SIDE_PRE.mid === ctxMachine && Date.now() - SIDE_PRE.at < 120000 ? SIDE_PRE.r : null;
+    if (pre && (pre.open || []).length) sideApply(SIDE, pre);   // 提前取好的列表：先照它显示，后台再取一次新的
+  }
   if (quote) SIDE.quote = quote;
   drawSide();
   if (fresh) await sideList();
@@ -8722,18 +8733,44 @@ async function openSide(quote){
 // 对话页右上角的「⋯」（#430）：重命名、置顶这些在对话列表那一行的「⋯」里已经有了，这里只放侧边对话
 const sideOk = c => !!c && !c.company && !c.staff && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
 function headMenu(e){
+  sideWarm();
   const on = SIDE && detail && SIDE.of === detail.id;
   pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`, true);
 }
 function closeSide(){
-  SIDE = null; drawSide();
+  SIDE = null; SIDE_PRE = null; drawSide();
+}
+// 提前准备（#484）：嵌着的对话页在页面空闲时就建好（藏着），点开只换它的 #；这个对话的侧边对话列表也先取好
+let SIDE_PRE = null;   // {of, mid, r, at}
+const SIDE_WARM = "#/warm";
+function sideApply(s, r){
+  s.tabs = r.open || []; s.closed = r.closed || []; s.error = null;
+  if (s.tabs.length && !s.tabs.some(t => t.id === s.cur)) s.cur = s.tabs[s.tabs.length - 1].id;
+}
+function sideWarm(){
+  if (EMBED || DOC_ONLY || $("#sidepane")) return;
+  const el = sidePane(); el.classList.add("off"); el.inert = true;
+  const f = document.createElement("iframe"); f.title = "侧边对话"; $("#sd-body").append(f);
+  const u = new URLSearchParams(location.search); u.set("embed", "side"); u.delete("m");
+  f.src = `${location.pathname}?${u}${SIDE_WARM}`;
+}
+async function sidePrefetch(){
+  const c = detail; if (!sideOk(c) || SIDE) return;
+  const of = c.id, mid = ctxMachine;
+  if (SIDE_PRE && SIDE_PRE.of === of && SIDE_PRE.mid === mid && Date.now() - SIDE_PRE.at < 60000) return;
+  try { const r = await api("/api/chat/sides", {id: of}, mid); SIDE_PRE = {of, mid, r, at: Date.now()}; } catch {}
+}
+function sideIdle(){   // 打开对话后空下来时做（手机上只取列表，嵌着的页面等点「⋯」再建）
+  if (EMBED || DOC_ONLY) return;
+  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { if (!narrow()) sideWarm(); sidePrefetch(); }, {timeout: 4000});
 }
 async function sideList(){
   const s = SIDE; if (!s) return;
   try {
     const r = await api("/api/chat/sides", {id: s.of}, s.mid);
     if (SIDE !== s) return;
-    Object.assign(s, {tabs: r.open || [], closed: r.closed || [], error: null});
+    SIDE_PRE = {of: s.of, mid: s.mid, r, at: Date.now()};
+    sideApply(s, r);
   } catch (e) {
     if (SIDE !== s) return;
     try {                                   // 那台电脑还是旧版本：只有一个侧边对话
@@ -8750,11 +8787,17 @@ async function sideNew(first){
   const s = SIDE; if (!s || s.busyNew) return;
   if (!first && (s.tabs || []).length >= sideMax()) return toast(`最多同时开 ${sideMax()} 个，先关掉一个`);
   s.busyNew = true;
+  const prev = s.cur, tmp = {id: "~new", title: "", busy: true, temp: true};   // 先把标签放上去（#484），建好再换成真的
+  s.tabs = [...(s.tabs || []), tmp]; s.cur = tmp.id; drawSide();
   try {
     const {id} = await api("/api/chat/side", {id: s.of, fresh: true}, s.mid);
     if (SIDE !== s) return;
-    s.tabs = [...(s.tabs || []), {id, title: ""}]; s.cur = id; s.error = null;
-  } catch (e) { if (SIDE !== s) return; if (first) s.error = e.message; else toast(e.message); }
+    s.tabs = s.tabs.map(t => t === tmp ? {id, title: ""} : t); s.cur = id; s.error = null;
+  } catch (e) {
+    if (SIDE !== s) return;
+    s.tabs = s.tabs.filter(t => t !== tmp); s.cur = prev;
+    if (first) s.error = e.message; else toast(e.message);
+  }
   finally { s.busyNew = false; }
   drawSide();
 }
@@ -8819,33 +8862,45 @@ function drawSideHead(){
   const tabs = s.tabs || [];
   h.innerHTML = `<div class="sd-tabs" role="tablist">${tabs.map(t => `<div class="sd-tab ${t.id === s.cur ? "on" : ""}" title="${esc(sideTitle(t))}">
       <button role="tab" aria-selected="${t.id === s.cur}" onclick="sideTab(${q(t.id)})">${t.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(sideTitle(t))}</span></button>
-      ${s.old ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
+      ${s.old || t.temp ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
     ${s.old ? "" : `<button class="icon-btn" title="新的侧边对话" aria-label="新的侧边对话" onclick="sideNew()">${ICON.plus}</button>
     <button class="icon-btn" title="历史" aria-label="历史" ${s.closed.length ? "" : "disabled"} onclick="sideHistory(event)">${ICON.clock}</button>`}
     <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button>`;
   h.querySelector(".sd-tab.on")?.scrollIntoView({block: "nearest", inline: "nearest"});
 }
-function drawSide(){
+function sidePane(){
   let el = $("#sidepane");
-  document.body.classList.toggle("side-open", !!SIDE);
-  if (!SIDE) { el?.remove(); if (!DOC) document.body.classList.remove("doc-open"); return; }
   if (!el) {
     el = document.createElement("aside"); el.id = "sidepane"; el.className = "docpane sidepane"; el.setAttribute("aria-label", "侧边对话");
     el.innerHTML = `<div class="sd-drag" aria-hidden="true"></div><div class="sd-head" id="sd-head"></div><div class="sd-msg" id="sd-msg"></div><div class="sd-body" id="sd-body"></div>`;
     document.body.append(el);
     sideDrag(el.querySelector(".sd-drag"));
   }
+  return el;
+}
+let sideShown = null;   // 嵌着的页面上一次显示的是哪个侧边对话
+function drawSide(){
+  let el = $("#sidepane");
+  document.body.classList.toggle("side-open", !!SIDE);
+  if (!SIDE) {   // 收起只是藏起来，嵌着的页面留着
+    if (el) { if (el.contains(document.activeElement)) document.activeElement.blur(); el.classList.add("off"); el.inert = true; }
+    if (!DOC) document.body.classList.remove("doc-open"); return;
+  }
+  el = sidePane(); el.classList.remove("off"); el.inert = false;
   document.body.classList.add("doc-open");
   sideWidth();
   drawSideHead();
-  const s = SIDE, msg = $("#sd-msg");
-  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur ? `<div class="doc-loading">…</div>` : "";
+  const s = SIDE, msg = $("#sd-msg"), temp = String(s.cur || "").startsWith("~");
+  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur || temp ? `<div class="doc-loading">…</div>` : "";
   msg.hidden = !msg.innerHTML;
-  if (!s.cur || s.error) return;
+  $("#sd-body").style.visibility = temp ? "hidden" : "";
+  if (!s.cur || s.error || temp) return;
   if (s.src !== s.cur) {
     s.src = s.cur;
     const w = sideWin();
-    if (w) w.pkGo(s.cur, s.mid);
+    if (w && sideShown === s.cur && w.pkChat() === s.cur) w.pkEvent({type: "resync"});   // 藏着的时候没收推送：重新取一下
+    else if (w) w.pkGo(s.cur, s.mid);
+    else if ($("#sd-body iframe") && (s.wait = (s.wait || 0) + 1) < 60) setTimeout(() => SIDE === s && s.src === s.cur && (s.src = null, drawSide()), 150);   // 提前建的页面还在启动
     else {
       let f = $("#sd-body iframe");
       if (!f) { f = document.createElement("iframe"); f.title = "侧边对话"; $("#sd-body").append(f); }
@@ -8853,6 +8908,7 @@ function drawSide(){
       if (s.mid) u.set("m", s.mid); else u.delete("m");
       f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(s.cur)}`;
     }
+    sideShown = s.cur;
   }
   sideQuoteIn();
   const focus = () => { const w = sideWin(); if (!SIDE || SIDE !== s) return; if (w && w.pkChat() === s.cur) w.pkFocus(); else setTimeout(focus, 150); };

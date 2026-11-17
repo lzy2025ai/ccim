@@ -14,7 +14,7 @@ Agent 的对话用 Agent 的 Bridge（工作目录、角色、默认模型）；
 
 安全：只监听 127.0.0.1；Host 必须是本机地址（挡 DNS rebinding）；接口要带 X-CCIM 头（别的网站跨域发不过来）。
 """
-import asyncio, base64, glob, json, logging, os, queue, re, shutil, subprocess, threading, time, uuid
+import asyncio, base64, glob, hashlib, json, logging, os, queue, re, shutil, subprocess, threading, time, uuid
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -48,6 +48,30 @@ def static_file(path):
         return None
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", path.lstrip("/")), "rb") as f:
         return f.read(), STATIC[path]
+
+
+STATIC_CACHE = {"Cache-Control": "private, max-age=86400"}   # 随包的图标、头像：嵌着的页面每开一次都要用（#490）
+_PAGE = {}
+
+
+def page_reply(headers, q):
+    """首页 web.html（#490）：(状态码, 内容, 响应头)。页面里的 __CCIM_V__ 换成内容摘要（升级后跟着变）；
+    浏览器带着同一个摘要来问（ETag）就回 304；地址里带着当前摘要的（侧边对话、助理嵌着的页面）直接用缓存，不再问。
+    接口照旧 no-store。"""
+    st = os.stat(PAGE)
+    key = (st.st_mtime_ns, st.st_size)
+    cur = _PAGE.get("cur")
+    if not cur or cur[0] != key:
+        with open(PAGE, "rb") as f:
+            raw = f.read()
+        v = hashlib.sha256(raw).hexdigest()[:16]
+        cur = _PAGE["cur"] = (key, raw.replace(b"__CCIM_V__", v.encode()), v)
+    _, data, v = cur
+    h = {"ETag": f'"{v}"',
+         "Cache-Control": "private, max-age=31536000, immutable" if (q or {}).get("v") == v else "no-cache"}
+    if f'"{v}"' in (headers.get("If-None-Match") or ""):    # nginx 压缩后会变成 W/"…"，照样认
+        return 304, b"", h
+    return 200, data, h
 UPLOAD_LIMIT = 100 * 1024 * 1024
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".svg")
 MARKS = ("title", "pin", "star", "archived", "archived_at", "icon", "color", "hidden", "expanded")   # 对话列表里用户加的标记（star：星标，#194；expanded：挂件对话点过放大，#326；archived：已完成，#369 以前叫归档）
@@ -2859,7 +2883,8 @@ def _handler(pf):
             if getattr(self, "_pt", None):
                 self.send_header("Server-Timing", f"app;dur={self._pt.took():.1f}")   # 网页拿它分出网络和后台各花了多久
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
+            if "Cache-Control" not in (extra or {}):
+                self.send_header("Cache-Control", "no-store")
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -2981,13 +3006,13 @@ def _handler(pf):
             if u.path in ("/", "/index.html"):
                 if not self._host_ok():
                     return self._send(403, b"forbidden", "text/plain")
-                with open(PAGE, "rb") as f:
-                    return self._send(200, f.read(), "text/html; charset=utf-8")
+                code, data, h = page_reply(self.headers, q)
+                return self._send(code, data, "text/html; charset=utf-8", h)
             if u.path in STATIC:
                 if not self._host_ok():
                     return self._send(403, b"forbidden", "text/plain")
                 data, ctype = static_file(u.path)
-                return self._send(200, data, ctype)
+                return self._send(200, data, ctype, STATIC_CACHE)
             if u.path == "/api/events":
                 return self._events()
             if u.path == "/api/file":
@@ -3106,8 +3131,8 @@ def _handler(pf):
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
                 "/api/pocket/settings": lambda: set_pocket(body),
-                "/api/chat/side": lambda: {"id": pf.run(pf.side_chat(b("id"), bool(b("fresh"))))},
-                "/api/chat/sides": lambda: pf.sides(b("id")),
+                "/api/chat/side": lambda: side_new(pf, b("id"), bool(b("fresh")), acct),
+                "/api/chat/sides": lambda: sides_of(pf, b("id"), bool(b("detail")), acct),
                 "/api/chat/side/close": lambda: pf.run(pf.side_close(b("id"), b("closed") is not False)),
                 "/api/side_tabs": lambda: set_side_tabs(b("value")),
                 "/api/chat/continue": lambda: pf.continue_chat(b("id"), b("text") or "", b("files") or []),
@@ -3390,6 +3415,23 @@ def chat_detail(pf, cid, acct=None):
                         people_view=dict(people.view(pf, cid, who), people=[]))
         return dict(pf.chat_detail(cid), people_role=st, people_view=people.view(pf, cid, who))
     return pf.chat_detail(cid)
+
+
+def side_new(pf, cid, fresh, acct=None):
+    """开侧边对话，顺带它的内容（#490）：网页不用再取一次。"""
+    sid = pf.run(pf.side_chat(cid, fresh))
+    return {"id": sid, "chat": chat_detail(pf, sid, acct)}
+
+
+def sides_of(pf, cid, detail=False, acct=None):
+    """侧边对话列表；detail 时顺带最后一个开着的内容（#490：网页空闲时先取好，点开直接显示）。"""
+    r = pf.sides(cid)
+    if detail and r["open"]:
+        try:
+            r["detail"] = chat_detail(pf, r["open"][-1]["id"], acct)
+        except Problem:
+            pass
+    return r
 
 
 def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=()):

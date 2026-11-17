@@ -464,6 +464,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .msg.me{display:flex;justify-content:flex-end}
 .invite-bar{display:flex;align-items:center;gap:10px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel, #fff);font-size:14px}
 .invite-bar .grow{flex:1}
+.composer.pk-draft .opts{opacity:.45;pointer-events:none}   /* 侧边对话还在建：先能打字，建好了再用这些（#490） */
 .composer.member #chip-model,.composer.member #chip-effort,.composer.member #chip-perm,.composer.member .chip[onclick^="pickKbs"],.composer.member .mfx{display:none!important}
 .msg.me>div{max-width:80%;min-width:0;display:flex;flex-direction:column;align-items:flex-end}
 .bubble{background:var(--sunk);padding:9px 14px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -2677,7 +2678,7 @@ function connectEvents(again){
   };
 }
 function onEvent(ev){
-    if (!EMBED) { pocketForward(ev); sideForward(ev); }
+    if (!EMBED) { pocketForward(ev); sideForward(ev); if (ev.chat) delete SIDE_DET[ev.chat]; }
     towerEvent(ev);
     if (ev.type === "idle") { refreshSoon(); return; }
     if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
@@ -3113,9 +3114,14 @@ async function openChat(id){
   if (fresh || rk !== rcptKey) { rcptKey = rk; toOff = null; chatRcpt = defaultRcpt(); }
   drawChat(); doJump(); markSeen(id);
   if (sideOk(detail)) sideIdle();
+  if (EMBED_SIDE) {
+    try { parent.sideShownAt?.(id); } catch {}
+    if (pkSendOnOpen === id) { pkSendOnOpen = null; if ($("#input")?.value.trim() || quoteList().length) sendChat(); }
+  }
   if (!quiet) perfMark("chat", "打开对话", performance.now() - t0, {ctx: {chat: id, machine: (machineOf(ctxMachine) || {}).name || "", msgs: (detail.log || []).length}});
 }
 async function openOn(id){            // 列表里没有它（更早的、别的电脑上的，#268）：这台找不到就挨台电脑再找
+  if (EMBED_SIDE) { try { const d = parent.sideDet && parent.sideDet(id, ctxMachine); if (d) return d; } catch {} }   // 外层先取好的（#490）
   const path = `/api/chat?id=${encodeURIComponent(id)}`;
   try { return await api(path); }
   catch (e) {
@@ -3721,7 +3727,8 @@ function drawChat(){
     </div></div></div>`;
   wsMount(c);
   drawThread(); drawComposerState(); drawPending(); drawChatRcpt(); drawKbRow(); drawQuotes(); gripInput();
-  if (notCreator() || c.company) document.querySelector(".composer")?.classList.add("member");   // 模型、知识库这些设置归建群的人（#419）；公司大群自己不回答（#454）
+  if (notCreator() || c.company) document.querySelector(".composer")?.classList.add("member");
+  if (c.draft) document.querySelector(".composer")?.classList.add("pk-draft");   // 模型、知识库这些设置归建群的人（#419）；公司大群自己不回答（#454）
   if (c.invite) { inviteBar(c); return; }
   const head = document.querySelector(".chat-head");   // 成员栏从头部下面开始：头部高度变了（换行、窗口变宽窄）跟着变
   if (head) { window._headRO?.disconnect(); window._headRO = new ResizeObserver(() => $("#main").style.setProperty("--head-h", head.offsetHeight + "px")); window._headRO.observe(head); }
@@ -3757,6 +3764,7 @@ function drawComposerState(){
   s.setAttribute("aria-label", c.busy ? "停下" : "发送");
   s.onclick = c.readonly ? sendChat : c.busy && !$("#input").value.trim() && !pendingFiles.length && !quoteList().length ? stopChat : sendChat;
   if (c.readonly) { s.className = "send"; s.innerHTML = ICON.up; }
+  if (c.draft && pkDraftSend) { s.innerHTML = `<span class="spin"></span>`; s.onclick = null; }
   $("#input").oninput = drawComposerState;
   fitInput();
 }
@@ -3884,6 +3892,7 @@ async function sendChat(){
   const typed = $("#input").value.trim(), files = pendingFiles.filter(f => f.key), qs = quoteList().slice(), v = withQuotes(qs, typed);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
+  if (detail.draft) { pkDraftSend = true; drawComposerState(); parent.sideRetry?.(); return; }   // 侧边对话还在建：建好就发（#490）
   closePop();
   const back = () => { $("#input").value = typed; saveDraft(); if (detail) quotes = {id: detail.id, list: qs}; drawQuotes(); };
   if (DIARY.test(typed)) {                // 记日记（#363）：不交给助手，也不算开始干活
@@ -8722,12 +8731,13 @@ async function openSide(quote){
   if (DOC && !DOC.ws) { await closeDoc(); if (DOC) return; }
   const fresh = !SIDE || SIDE.of !== c.id;
   if (fresh) {
-    SIDE = {of: c.id, mid: ctxMachine, tabs: null, closed: [], cur: null};
+    SIDE = {of: c.id, mid: ctxMachine, tabs: null, closed: [], cur: null, t0: performance.now(), cold: !sideWin()};
     const pre = SIDE_PRE && SIDE_PRE.of === c.id && SIDE_PRE.mid === ctxMachine && Date.now() - SIDE_PRE.at < 120000 ? SIDE_PRE.r : null;
-    if (pre && (pre.open || []).length) sideApply(SIDE, pre);   // 提前取好的列表：先照它显示，后台再取一次新的
+    if (pre) sideApply(SIDE, pre);   // 提前取好的列表：先照它显示，后台再取一次新的
   }
   if (quote) SIDE.quote = quote;
-  drawSide();
+  if (fresh && SIDE.tabs && !SIDE.tabs.length && !SIDE.old) sideNew(true);   // 还没有侧边对话：马上给输入框，后台建（#490）
+  else drawSide();
   if (fresh) await sideList();
   else { sideQuoteIn(); sideWin()?.pkFocus(); }
 }
@@ -8739,36 +8749,57 @@ function headMenu(e){
   pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`, true);
 }
 function closeSide(){
-  SIDE = null; SIDE_PRE = null; drawSide();
+  if (SIDE && SIDE.tabs) SIDE_PRE = {of: SIDE.of, mid: SIDE.mid, r: {open: SIDE.tabs.filter(t => !t.temp), closed: SIDE.closed}, at: Date.now()};   // 再开时照它先画（#490）
+  SIDE = null; drawSide();
 }
 // 提前准备（#484）：嵌着的对话页在页面空闲时就建好（藏着），点开只换它的 #；这个对话的侧边对话列表也先取好
 let SIDE_PRE = null;   // {of, mid, r, at}
 const SIDE_WARM = "#/warm";
-function sideApply(s, r){
-  s.tabs = r.open || []; s.closed = r.closed || []; s.error = null;
+function sideApply(s, r){   // 这边刚建、列表里还没有的（还在建的、建好了但列表是之前取的）留着
+  const ids = new Set([...(r.open || []), ...(r.closed || [])].map(t => t.id));
+  s.tabs = [...(r.open || []), ...(s.tabs || []).filter(t => (t.temp || t.mine) && !ids.has(t.id))]; s.closed = r.closed || []; s.error = null;
+  if (r.detail) sideDetPut(r.detail, s.mid);
   if (s.tabs.length && !s.tabs.some(t => t.id === s.cur)) s.cur = s.tabs[s.tabs.length - 1].id;
+}
+// 侧边对话的内容也先取好（#490）：嵌着的页面打开它时直接用（parent.sideDet），不再等一次请求；它有新动静（推送）就作废
+const SIDE_DET = {};   // 对话编号 → {d, mid, at}
+function sideDetPut(d, mid){ if (d && d.id) SIDE_DET[d.id] = {d, mid: mid || null, at: Date.now()}; }
+function sideDet(id, mid){
+  const x = SIDE_DET[id];
+  return x && x.mid === (mid || null) && Date.now() - x.at < 120000 ? structuredClone(x.d) : null;
+}
+function sideShownAt(id){   // 嵌着的页面画好了：记下点开到能用花了多久
+  const s = SIDE; if (!s || !s.t0 || id !== s.cur) return;
+  perfMark("side", s.cold ? "侧边对话：第一次点开" : "侧边对话：再次点开", performance.now() - s.t0, {ctx: {machine: (machineOf(s.mid) || {}).name || "", draft: String(id).startsWith("~")}});
+  s.t0 = null;
+}
+let sideHtml = false;
+function sideHtmlWarm(){   // 手机上不预建面板（省内存），只把嵌着的页面先下到缓存里，点开时不用再下
+  if (sideHtml || !/^[0-9a-f]{16}$/.test(PAGE_V)) return;
+  sideHtml = true;
+  const f = {}; embedSrc(f, "side", null, "");
+  fetch(f.src, {credentials: "same-origin"}).catch(() => { sideHtml = false; });
 }
 function sideWarm(){
   if (EMBED || DOC_ONLY || $("#sidepane")) return;
   const el = sidePane(); el.classList.add("off"); el.inert = true;
   const f = document.createElement("iframe"); f.title = "侧边对话"; $("#sd-body").append(f);
-  const u = new URLSearchParams(location.search); u.set("embed", "side"); u.delete("m");
-  f.src = `${location.pathname}?${u}${SIDE_WARM}`;
+  embedSrc(f, "side", null, SIDE_WARM);
 }
 async function sidePrefetch(){
   const c = detail; if (!sideOk(c) || SIDE) return;
   const of = c.id, mid = ctxMachine;
   if (SIDE_PRE && SIDE_PRE.of === of && SIDE_PRE.mid === mid && Date.now() - SIDE_PRE.at < 60000) return;
-  try { const r = await api("/api/chat/sides", {id: of}, mid); SIDE_PRE = {of, mid, r, at: Date.now()}; } catch {}
+  try { const r = await api("/api/chat/sides", {id: of, detail: true}, mid); SIDE_PRE = {of, mid, r, at: Date.now()}; if (r.detail) sideDetPut(r.detail, mid); } catch {}
 }
 function sideIdle(){   // 打开对话后空下来时做（手机上只取列表，嵌着的页面等点「⋯」再建）
   if (EMBED || DOC_ONLY) return;
-  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { if (!narrow()) sideWarm(); sidePrefetch(); }, {timeout: 4000});
+  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { if (!narrow()) sideWarm(); else sideHtmlWarm(); sidePrefetch(); }, {timeout: 4000});
 }
 async function sideList(){
   const s = SIDE; if (!s) return;
   try {
-    const r = await api("/api/chat/sides", {id: s.of}, s.mid);
+    const r = await api("/api/chat/sides", {id: s.of, detail: !s.tabs}, s.mid);   // 没有提前取好的：顺带内容，省一次请求
     if (SIDE !== s) return;
     SIDE_PRE = {of: s.of, mid: s.mid, r, at: Date.now()};
     sideApply(s, r);
@@ -8777,7 +8808,7 @@ async function sideList(){
     try {                                   // 那台电脑还是旧版本：只有一个侧边对话
       const {id} = await api("/api/chat/side", {id: s.of}, s.mid);
       if (SIDE !== s) return;
-      Object.assign(s, {tabs: [{id, title: ""}], closed: [], old: true, error: null});
+      Object.assign(s, {tabs: [{id, title: ""}], cur: id, closed: [], old: true, error: null});
     } catch { s.error = e.message; drawSide(); return; }
   }
   if (!s.tabs.length) return sideNew(true);
@@ -8787,20 +8818,42 @@ async function sideList(){
 async function sideNew(first){
   const s = SIDE; if (!s || s.busyNew) return;
   if (!first && (s.tabs || []).length >= sideMax()) return toast(`最多同时开 ${sideMax()} 个，先关掉一个`);
-  s.busyNew = true;
-  const prev = s.cur, tmp = {id: "~new", title: "", busy: true, temp: true};   // 先把标签放上去（#484），建好再换成真的
+  // 先放一个标签、给能打字的输入框（#484、#490），后台建；建好换成真的，输入框里的字带过去
+  const tmp = {id: "~new" + (++sideSeq), title: "", busy: true, temp: true};
   s.tabs = [...(s.tabs || []), tmp]; s.cur = tmp.id; drawSide();
+  await sideCreate(s, tmp);
+}
+let sideSeq = 0;
+async function sideCreate(s, tmp){
+  if (s.busyNew) return;
+  s.busyNew = true; tmp.busy = true; tmp.failed = false; drawSideHead();
   try {
-    const {id} = await api("/api/chat/side", {id: s.of, fresh: true}, s.mid);
-    if (SIDE !== s) return;
-    s.tabs = s.tabs.map(t => t === tmp ? {id, title: ""} : t); s.cur = id; s.error = null;
+    const r = await api("/api/chat/side", {id: s.of, fresh: true}, s.mid);
+    if (SIDE !== s || !s.tabs.includes(tmp)) {   // 等的时候关掉了：还没说过话，删掉
+      api("/api/chat/side/close", {id: r.id}, s.mid).catch(() => {}); return;
+    }
+    if (r.chat) sideDetPut(r.chat, s.mid);
+    const t = {id: r.id, title: "", mine: true};
+    s.tabs = s.tabs.map(x => x === tmp ? t : x); s.error = null;
+    if (s.cur === tmp.id) s.cur = r.id;
   } catch (e) {
-    if (SIDE !== s) return;
-    s.tabs = s.tabs.filter(t => t !== tmp); s.cur = prev;
-    if (first) s.error = e.message; else toast(e.message);
+    if (SIDE !== s || !s.tabs.includes(tmp)) return;
+    tmp.busy = false; tmp.failed = true;
+    toast(`侧边对话没开成：${e.message}`);
+    try { sideWin()?.pkDraftFail(); } catch {}
   }
   finally { s.busyNew = false; }
   drawSide();
+}
+function sideRetry(){   // 没开成的标签里点了发送：再建一次
+  const s = SIDE, t = s && (s.tabs || []).find(x => x.id === s.cur && x.temp);
+  if (t && !s.busyNew) sideCreate(s, t);
+}
+function sideDraft(s){   // 还在建的侧边对话：照主对话先画一个空的
+  const m = detail && detail.id === s.of ? detail : {};
+  return {id: s.cur, draft: true, title: "新的侧边对话", base: m.base || "claude", agent: m.agent || null, agent_name: m.agent_name || "",
+          dir: m.dir || null, side_of: s.of, log: [], earlier: [], chapters: {}, rewind: [], progress: null, sub_progress: {},
+          busy: false, readonly: false, members: []};
 }
 function sideTab(id){
   if (!SIDE || SIDE.cur === id) return;
@@ -8810,8 +8863,8 @@ async function sideCloseTab(id, e){
   if (e) e.stopPropagation();
   const s = SIDE; if (!s) return;
   const i = s.tabs.findIndex(t => t.id === id); if (i < 0) return;
-  let r;
-  try { r = await api("/api/chat/side/close", {id}, s.mid); } catch (err) { return toast(err.message); }
+  let r = {dropped: true};
+  if (!s.tabs[i].temp) try { r = await api("/api/chat/side/close", {id}, s.mid); } catch (err) { return toast(err.message); }
   if (SIDE !== s) return;
   const [t] = s.tabs.splice(i, 1);
   if (!r.dropped) s.closed = [{...t, busy: false}, ...s.closed.filter(x => x.id !== id)];
@@ -8863,7 +8916,7 @@ function drawSideHead(){
   const tabs = s.tabs || [];
   h.innerHTML = `<div class="sd-tabs" role="tablist">${tabs.map(t => `<div class="sd-tab ${t.id === s.cur ? "on" : ""}" title="${esc(sideTitle(t))}">
       <button role="tab" aria-selected="${t.id === s.cur}" onclick="sideTab(${q(t.id)})">${t.busy ? `<span class="spin"></span>` : ""}<span class="tt">${esc(sideTitle(t))}</span></button>
-      ${s.old || t.temp ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
+      ${s.old || t.temp && !t.failed ? "" : `<button class="sd-x" aria-label="关掉" title="关掉" onclick="sideCloseTab(${q(t.id)},event)">${ICON.x}</button>`}</div>`).join("")}</div>
     ${s.old ? "" : `<button class="icon-btn" title="新的侧边对话" aria-label="新的侧边对话" onclick="sideNew()">${ICON.plus}</button>
     <button class="icon-btn" title="历史" aria-label="历史" ${s.closed.length ? "" : "disabled"} onclick="sideHistory(event)">${ICON.clock}</button>`}
     <button class="icon-btn" title="收起" aria-label="收起" onclick="closeSide()">${narrow() ? ICON.left : ICON.x}</button>`;
@@ -8892,22 +8945,22 @@ function drawSide(){
   sideWidth();
   drawSideHead();
   const s = SIDE, msg = $("#sd-msg"), temp = String(s.cur || "").startsWith("~");
-  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur || temp ? `<div class="doc-loading">…</div>` : "";
+  msg.innerHTML = s.error ? `<p class="muted">${esc(s.error)}</p>` : !s.cur ? `<div class="doc-loading">…</div>` : "";
   msg.hidden = !msg.innerHTML;
-  $("#sd-body").style.visibility = temp ? "hidden" : "";
-  if (!s.cur || s.error || temp) return;
+  $("#sd-body").style.visibility = s.cur && !s.error ? "" : "hidden";   // 还不知道开哪个时不露出上一个对话的侧边栏
+  if (!s.cur || s.error) return;
   if (s.src !== s.cur) {
     s.src = s.cur;
     const w = sideWin();
-    if (w && sideShown === s.cur && w.pkChat() === s.cur) w.pkEvent({type: "resync"});   // 藏着的时候没收推送：重新取一下
+    if (w && temp) w.pkDraft(sideDraft(s), s.mid);
+    else if (w && sideShown === s.cur && w.pkChat() === s.cur) { w.pkEvent({type: "resync"}); sideShownAt(s.cur); }   // 藏着的时候没收推送：重新取一下
     else if (w) w.pkGo(s.cur, s.mid);
-    else if ($("#sd-body iframe") && (s.wait = (s.wait || 0) + 1) < 60) setTimeout(() => SIDE === s && s.src === s.cur && (s.src = null, drawSide()), 150);   // 提前建的页面还在启动
+    else if ($("#sd-body iframe") && (s.wait = (s.wait || 0) + 1) < 200) setTimeout(() => SIDE === s && s.src === s.cur && (s.src = null, drawSide()), 50);   // 嵌着的页面还在启动
     else {
       let f = $("#sd-body iframe");
       if (!f) { f = document.createElement("iframe"); f.title = "侧边对话"; $("#sd-body").append(f); }
-      const u = new URLSearchParams(location.search); u.set("embed", "side");
-      if (s.mid) u.set("m", s.mid); else u.delete("m");
-      f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(s.cur)}`;
+      if (temp) { embedSrc(f, "side", null, SIDE_WARM); s.src = null; s.wait = 0; setTimeout(() => SIDE === s && !s.src && drawSide(), 50); }
+      else embedSrc(f, "side", s.mid, `#/chats/${encodeURIComponent(s.cur)}`);
     }
     sideShown = s.cur;
   }
@@ -8965,7 +9018,16 @@ function workFiles(fs, chat){
 const EMBED_KIND = window.parent !== window ? new URLSearchParams(location.search).get("embed") : null;
 const EMBED_SIDE = EMBED_KIND === "side";      // 侧边栏里嵌的（#476），和助理同一套
 const EMBED = EMBED_KIND === "pocket" || EMBED_SIDE;
-if (EMBED_SIDE) ctxMachine = new URLSearchParams(location.search).get("m") || null;
+if (EMBED_SIDE) ctxMachine = new URLSearchParams(location.search).get("m") || (window.name.startsWith("ccim-m:") ? window.name.slice(7) : "") || null;
+// 嵌着的页面的地址带上网页版本（服务器把下面的占位换成内容摘要），浏览器直接用缓存、不再问服务器；电脑编号放在 name 里，
+// 不进地址，几台电脑共用一份缓存（#490）
+const PAGE_V = "__CCIM_V__";
+function embedSrc(f, kind, mid, hash){
+  const u = new URLSearchParams(location.search); u.delete("v"); u.delete("m"); u.set("embed", kind);
+  if (/^[0-9a-f]{16}$/.test(PAGE_V)) u.set("v", PAGE_V);
+  f.name = mid ? "ccim-m:" + mid : "";
+  f.src = `${location.pathname}?${u}${hash}`;
+}
 let EMBED_HASH = EMBED ? location.hash : null;
 if (EMBED) document.documentElement.classList.add("embed");
 const POCKET = {open: false, id: null, src: null, busy: false, unread: false, subs: new Set(), synced: false, idle: false};
@@ -9027,8 +9089,7 @@ function pocketFrame(){
   if (w) { w.pkGo(POCKET.id); return; }
   let f = p.querySelector("iframe");
   if (!f) { f = document.createElement("iframe"); f.title = "助理"; p.append(f); }
-  const u = new URLSearchParams(location.search); u.set("embed", "pocket");
-  f.src = `${location.pathname}?${u}#/chats/${encodeURIComponent(POCKET.id)}`;
+  embedSrc(f, "pocket", null, `#/chats/${encodeURIComponent(POCKET.id)}`);
 }
 function pocketFocus(){ const w = pocketWin(); if (w) w.pkFocus(); else if (POCKET.open) setTimeout(pocketFocus, 150); }
 async function pocketOpen(){
@@ -9075,10 +9136,29 @@ function pocketEvent(ev){
   drawPocket();
 }
 window.pkS = () => S;                      // let 声明的不在 window 上：嵌着的页面靠它拿外面的整体状态
+let pkDraftSend = false, pkSendOnOpen = null;   // 侧边对话还在建时点了发送：建好就发（#490）
 if (EMBED) {                                // 外层调这几个
   window.pkEvent = ev => ev.type === "resync" ? (refreshSoon(), detail && reloadChat().catch(() => {})) : onEvent(ev);
   window.pkState = () => { S = parent.pkS(); afterState(); };
-  window.pkGo = (id, mid) => { if (EMBED_SIDE) ctxMachine = mid || null; EMBED_HASH = `#/chats/${encodeURIComponent(id)}`; location.hash = EMBED_HASH; };
+  window.pkGo = (id, mid) => {
+    if (detail && detail.draft) {         // 还在建的侧边对话建好了（#490）：输入框里的字、引用带过去，点过发送的接着发
+      const v = $("#input") ? $("#input").value : "";
+      try { if (v.trim()) localStorage.setItem(DRAFT + "c:" + id, v); } catch {}
+      if (quotes.id === detail.id) quotes.id = id;
+      if (pkDraftSend) pkSendOnOpen = id;
+      pkDraftSend = false; detail = null;
+    }
+    if (EMBED_SIDE) ctxMachine = mid || null; EMBED_HASH = `#/chats/${encodeURIComponent(id)}`; location.hash = EMBED_HASH;
+  };
+  window.pkDraft = (d, mid) => {          // 侧边对话还在建：先画个空的，能打字（#490）
+    ctxMachine = mid || null; EMBED_HASH = SIDE_WARM;
+    if (location.hash !== SIDE_WARM) history.replaceState(null, "", SIDE_WARM);
+    current = {view: "chats", id: d.id}; detail = d; pkDraftSend = false; pkSendOnOpen = null;
+    try { localStorage.removeItem(DRAFT + "c:" + d.id); } catch {}
+    drawChat();
+    parent.sideShownAt?.(d.id);
+  };
+  window.pkDraftFail = () => { pkDraftSend = false; drawComposerState(); };
   window.pkChat = () => detail && detail.id;
   window.pkFocus = () => $("#input")?.focus();
   const dark = () => document.documentElement.classList.toggle("pk-dark", parent.document.documentElement.classList.contains("ws-dark"));

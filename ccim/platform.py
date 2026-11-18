@@ -3016,7 +3016,7 @@ def _handler(pf):
             if u.path == "/api/events":
                 return self._events()
             if u.path == "/api/file":
-                return self._file(q.get("chat", ""), q.get("path", ""))
+                return self._file(q.get("chat", ""), q.get("path", ""), q.get("part", ""))
             if u.path == "/api/file/part":
                 return self._file_part(q)
             routes = {
@@ -3311,11 +3311,17 @@ def _handler(pf):
                 return True
             return self.headers.get("Sec-Fetch-Site") in (None, "same-origin", "none")
 
-        def _file(self, chat, path):
+        def _file(self, chat, path, part=""):
             if not self._host_ok() or not self._fs_ok():
                 return self._send(403, b"forbidden", "text/plain")
             if not self._file_ok(chat, path):
                 return self._send(404, b"not found", "text/plain")
+            if part:     # Word 预览里的一张图（#495）：地址带着文件的修改时间，可以缓存
+                try:
+                    data, ctype = docs.docx_part(path, part)
+                except docs.Problem:
+                    return self._send(404, b"not found", "text/plain")
+                return self._send(200, data, ctype, {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
             filesend.serve_local(self, path)
 
         def _file_part(self, q):

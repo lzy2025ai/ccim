@@ -9251,9 +9251,15 @@ function docBody(){
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
   if (DOC.mode === "edit") return `<textarea id="doc-ta" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
   if (d.kind === "md") return wxView();   // Markdown 的预览直接按公众号主题排版（#392）
-  if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
+  if (d.kind === "docx") return `<article class="doc-md">${docxHtml(d)}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
+}
+// Word 里的图不随正文发来（#495）：按名字单独取，翻到才加载；地址带修改时间，文件改了就换新的
+function docxHtml(d){
+  const ps = d.parts || [];
+  return d.html.replace(/<img data-p="(\d+)"/g, (m, i) => ps[i] == null ? m
+    : `<img loading="lazy" decoding="async" src="${esc(`${docFileUrl()}&part=${encodeURIComponent(ps[i])}&t=${d.mtime}`)}"`);
 }
 // 压缩包（#402）：按文件夹排成树，文件夹带里面文件的总大小；只有一个顶层文件夹时默认展开
 function arcView(d){

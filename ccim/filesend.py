@@ -211,6 +211,16 @@ def serve_peer(handler, peers, mid, extra=None, headers=None):
     """文件在别的电脑上（网页请求的 /api/file 带 machine）：按段取，边收边发。错误用 handler._send 回。"""
     from .peers import Offline
     q = {k: v[0] for k, v in parse_qs(urlparse(handler.path).query).items()}
+    if q.get("part"):       # Word 里的一张图（#495）：不大，整个取过来
+        try:
+            status, ctype, data = peers.forward(mid, "GET", handler.path, b"", headers or {})
+        except Offline:
+            return _offline(handler, peers, mid)
+        except Exception as e:
+            log.exception("取文件出错")
+            return handler._send(502, {"error": f"出错了：{e}"})
+        cache = {"Cache-Control": "private, max-age=86400"} if status == 200 else {}
+        return handler._send(status, data, ctype, {**(extra or {}), **cache})
     base = "/api/file/part?" + urlencode({"chat": q.get("chat", ""), "path": q.get("path", "")})
 
     def fetch(start, n):

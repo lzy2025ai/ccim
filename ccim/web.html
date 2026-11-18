@@ -3831,7 +3831,8 @@ function gripInput(){
   };
   g.ondblclick = () => { inputH = 0; localStorage.removeItem("ccim.inputH"); fitInput(); };
 }
-// 引用：放在输入框上面，发送时拼到消息前面。引用了两段及以上时每段下面能写针对它的话（#443），发出去是「引用 → 它的话」依次排
+// 引用：放在输入框上面，发送时拼到消息前面。每段下面能写针对它的话（#443），发出去是「引用 → 它的话」依次排；
+// 只引用一段时也有，加第二段时界面不变、已写的话不挪
 let quotes = {id: null, list: []};      // list：[{text, note}]
 const quoteList = () => detail && quotes.id === detail.id ? quotes.list : [];
 function addQuote(text){
@@ -3841,24 +3842,17 @@ function addQuote(text){
     return input.focus();
   }
   if (quotes.id !== detail.id) quotes = {id: detail.id, list: []};
-  if (quotes.list.length === 1 && !quotes.list[0].note && input.value.trim()) {   // 第二段进来：输入框里已经写的是针对第一段的
-    quotes.list[0].note = input.value.trim(); input.value = ""; saveDraft();
-  }
   quotes.list.push({text, note: ""}); drawQuotes(); drawComposerState();
-  if (quotes.list.length > 1) $(`#quotes .qnote[data-k="${quotes.list.length - 1}"]`)?.focus(); else input.focus();
+  ($(`#quotes .qnote[data-k="${quotes.list.length - 1}"]`) || input).focus();
 }
 function dropQuote(k){
   quotes.list.splice(k, 1);
-  const one = quotes.list.length === 1 && quotes.list[0], i = $("#input");
-  if (one && one.note && i) { i.value = [one.note.trim(), i.value.trim()].filter(Boolean).join("\n\n"); one.note = ""; saveDraft(); }   // 只剩一段：它的话回到输入框
-  drawQuotes(); drawComposerState(); i?.focus();
+  drawQuotes(); drawComposerState(); $("#input")?.focus();
 }
 function quoteNote(el){ const x = quotes.list[+el.dataset.k]; if (x) x.note = el.value; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
 function drawQuotes(){
   const el = $("#quotes"); if (!el) return;
-  const qs = quoteList(), many = qs.length > 1;
-  el.innerHTML = qs.map((x, k) => `<div class="quote in-box ${many ? "noted" : ""}"><div class="qbody"><span class="qt">${esc(x.text)}</span>${many
-    ? `<textarea class="qnote" data-k="${k}" rows="1" placeholder="针对这段说…" aria-label="针对这段引用说的话" oninput="quoteNote(this)" onkeydown="if(sendKey(event)){event.preventDefault();sendChat()}">${esc(x.note || "")}</textarea>` : ""}</div><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="dropQuote(${k})">${ICON.x}</button></div>`).join("");
+  el.innerHTML = quoteList().map((x, k) => `<div class="quote in-box noted"><div class="qbody"><span class="qt">${esc(x.text)}</span><textarea class="qnote" data-k="${k}" rows="1" placeholder="针对这段说…" aria-label="针对这段引用说的话" oninput="quoteNote(this)" onkeydown="if(sendKey(event)){event.preventDefault();sendChat()}">${esc(x.note || "")}</textarea></div><button class="icon-btn" aria-label="去掉引用" title="去掉引用" onclick="dropQuote(${k})">${ICON.x}</button></div>`).join("");
   el.querySelectorAll(".qnote").forEach(t => { if (t.value) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } });
 }
 // 引用拼成「> 引用」+ 针对它的话；qs 里可以是文字（侧边对话）或 {text, note}。
@@ -9160,7 +9154,7 @@ if (EMBED) {                                // 外层调这几个
   };
   window.pkDraftFail = () => { pkDraftSend = false; drawComposerState(); };
   window.pkChat = () => detail && detail.id;
-  window.pkFocus = () => $("#input")?.focus();
+  window.pkFocus = () => ([...document.querySelectorAll("#quotes .qnote")].pop() || $("#input"))?.focus();
   const dark = () => document.documentElement.classList.toggle("pk-dark", parent.document.documentElement.classList.contains("ws-dark"));
   dark(); new MutationObserver(dark).observe(parent.document.documentElement, {attributes: true, attributeFilter: ["class"]});
 }
@@ -10420,7 +10414,7 @@ function wsSelTool(sel){
     t.remove(); getSelection().removeAllRanges();
     const p = DOC.path;
     if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (wsNoChat()) wsToggleChat();
-    setTimeout(() => { addQuote(`${wsRel(p)}：\n${text}`); const i = $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
+    setTimeout(() => { addQuote(`${wsRel(p)}：\n${text}`); const i = [...document.querySelectorAll("#quotes .qnote")].pop() || $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
   };
   ed.onclick = () => go("edit"); ask.onclick = () => go("ask");
   document.body.append(t);

@@ -43,8 +43,9 @@ button{cursor:pointer;border:0;background:none;padding:0}
 body.resizing{cursor:col-resize;user-select:none}
 .topbar{position:fixed;top:0;left:0;right:0;height:2px;z-index:60;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .2s}
 .topbar.on{opacity:1}
-.topbar::after{content:"";position:absolute;top:0;left:-40%;width:40%;height:100%;background:var(--qing);animation:topbar 1s ease-in-out infinite}
-@keyframes topbar{to{left:100%}}
+.topbar::after{content:"";position:absolute;top:0;left:0;width:40%;height:100%;background:var(--qing);transform:translateX(-100%)}
+.topbar.on::after{animation:topbar 1s ease-in-out infinite}   /* 只在显示时动：藏着也动会每帧重排（#493） */
+@keyframes topbar{to{transform:translateX(250%)}}
 button.pending,.btn.pending{opacity:.6;pointer-events:none;cursor:progress}
 .msg.me.sending .bubble{opacity:.65}
 body{overflow:hidden}
@@ -204,17 +205,20 @@ body{overflow:hidden}
 .item.today .when{color:var(--qing);font-weight:500}
 .has-badge{position:relative}
 .nbadge{position:absolute;top:4px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--zhu);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
-/* 任务面板角标（#187）：实心红 = 等你处理；橙色滚动虚线 = 有对话在干活（和干活的卡片同一种虚线），卡住变成一闪一闪的红圈 */
+/* 任务面板角标（#187）：实心红 = 等你处理；橙色虚线一明一暗 = 有对话在干活（和干活的卡片同一种虚线），卡住变成一闪一闪的红圈 */
 .nbadge.work{background:var(--panel);color:var(--warn);font-weight:600}
 .nbadge .ring{position:absolute;inset:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;pointer-events:none}
-.nbadge .ring rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:10.25px;ry:10.25px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:3 2.5;animation:ring .9s linear infinite}
+.nbadge .ring rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:10.25px;ry:10.25px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:3 2.5}
+/* 虚线不滚动，整个圈淡入淡出：滚动的虚线每帧在主线程重画，一个就占约 10% CPU；透明度交给显卡（#493） */
+.nbadge .ring{animation:fade 1.4s ease-in-out infinite;will-change:opacity}
+.nbadge.stuck .ring{animation:breathe 1.6s ease-in-out infinite}
 .nbadge.work .ring{inset:0;width:100%;height:100%}
 .nbadge.work .ring rect{rx:7.25px;ry:7.25px}
-.nbadge.stuck .ring rect{stroke:var(--stuck);stroke-dasharray:none;stroke-width:1.8;animation:breathe 1.6s ease-in-out infinite}
+.nbadge.stuck .ring rect{stroke:var(--stuck);stroke-dasharray:none;stroke-width:1.8}
 .nbadge.work.stuck{color:var(--stuck-ink)}
-@keyframes ring{to{stroke-dashoffset:-5.5}}
 @keyframes breathe{50%{opacity:.2}}
-@media (prefers-reduced-motion:reduce){.nbadge .ring rect,.nbadge.stuck .ring rect{animation:none}}
+@keyframes fade{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.nbadge .ring,.nbadge.stuck .ring{animation:none}}
 .ck-box{flex:none;width:18px;height:18px;margin:2px 10px 0 0;border:1.5px solid var(--line-strong);border-radius:5px;background:var(--panel,#fff);color:#fff;font-size:12px;line-height:15px;text-align:center;cursor:pointer;padding:0}
 .ck-box.on{background:var(--qing);border-color:var(--qing)}
 .ck-box:disabled{opacity:.4;cursor:default}
@@ -255,12 +259,12 @@ body{overflow:hidden}
 .brow.fresh .bprog{color:var(--ink)}
 .brow.work,.item.work{position:relative;border-color:transparent}
 .ants{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.ants rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:12px;ry:12px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:6 5;animation:ants 1s linear infinite}
+.ants rect{x:.75px;y:.75px;width:calc(100% - 1.5px);height:calc(100% - 1.5px);rx:12px;ry:12px;fill:none;stroke:var(--warn);stroke-width:1.5;stroke-dasharray:6 5}
+.ants{animation:fade 1.4s ease-in-out infinite;will-change:opacity}   /* 同上（#493） */
+.stall .ants{animation:breathe 1.6s ease-in-out infinite}
 .item.work .ants rect{rx:10px;ry:10px;stroke-width:1.2;stroke-dasharray:5 4}
-@keyframes ants{to{stroke-dashoffset:-11}}
-@media (prefers-reduced-motion:reduce){.ants rect{animation:none}}
-.stall .ants rect{stroke:var(--stuck);stroke-dasharray:none;animation:breathe 1.6s ease-in-out infinite}
-@media (prefers-reduced-motion:reduce){.stall .ants rect{animation:none}}
+@media (prefers-reduced-motion:reduce){.ants,.stall .ants{animation:none}}
+.stall .ants rect{stroke:var(--stuck);stroke-dasharray:none}
 .item.err{box-shadow:inset 0 0 0 1.2px var(--bad)} .brow.err{border-color:var(--bad)}   /* 出错停下的才用红色实线 */
 .working.stuck{color:var(--stuck-ink)}
 .stallbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;border-radius:8px;
@@ -2725,8 +2729,10 @@ function onEvent(ev){
       if (ev.type === "progress"){
         detail.progress = ev.state === "working" ? ev : null;
         const ended = detail.busy && ev.state !== "working";
+        const was = detail.busy;
         detail.busy = ev.state === "working";
-        drawThread(); drawComposerState(); wsProgress(ev);
+        if (was && detail.busy) drawLiveSoon(); else drawThread();   // 干活中每 0.3 秒一条：只换正在写的那块（#493）
+        drawComposerState(); wsProgress(ev);
         if (ended && (detail.perm || detail.turn_free)) permSoon();   // 这一轮做完可能切回了自动
       } else if (ev.type === "ctx"){
         detail.ctx = ev.ctx; drawCtxRing(detail); redrawGroup();
@@ -3369,7 +3375,7 @@ function liveHtml(){
   const p = detail.progress; if (!p) return "";
   const last = p.steps[p.steps.length - 1];
   const head = `<span class="spin"></span>${p.retry ? `网络不稳，正在重试（第 ${p.retry} 次）` : last ? "正在" + esc(last.replace(/^(运行|读|改|搜索|查找|写)[：:]?\s*/, (m, v) => v + "：")) : "思考中"}`;
-  return `<div class="msg">${fromRow()}${flowHtml(p.steps, p.said, {head, open: true})}
+  return `<div class="msg" id="live">${fromRow()}${flowHtml(p.steps, p.said, {head, open: true})}
     ${stallBar(p, detail.id, ctxMachine)}${liveText(p)}</div>`;
 }
 // 一轮答完后还在跑的后台任务（#271）
@@ -3430,6 +3436,22 @@ function drawThread(){
   drawToc();
 }
 const SHOW_RECENT = 60;
+// 干活中的进度只换 #live 那一块，一帧最多一次；找不到它（比如被 @ 的回答排在后面）就整个重画
+let liveRaf = 0;
+function drawLiveSoon(){
+  if (liveRaf) return;
+  liveRaf = requestAnimationFrame(() => {
+    liveRaf = 0;
+    const t = $("#thread"), el = t && t.querySelector("#live");
+    if (!t || !el || !detail || !detail.progress) return drawThread();
+    const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+    const box = document.createElement("div"); box.innerHTML = liveHtml();
+    const nu = box.firstElementChild; if (!nu) return drawThread();
+    el.replaceWith(nu);
+    if (near) t.scrollTop = t.scrollHeight;
+    if (EMBED) pkScrolled(t);
+  });
+}
 function showEarlier(keep = true){
   const t = $("#thread"), h = t ? t.scrollHeight - t.scrollTop : 0;
   detail.showAll = true; drawThread();

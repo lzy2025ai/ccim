@@ -178,6 +178,12 @@ def view(path, base=None):
         except OSError:
             raise Problem("文件已经不在了。")
     base = base or os.path.dirname(path)
+    try:
+        big = os.path.getsize(path) > MAX_DOC
+    except OSError:
+        big = False      # 不在了：交给 _read 报
+    if big:              # 太大不预览，面板照样打开，能下载、在访达中显示（#495）
+        return {"kind": "other", "mtime": os.path.getmtime(path), "editable": False, "error": "文件太大，不能在这里预览"}
     data = _read(path)
     out = {"kind": k, "mtime": os.path.getmtime(path), "editable": k in EDITABLE}
     if k == "docx":

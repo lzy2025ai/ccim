@@ -1734,6 +1734,8 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
 .ws-img img,.ws-img video{max-width:100%;max-height:calc(100vh - 200px);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
 .ws-other{margin:auto;text-align:center;padding:60px 20px;color:var(--muted)}
 .ws-other b{display:block;color:var(--ink);font-size:15px;margin-bottom:12px}
+.ws-other-acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.ws-other-acts a.btn{color:inherit;text-decoration:none}
 
 .ws-changes{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 4px;background:var(--panel);max-width:560px}
 .ws-changes .h{display:flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line);background:#FAFAF8}
@@ -9244,15 +9246,21 @@ function docBody(){
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
   if (d.kind === "archive") return arcView(d);
   if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
-  if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a></div>`;
+  if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<div class="ws-other-acts"><a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a>${!DOC.ws && canReveal(DOC.machine) ? `<button class="btn" onclick="docReveal()">在访达中显示</button>` : ""}</div></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
   if (DOC.mode === "edit" && d.kind === "md") return `<div id="doc-live" class="live-ed" contenteditable="true" spellcheck="false" autocapitalize="off" role="textbox" aria-multiline="true"></div>`;
   if (DOC.mode === "edit" && (DOC.ws || d.kind === "html")) return codeEd(false);
   if (DOC.mode === "edit") return `<textarea id="doc-ta" spellcheck="false" oninput="docInput(this)" onkeydown="docKey(event)">${esc(DOC.draft)}</textarea>`;
   if (d.kind === "md") return wxView();   // Markdown 的预览直接按公众号主题排版（#392）
-  if (d.kind === "docx") return `<article class="doc-md">${d.html}</article>`;
+  if (d.kind === "docx") return `<article class="doc-md">${docxHtml(d)}</article>`;
   const html = DOC.dirty ? DOC.draft : d.html;     // 改过没保存：按改的预览（图片只认原来就有的）
   return `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(html)}" title="${esc(d.name)}"></iframe>`;
+}
+// Word 里的图不随正文发来（#495）：按名字单独取，翻到才加载；地址带修改时间，文件改了就换新的
+function docxHtml(d){
+  const ps = d.parts || [];
+  return d.html.replace(/<img data-p="(\d+)"/g, (m, i) => ps[i] == null ? m
+    : `<img loading="lazy" decoding="async" src="${esc(`${docFileUrl()}&part=${encodeURIComponent(ps[i])}&t=${d.mtime}`)}"`);
 }
 // 压缩包（#402）：按文件夹排成树，文件夹带里面文件的总大小；只有一个顶层文件夹时默认展开
 function arcView(d){

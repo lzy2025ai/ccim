@@ -177,12 +177,22 @@ def view(path, base=None):
             return {"kind": k, "mtime": os.path.getmtime(path), "editable": False}
         except OSError:
             raise Problem("文件已经不在了。")
+    if k == "docx":     # 正文转网页，图片不塞进来，网页翻到哪张再按 parts 里的名字单独取（#495）
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            raise Problem("文件已经不在了。")
+        html, parts = docx_html(path)
+        return {"kind": k, "mtime": mtime, "editable": False, "html": html, "parts": parts}
     base = base or os.path.dirname(path)
+    try:
+        big = os.path.getsize(path) > MAX_DOC
+    except OSError:
+        big = False      # 不在了：交给 _read 报
+    if big:              # 太大不预览，面板照样打开，能下载、在访达中显示（#495）
+        return {"kind": "other", "mtime": os.path.getmtime(path), "editable": False, "error": "文件太大，不能在这里预览"}
     data = _read(path)
     out = {"kind": k, "mtime": os.path.getmtime(path), "editable": k in EDITABLE}
-    if k == "docx":
-        out["html"] = docx_html(path)
-        return out
     text = data.decode("utf-8", errors="replace")
     out["text"] = text
     if k == "text":
@@ -261,14 +271,18 @@ R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 V = "{urn:schemas-microsoft-com:vml}"
 REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+WP = "{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}"
+DOCX_XML = 30 << 20         # Word 正文（document.xml 解压后）最多这么大；图片不算，按需单独取
 
 
 def docx_html(path):
     """够看就行的 Word 转网页：标题、段落、加粗斜体下划线删除线、链接、列表、表格、图片。"""
     try:
         z = zipfile.ZipFile(path)
+        if z.getinfo("word/document.xml").file_size > DOCX_XML:
+            raise Problem("这个 Word 文件的文字太多，不能在这里预览")
         doc = ET.fromstring(z.read("word/document.xml"))
-    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError):
         raise Problem("这个 Word 文件打不开。")
     rels = {}
     try:
@@ -283,21 +297,22 @@ def docx_html(path):
             styles[s.get(W + "styleId")] = (n.get(W + "val") if n is not None else "").lower()
     except (KeyError, ET.ParseError):
         pass
-    total = [0]
+    members = set(z.namelist())
+    pics, index, size = [], {}, [None]   # size：正在处理的图片在 Word 里排的大小（像素）
 
     def image(rid):
-        target = (rels.get(rid) or (None, None))[0]
-        if not target:
+        """图片只记名字（pics 里的第几个），网页按 /api/file 带 part 单独取。"""
+        target, mode = rels.get(rid) or (None, None)
+        if not target or mode == "External":
             return ""
-        name = "word/" + target if not target.startswith("/") else target[1:]
-        try:
-            data = z.read(os.path.normpath(name).replace("\\", "/"))
-        except KeyError:
+        name = os.path.normpath("word/" + target if not target.startswith("/") else target[1:]).replace("\\", "/")
+        if name not in members:
             return ""
-        if total[0] + len(data) > MAX_ASSETS:
-            return ""
-        total[0] += len(data)
-        return f'<img src="{_data_uri(name, data)}" alt="">'
+        if name not in index:
+            index[name] = len(pics)
+            pics.append(name)
+        wh = f' width="{size[0][0]}" height="{size[0][1]}"' if size[0] else ""
+        return f'<img data-p="{index[name]}"{wh} alt="">'
 
     def runs(p):
         out = []
@@ -315,7 +330,12 @@ def docx_html(path):
     def run(r):
         parts = []
         for el in r.iter():
-            if el.tag == W + "t":
+            if el.tag == WP + "extent":
+                try:
+                    size[0] = (round(int(el.get("cx")) / 9525), round(int(el.get("cy")) / 9525))   # EMU → 像素
+                except (TypeError, ValueError):
+                    size[0] = None
+            elif el.tag == W + "t":
                 parts.append(htmllib.escape(el.text or ""))
             elif el.tag == W + "tab":
                 parts.append("&emsp;")
@@ -323,8 +343,10 @@ def docx_html(path):
                 parts.append("<br>")
             elif el.tag == A + "blip":
                 parts.append(image(el.get(R + "embed")))
+                size[0] = None
             elif el.tag == V + "imagedata":
                 parts.append(image(el.get(R + "id")))
+                size[0] = None
         s = "".join(parts)
         pr = r.find(W + "rPr")
         if pr is not None and s:
@@ -394,4 +416,19 @@ def docx_html(path):
         return "".join(out)
 
     body = doc.find(W + "body")
-    return block(list(body) if body is not None else [])
+    return block(list(body) if body is not None else []), pics
+
+
+def docx_part(path, name):
+    """Word 里的一张图：(字节, 类型)。只给 word/ 下的图片。"""
+    ctype = mimetypes.guess_type(name)[0] or ""
+    if not name.startswith("word/") or ".." in name.split("/") or not ctype.startswith("image/"):
+        raise Problem("找不到这张图。")
+    try:
+        with zipfile.ZipFile(path) as z:
+            info = z.getinfo(name)
+            if info.file_size > MAX_DOC:
+                raise Problem("这张图太大了。")
+            return z.read(info), ctype
+    except (zipfile.BadZipFile, KeyError, OSError):
+        raise Problem("找不到这张图。")

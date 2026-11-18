@@ -47,7 +47,6 @@ def clean_share(opts):
     o = opts if isinstance(opts, dict) else {}
     return {"agents": [str(x) for x in o.get("agents") or [] if x][:200], "own": bool(o.get("own", True)),
             "codex": bool(o.get("codex")), "dir": (str(o.get("dir") or "").strip() or None)}
-PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 ISSUER = "ccim"
 
 
@@ -652,10 +651,10 @@ def _handler(hub):
             unname(self)
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            from .platform import static_file
+            from .platform import STATIC_CACHE, page_reply, static_file
             st = static_file(u.path)
             if st:
-                return self._send(200, st[0], st[1])
+                return self._send(200, st[0], st[1], STATIC_CACHE)
             if u.path == "/join.sh":                 # 新电脑一条命令接入（#175），不用登录；安装包在 /peer/dl/
                 from . import onboard
                 return self._send(200, onboard.script(hub.public_url or "https://" + (self.headers.get("Host") or "")),
@@ -669,10 +668,10 @@ def _handler(hub):
                                           "text/html; charset=utf-8")
                     body = LOGIN_BODY if hub.accounts_on() else LOGIN_BODY.replace('<div id="nmbox">', '<div id="nmbox" hidden>')
                     return self._send(200, _page(body, LOGIN_SCRIPT), "text/html; charset=utf-8")
-                with open(PAGE, "rb") as f:   # 顺手重发一次 cookie：老的是 Strict，换成 Lax，剩余时间不变（#473）
-                    left = hub.session_left(self._cookie())
-                    return self._send(200, f.read(), "text/html; charset=utf-8",
-                                      self._set_cookie(self._cookie(), left) if left else None)
+                code, data, h = page_reply(self.headers, q)   # 没变过回 304、嵌着的页面直接用缓存（#490）
+                left = hub.session_left(self._cookie())       # 顺手重发一次 cookie：老的是 Strict，换成 Lax，剩余时间不变（#473）
+                return self._send(code, data, "text/html; charset=utf-8",
+                                  {**h, **(self._set_cookie(self._cookie(), left) if left else {})})
             if not u.path.startswith("/api/"):
                 return self._send(404, {"error": "not found"})
             if not self._authed():

@@ -479,6 +479,10 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .msg-acts button{display:flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted)}
 .msg-acts button:hover{background:var(--sunk);color:var(--ink)}
 .msg-acts svg{width:14px;height:14px}
+.msg-forks{display:flex;flex-wrap:wrap;gap:2px 4px;margin-top:2px}
+.msg-forks a{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:0 7px;border-radius:7px;font-size:12px;color:var(--muted);text-decoration:none}
+.msg-forks a:hover{background:var(--sunk);color:var(--ink)}
+.msg-forks svg{width:13px;height:13px;flex:none}
 .msg-time{display:flex;align-items:center;height:26px;padding:0 7px;font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 /* 分叉出来的对话：从上面那个对话的印章下面引一条线，每个分支一个拐角，最后一个到拐角为止 */
 .kids{margin:-2px 0 2px 26px}
@@ -3135,7 +3139,11 @@ async function openChat(id){
     }
     renderList();
   }
-  else if (current.view === "agents" && current.sub === id && agentSide && agentSide.id === current.id && !agentSide.chats.some(c => c.id === id)) renderList();   // 不在列表里的：有了对话详情才知道选中哪一行（#371）
+  else if (current.view === "agents" && current.sub === id && agentSide && agentSide.id === current.id && !agentSide.chats.some(c => c.id === id)) {
+    const row = chatById(id);             // 刚分叉、刚开的（#504 直接跳到 Agent 页）：先插进列表，再整份重取
+    if (row && row.agent === current.id) { agentSide.chats.unshift(row); fetchAgentSide(current.id); }
+    renderList();   // 不在列表里的：有了对话详情才知道选中哪一行（#371）
+  }   // 不在列表里的：有了对话详情才知道选中哪一行（#371）
   const rk = id + "|" + (current.view === "agents" ? current.id : "");   // 同一个群从不同 Agent 的列表打开，默认发给谁不一样（#359）
   if (fresh || rk !== rcptKey) { rcptKey = rk; toOff = null; chatRcpt = defaultRcpt(); }
   drawChat(); doJump(); markSeen(id);
@@ -3342,7 +3350,7 @@ function recHtml(r, i, src = "log"){
   if (r.type === "secret") return secretHtml(r);
   if (r.type === "answer"){
     const stopped = r.state === "stopped";
-    return `<div class="msg">${fromRow()}${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${changesHtml(r)}${msgActs(src, i, r)}` : (stopped ? `<div class="muted">已停下。</div>` : "") + changesHtml(r)}</div>`;
+    return `<div class="msg">${fromRow()}${flowHtml(r.steps, r.said, {final: r.text})}${r.text ? `<div class="answer ${r.state === "error" ? "state-err" : ""}">${md(r.text)}</div>${changesHtml(r)}${msgActs(src, i, r)}${forkMarks(r)}` : (stopped ? `<div class="muted">已停下。</div>` : "") + changesHtml(r)}</div>`;
   }
   if (r.type === "card"){
     const live = r.buttons && r.buttons.length && (!r.color || r.color === "orange");   // 处理过的卡片：记录合并后按钮还在，看颜色
@@ -4472,9 +4480,23 @@ function quotePick(btn, src, i){
 function quoteMsg(btn, src, i){ addQuote(quotePick(btn, src, i)); }
 function quoteMain(btn, src, i){ parent.sideToMain(quotePick(btn, src, i)); }   // 侧边栏里嵌着的（#476）：放进主对话的输入框
 async function forkAt(i, src = "log"){
-  const r = (src === "earlier" ? detail.earlier : detail.log)[i] || {};
-  const {id} = await act(() => api("/api/chat/fork", {id: detail.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
-  await loadState(); location.hash = `#/chats/${encodeURIComponent(id)}`;
+  const r = (src === "earlier" ? detail.earlier : detail.log)[i] || {}, from = detail;
+  const {id} = await act(() => api("/api/chat/fork", {id: from.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
+  await loadState();
+  quietOpen = id;                        // 不先清空页面、不先落到对话页再跳（#504）：新对话的内容到了直接换上
+  if (EMBED) try { parent.quietGo(id); } catch {}   // 侧边对话、助理里分的：在外面的页面打开，那边也别先清空
+  location.hash = chatHash(from, id);
+}
+window.quietGo = id => { quietOpen = id; };
+// 打开这个对话（或从它分出来的）该去哪：和 Agent 的对话在 Agent 页里看；被拉进别人群的人、一人公司的员工照旧走对话页（openChat 再转）
+function chatHash(d, id){
+  const a = d && d.agent && !joinedOf(d) && !(S.staff || []).some(x => x.id === d.agent) ? d.agent : null;
+  return a ? `#/agents/${encodeURIComponent(a)}/${encodeURIComponent(id)}` : `#/chats/${encodeURIComponent(id)}`;
+}
+// 被分出去的回答下面：分到了哪几个对话（#504）。按会话里的消息编号或那条回答的时间对，不按下标（#288）
+function forkMarks(r){
+  const fs = (detail.forks || []).filter(f => f.uuid && (r.uuid === f.uuid || (r.fork || {}).at === f.uuid) || f.row && r.at === f.row);
+  return fs.length ? `<div class="msg-forks">${fs.map(f => `<a href="${chatHash(detail, f.id)}">${ICON.branch}已分叉 → ${esc(f.title)}</a>`).join("")}</div>` : "";
 }
 function saveAsAgent(){   // 建好后这个对话归到它名下（#318）；名字和角色说明按对话内容起草
   if (detail.busy) { toast("它还在干活，等这一轮做完再保存"); return; }

@@ -723,7 +723,9 @@ async def refresh_brief(pf, cid):
     if not ans:
         return
     user = next((r.get("text") or "" for r in reversed(rows) if r.get("type") == "user" and r.get("at", 0) <= ans.get("at", 0)), "")
-    asks = [r.get("text") or "" for r in rows if r.get("type") == "user" and not r.get("by")]
+    cut = m.get("fork_row") if m.get("parent") else None   # 分叉出来的：复制过来的问题不算，按分出来以后说的起标题（#504）
+    asks = [r.get("text") or "" for r in rows if r.get("type") == "user" and not r.get("by")
+            and (cut is None or (r.get("at") or 0) > cut)]
     first = "\n".join(asks[:TITLE_ROUNDS]) if asks and len(asks) <= TITLE_ROUNDS and not renamed(m, asks[0]) else None
     async with _brief_lock:
         try:

@@ -3421,7 +3421,7 @@ function drawThread(){
   while (k < ew.length && from && (ew[k].at || 0) < firstAt) k++;
   const ewUpTo = at => { let h = ""; while (k < ew.length && (ew[k].at || 0) < at) { h += recHtml(ew[k], k, "elsewhere"); k++; } return h; };
   const {order, liveAt} = threadOrder(detail.log, from);
-  const parts = order.map(i => { const r = detail.log[i]; return ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + chapPill(r, i) + recHtml(r, i); });
+  const parts = order.map(i => { const r = detail.log[i]; return ewUpTo(r.at || 0) + `<i class="anc" id="rec-${i}"></i>` + (r.type === "mention" ? "" : chapPill(r, i)) + recHtml(r, i); });
   if (liveAt < parts.length) parts.splice(liveAt, 0, liveHtml());
   t.innerHTML = more + (earlier ? earlier + `<div class="note" style="text-align:center;margin:6px auto 22px">以上是${esc(detail.origin_source || "原来")}里的对话，以下是在网页里接着聊的</div>` : "")
     + parts.join("") + ewUpTo(Infinity) + (liveAt < parts.length ? "" : liveHtml()) + bgHtml();
@@ -3462,7 +3462,8 @@ function showEarlier(keep = true){
 function ensureShown(i){ if (!detail.showAll && i < detail.log.length - SHOW_RECENT) showEarlier(false); }
 // ---- 章节（#25）：给重要的消息起个名字，右边的目录点一下跳过去 ----
 let showToc = (() => { try { return localStorage.getItem("ccim.toc") !== "0"; } catch { return true; } })();
-const chapKey = r => (r.type === "user" || r.type === "answer" || r.type === "note" && r.divider) && r.at ? `${r.type}:${r.at}` : null;
+// 群里成员的回答（mention）也能标（#503）；它画在 mentionOne 里，章节标记跟着画在那
+const chapKey = r => (r.type === "user" || r.type === "answer" || r.type === "note" && r.divider || r.type === "mention" && r.text) && r.at ? `${r.type}:${r.at}` : null;
 function chapters(){
   const ch = detail.chapters || {};
   return detail.log.map((r, i) => [i, ch[chapKey(r)]]).filter(([, n]) => n);
@@ -4389,6 +4390,7 @@ function mentionActs(i, r, live){
   if (r.text) btns.push(`<button onclick="copyMsg(this,'log',${i})" title="复制">${ICON.copy}复制</button>`,
                         `<button onclick="quoteMsg(this,'log',${i})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (r.text && EMBED_SIDE) btns.push(`<button onclick="quoteMain(this,'log',${i})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
+  if (r.text && !notCreator() && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
   return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
 }
@@ -4398,7 +4400,7 @@ function fpScope(r, html){   // 被 @ 的 Agent 回答里的路径按它自己�
 function mentionOne(r, i){
   const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"}, live = liveOfMention(r);
   const files = r.state === "queued" ? "" : workFiles(r.files, r.files_chat || r.chat);   // 派出去的活做完了，它回来汇报时附上的
-  return `<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
+  return `${chapPill(r, i)}<div class="from-row">${avHov(a, seal(a, "sm", false))}<b>${esc(a.name)}</b><span class="tag">${BASE[a.base || "claude"]}</span>${r.machine && r.machine !== (ctxMachine || S.me) ? whereTag(r.agent, ctxMachine || S.me) : ""}${stateLabel(r, live)}</div>
       ${fpScope(r, replyBody(r, live))}${files ? `<div class="work-out">${files}</div>` : ""}${mentionActs(i, r, live)}`;
 }
 function mentionGroup(mid){
@@ -8760,7 +8762,7 @@ async function openSide(quote){
   else { sideQuoteIn(); sideWin()?.pkFocus(); }
 }
 // 对话页右上角的「⋯」（#430）：重命名、置顶这些在对话列表那一行的「⋯」里已经有了，这里只放侧边对话
-const sideOk = c => !!c && !c.company && !c.staff && !notCreator() && !c.readonly && !c.mention_of && !c.side_of && !String(c.id).startsWith("x:");
+const sideOk = c => !!c && !c.company && !c.staff && !notCreator() && !c.readonly && !c.side_at && !c.side_of && !String(c.id).startsWith("x:");   // 群成员的子对话也能开（#503）
 function headMenu(e){
   sideWarm();
   const on = SIDE && detail && SIDE.of === detail.id;

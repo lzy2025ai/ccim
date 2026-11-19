@@ -1759,9 +1759,11 @@ def _save_node(chat, pf):
             n = nodes.save(nid, fields, m.get("account"), from_chat=chat.chat_id, runner=None if nid else runner)
         except nodes.Problem as e:
             return _err(str(e))
-        link = f"#/nodes/{n['id']}"
+        send = getattr(chat.b.channel, "send_node", None)
+        if send:
+            await send(chat.chat_id, n, not nid)
         return {"content": [{"type": "text", "text": f"{'改好了' if nid else '存好了'}：节点「{n['name']}」（id {n['id']}）。"
-                             f"回复里给用户这个链接，点开能看、改、运行：[{n['name']}]({link})"}]}
+                             "对话里已经显示了这个节点的卡片，用户点它能打开、运行，回复里不用再贴链接、不用复述全部步骤。"}]}
     return save_node
 
 

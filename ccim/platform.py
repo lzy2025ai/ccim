@@ -420,6 +420,12 @@ class WebChannel(Channel):
         """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。"""
         self._post(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""})
 
+    async def send_node(self, chat_id, node, fresh):
+        """Agent 用 save_node 存了节点（#501）：对话里显示成节点卡片，点了打开节点页、运行。"""
+        steps, total = nodes_mod.step_titles(node.get("steps"))
+        self._post(chat_id, {"type": "node", "node": node["id"], "name": node["name"], "input": (node.get("input") or "")[:200],
+                             "steps": steps, "total": total, "runner": node.get("runner"), "fresh": fresh})
+
     async def send_chatlog(self, chat_id, log):
         """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
         items = []

@@ -691,6 +691,30 @@ a.org-n:hover{border-color:var(--qing);box-shadow:0 0 0 3px color-mix(in srgb,va
 .nd-back{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);text-decoration:none;margin-bottom:4px}
 .nd-back svg{width:14px;height:14px}
 .nd-back:hover{color:var(--ink)}
+.ndcard{width:min(440px,100%);border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px 16px 12px;cursor:pointer;
+  box-shadow:0 1px 0 rgba(29,34,43,.03);transition:border-color .15s,box-shadow .15s;position:relative;overflow:hidden}
+.ndcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--qing)}
+.ndcard:hover{border-color:var(--line-strong);box-shadow:0 6px 18px rgba(29,34,43,.07)}
+.ndc-top{display:flex;gap:10px;align-items:center}
+.ndc-t{display:flex;flex-direction:column;min-width:0}
+.ndc-t small{font-size:11.5px;color:var(--qing);font-weight:500;letter-spacing:.02em}
+.ndc-t b{font:600 16px/1.35 var(--song);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ndc-in{display:flex;gap:8px;margin-top:10px;font-size:12.5px;line-height:1.55}
+.ndc-in span{flex:none;color:var(--muted);background:var(--sunk);border-radius:5px;padding:0 6px;height:19px;line-height:19px;font-size:11.5px}
+.ndc-in p{margin:0;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ndc-steps{list-style:none;margin:12px 0 2px;padding:0;counter-reset:st}
+.ndc-steps li{counter-increment:st;position:relative;padding:0 0 9px 28px;font-size:13px;line-height:20px;color:var(--ink)}
+.ndc-steps li::before{content:counter(st);position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--qing);color:var(--qing);
+  font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;background:var(--panel);box-sizing:border-box}
+.ndc-steps li:not(:last-child)::after{content:"";position:absolute;left:9.25px;top:21px;bottom:1px;width:1.5px;background:var(--line-strong)}
+.ndc-steps li.more{color:var(--muted);font-size:12.5px}
+.ndc-steps li.more::before{content:"⋯";border-style:dashed;border-color:var(--line-strong);color:var(--muted)}
+.ndc-foot{display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:10px;margin-top:6px;font-size:12.5px;color:var(--muted)}
+.ndc-foot .who b{color:var(--ink-2);font-weight:500}
+.ndc-foot .grow{flex:1}
+.ndc-foot .seal.sm{width:20px;height:20px;font-size:8.5px;border-radius:5px;padding:1px}
+.ndc-foot a.btn{text-decoration:none}
+.ndc-foot a.btn.primary{color:#fff}
 .textarea.nf-s{min-height:64px}
 .textarea.nf-m{min-height:110px}
 .textarea.nf-l{min-height:280px}
@@ -3402,6 +3426,7 @@ function recHtml(r, i, src = "log"){
       : fileChip(src, r.name, r.path)}${timeActs(r)}</div>`;
   }
   if (r.type === "app") return `<div class="msg">${appChip(r)}${timeActs(r)}</div>`;
+  if (r.type === "node") return `<div class="msg">${nodeChip(r)}${timeActs(r)}</div>`;
   if (r.type === "chatlog"){
     const items = r.items || [];
     return `<div class="msg"><button class="chatlog" onclick="openChatlog(${i})"><div class="t">${esc(r.title)}</div>
@@ -4964,6 +4989,17 @@ function runnerName(r){
   if (r.agent) { const a = agentOf(r.agent); return a ? a.name : "Agent 已删除"; }
   const t = r.temp || {};
   return BASE[t.base || "claude"] + (t.model ? " · " + modelName(t.model) : "");
+}
+// 对话里的节点卡片：Agent 存了、改了节点（save_node）。整张点开节点页，「运行」直接开始
+function nodeChip(r){
+  const st = r.steps || [], more = (r.total || st.length) - Math.min(st.length, 4), href = `#/nodes/${encodeURIComponent(r.node)}`;
+  const ag = r.runner && r.runner.agent && agentOf(r.runner.agent);
+  return `<div class="ndcard" role="link" tabindex="0" onclick="if(!event.target.closest('button,a'))location.hash=${q(href)}" onkeydown="if(event.key==='Enter')location.hash=${q(href)}">
+    <div class="ndc-top"><span class="nd-mark">${NODE_ICON}</span><span class="ndc-t"><small>${r.fresh === false ? "节点已更新" : "新节点"}</small><b>${esc(r.name)}</b></span></div>
+    ${r.input ? `<div class="ndc-in"><span>输入</span><p>${esc(r.input)}</p></div>` : ""}
+    ${st.length ? `<ol class="ndc-steps">${st.slice(0, 4).map(t => `<li>${esc(t)}</li>`).join("")}${more > 0 ? `<li class="more">还有 ${more} 步</li>` : ""}</ol>` : ""}
+    <div class="ndc-foot">${ag ? seal(ag, "sm", false) : ""}<span class="who">由 <b>${esc(runnerName(r.runner))}</b> 来做</span><span class="grow"></span>
+      <button class="btn sm" onclick="startRun(${q(r.node)})">运行</button><a class="btn sm primary" href="${href}">打开</a></div></div>`;
 }
 // ---- 开始对比：填任务，选交给谁 ----
 function runWho(){

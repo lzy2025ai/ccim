@@ -7,7 +7,7 @@
 记下这几个对话，对比页并排看。不用节点也能对比（直接写任务）。
 以后节点串成流程、上画布，都在这上面加。
 """
-import json, os, tempfile, time, uuid
+import json, os, re, tempfile, time, uuid
 
 from . import registry
 
@@ -109,6 +109,18 @@ def delete(nid, account=None):
     del d["nodes"][nid]
     _write(d)
     return {}
+
+
+def step_titles(steps, n=12):
+    """对话里节点卡片上列的步骤：编号行取冒号前那段，没编号就取每行开头。"""
+    out = []
+    lines = [l.strip() for l in (steps or "").splitlines() if l.strip()]
+    numbered = [l for l in lines if re.match(r"^\d+[.、)）]", l)]
+    for l in numbered or lines:
+        t = re.sub(r"^(\d+[.、)）]|[-*•])\s*", "", l)
+        t = re.split(r"[：:]|——", t, maxsplit=1)[0].strip().strip("*")
+        out.append(t[:18] + ("…" if len(t) > 18 else ""))
+    return out[:n], len(numbered or lines)
 
 
 def compose(node, text):

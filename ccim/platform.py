@@ -3173,6 +3173,7 @@ def _handler(pf):
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
                 "/api/slash": lambda: {"skills": slash_skills(q, acct)},          # 输入 / 时列出的 Skill（#381）
+                "/api/models": lambda: models_now(),                             # 打开模型选择时取最新的（#499）
                 "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or "", q.get("base")), timeout=90)},   # 新对话页的 /usage
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
                 "/api/diary/home": lambda: pf.diary_home_view(),         # 日记存在哪台电脑（#376）
@@ -3726,7 +3727,6 @@ def agent_recent(pf, aid, acct=None, n=5, at=None):
 
 def state(pf, acct=None):
     """acct：共享电脑上访客的账号，只给它自己的；主人（None）看不到访客的（#154）。"""
-    from . import models
     from . import web as console
     g = registry.global_config()
     from . import upgrade
@@ -3739,7 +3739,12 @@ def state(pf, acct=None):
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
         "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @，#290）
-        "models": {"claude": models.claude(), "codex": models.codex()}}, acct)
+        "models": models_now()}, acct)
+
+
+def models_now():
+    from . import models
+    return {"claude": models.claude(), "codex": models.codex()}
 
 
 def save_agent(pf, aid, fields, acct=None):

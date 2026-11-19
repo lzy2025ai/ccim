@@ -59,14 +59,50 @@ def _readable(msg):
         return msg
 
 
-def find_codex():
-    """ChatGPT 桌面版自带的 codex 不依赖 Node，后台进程里也能跑；没有再找 nvm 装的（直接用里面的原生程序，不经过 node）。"""
-    app = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
-    if os.access(app, os.X_OK):
-        return app
-    hits = sorted(glob.glob(os.path.expanduser(
+_VERS = {}                                    # 路径 → (修改时间, 版本号)
+_FOUND = [0.0, None]                          # 上次找的时间、结果：整体状态每次都问，不必每次都跑 --version
+
+
+def _version(path):
+    """codex-cli 0.170.0 → (0, 170, 0)；alpha 等后缀不算。认不出返回 None。按文件修改时间缓存。"""
+    import subprocess
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _VERS.get(path)
+    if hit and hit[0] == mt:
+        return hit[1]
+    try:
+        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+    v = tuple(int(x) for x in m.groups()) if m else None
+    _VERS[path] = (mt, v)
+    return v
+
+
+def _candidates():
+    """本机能直接跑的 codex 原生程序（都不经过 node，后台进程里也能跑）：
+    Codex 桌面端自己维护、自动升级的那份；ChatGPT 桌面版自带的；nvm 装的。"""
+    out = [os.path.expanduser("~/.codex/packages/app-server-daemon/current/bin/codex"),
+           "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"]
+    out += sorted(glob.glob(os.path.expanduser(
         "~/.nvm/versions/node/*/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-*/vendor/*/bin/codex")))
-    return hits[-1] if hits else None
+    return [p for p in out if os.access(p, os.X_OK)]
+
+
+def find_codex():
+    """用版本最新的那个（#499）：新模型只有新版本能用，旧版本选上会报不支持；模型清单 ~/.codex/models_cache.json
+    是几份 codex 共用的，谁最近跑过就是谁拉的，列表里有的新模型旧版本未必认。"""
+    now = time.time()
+    if now - _FOUND[0] < 60:
+        return _FOUND[1]
+    found = _candidates()
+    best = max(found, key=lambda p: _version(p) or (0,), default=None) if found else None
+    _FOUND[:] = [now, best]
+    return best
 
 
 def _toml(path):

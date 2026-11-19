@@ -808,12 +808,6 @@ class Platform:
         role = role.partition("：")[2].strip() if role.startswith("角色说明") else role
         return {"name": " ".join(name.split()).strip("「」\"'“”")[:20], "role": role[:2000]}
 
-    async def draft_node(self, cid):
-        """按对话内容起草节点（#501）。"""
-        if not self.chats().get(cid):
-            raise Problem("找不到这个对话。")
-        return await nodes_mod.draft(self.channel.logs.read(cid))
-
     async def start_run(self, node_id, text, runners, account=None, rid=None):
         """同题对比（#501）：同一段任务交给几个 Agent（或底座 + 模型），各开一个独立对话同时开始。
         rid：往已有的对比里再加。"""
@@ -3283,8 +3277,7 @@ def _handler(pf):
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/draft": lambda: pf.run(pf.draft_agent(b("chat")), timeout=120),
-                "/api/node/draft": lambda: pf.run(pf.draft_node(b("chat")), timeout=150),     # 节点、同题对比（#501）
-                "/api/node/save": lambda: pf.call(nodes_mod.save, b("id"), b("fields") or {}, acct, b("from_chat")),
+                "/api/node/save": lambda: pf.call(nodes_mod.save, b("id"), b("fields") or {}, acct, None, b("runner")),   # 节点、同题对比（#501）
                 "/api/node/delete": lambda: pf.call(nodes_mod.delete, b("id"), acct),
                 "/api/node/start": lambda: pf.run(pf.start_run(b("node"), b("text"), b("runners"), acct, b("run"))),
                 "/api/node/run/delete": lambda: pf.call(nodes_mod.delete_run, b("id"), acct),

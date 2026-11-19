@@ -1,7 +1,8 @@
 """节点和同题对比（#501）：~/.ccim/nodes.json。
 
-节点 = 一件事的固定做法：名字、要给它什么（输入）、怎么做（含聊出来的注意事项）、交付什么。
-在对话里聊清楚后「存为节点」（按对话内容起草，用户改过再存），下次填这次的输入就能再跑。
+节点 = 一件事的固定做法：名字、要给它什么（输入）、怎么做（含聊出来的注意事项）、交付什么，和由谁来做（runner）。
+在对话里聊清楚后「存为节点」：由这个对话的 Agent 自己用 save_node 工具写（它有完整的上下文），
+节点就记下它（Agent 的对话记 Agent，临时对话记当时的底座和模型），运行时默认交给它。
 对比（run）= 同一段任务交给几个 Agent（或底座 + 模型），各开一个独立对话同时开始，互不影响；
 记下这几个对话，对比页并排看。不用节点也能对比（直接写任务）。
 以后节点串成流程、上画布，都在这上面加。
@@ -65,7 +66,17 @@ def get(nid, account=None):
     return dict(n, id=nid)
 
 
-def save(nid, fields, account=None, from_chat=None):
+def clean_runner(r):
+    """{"agent": 编号} 或 {"temp": {"base", "model", "effort"}}；不认识的当 Claude Code 默认设置。"""
+    r = r if isinstance(r, dict) else {}
+    if isinstance(r.get("agent"), str) and r["agent"]:
+        return {"agent": r["agent"]}
+    t = r.get("temp") if isinstance(r.get("temp"), dict) else {}
+    return {"temp": {"base": t.get("base") if t.get("base") in registry.BASES else "claude",
+                     "model": str(t.get("model") or "")[:80] or None, "effort": str(t.get("effort") or "")[:20] or None}}
+
+
+def save(nid, fields, account=None, from_chat=None, runner=None):
     d = _read()
     clean = {k: str(fields.get(k) or "").strip()[:LIMITS[k]] for k in FIELDS}
     if not clean["name"]:
@@ -84,6 +95,8 @@ def save(nid, fields, account=None, from_chat=None):
         if from_chat:
             n["from_chat"] = from_chat
     n.update(clean, updated=registry.now())
+    if runner is not None or not n.get("runner"):
+        n["runner"] = clean_runner(runner)
     _write(d)
     return dict(n, id=nid)
 
@@ -155,71 +168,3 @@ def add_chat(rid, chat, account=None):
         raise Problem("找不到这次对比。")
     r["chats"].append(chat)
     _write(d)
-
-
-DRAFT_PROMPT = """下面是用户和 AI 助手的一段对话。用户想把对话里聊清楚的这件事的做法固定成一个「节点」：以后换个输入，交给任意一个 AI 助手照着做，不用再从头聊。
-
-请从对话里提炼出：
-1. 名字：这件事叫什么，不超过 16 个字。
-2. 要给它什么：每次运行时用户要提供的输入，一两句话。
-3. 怎么做：具体步骤和要求。对话里用户纠正过的、指出的问题、定下来的规矩，都要写进去，写成正面的要求（比如「不要把早已存在的产品分级当成新变化」）。不要写这次对话里的具体内容（比如这次是哪个产品），要写成换个输入也能用的做法。
-4. 交付什么：最后交出来的东西是什么样的，格式和要包含的部分。
-
-对话：
-{talk}
-
-按这个格式输出，不要别的内容：
-【名字】……
-【要给它什么】……
-【怎么做】
-……
-【交付什么】
-……"""
-
-_KEYS = {"名字": "name", "要给它什么": "input", "怎么做": "steps", "交付什么": "output"}
-
-
-def parse_draft(text):
-    out, key, buf = {}, None, []
-
-    def flush():
-        if key:
-            out[key] = "\n".join(buf).strip()
-    for line in (text or "").splitlines():
-        s = line.strip()
-        hit = next((k for k in _KEYS if s.startswith(f"【{k}】")), None)
-        if hit:
-            flush()
-            key, buf = _KEYS[hit], [s[len(hit) + 2:].strip()]
-        elif key:
-            buf.append(line.rstrip())
-    flush()
-    if out.get("name"):
-        out["name"] = " ".join(out["name"].split()).strip("「」\"'“”")[:20]
-    return {k: out.get(k, "") for k in FIELDS}
-
-
-def talk_of(rows):
-    lines = [("用户：" if r["type"] == "user" else "助手：") + r["text"].strip()[:3000]
-             for r in rows if r.get("type") in ("user", "answer") and r.get("text")]
-    talk = "\n\n".join(lines)
-    if len(talk) > 30000:
-        talk = talk[:8000] + "\n\n……\n\n" + talk[-22000:]
-    return talk
-
-
-async def draft(rows):
-    """按对话起草节点。"""
-    from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
-    from .session import CLI
-    talk = talk_of(rows)
-    if not talk:
-        return {k: "" for k in FIELDS}
-    opts = ClaudeAgentOptions(model="sonnet", max_turns=1, allowed_tools=[], setting_sources=[],
-                              cwd=os.path.expanduser("~"), cli_path=CLI, permission_mode="default",
-                              extra_args={"no-session-persistence": None})   # 不留对话记录
-    text = ""
-    async for msg in query(prompt=DRAFT_PROMPT.format(talk=talk), options=opts):
-        if isinstance(msg, AssistantMessage):
-            text += "".join(b.text for b in msg.content if isinstance(b, TextBlock))
-    return parse_draft(text)

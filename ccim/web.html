@@ -4870,7 +4870,7 @@ function renderChatEmptyOr(){ renderChatEmpty(); }
 // 节点：在对话里聊清楚的一件事的做法存下来，换个输入再跑。对比：同一段任务交给几个 Agent 或模型，
 // 各开一个独立对话（上下文互不影响），这里并排看；对话本身照常在列表里，点「打开」接着聊。节点和对比记在本机（S.me）
 let NODES = null;        // {nodes, runs}
-let NF = null;           // 正在编辑的节点：{id?, name, input, steps, output, from_chat?, drafting?}
+let NF = null;           // 正在编辑的节点：{id?, name, input, steps, output, runner, row（表单里选的由谁来做）}
 let RS = null;           // 开始对比的弹框：{node, run?, rows: [{who, model}]}；who 是 "claude" / "codex" / "a:<Agent>"
 let RUNV = null;         // 打开的对比：{id, run, cols: [{id, d, err}], tab}
 const NODE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/></svg>`;
@@ -4897,7 +4897,7 @@ function nodeCardsHtml(){
   const cards = ns.length ? `<div class="cgrid">${ns.map(n => `<a class="ccard" href="#/nodes/${encodeURIComponent(n.id)}">
       <div class="top"><span class="nd-mark">${NODE_ICON}</span><div class="t"><div class="nm">${esc(n.name)}</div></div></div>
       <div class="role">${esc(n.input ? "输入：" + n.input : n.steps)}</div>
-      <div class="foot"><span class="grow">${n.runs ? `运行过 ${n.runs} 次` : "还没运行过"}</span><button class="btn sm" onclick="event.preventDefault();startRun(${q(n.id)})">运行</button></div></a>`).join("")}</div>`
+      <div class="foot"><span class="grow">${esc(runnerName(n.runner))}${n.runs ? ` · 运行过 ${n.runs} 次` : ""}</span><button class="btn sm" onclick="event.preventDefault();startRun(${q(n.id)})">运行</button></div></a>`).join("")}</div>`
     : `<div class="empty nd-empty"><h2>还没有节点</h2><p>在对话里把一件事的做法聊清楚后，点右上角「⋯」里的「存为节点」，下次换个输入就能直接再跑。</p></div>`;
   const runs = rs.length ? `<h3 class="nd-h">最近的对比</h3><div class="nd-runs">${rs.map(r => `<a class="nd-run" href="#/nodes/run/${encodeURIComponent(r.id)}">
       <span class="title">${esc(r.title || "对比")}</span><span class="sub">${r.chats.length} 个 · ${when(r.created)}</span></a>`).join("")}</div>` : "";
@@ -4911,39 +4911,46 @@ async function renderNodeForm(id){
     if (current.view !== "nodes" || current.id !== id) return;
   }
   if (!id && (!NF || NF.id)) NF = {name: "", input: "", steps: "", output: ""};
-  const f = NF, ph = t => f.drafting ? "正在按对话起草…" : t;
+  const f = NF, ph = t => t;
+  f.row = f.row || runnerRow(f.runner);
   $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow">
       <a class="nd-back" href="#/nodes">${ICON.left}节点</a>
-      <h2>${id ? esc(f.name || "节点") : f.from_chat ? "存为节点" : "新建节点"}</h2></div>
+      <h2>${id ? esc(f.name || "节点") : "新建节点"}</h2></div>
       ${id ? `<button class="btn primary" onclick="startRun(${q(id)})">运行</button>` : ""}</div>
     <div class="pane"><div class="form">
       <label for="nf-name">名字</label><input id="nf-name" class="input" value="${esc(f.name)}" placeholder="${ph("比如：新模型发布信息报告")}" oninput="NF.name=this.value">
       <label for="nf-input">要给它什么</label><textarea id="nf-input" class="textarea nf-s" placeholder="${ph("每次运行时填的内容，比如：模型名称")}" oninput="NF.input=this.value">${esc(f.input)}</textarea>
       <label for="nf-steps">怎么做</label><textarea id="nf-steps" class="textarea nf-l" placeholder="${ph("步骤和要求，包括要避开的坑")}" oninput="NF.steps=this.value">${esc(f.steps)}</textarea>
       <label for="nf-output">交付什么</label><textarea id="nf-output" class="textarea nf-m" placeholder="${ph("最后交出来的东西长什么样")}" oninput="NF.output=this.value">${esc(f.output)}</textarea>
+      <label>由谁来做</label><div class="rs-row nf-who" id="nf-who"></div>
       <span></span><div class="nf-acts"><button class="btn primary" onclick="saveNode()">保存</button>
         ${id ? `<button class="btn danger" onclick="deleteNode(${q(id)})">删除</button>` : `<a class="btn" href="#/nodes">取消</a>`}</div>
     </div></div></div>`;
-  if (!id && !f.drafting) $("#nf-name").focus();
+  drawNfWho();
+  if (!id) $("#nf-name").focus();
 }
-function saveAsNode(){   // 对话右上角「⋯」：按对话内容起草，用户改过再存
+// 节点由谁来做 ↔ 弹框里的一行 {who, model}
+function runnerRow(r){
+  r = r || {};
+  if (r.agent && runWho().some(o => o[0] === "a:" + r.agent)) return {who: "a:" + r.agent, model: ""};
+  const t = r.temp || {};
+  return {who: runWho().some(o => o[0] === t.base) ? t.base : "claude", model: t.model || ""};
+}
+const rowRunner = r => r.who.startsWith("a:") ? {agent: r.who.slice(2)} : {temp: {base: r.who, model: r.model || null}};
+function drawNfWho(){
+  const el = $("#nf-who"), r = NF && NF.row; if (!el || !r) return;
+  el.innerHTML = dd("nf-w", runWho(), r.who, v => { NF.row = {who: v, model: ""}; drawNfWho(); })
+    + (r.who.startsWith("a:") ? "" : dd("nf-m", modelOpts(r.who, "默认模型", r.model, S.me), r.model, v => { NF.row.model = v; }));
+}
+async function saveAsNode(){   // 对话右上角「⋯」：交给这个对话的 Agent 自己写（它有完整的上下文），节点记下由它来做
   if (!detail) return;
   if (detail.busy) { toast("它还在干活，等这一轮做完再存"); return; }
-  const from = detail.id;
-  NF = {name: "", input: "", steps: "", output: "", from_chat: from, drafting: true};
-  location.hash = "#/nodes/new";
-  api("/api/node/draft", {chat: from}, ctxMachine).then(r => applyNodeDraft(from, r)).catch(e => { applyNodeDraft(from, {}); toast("没起草出来，自己写一下：" + e.message); });
-}
-function applyNodeDraft(from, r){
-  if (!NF || NF.from_chat !== from || NF.id) return;   // 已经离开这个表单
-  NF.drafting = false;
-  for (const k of ["name", "input", "steps", "output"]) if (!(NF[k] || "").trim() && r[k]) NF[k] = r[k];
-  if (current.view === "nodes" && current.id === "new") renderNodeForm(null);
+  await act(() => api("/api/chat/send", {id: detail.id, text: "把这件事的做法存成节点，下次换个输入就能直接再跑。", files: []}, ctxMachine));
 }
 async function saveNode(){
   const f = NF; if (!f) return;
   const fields = {name: f.name, input: f.input, steps: f.steps, output: f.output};
-  const r = await act(() => nodesApi("/api/node/save", {id: f.id || null, fields, from_chat: f.from_chat || null}), "已保存");
+  const r = await act(() => nodesApi("/api/node/save", {id: f.id || null, fields, runner: rowRunner(f.row || runnerRow(f.runner))}), "已保存");
   NF = r; NODES = null;
   if (!f.id) location.hash = `#/nodes/${encodeURIComponent(r.id)}`; else renderNodeForm(r.id);
 }
@@ -4951,6 +4958,12 @@ async function deleteNode(id){
   if (!await confirmBox(`删除节点「${NF ? NF.name : ""}」？`, "用它跑过的对比和对话都还在。", "删除")) return;
   await act(() => nodesApi("/api/node/delete", {id}), "已删除");
   NF = null; NODES = null; location.hash = "#/nodes";
+}
+function runnerName(r){
+  r = r || {};
+  if (r.agent) { const a = agentOf(r.agent); return a ? a.name : "Agent 已删除"; }
+  const t = r.temp || {};
+  return BASE[t.base || "claude"] + (t.model ? " · " + modelName(t.model) : "");
 }
 // ---- 开始对比：填任务，选交给谁 ----
 function runWho(){
@@ -4962,7 +4975,7 @@ async function startRun(node, run){
   let n = null;
   if (node) { try { n = await nodesApi(`/api/node?id=${encodeURIComponent(node)}`); } catch (e) { toast(e.message); return; } }
   const codex = runWho().some(o => o[0] === "codex");
-  RS = {node, run: run || null, rows: run ? [{who: "claude", model: ""}]
+  RS = {node, run: run || null, rows: run ? [{who: "claude", model: ""}] : n ? [runnerRow(n.runner)]   // 运行节点：默认交给它记下的那个，要对比再加
     : codex ? [{who: "claude", model: ""}, {who: "codex", model: ""}] : [{who: "claude", model: "opus"}, {who: "claude", model: "sonnet"}]};
   const ask = run ? "" : `<label class="nd-lab" for="rs-text">${n ? "这次的输入" : "要做的事"}</label>
       <textarea id="rs-text" class="textarea rs-text" placeholder="${esc(n ? n.input || "这次要处理的内容" : "交给它们的任务，几个会各自独立去做")}"></textarea>`;
@@ -4982,7 +4995,7 @@ function drawRunRows(){
 async function goRun(){
   const t = $("#rs-text"), text = t ? t.value.trim() : "";
   if (!RS.node && !RS.run && !text) { toast("写一下要做的事"); t && t.focus(); return; }
-  const runners = RS.rows.map(r => r.who.startsWith("a:") ? {agent: r.who.slice(2)} : {temp: {base: r.who, model: r.model || null}});
+  const runners = RS.rows.map(rowRunner);
   const r = await act(() => nodesApi("/api/node/start", {node: RS.node, text, runners, run: RS.run}));
   closeDialog(); NODES = null; refreshSoon();
   if (RS.run) openRun(RS.run); else location.hash = `#/nodes/run/${encodeURIComponent(r.id)}`;

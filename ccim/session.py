@@ -1276,6 +1276,8 @@ class Chat:
         side = chat.b.entry.get("side")      # 侧边对话（#196）：@ 人走输入框，不给 ask_agent、不转交
         fenced = chat.fenced()               # 被拉进群的访客叫的这一轮（#419）：只留发文件，别的都是主人的
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not fenced:
+            if not side and not chat.b.entry.get("lent") and not guest_of(chat.b):
+                tools.append(_save_node(chat, pf))   # 把聊清楚的做法存成节点，节点记下由它来做（#501）
             if not side:
                 tools += _ask_agent(chat, pf)   # 平台上的对话：找别的 Agent 问话派活、给自己开新对话（#179）
             if _searchable(chat):
@@ -1305,7 +1307,7 @@ class Chat:
 
 
 DIARY_TOOLS = ["mcp__ccim__diary_read", "mcp__ccim__diary_search"]   # 只读
-APP_TOOLS = [f"mcp__ccim__app_{n}" for n in ("list", "query", "save", "delete", "open")]   # 应用的数据有 git 记录，能退回
+APP_TOOLS = [f"mcp__ccim__app_{n}" for n in ("list", "query", "save", "delete", "open")] + ["mcp__ccim__save_node"]   # 应用的数据有 git 记录，能退回
 SKILL_TOOLS = [f"mcp__ccim__skill_{n}" for n in ("list", "files", "read", "write", "install", "enable")] + ["mcp__ccim__share_skill_to_platform"]
 
 
@@ -1731,6 +1733,36 @@ def _overview_tool(chat, pf):
         return {"content": [{"type": "text", "text": text}]}
 
     return overview
+
+
+def _save_node(chat, pf):
+    """节点（#501）：对话里聊清楚的一件事的做法，由这个对话的 Agent 自己写成节点（它有完整的上下文）。
+    节点记下由谁来做：Agent 的对话记 Agent，临时对话记当时的底座、模型、思考深度。"""
+    from . import nodes
+    s = {"type": "string"}
+
+    @tool("save_node", "把这个对话里和用户聊清楚的一件事的做法存成「节点」：以后用户换个输入就能让你照着再做一遍，不用从头聊，"
+          "也能同时交给几个 Agent、模型对比。用户说「存为节点」「把这个做法存下来」时用。"
+          "name：这件事叫什么，不超过 16 个字。input：每次运行时用户要提供什么，一两句话。"
+          "steps：具体怎么做；对话里用户纠正过的、指出的问题、定下来的规矩都写进去，写成正面的要求；"
+          "写成换个输入也能用的做法，不写这次的具体内容；用到的工具、资料来源、Skill 要写明。"
+          "output：交付物的格式和要包含的部分。要改已经存过的节点就带上它的 id（只改给了的字段）。",
+          {"type": "object", "properties": {"name": s, "input": s, "steps": s, "output": s, "id": s}, "required": ["name", "steps"]})
+    async def save_node(args):
+        m = pf.chats().get(chat.chat_id) or {}
+        runner = {"agent": m["agent"]} if m.get("agent") else \
+            {"temp": {"base": chat.agent, "model": chat.model, "effort": chat.effort}}
+        nid = (args.get("id") or "").strip() or None
+        try:
+            old = nodes.get(nid, m.get("account")) if nid else {}
+            fields = {k: args.get(k) if args.get(k) is not None else old.get(k, "") for k in nodes.FIELDS}
+            n = nodes.save(nid, fields, m.get("account"), from_chat=chat.chat_id, runner=None if nid else runner)
+        except nodes.Problem as e:
+            return _err(str(e))
+        link = f"#/nodes/{n['id']}"
+        return {"content": [{"type": "text", "text": f"{'改好了' if nid else '存好了'}：节点「{n['name']}」（id {n['id']}）。"
+                             f"回复里给用户这个链接，点开能看、改、运行：[{n['name']}]({link})"}]}
+    return save_node
 
 
 def _app_tools(chat, pf):

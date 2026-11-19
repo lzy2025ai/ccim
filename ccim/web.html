@@ -2910,7 +2910,10 @@ function route(){
   else if (current.view === "skills") renderSkills();
   else if (current.view === "settings") current.id === "dev" ? renderDev() : current.id === "chats" ? renderChatSettings() : current.id === "accounts" && isOwner() ? renderAccounts() : current.id === "machines" && current.sub ? renderDevice(current.sub, current.tab)
     : current.id === "models" ? renderSettings() : current.id === "machines" || S.hub ? renderMachines() : renderSettings();
-  else { current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty(); }
+  else {
+    if (current.id === "new" && !(prev.view === "chats" && prev.id === "new")) chatRcpt = [];   // 对话里一直带着的 @（#327）只管那个对话，进新对话页不带过来（#497）
+    current.id === "new" ? renderNewChat() : current.id ? openChat(current.id) : renderChatEmpty();
+  }
   drawPocket();
 }
 // 回答里的站内链接（#284）：点过去的对话顶上有返回，回到点链接的地方（手机左上角的返回也一样），连着点几层就一层层回去；回去时滚动位置还原

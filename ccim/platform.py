@@ -114,6 +114,10 @@ SIDE_ROLE = ("\n\n## 侧边对话\n"
              "- 你改了哪些文件、跑了哪些命令，平台会在主对话下一轮开头告诉它。\n"
              "- 想请别的 Agent 来看看或帮忙，用户在这里的输入框打 @ 选它就行。\n"
              "- 回答简短。")
+FORK_COPY = ("user", "answer", "file", "chatlog", "note", "mention")   # 分叉时复制到新对话的记录
+# 分叉出来的对话（#507）：第一次发消息时带一次，免得把原对话没做完的事当成自己的、动了整个目录打断那边
+FORK_NOTE = ("（平台自动附上的：你是从「{title}」分出来的对话。分叉之前的内容是那边的历史，里面没做完的事归那边，"
+             "除非用户在这里让你接着做。那边可能还在同一个目录里干活：提交、推送、切分支、stash、重启服务前先问用户。）\n\n")
 # 侧边对话里被 @ 的 Agent（#290）：和侧边对话一样能动手；大一点的活可以新开自己的对话去做
 SIDE_AT_ROLE = ("\n\n## 在侧边对话里被 @\n"
                 "用户在某个对话旁边开了侧边对话，在侧边对话里 @ 了你。消息前面括号里是平台附上的主对话和侧边对话的内容，"
@@ -1273,8 +1277,10 @@ class Platform:
             text = f"[用户在你于{where}的子会话里直接跟你说的，群里其他人看不到这段]\n{text}"
         if m.get("side_of") and text:          # 侧边对话：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
-        elif text and not m.get("side_at"):   # 主对话（含群成员的子对话，#503）：带上侧边对话动过的文件、跑过的命令（#476）
+        elif text and not m.get("side_at"):   # 主对话（含群成员的子对话，#503）：带上侧边对话、分叉动过的文件、跑过的命令（#476、#507）
             text = self._side_news(cid) + text
+        if m.get("fork_note") and text and not m.get("side_of"):   # 分叉出来的第一轮（#507）：只带这一次
+            text = self._fork_note(cid, m) + text
         if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
             from .search import short
             text = "（用户指了你以前的这些对话，和这次说的有关，用 open_chat 读，不用再搜：" + \
@@ -1648,20 +1654,36 @@ class Platform:
         rp = os.path.realpath(path)
         return os.path.relpath(rp, root) if rp.startswith(root + os.sep) else path
 
+    def _fork_note(self, cid, m):
+        """分叉出来的对话第一次发消息时的说明（#507），带过就清掉标记。"""
+        p = m.get("parent") or ""
+        title = (self.chats().get(p) or {}).get("title") or m.get("fork_title") or "原对话"
+        chats = self.chats()
+        if cid in chats:
+            chats[cid].pop("fork_note", None)
+            self.store.write(chats)
+        return FORK_NOTE.format(title=title)
+
     def _side_news(self, cid):
         """主对话发消息时带上的（#476）：它的侧边对话（和在里面被 @ 的）上次之后改了哪些文件、跑了哪些命令，正在做的也带上。
-        各侧边对话看到哪，记在主对话 meta 的 side_seen（侧边对话 → 记录条数）。"""
+        从它分出去的对话（#507）也一样，只算分叉之后的，不带结论。
+        各对话看到哪，记在主对话 meta 的 side_seen（对话 → 记录条数）；分叉第一次算从 fork_upto（复制过去的条数）开始。"""
         chats = self.chats()
         sides = [c for c, x in chats.items() if x.get("side_of") == cid]
         sides += [c for c, x in chats.items() if x.get("side_at") and x.get("mention_of") in sides]
-        if not sides:
+        forks = [c for c, x in chats.items() if x.get("parent") == cid and not x.get("dispatched_from")
+                 and not x.get("side_of") and not x.get("mention_of")]
+        if not sides and not forks:
             return ""
         seen = dict((chats.get(cid) or {}).get("side_seen") or {})
-        parts = []
-        for c in sides:
+        parts, kinds = [], set()
+        for c in sides + forks:
             rows = self.channel.logs.read(c)
             files, runs = [], []
-            for r in rows[seen.get(c, 0):]:
+            start = seen.get(c)
+            if start is None:                 # 分叉：复制过去的是原对话自己的；以前分的没记条数，从现在算起
+                start = (chats[c].get("fork_upto", len(rows)) if c in forks else 0)
+            for r in rows[start:]:
                 if r.get("type") != "answer":
                     continue
                 for f in r.get("changed") or []:
@@ -1681,7 +1703,9 @@ class Platform:
             if not files and not runs:
                 continue
             x = chats.get(c) or {}
-            who = (f"侧边对话里被 @ 的 {(agents.get(x.get('agent')) or {}).get('name') or 'Agent'}" if x.get("side_at")
+            kinds.add("分叉出去的对话" if c in forks else "侧边对话")
+            who = (f"分叉「{x.get('title') or '分叉'}」" if c in forks
+                   else f"侧边对话里被 @ 的 {(agents.get(x.get('agent')) or {}).get('name') or 'Agent'}" if x.get("side_at")
                    else f"侧边对话「{x.get('title') or '侧边对话'}」")
             line = who + ("（正在做）" if p else "") + "："
             if files:
@@ -1694,7 +1718,8 @@ class Platform:
             self.store.write(chats)
         if not parts:
             return ""
-        return "（平台自动附上的：用户在侧边对话里让别的会话动过这些，改之前先看一眼最新内容）\n" + "\n".join(parts) + "\n\n——\n\n"
+        where = "、".join(k for k in ("侧边对话", "分叉出去的对话") if k in kinds)
+        return f"（平台自动附上的：用户在{where}里让别的会话动过这些，改之前先看一眼最新内容）\n" + "\n".join(parts) + "\n\n——\n\n"
 
     def work(self, src, text, title=None):
         """被 @ 的 Agent 要动手：新开一个它自己的对话去做。侧边对话里被 @ 的（#290）、群聊里被 @ 的成员（#359）都走这里。
@@ -2686,12 +2711,13 @@ class Platform:
         new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, fork_from=sid, fork_at=at, parent=cid)
         chats = self.chats()
         if new in chats:
+            chats[new].update(fork_note=True, fork_upto=sum(1 for r in rows[:index + 1] if r.get("type") in FORK_COPY))
             chats[new]["fork_row"] = rows[index].get("at")   # 原对话里从哪条回答分的：Codex 没有 fork_at，靠它在原回答下标出来
             if t and not t.get("dir"):        # 没选目录的临时对话：接着用原来那个临时目录（会话记录按目录存）
                 chats[new]["temp"]["scratch"] = t.get("scratch") or cid
             self.store.write(chats)
         for r in rows[:index + 1]:
-            if r.get("type") in ("user", "answer", "file", "chatlog", "note", "mention"):
+            if r.get("type") in FORK_COPY:
                 self.channel.logs.append(new, r)      # 带着 fork：在新对话里也能从之前的回答再分
         return {"id": new}
 
@@ -2755,6 +2781,7 @@ class Platform:
         new = self.new_chat(agent=d.get("agent"), fork_from=sid, fork_at=rows[index]["uuid"], parent=cid)
         chats = self.chats()
         if new in chats:
+            chats[new].update(fork_note=True, fork_upto=index + 1, fork_title=d.get("title"))
             chats[new]["fork_row"] = rows[index].get("at")
             self.store.write(chats)
         for r in rows[:index + 1]:

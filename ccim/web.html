@@ -676,6 +676,62 @@ a.org-n:hover{border-color:var(--qing);box-shadow:0 0 0 3px color-mix(in srgb,va
 .ccard .more svg{width:16px;height:16px}
 .ccard:hover .more{opacity:1}
 .ccard .more:hover{background:var(--sunk);color:var(--ink)}
+/* 节点、同题对比（#501） */
+.btn.sm{padding:3px 10px;font-size:12.5px}
+.nd-mark{width:34px;height:34px;border-radius:9px;background:var(--sunk);color:var(--qing);display:flex;align-items:center;justify-content:center;flex:none}
+.nd-mark svg{width:19px;height:19px}
+.nd-empty{margin:40px auto 10px}
+.nd-h{font:600 15px/1.3 var(--song);margin:30px 0 10px}
+.nd-runs{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden;max-width:760px}
+.nd-run{display:flex;align-items:baseline;gap:12px;padding:10px 14px;text-decoration:none;color:inherit;border-top:1px solid var(--line)}
+.nd-run:first-child{border-top:0}
+.nd-run:hover{background:var(--sunk)}
+.nd-run .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nd-run .sub{font-size:12px;color:var(--muted);flex:none}
+.nd-back{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);text-decoration:none;margin-bottom:4px}
+.nd-back svg{width:14px;height:14px}
+.nd-back:hover{color:var(--ink)}
+.textarea.nf-s{min-height:64px}
+.textarea.nf-m{min-height:110px}
+.textarea.nf-l{min-height:280px}
+.nf-acts{display:flex;gap:10px}
+.nd-lab{display:block;font-size:12.5px;color:var(--muted);margin:2px 0 6px}
+.rs-text{min-height:120px;margin-bottom:14px}
+.rs-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.rs-row .select{flex:1;min-width:0}
+.rs-add{margin-top:2px}
+.cmp-page{display:flex;flex-direction:column;flex:1;min-height:0;height:100%}
+.cmp-head{padding:18px 24px 10px;border-bottom:1px solid var(--line)}
+.cmp-t{display:flex;align-items:center;gap:10px}
+.cmp-t h2{font:600 20px/1.3 var(--song);margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-t .grow{flex:1}
+.cmp-input{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.cmp-input summary{cursor:pointer}
+.cmp-input .answer{margin-top:8px;max-height:220px;overflow:auto;padding:10px 12px;background:var(--sunk);border-radius:8px;color:var(--ink);font-size:13px}
+.cmp-tabs{margin:10px 14px 0;align-self:flex-start;max-width:calc(100% - 28px);overflow-x:auto}
+.cmp-tabs button{white-space:nowrap}
+.cmp-cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:12px;padding:12px 16px}
+.cmp-col{display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.rc-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.rc-head b{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-head .grow{flex:1}
+.rc-body{flex:1;overflow:auto;padding:12px 14px 18px;display:flex;flex-direction:column;gap:12px}
+.rc-body .loading{margin:30px auto}
+.rc-user{align-self:flex-end;max-width:85%;background:var(--sunk);border-radius:10px;padding:7px 11px;white-space:pre-wrap;font-size:13.5px}
+.rc-note{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.rc-note svg{width:14px;height:14px}
+a.rc-note.warn{color:var(--huang);text-decoration:none;font-weight:500}
+.cmp-foot{display:flex;gap:10px;align-items:flex-end;padding:0 16px 16px}
+body:has(#pocket-fab) .cmp-foot{padding-right:84px}
+.cmp-page a.btn,.ccard a.btn,.nf-acts a.btn{color:inherit;text-decoration:none}
+.cmp-foot .textarea{min-height:42px;max-height:160px;resize:none}
+@media (max-width:760px){
+  .cmp-head{padding:14px 14px 8px}
+  .cmp-cols{padding:10px 12px}
+  .cmp-foot{padding:0 12px 10px}
+  .form .nf-acts{grid-column:1 / -1}
+  .app.phone-main .agent-top:has(.nd-back){padding-left:16px}
+}
 .ccard .pin.on{color:var(--warn)}
 .ccard .pin svg{width:15px;height:15px}
 .ccard.add{border-style:dashed;align-items:center;justify-content:center;color:var(--muted);min-height:170px;gap:6px;background:transparent}
@@ -2001,6 +2057,7 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <!-- 应用入口先关掉（#482），应用在对话右侧照常打开；重新开启时去掉这层注释 -->
     <!--<a href="#/apps" data-nav="apps" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>-->
     <a href="#/skills" data-nav="skills" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>共享 Skill</a>
+    <a href="#/nodes" data-nav="nodes" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/></svg>节点</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
     <div class="spacer"></div>
     <a href="#/opc" data-nav="opc" class="mi" id="nav-opc"><span class="rail-me" aria-hidden="true">我</span><span class="rail-nm">我</span></a>
@@ -2686,6 +2743,7 @@ function connectEvents(again){
 function onEvent(ev){
     if (!EMBED) { pocketForward(ev); sideForward(ev); if (ev.chat) delete SIDE_DET[ev.chat]; }
     towerEvent(ev);
+    runEvent(ev);
     if (ev.type === "idle") { refreshSoon(); return; }
     if (ev.type === "pairing") { pairEvent(ev); return; }   // 添加电脑：那台电脑走到哪一步了（#175）   // 一轮结束的状态记下了（#98）
     if (ev.type === "group") {            // 群成员、群聊说明改了（#15）
@@ -2873,7 +2931,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower");
+    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower" || current.view === "nodes");
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -2887,6 +2945,7 @@ function route(){
   renderList();
   if (current.view !== "projects") proj = null;
   if (current.view !== "schedules") sched = null;
+  if (current.view !== "nodes") RUNV = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
   else if (current.view === "opc") openOpc();
   else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
@@ -2905,6 +2964,7 @@ function route(){
   }
   else if (current.view === "kb") { if (!current.id) renderKbCards(); else openKb(current.id, current.sub); }
   else if (current.view === "apps") current.id ? openApp(current.id, current.sub) : renderApps();
+  else if (current.view === "nodes") renderNodes();
   else if (current.view === "board") renderBoard();
   else if (current.view === "tower") renderTower();
   else if (current.view === "skills") renderSkills();
@@ -2947,7 +3007,7 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board" || current.view === "skills" || current.view === "apps" || current.view === "tower") return;
+  if (current.view === "board" || current.view === "skills" || current.view === "apps" || current.view === "tower" || current.view === "nodes") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
@@ -4805,6 +4865,220 @@ async function startAgent(aid){
   location.hash = `#/agents/${encodeURIComponent(aid)}/${encodeURIComponent(id)}`;
 }
 function renderChatEmptyOr(){ renderChatEmpty(); }
+
+// ================= 节点、同题对比（#501） =================
+// 节点：在对话里聊清楚的一件事的做法存下来，换个输入再跑。对比：同一段任务交给几个 Agent 或模型，
+// 各开一个独立对话（上下文互不影响），这里并排看；对话本身照常在列表里，点「打开」接着聊。节点和对比记在本机（S.me）
+let NODES = null;        // {nodes, runs}
+let NF = null;           // 正在编辑的节点：{id?, name, input, steps, output, from_chat?, drafting?}
+let RS = null;           // 开始对比的弹框：{node, run?, rows: [{who, model}]}；who 是 "claude" / "codex" / "a:<Agent>"
+let RUNV = null;         // 打开的对比：{id, run, cols: [{id, d, err}], tab}
+const NODE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/></svg>`;
+const RUN_MAX = 4;       // 一次对比最多几个（开始时最多选 3 个，之后还能再加一个）
+const nodesApi = (path, body) => api(path, body, S.me);
+function renderNodes(){
+  if (current.id !== "run") RUNV = null;
+  if (current.id === "new") return renderNodeForm(null);
+  if (current.id === "run") return openRun(current.sub);
+  if (current.id) return renderNodeForm(current.id);
+  renderNodeCards();
+}
+async function renderNodeCards(){
+  $("#main").innerHTML = `<div class="overview"><div class="ov-head"><h1>节点</h1><span class="grow"></span>
+      <button class="btn" onclick="startRun(null)">同题对比</button>
+      <button class="btn primary" onclick="NF=null;location.hash='#/nodes/new'">${ICON.plus}新建节点</button></div>
+    <div class="ov-body" id="nd-body">${NODES ? nodeCardsHtml() : `<div class="loading">…</div>`}</div></div>`;
+  try { NODES = await nodesApi("/api/nodes"); }
+  catch (e) { if ($("#nd-body")) $("#nd-body").innerHTML = `<div class="empty"><h2>打不开节点</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (current.view === "nodes" && !current.id && $("#nd-body")) $("#nd-body").innerHTML = nodeCardsHtml();
+}
+function nodeCardsHtml(){
+  const ns = NODES.nodes, rs = NODES.runs;
+  const cards = ns.length ? `<div class="cgrid">${ns.map(n => `<a class="ccard" href="#/nodes/${encodeURIComponent(n.id)}">
+      <div class="top"><span class="nd-mark">${NODE_ICON}</span><div class="t"><div class="nm">${esc(n.name)}</div></div></div>
+      <div class="role">${esc(n.input ? "输入：" + n.input : n.steps)}</div>
+      <div class="foot"><span class="grow">${n.runs ? `运行过 ${n.runs} 次` : "还没运行过"}</span><button class="btn sm" onclick="event.preventDefault();startRun(${q(n.id)})">运行</button></div></a>`).join("")}</div>`
+    : `<div class="empty nd-empty"><h2>还没有节点</h2><p>在对话里把一件事的做法聊清楚后，点右上角「⋯」里的「存为节点」，下次换个输入就能直接再跑。</p></div>`;
+  const runs = rs.length ? `<h3 class="nd-h">最近的对比</h3><div class="nd-runs">${rs.map(r => `<a class="nd-run" href="#/nodes/run/${encodeURIComponent(r.id)}">
+      <span class="title">${esc(r.title || "对比")}</span><span class="sub">${r.chats.length} 个 · ${when(r.created)}</span></a>`).join("")}</div>` : "";
+  return cards + runs;
+}
+// ---- 节点：新建、存为节点、编辑 ----
+async function renderNodeForm(id){
+  if (id && (!NF || NF.id !== id)) {
+    try { NF = await nodesApi(`/api/node?id=${encodeURIComponent(id)}`); }
+    catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这个节点</h2><p>${esc(e.message)}</p><a class="btn" href="#/nodes">回到节点</a></div>`; return; }
+    if (current.view !== "nodes" || current.id !== id) return;
+  }
+  if (!id && (!NF || NF.id)) NF = {name: "", input: "", steps: "", output: ""};
+  const f = NF, ph = t => f.drafting ? "正在按对话起草…" : t;
+  $("#main").innerHTML = `<div class="agent-page"><div class="agent-top"><div class="grow">
+      <a class="nd-back" href="#/nodes">${ICON.left}节点</a>
+      <h2>${id ? esc(f.name || "节点") : f.from_chat ? "存为节点" : "新建节点"}</h2></div>
+      ${id ? `<button class="btn primary" onclick="startRun(${q(id)})">运行</button>` : ""}</div>
+    <div class="pane"><div class="form">
+      <label for="nf-name">名字</label><input id="nf-name" class="input" value="${esc(f.name)}" placeholder="${ph("比如：新模型发布信息报告")}" oninput="NF.name=this.value">
+      <label for="nf-input">要给它什么</label><textarea id="nf-input" class="textarea nf-s" placeholder="${ph("每次运行时填的内容，比如：模型名称")}" oninput="NF.input=this.value">${esc(f.input)}</textarea>
+      <label for="nf-steps">怎么做</label><textarea id="nf-steps" class="textarea nf-l" placeholder="${ph("步骤和要求，包括要避开的坑")}" oninput="NF.steps=this.value">${esc(f.steps)}</textarea>
+      <label for="nf-output">交付什么</label><textarea id="nf-output" class="textarea nf-m" placeholder="${ph("最后交出来的东西长什么样")}" oninput="NF.output=this.value">${esc(f.output)}</textarea>
+      <span></span><div class="nf-acts"><button class="btn primary" onclick="saveNode()">保存</button>
+        ${id ? `<button class="btn danger" onclick="deleteNode(${q(id)})">删除</button>` : `<a class="btn" href="#/nodes">取消</a>`}</div>
+    </div></div></div>`;
+  if (!id && !f.drafting) $("#nf-name").focus();
+}
+function saveAsNode(){   // 对话右上角「⋯」：按对话内容起草，用户改过再存
+  if (!detail) return;
+  if (detail.busy) { toast("它还在干活，等这一轮做完再存"); return; }
+  const from = detail.id;
+  NF = {name: "", input: "", steps: "", output: "", from_chat: from, drafting: true};
+  location.hash = "#/nodes/new";
+  api("/api/node/draft", {chat: from}, ctxMachine).then(r => applyNodeDraft(from, r)).catch(e => { applyNodeDraft(from, {}); toast("没起草出来，自己写一下：" + e.message); });
+}
+function applyNodeDraft(from, r){
+  if (!NF || NF.from_chat !== from || NF.id) return;   // 已经离开这个表单
+  NF.drafting = false;
+  for (const k of ["name", "input", "steps", "output"]) if (!(NF[k] || "").trim() && r[k]) NF[k] = r[k];
+  if (current.view === "nodes" && current.id === "new") renderNodeForm(null);
+}
+async function saveNode(){
+  const f = NF; if (!f) return;
+  const fields = {name: f.name, input: f.input, steps: f.steps, output: f.output};
+  const r = await act(() => nodesApi("/api/node/save", {id: f.id || null, fields, from_chat: f.from_chat || null}), "已保存");
+  NF = r; NODES = null;
+  if (!f.id) location.hash = `#/nodes/${encodeURIComponent(r.id)}`; else renderNodeForm(r.id);
+}
+async function deleteNode(id){
+  if (!await confirmBox(`删除节点「${NF ? NF.name : ""}」？`, "用它跑过的对比和对话都还在。", "删除")) return;
+  await act(() => nodesApi("/api/node/delete", {id}), "已删除");
+  NF = null; NODES = null; location.hash = "#/nodes";
+}
+// ---- 开始对比：填任务，选交给谁 ----
+function runWho(){
+  const codex = ((S.machine_info || {})[S.me] || {}).codex ?? S.codex;
+  return [["claude", "Claude Code", "新开一个临时对话"], ...(codex ? [["codex", "Codex", "新开一个临时对话"]] : []),
+          ...S.agents.filter(a => (a.machine || S.me) === S.me && !a.shared).map(a => ["a:" + a.id, a.name, BASE[a.base || "claude"]])];
+}
+async function startRun(node, run){
+  let n = null;
+  if (node) { try { n = await nodesApi(`/api/node?id=${encodeURIComponent(node)}`); } catch (e) { toast(e.message); return; } }
+  const codex = runWho().some(o => o[0] === "codex");
+  RS = {node, run: run || null, rows: run ? [{who: "claude", model: ""}]
+    : codex ? [{who: "claude", model: ""}, {who: "codex", model: ""}] : [{who: "claude", model: "opus"}, {who: "claude", model: "sonnet"}]};
+  const ask = run ? "" : `<label class="nd-lab" for="rs-text">${n ? "这次的输入" : "要做的事"}</label>
+      <textarea id="rs-text" class="textarea rs-text" placeholder="${esc(n ? n.input || "这次要处理的内容" : "交给它们的任务，几个会各自独立去做")}"></textarea>`;
+  dialog(run ? "再加一个" : n ? `运行「${n.name}」` : "同题对比", `${ask}<div class="nd-lab">交给谁</div><div id="rs-rows"></div>`,
+    `<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" onclick="goRun()">开始</button>`);
+  drawRunRows();
+  $("#rs-text")?.focus();
+}
+function drawRunRows(){
+  const el = $("#rs-rows"); if (!el) return;
+  const max = RS.run ? 1 : 3, who = runWho();
+  el.innerHTML = RS.rows.map((r, i) => `<div class="rs-row">${dd("rs-w" + i, who, r.who, v => { RS.rows[i] = {who: v, model: ""}; drawRunRows(); })}
+      ${r.who.startsWith("a:") ? "" : dd("rs-m" + i, modelOpts(r.who, "默认模型", r.model, S.me), r.model, v => { RS.rows[i].model = v; })}
+      ${RS.rows.length > 1 ? `<button class="icon-btn" aria-label="去掉" title="去掉" onclick="RS.rows.splice(${i},1);drawRunRows()">${ICON.x}</button>` : ""}</div>`).join("")
+    + (RS.rows.length < max ? `<button class="btn rs-add" onclick="RS.rows.push({who:'claude',model:''});drawRunRows()">${ICON.plus}再加一个</button>` : "");
+}
+async function goRun(){
+  const t = $("#rs-text"), text = t ? t.value.trim() : "";
+  if (!RS.node && !RS.run && !text) { toast("写一下要做的事"); t && t.focus(); return; }
+  const runners = RS.rows.map(r => r.who.startsWith("a:") ? {agent: r.who.slice(2)} : {temp: {base: r.who, model: r.model || null}});
+  const r = await act(() => nodesApi("/api/node/start", {node: RS.node, text, runners, run: RS.run}));
+  closeDialog(); NODES = null; refreshSoon();
+  if (RS.run) openRun(RS.run); else location.hash = `#/nodes/run/${encodeURIComponent(r.id)}`;
+}
+// ---- 对比页：几个对话并排（手机上一次一个，上面切换） ----
+async function openRun(rid){
+  let run;
+  try { run = await nodesApi(`/api/node/run?id=${encodeURIComponent(rid)}`); if (run.node && !NODES) NODES = await nodesApi("/api/nodes").catch(() => null); }
+  catch (e) { $("#main").innerHTML = `<div class="empty"><h2>找不到这次对比</h2><p>${esc(e.message)}</p><a class="btn" href="#/nodes">回到节点</a></div>`; return; }
+  if (current.view !== "nodes" || current.sub !== rid) return;
+  const old = RUNV && RUNV.id === rid ? RUNV : null;
+  RUNV = {id: rid, run, tab: old ? Math.min(old.tab, run.chats.length - 1) : 0,
+          cols: run.chats.map(id => (old && old.cols.find(c => c.id === id)) || {id, d: null})};
+  drawRunPage();
+  await Promise.all(RUNV.cols.map(async c => {
+    try { c.d = await api(`/api/chat?id=${encodeURIComponent(c.id)}`, undefined, S.me); c.err = null; }
+    catch (e) { c.err = e.message; }
+    drawCol(c);
+  }));
+  if (narrow() && RUNV && RUNV.id === rid && current.sub === rid && !($("#cmp-ask") || {}).value) drawRunPage();   // 手机上的切换按钮换成各自的名字
+}
+function colLabel(c){
+  const d = c.d; if (!d) return "…";
+  const a = d.agent && agentOf(d.agent);
+  return a ? a.name : BASE[d.base || "claude"] + (d.model ? " · " + modelName(d.model) : "");
+}
+function drawRunPage(){
+  const v = RUNV, r = v.run, one = narrow();
+  const node = r.node && (NODES ? NODES.nodes.find(n => n.id === r.node) : null);
+  $("#main").innerHTML = `<div class="cmp-page"><div class="cmp-head">
+      <a class="nd-back" href="#/nodes">${ICON.left}节点</a>
+      <div class="cmp-t"><h2>${esc(r.title || "对比")}</h2><span class="grow"></span>
+        ${v.cols.length < RUN_MAX ? `<button class="btn sm" onclick="startRun(${q(r.node || "")}||null,${q(v.id)})">${ICON.plus}再加一个</button>` : ""}
+        <button class="icon-btn" aria-label="更多" title="更多" onclick="runMenu(event)">${ICON.more}</button></div>
+      <details class="cmp-input"><summary>${r.node ? `按${node ? `「${esc(node.name)}」` : "节点"}的做法 · ` : ""}${when(r.created)}${r.input ? " · 这次的输入" : ""}</summary>
+        ${r.input ? `<div class="answer">${md(r.input)}</div>` : ""}</details></div>
+    ${one && v.cols.length > 1 ? `<div class="seg cmp-tabs">${v.cols.map((c, i) => `<button class="${i === v.tab ? "on" : ""}" onclick="RUNV.tab=${i};drawRunPage()">${esc(colLabel(c))}</button>`).join("")}</div>` : ""}
+    <div class="cmp-cols" style="--n:${one ? 1 : v.cols.length}">${v.cols.map((c, i) => one && i !== v.tab ? "" : `<section class="cmp-col" id="rc-${esc(c.id)}"></section>`).join("")}</div>
+    <div class="cmp-foot"><textarea id="cmp-ask" class="textarea" rows="1" placeholder="同时追问${v.cols.length > 1 ? `这 ${v.cols.length} 个` : ""}" onkeydown="if(sendKey(event)){event.preventDefault();askAll()}"></textarea>
+      <button class="btn primary" onclick="askAll()">发送</button></div></div>`;
+  v.cols.forEach(drawCol);
+}
+function runMenu(e){
+  pop(e, `<button class="danger" onclick="closePop();deleteRun()">删除这条对比记录</button>`);
+}
+function colHref(c){
+  const d = c.d || {};
+  return d.agent ? `#/agents/${encodeURIComponent(d.agent)}/${encodeURIComponent(c.id)}` : `#/chats/${encodeURIComponent(c.id)}`;
+}
+function drawCol(c){
+  const el = document.getElementById("rc-" + c.id); if (!el) return;
+  const d = c.d, body = el.querySelector(".rc-body");
+  const atEnd = !body || body.scrollHeight - body.scrollTop - body.clientHeight < 40, top = body ? body.scrollTop : 0;
+  let html;
+  if (c.err) html = `<p class="muted">${esc(c.err)}</p>`;
+  else if (!d) html = `<div class="loading">…</div>`;
+  else {
+    const log = d.log || [], first = log.findIndex(r => r.type === "user");
+    html = log.map((r, i) => r.type === "answer" && r.text ? `<div class="answer">${md(r.text)}</div>`
+      : r.type === "user" && i !== first ? `<div class="rc-user">${esc(r.text || "")}</div>`
+      : r.type === "card" && r.buttons && r.buttons.length && (!r.color || r.color === "orange") ? `<a class="rc-note warn" href="${colHref(c)}">等你确认，点这里去处理</a>`
+      : r.type === "file" && r.name ? `<div class="rc-note">${ICON.file}${esc(r.name)}</div>` : "").join("");
+    const p = d.busy && d.progress, last = p && (p.steps || [])[p.steps.length - 1];
+    if (p) html += flowHtml(p.steps, p.said, {head: `<span class="spin"></span>${last ? "正在" + esc(last) : "思考中"}`}) + liveText(p);
+    else if (d.busy) html += `<div class="rc-note"><span class="spin"></span>开始了</div>`;
+    if (!html) html = `<p class="muted">还没有回答</p>`;
+  }
+  el.innerHTML = `<header class="rc-head">${seal(d && d.agent ? agentOf(d.agent) : null, "sm", false)}<b>${esc(colLabel(c))}</b><span class="grow"></span>
+      ${d && d.busy ? `<span class="spin"></span>` : ""}<a class="btn sm" href="${colHref(c)}">打开</a></header><div class="rc-body">${html}</div>`;
+  const nb = el.querySelector(".rc-body");
+  nb.scrollTop = atEnd ? nb.scrollHeight : top;
+}
+function runEvent(ev){   // 推送：对比里的对话有新内容、干活进度
+  if (!RUNV || !ev.chat) return;
+  const c = RUNV.cols.find(x => x.id === ev.chat); if (!c || !c.d) return;
+  if (ev.type === "progress") { c.d.busy = ev.state === "working"; c.d.progress = c.d.busy ? ev : null; }
+  else if (STATUS_EVENTS.has(ev.type) || ev.type === "ctx" || ev.type === "drop") return;
+  else {
+    const rec = {...ev}; delete rec.chat; delete rec.rec_chat;
+    const i = rec.id ? c.d.log.findIndex(r => r.id === rec.id && r.type === rec.type) : -1;
+    if (i >= 0) c.d.log[i] = {...c.d.log[i], ...rec}; else c.d.log.push(rec);
+  }
+  clearTimeout(c.t); c.t = setTimeout(() => drawCol(c), 150);
+}
+async function askAll(){
+  const t = $("#cmp-ask"), text = t.value.trim(); if (!text || !RUNV) return;
+  t.value = "";
+  const res = await Promise.allSettled(RUNV.cols.map(c => api("/api/chat/send", {id: c.id, text, files: []}, S.me)));
+  const bad = res.filter(r => r.status === "rejected");
+  if (bad.length) { toast(`有 ${bad.length} 个没发出去：${bad[0].reason.message}`); if (bad.length === res.length) t.value = text; }
+}
+async function deleteRun(){
+  if (!RUNV || !await confirmBox("删除这条对比记录？", "这几个对话还留在对话列表里，可以接着聊。", "删除")) return;
+  await act(() => nodesApi("/api/node/run/delete", {id: RUNV.id}), "已删除");
+  RUNV = null; NODES = null; location.hash = "#/nodes";
+}
 
 // ================= 应用（#103） =================
 // 应用页面放进隔离的 iframe（不同源，碰不到平台的接口和登录），只能通过 window.ccim 发消息给这里，由这里调这个应用自己的接口。
@@ -8764,7 +9038,10 @@ const sideOk = c => !!c && !c.company && !c.staff && !notCreator() && !c.readonl
 function headMenu(e){
   sideWarm();
   const on = SIDE && detail && SIDE.of === detail.id;
-  pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`, true);
+  const node = detail && (detail.log || []).some(r => r.type === "answer") && !EMBED;   // 节点、对比（#501）
+  pop(e, `<button onclick="closePop();${on ? "closeSide()" : "openSide()"}">${ICON.side}${on ? "关掉侧边对话" : "侧边对话"}</button>`
+    + (node ? `<button onclick="closePop();saveAsNode()">${NODE_ICON}存为节点</button>` : "")
+    + (detail && detail.run && !EMBED ? `<button onclick="closePop();location.hash='#/nodes/run/'+encodeURIComponent(${q(detail.run)})">${NODE_ICON}回到对比</button>` : ""), true);
 }
 function closeSide(){
   if (SIDE && SIDE.tabs) SIDE_PRE = {of: SIDE.of, mid: SIDE.mid, r: {open: SIDE.tabs.filter(t => !t.temp), closed: SIDE.closed}, at: Date.now()};   // 再开时照它先画（#490）

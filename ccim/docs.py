@@ -432,3 +432,114 @@ def docx_part(path, name):
             return z.read(info), ctype
     except (zipfile.BadZipFile, KeyError, OSError):
         raise Problem("找不到这张图。")
+
+
+# ----- 两版比一比（#513）：按段比，改了几段、新增几段、删了几段，在哪几个标题下面 -----
+
+class _Blocks(__import__("html.parser", fromlist=["HTMLParser"]).HTMLParser):
+    """从 docx_html 的结果里按段取文字：标题、段落、列表项（表格里的段落也算）。"""
+    TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}
+
+    def __init__(self):
+        super().__init__()
+        self.out, self.cur = [], None
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.TAGS:
+            self._end()
+            self.cur = [tag, []]
+
+    def handle_endtag(self, tag):
+        if self.cur and tag == self.cur[0]:
+            self._end()
+
+    def handle_data(self, data):
+        if self.cur:
+            self.cur[1].append(data)
+
+    def _end(self):
+        if self.cur:
+            t = " ".join("".join(self.cur[1]).split())
+            if t:
+                self.out.append((self.cur[0][0] == "h", t))
+        self.cur = None
+
+
+def blocks(path):
+    """文档按段落取出文字：[(是不是标题, 文字)]；不是 Markdown、Word 返回 None。"""
+    k = kind(path)
+    if k == "md":
+        out, fence = [], False
+        for line in _read(path).decode("utf-8", "replace").splitlines():
+            s = line.strip()
+            if s.startswith(("```", "~~~")):
+                fence = not fence
+                continue
+            if not s or re.fullmatch(r"[-*_=|:\s]{3,}", s):
+                continue
+            head = not fence and bool(re.match(r"#{1,6}\s", s))
+            t = s if fence else re.sub(r"^(#{1,6}\s+|>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)", "", s)
+            t = " ".join(t.split())
+            if t:
+                out.append((head, t))
+        return out
+    if k == "docx":
+        p = _Blocks()
+        p.feed(docx_html(path)[0])
+        p._end()
+        return p.out
+    return None
+
+
+def change_summary(old, new):
+    """新的一版比旧的一版：{"mod": 改了几段, "add": 新增几段, "del": 删了几段, "where": [所在标题，最多 3 个], "more": 还有别处}。
+    比不了返回 None；一样返回 {}。"""
+    import difflib
+    try:
+        a, b = blocks(old), blocks(new)
+    except (Problem, OSError):
+        return None
+    if a is None or b is None:
+        return None
+    head, heads = "", []
+    for h, t in b:
+        if h:
+            head = t
+        heads.append(head)
+    old_head, oh = "", []
+    for h, t in a:
+        if h:
+            old_head = t
+        oh.append(old_head)
+    sm = difflib.SequenceMatcher(None, [t for _, t in a], [t for _, t in b], autojunk=False)
+    n = {"mod": 0, "add": 0, "del": 0}
+    where = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+        no, nn = i2 - i1, j2 - j1
+        m = 0                              # 换掉的几段：一对一像的算改了，不像的算删了一段又加了一段
+        if tag == "replace":
+            m = sum(difflib.SequenceMatcher(None, a[i1 + k][1], b[j1 + k][1], autojunk=False).ratio() >= 0.4
+                    for k in range(min(no, nn)))
+        n["mod"] += m
+        n["add"] += nn - m
+        n["del"] += no - m
+        w = heads[j1] if j1 < j2 else oh[i1] if i1 < len(oh) else ""
+        if w and w not in where:
+            where.append(w)
+    if not any(n.values()):
+        return {}
+    return dict(n, where=where[:3], more=len(where) > 3)
+
+
+def prev_snap(rows, path):
+    """记录里这个文件最近一版的留底（比新的一版用）。"""
+    rp = os.path.realpath(path)
+    for r in reversed(rows):
+        ps = [(r.get("path"), r.get("snap"))] if r.get("type") in ("file", "edit", "ver") else \
+            [(f.get("path"), f.get("path")) for f in r.get("files") or []] if r.get("type") == "user" else []
+        for p, s in ps:
+            if p and s and os.path.realpath(p) == rp and os.path.isfile(s):
+                return s
+    return None

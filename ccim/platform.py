@@ -381,9 +381,13 @@ class WebChannel(Channel):
 
     async def send_file(self, chat_id, path):
         rec = {"type": "file", "path": os.path.realpath(path), "name": os.path.basename(path), "size": os.path.getsize(path)}
+        old = docs.prev_snap(self.logs.read(chat_id), path) if docs.kind(path) in ("md", "docx") else None
         snap = docs.snapshot(self.logs.folder, chat_id, path)      # 文档存一份，之后能切换看各版本
         if snap:
             rec["snap"] = snap
+            diff = docs.change_summary(old, snap) if old else None   # 发过的文档又发一版：比上一版改了什么（#513）
+            if diff is not None:
+                rec["diff"] = diff
         elif os.path.splitext(path)[1].lower() in IMAGES and rec["size"] <= 30 << 20:
             # 图片也存一份：Agent 常常反复写同一个文件名（截图），不存的话之前那几条消息也会显示成最新的（#56）
             try:
@@ -2348,6 +2352,9 @@ class Platform:
             return False
         snap = docs.snapshot(self.channel.logs.folder, cid, path)
         rec = dict(rec, path=path, name=os.path.basename(path), mtime=mtime, **({"snap": snap} if snap else {}))
+        diff = docs.change_summary(last["snap"], snap) if last and snap else None    # 比上一版改了什么（#513）
+        if diff is not None:
+            rec["diff"] = diff
         self.channel._emit(cid, self.channel.logs.append(cid, rec))
         return True
 

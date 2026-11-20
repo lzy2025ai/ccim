@@ -40,7 +40,7 @@ GZIP_MIN = 4096                               # 回给总控的结果超过这�
 CALL_TIMEOUT = 660                            # 派活最长 600 秒，留点余量
 PAGE_GLOBAL = ("archive_days", "workspace", "diary_cards", "diary_style", "kb", "side_tabs")   # 网页按「当前那台」显示的全局设置，经总控也要带上（#378）
 QUICK = {"/api/state", "/api/chats", "/api/chat", "/api/agent", "/api/project", "/api/schedule", "/api/dirs", "/api/peer/task",
-         "/api/peer/result"}
+         "/api/peer/result", "/api/models"}
 QUEUED = ("/api/chat/send", "/api/chat/mention")     # 离线时先存起来、上线再发的
 
 

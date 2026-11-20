@@ -82,14 +82,23 @@ def _catalog():
     return []
 
 
+_CODEX = [None, []]                           # 清单文件的修改时间、读出的列表：文件约 600KB，整体状态每次都要，没变就不重读
+
+
 def codex():
+    path = os.path.expanduser("~/.codex/models_cache.json")
     try:
-        with open(os.path.expanduser("~/.codex/models_cache.json"), encoding="utf-8") as f:
+        mt = os.path.getmtime(path)
+        if mt == _CODEX[0]:
+            return _CODEX[1]
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f).get("models") or []
     except (OSError, ValueError, AttributeError):
         return []
-    return [[m["slug"], m.get("display_name") or m["slug"], "", m["slug"]] for m in raw
-            if m.get("slug") and m.get("visibility", "list") == "list"]
+    out = [[m["slug"], m.get("display_name") or m["slug"], "", m["slug"]] for m in raw
+           if m.get("slug") and m.get("visibility", "list") == "list"]
+    _CODEX[:] = [mt, out]
+    return out
 
 
 def stale():

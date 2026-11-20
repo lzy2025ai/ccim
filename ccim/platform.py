@@ -1271,6 +1271,8 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
+        if m.get("mention_of") and text:       # 群成员的子对话里直接说的：外层对话里还在 Word 开着的文档也要说（#515）
+            text = self.doc_word_note(cid) + text
         if m.get("mention_of") and text:       # 群成员的子对话里用户直接说的（#409）：群里看不到，让它知道这部分只有它有
             of = self.chats().get(m["mention_of"]) or {}
             where = f"群聊「{of.get('title') or m.get('title') or ''}」" if of.get("title") or m.get("title") else "群聊"
@@ -2423,9 +2425,11 @@ class Platform:
         if not mine:
             return
         clash = [p for p in self._doc_in_word(cid) if os.path.realpath(p) in mine]
-        if clash:                             # 改了用户正在 Word 里开着的文档：提醒用户保存前先处理（#515）
+        if clash:                             # 改了用户正在 Word 里开着的文档：提醒用户保存前先处理（#515），记在打开它的那个对话里
             names = "、".join(f"「{os.path.basename(p)}」" for p in clash)
-            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "text":
+            chats = self.chats()
+            at = next((c for c in self._doc_scope(cid) if set(clash) & set(chats[c].get("doc_opened") or {})), cid)
+            self.channel._emit(at, self.channel.logs.append(at, {"type": "note", "text":
                 f"Agent 刚改了{names}，它还在 Word 里开着。在 Word 里直接保存会盖掉 Agent 的改动："
                 "要保留 Agent 改的，先关掉不保存，再重新打开接着改；要保留你在 Word 里改的，就照常保存。"}))
         docs_in = {}
@@ -2441,11 +2445,13 @@ class Platform:
                 except Problem:
                     pass
         chats = self.chats()
-        opened = (chats.get(cid) or {}).get("doc_opened")
-        if opened and any(os.path.realpath(p) in mine for p in opened):
+        hit = False
+        for c in self._doc_scope(cid):        # 外层对话里用 Word 打开的也从新的修改时间重记
+            opened = chats[c].get("doc_opened") or {}
             for p in opened:
                 if os.path.realpath(p) in mine and os.path.exists(p):
-                    opened[p] = os.path.getmtime(p)
+                    opened[p], hit = os.path.getmtime(p), True
+        if hit:
             self.store.write(chats)
 
     def doc_save(self, cid, path, text, mtime):
@@ -2486,14 +2492,26 @@ class Platform:
         paths = (chats.get(cid) or {}).pop("doc_edits", None)
         if paths:
             self.store.write(chats)
-        busy = self._doc_in_word(cid)
-        return ("（我直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n" if paths else "") + \
-            ("（我正在 Word 里编辑这些文件，先别改它们，不然我在 Word 里保存时会盖掉你的改动。要改就先告诉我改哪里，"
-             "或者另存一份再改：" + "、".join(busy) + "）\n\n" if busy else "")
+        return ("（我直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n" if paths else "") + self.doc_word_note(cid)
+
+    def _doc_scope(self, cid):
+        """这个对话和它的外层（群成员的子对话、侧边对话）：文档在外层打开，成员在自己的子对话里干活（#515）。"""
+        chats, out = self.chats(), []
+        while cid and cid in chats and cid not in out:
+            out.append(cid)
+            cid = chats[cid].get("mention_of") or chats[cid].get("side_of")
+        return out
 
     def _doc_in_word(self, cid):
-        """用 Word 打开过、现在还开着的文档（#515）。"""
-        return [p for p in (self.chats().get(cid) or {}).get("doc_opened") or {} if docs.office_open(p)]
+        """用 Word 打开过、现在还开着的文档（#515），连外层对话里打开的。"""
+        chats = self.chats()
+        return list(dict.fromkeys(p for c in self._doc_scope(cid) for p in (chats[c].get("doc_opened") or {}) if docs.office_open(p)))
+
+    def doc_word_note(self, cid):
+        """还在 Word 里开着的文档：每次交给 Agent 时带上，让它先别改。"""
+        busy = self._doc_in_word(cid)
+        return ("（我正在 Word 里编辑这些文件，先别改它们，不然我在 Word 里保存时会盖掉你的改动。要改就先告诉我改哪里，"
+                "或者另存一份再改：" + "、".join(busy) + "）\n\n") if busy else ""
 
     # ----- 飞书、微信、终端里的对话 -----
 

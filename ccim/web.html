@@ -2318,14 +2318,59 @@ function fpMark(el, v, c){
 // 点路径（#523）：文件直接在右侧预览（下载、在访达中显示在面板右上角「⋯」里），预览不了的也开在右侧只给这两个按钮；
 // 文件夹预览不了，直接在访达里打开
 async function fpOpen(v, c){
-  if (v.dir) return fpReveal(c.chat, c.mid || "", v.path);
-  if (v.view !== false) return openDoc(v.path, null, c.chat);
   if (DOC && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  DOC_BACK = null;
+  if (v.dir) return openFolder(v.path, c.chat, c.mid || ctxMachine);
+  if (v.view !== false) return openDoc(v.path, null, c.chat);
+  docOther(v.path, c.chat, c.mid || ctxMachine);
+}
+function docOther(path, chat, machine, error){   // 预览不了的文件：右侧只给文件名和下载、在访达中显示
   if (SIDE) closeSide();
-  DOC = {chat: c.chat, machine: c.mid || ctxMachine, path: v.path, mode: "view", draft: "", dirty: false, ws: false,
-         d: {kind: "other", name: v.path.split("/").pop(), versions: [], latest: true, v: 0}};
+  DOC = {chat, machine, path, mode: "view", draft: "", dirty: false, ws: false,
+         d: {kind: "other", name: path.split("/").pop(), versions: [], latest: true, v: 0, error}};
   drawDoc();
 }
+// 文件夹（#523）：右侧列出里面的文件，子文件夹点了展开（用到才取），文件点了在右侧预览，左上角能回到文件夹
+let DOC_BACK = null, FDX = [];
+async function openFolder(path, chat, machine){
+  if (SIDE) closeSide();
+  DOC = {chat, machine, path, mode: "view", draft: "", dirty: false, ws: false,
+         d: {kind: "folder", name: path.replace(/\/+$/, "").split("/").pop(), versions: [], latest: true, v: 0, ls: {}, open: new Set([path])}};
+  drawDoc();
+  await folderLoad(path);
+}
+async function folderLoad(p){
+  const doc = DOC; if (!doc || !doc.d || doc.d.kind !== "folder") return;
+  try { doc.d.ls[p] = await api(`/api/ws/ls?chat=${encodeURIComponent(doc.chat)}&path=${encodeURIComponent(p)}`, undefined, doc.machine); }
+  catch (e) { doc.d.ls[p] = {error: e.message, entries: []}; }
+  if (DOC === doc) drawDocBody();
+}
+function folderView(d){
+  FDX = [];
+  const rows = p => {
+    const l = d.ls[p];
+    if (!l) return `<div class="row muted"><span class="car"></span>…</div>`;
+    if (l.error) return `<div class="row muted"><span class="car"></span>${esc(l.error)}</div>`;
+    if (!l.entries.length) return `<div class="row muted"><span class="car"></span>是空的</div>`;
+    return l.entries.map(e => {
+      const k = FDX.push(e) - 1, open = e.dir && d.open.has(e.path);
+      return e.dir
+        ? `<div class="row fd" role="button" tabindex="0" onclick="folderClick(${k})"><span class="car" style="${open ? "transform:rotate(90deg)" : ""}">${ICON.chev}</span>${ICON.folder}<span class="nm">${esc(e.name)}</span></div>${open ? `<div class="kids">${rows(e.path)}</div>` : ""}`
+        : `<div class="row fd" role="button" tabindex="0" onclick="folderClick(${k})"><span class="car"></span>${ICON.file}<span class="nm" title="${esc(e.name)}">${esc(e.name)}</span><span class="sz">${bytes(e.size || 0)}</span></div>`;
+    }).join("") + (l.more ? `<div class="row muted"><span class="car"></span>还有 ${l.more} 项没列出</div>` : "");
+  };
+  return `<div class="arc">${rows(DOC.path)}</div>`;
+}
+function folderClick(k){
+  const e = FDX[k], d = DOC && DOC.d; if (!e || !d || d.kind !== "folder") return;
+  if (e.dir) {
+    if (d.open.has(e.path)) d.open.delete(e.path); else { d.open.add(e.path); if (!d.ls[e.path]) folderLoad(e.path); }
+    return drawDocBody();
+  }
+  DOC_BACK = DOC;
+  openDoc(e.path, null, DOC.chat, false, true);
+}
+function folderBack(){ if (!DOC_BACK) return; DOC = DOC_BACK; DOC_BACK = null; drawDoc(); }
 // 在放文件的那台电脑上打开访达（#322）：服务器、别人共享给我的电脑上不行；网页不在那台电脑上时说一声开在哪了
 function canReveal(mid){
   if (!isRemote(mid)) return true;
@@ -9389,7 +9434,8 @@ function pocketRoom(){   // 窗口窄、输入框贴到右边时，输入框右�
 if (!EMBED && window.ResizeObserver) new ResizeObserver(pocketRoom).observe(document.querySelector("#main"));
 
 let DOC = null;   // 打开的文档：{chat, machine, path, d（接口给的）, mode: view / edit, draft, dirty}
-async function openDoc(path, v, chat, inWs){
+async function openDoc(path, v, chat, inWs, soft){   // soft：打不开预览时也留在右侧，只给下载、在访达中显示
+  if (!soft && (!DOC || DOC.path !== path)) DOC_BACK = null;   // 不是从文件夹里点开的，就没有「回到文件夹」
   chat = chat || (DOC && DOC.path === path ? DOC.chat : detail && detail.id);
   if (!inWs && v == null && WS && WS.chat === chat && wsInside(path) && wsEdShown()) return wsOpen(path);   // 工作区开着：在编辑区打开
   if (!inWs && SIDE) closeSide();
@@ -9400,6 +9446,7 @@ async function openDoc(path, v, chat, inWs){
   try { d = await api(`/api/doc?chat=${encodeURIComponent(chat)}&path=${encodeURIComponent(path)}${v != null ? "&v=" + v : ""}`, undefined, machine); }
   catch (e) {
     if (inWs && DOC && DOC.path === path) { DOC.d = {kind: "other", name: path.split("/").pop(), versions: [], latest: true, v: 0, error: e.message}; WS.docs[path] = DOC; drawDoc(); return; }
+    if (soft && DOC && DOC.path === path) return docOther(path, chat, DOC.machine, e.message);
     toast(e.message); if (DOC && !DOC.d) closeDoc(true); return;
   }
   if (!DOC || DOC.path !== path) return;
@@ -9412,7 +9459,7 @@ async function closeDoc(force){
   if (!DOC || DOC_ONLY) return;
   if (DOC.ws) { if (force || !WS) { DOC = null; return; } return narrow() ? wsGo("files") : wsCloseTab(DOC.path); }
   if (!force && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，关掉就丢掉了。", "丢掉")) return;
-  DOC = null; drawDoc();
+  DOC = null; DOC_BACK = null; drawDoc();
 }
 function docBody(){
   const d = DOC.d;
@@ -9422,6 +9469,7 @@ function docBody(){
   if (d.kind === "audio") return `<div class="ws-img"><audio src="${esc(docFileUrl())}" controls></audio></div>`;
   if (d.kind === "pdf") return `<iframe src="${esc(docFileUrl())}" title="${esc(d.name)}"></iframe>`;   // 浏览器自带的阅读器，按需分段取
   if (d.kind === "archive") return arcView(d);
+  if (d.kind === "folder") return folderView(d);
   if (d.kind === "app") return `<iframe class="app-frame" sandbox="${APP_SANDBOX}" title="${esc(d.name)}"></iframe>`;
   if (d.kind === "other") return `<div class="ws-other"><b>${esc(d.name)}</b>${d.error ? `<p>${esc(d.error)}</p>` : `<p>这种文件不能在这里打开</p>`}<div class="ws-other-acts"><a class="btn" href="${esc(docFileUrl())}" download="${esc(d.name)}">${ICON.dl}下载</a>${!DOC.ws && canReveal(DOC.machine) ? `<button class="btn" onclick="docReveal()">在访达中显示</button>` : ""}</div></div>`;
   if (d.kind === "text") return codeEd(!d.latest);
@@ -9534,6 +9582,7 @@ function drawDoc(){
   delete el.dataset.app;
   el.innerHTML = `<div class="doc-top">
       ${DOC_ONLY ? `<a class="icon-btn" aria-label="回到对话" title="回到对话" href="${esc(docOnlyBack())}">${ICON.chat}</a>` : `<button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>`}
+      ${DOC_BACK && DOC_BACK !== DOC && !DOC_ONLY ? `<button class="icon-btn" aria-label="回到文件夹" title="回到「${esc(DOC_BACK.d.name)}」" onclick="folderBack()">${ICON.left}</button>` : ""}
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
       ${diffBtn()}
@@ -9618,6 +9667,7 @@ async function docDiff(){
 function docMoreBtn(){ return `<button class="icon-btn" aria-label="更多" title="更多" onclick="docMore(event)">${ICON.more}</button>`; }
 function docMore(e){
   const d = DOC.d, b = (js, label) => `<button onclick="closePop();${js}">${label}</button>`;
+  if (d.kind === "folder") return pop(e, canReveal(DOC.machine) ? b("fpReveal(DOC.chat,DOC.machine||'',DOC.path)", "在访达中显示") : `<div class="sec">没有别的操作</div>`);
   pop(e, [
     d.kind === "md" ? b("wxCopy()", "复制到公众号") : "",
     typeof d.text === "string" ? b("docCopyText()", "复制全文") : "",

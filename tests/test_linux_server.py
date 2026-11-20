@@ -107,6 +107,13 @@ class BaseTests(unittest.TestCase):
             json.dump({"env": {"ANTHROPIC_API_KEY": "k"}}, f)
         self.assertTrue(self.status()["claude"]["ready"])
 
+    def test_claude_compatible_endpoint(self):
+        """Claude Code 接别家的 Claude 兼容接口（自定义地址 + 令牌）也算能用。"""
+        os.makedirs(os.path.join(self.home, ".claude"))
+        with open(os.path.join(self.home, ".claude", "settings.json"), "w") as f:
+            json.dump({"env": {"ANTHROPIC_BASE_URL": "https://example.com/anthropic", "ANTHROPIC_AUTH_TOKEN": "t"}}, f)
+        self.assertTrue(self.status()["claude"]["ready"])
+
     def test_codex_and_dsh(self):
         os.makedirs(os.path.join(self.home, ".codex"))
         with open(os.path.join(self.home, ".codex", "auth.json"), "w") as f:

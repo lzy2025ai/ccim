@@ -146,5 +146,100 @@ class LinuxTrashTests(unittest.TestCase):
                     devices._removable(os.path.join(self.home, n))
 
 
+
+class AdminTests(unittest.IsolatedAsyncioTestCase):
+    """Linux 上的 run_as_admin：卡片同意才用 sudo -n 执行，拒绝不执行，没有免密 sudo 说清楚。"""
+
+    def chat(self, allow):
+        from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+        asked = []
+
+        async def ask(chat_id, name, inp, ctx):
+            asked.append((name, inp))
+            return PermissionResultAllow() if allow else PermissionResultDeny(message="no")
+        from types import SimpleNamespace
+        return SimpleNamespace(chat_id="c1", b=SimpleNamespace(approvals=SimpleNamespace(ask=ask))), asked
+
+    async def test_allow_runs_sudo_n(self):
+        from ccim import admin
+        chat, asked = self.chat(True)
+        calls = []
+
+        async def fake_sudo(cmd):
+            calls.append(cmd)
+            return True, "退出码 0\nok"
+        with mock.patch.object(admin.sys, "platform", "linux"), mock.patch.object(admin, "_sudo_n", fake_sudo):
+            ok, text = await admin.run(chat, "apt-get update", "装依赖")
+        self.assertTrue(ok)
+        self.assertEqual(calls, ["apt-get update"])
+        self.assertEqual(asked, [("run_as_admin", {"command": "apt-get update", "reason": "装依赖"})])
+
+    async def test_deny_does_not_run(self):
+        from ccim import admin
+        chat, _ = self.chat(False)
+        with mock.patch.object(admin.sys, "platform", "linux"), \
+             mock.patch.object(admin, "_sudo_n", side_effect=AssertionError("不该执行")):
+            ok, text = await admin.run(chat, "rm -rf /tmp/x", "清理")
+        self.assertFalse(ok)
+        self.assertIn("没有执行", text)
+
+    async def test_sudo_n_without_nopasswd(self):
+        from ccim import admin
+
+        class P:
+            returncode = 1
+            async def communicate(self):
+                return b"", b"sudo: a password is required\n"
+        seen = []
+
+        async def fake_exec(*args, **kw):
+            seen.append(args)
+            return P()
+        with mock.patch.object(admin.shutil, "which", return_value="/usr/bin/sudo"), \
+             mock.patch.object(admin.asyncio, "create_subprocess_exec", fake_exec):
+            ok, text = await admin._sudo_n("id")
+        self.assertFalse(ok)
+        self.assertEqual(seen[0][:3], ("/usr/bin/sudo", "-n", "--"))
+        self.assertIn("NOPASSWD", text)
+
+    def test_card(self):
+        from ccim.approval import Pending
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            async def mk():
+                return Pending("c", "run_as_admin", {"command": "systemctl restart nginx", "reason": "重启"}, None)
+            p = loop.run_until_complete(mk())
+        finally:
+            loop.close()
+        card = p.card("项目")
+        self.assertIn("systemctl restart nginx", card["body"])
+        self.assertEqual([b["text"] for b in card["buttons"]], ["执行", "不执行"])
+
+
+class SudoBlockTests(unittest.IsolatedAsyncioTestCase):
+    def test_pattern(self):
+        from ccim.session import SUDO_CMD
+        for c in ["sudo ls", "cd /x && sudo rm a", "echo; su - root", 'bash -c "sudo id"', "$(sudo cat f)",
+                  "FOO=1 sudo x", "env A=b sudo x", "/usr/bin/sudo id", "pkexec x", "doas x", "x | sudo tee f"]:
+            self.assertTrue(SUDO_CMD.search(c), c)
+        for c in ["ls sudo-notes", "grep sudo /etc/group", "echo pseudo", "cat /etc/sudoers.d/x", "ls ~/su"]:
+            self.assertFalse(SUDO_CMD.search(c), c)
+
+    async def test_pre_bash_denies_on_linux(self):
+        from ccim.session import Chat
+        c = object.__new__(Chat)
+        from types import SimpleNamespace
+        c.b = SimpleNamespace(path="/tmp")
+        data = {"tool_name": "Bash", "tool_input": {"command": "sudo apt-get install -y jq"}}
+        from ccim import session
+        with mock.patch.object(session.sys, "platform", "linux"):
+            r = await c._pre_bash(data, "t1", None)
+        self.assertEqual(r["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("run_as_admin", r["hookSpecificOutput"]["permissionDecisionReason"])
+        with mock.patch.object(session.sys, "platform", "darwin"):
+            self.assertEqual(await c._pre_bash(data, "t1", None), {})
+
+
 if __name__ == "__main__":
     unittest.main()

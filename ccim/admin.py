@@ -4,8 +4,10 @@
 不进对话记录、不进日志，也不回给 Claude。
 飞书、微信（消息要经过它们的服务器）：不收密码，用 osascript 的 with administrator privileges
 在 Mac 上弹系统自己的授权窗口。
+Linux（#522，多是服务器）：不收密码，所有渠道（网页、总控转来的、飞书、微信）都弹审批卡片，用户点「执行」后用 sudo -n 执行
+（join.sh 给 ccim 建的用户默认免密 sudo）。Agent 在 Bash 里直接 sudo 由 session 的 _pre_bash 拦下。
 """
-import asyncio, logging, sys
+import asyncio, logging, shutil, sys
 
 log = logging.getLogger("ccim.admin")
 
@@ -42,9 +44,6 @@ def _applescript(s):
 
 
 async def _dialog(command, reason):
-    if sys.platform != "darwin":              # Linux 服务器没有系统授权窗口（#522）
-        return False, ("这台电脑没有可以弹出的授权窗口，命令没有执行。请用户在这台电脑本机打开的网页里确认并输入密码，"
-                       "或者自己登录这台电脑用管理员执行：" + command)
     script = f"do shell script {_applescript(command)} with prompt {_applescript('ccim：' + reason)} with administrator privileges"
     p = await asyncio.create_subprocess_exec("/usr/bin/osascript", "-e", script, stdin=asyncio.subprocess.DEVNULL,
                                              stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -59,8 +58,47 @@ async def _dialog(command, reason):
     return p.returncode == 0, _cut(f"退出码 {p.returncode}\n{out.decode(errors='replace')}{err}")
 
 
+NO_SUDO = ("这台电脑上的 ccim 用户不能免密使用 sudo，命令没有执行。告诉用户：用管理员在这台电脑上运行 "
+           "`echo '{user} ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/ccim-{user} && sudo chmod 440 /etc/sudoers.d/ccim-{user}`，"
+           "之后在聊天里批准就能执行。")
+
+
+def _user():
+    import pwd
+    return pwd.getpwuid(__import__("os").getuid()).pw_name
+
+
+async def _sudo_n(command):
+    """Linux：用户在卡片上同意后，用免密 sudo 执行。"""
+    sudo = shutil.which("sudo") or (SUDO if __import__("os").path.exists(SUDO) else None)
+    if not sudo:
+        return False, "这台电脑上没有 sudo，命令没有执行。"
+    p = await asyncio.create_subprocess_exec(sudo, "-n", "--", "/bin/sh", "-c", command, stdin=asyncio.subprocess.DEVNULL,
+                                             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        out, err = await asyncio.wait_for(p.communicate(), RUN_TIMEOUT)
+    except asyncio.TimeoutError:
+        p.kill()
+        return False, "命令跑了太久，已经停掉。"
+    err = err.decode(errors="replace")
+    if p.returncode != 0 and ("password is required" in err or "a terminal is required" in err):
+        return False, NO_SUDO.format(user=_user())
+    return p.returncode == 0, _cut(f"退出码 {p.returncode}\n{out.decode(errors='replace')}{err}")
+
+
+async def _approve(chat, command, reason):
+    """Linux：在对话里弹审批卡片（网页、飞书、微信一样），返回用户同意没有。"""
+    from claude_agent_sdk import PermissionResultAllow
+    r = await chat.b.approvals.ask(chat.chat_id, "run_as_admin", {"command": command, "reason": reason}, None)
+    return isinstance(r, PermissionResultAllow)
+
+
 async def run(chat, command, reason):
     """返回 (成功与否, 给 Claude 看的结果)。"""
+    if sys.platform != "darwin":
+        if not await _approve(chat, command, reason):
+            return False, "用户没有同意（或者超时了），命令没有执行。用户拒绝了就不要换个说法再试。"
+        return await _sudo_n(command)
     ch = chat.b.channel
     ask = getattr(ch, "ask_secret", None)
     if ask:
@@ -73,6 +111,5 @@ async def run(chat, command, reason):
             return await _sudo(command, pw)
         finally:
             pw = None
-    if sys.platform == "darwin":
-        await ch.send_text(chat.chat_id, f"要用管理员权限执行命令（{reason}），Mac 上弹出了授权窗口，请在电脑上确认。")
+    await ch.send_text(chat.chat_id, f"要用管理员权限执行命令（{reason}），Mac 上弹出了授权窗口，请在电脑上确认。")
     return await _dialog(command, reason)

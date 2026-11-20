@@ -30,6 +30,22 @@ class SideTabsTests(base.SideMentionTests):                          # 只借它
         pf.run(pf.delete_chat(main))
         self.assertNotIn(b, pf.chats())                             # 跟着主对话删
 
+    def test_member_sub_chat_can_open_side(self):            # 群成员的子对话也能开侧边对话（#503）
+        pf = self.pf
+        main = self.group()
+        pf.run(pf.mentions.send(main, "配个图", [self.helper]))
+        sub = f"m-{main}-{self.helper}"
+        self.assertEqual(pf.chats()[sub].get("mention_of"), main)
+        pf.channel.logs.append(sub, {"type": "user", "id": "u8", "text": "配个图"})
+        pf.channel.logs.append(sub, {"type": "answer", "text": "配图用落叶"})
+        s = pf.run(pf.side_chat(sub))
+        self.assertEqual(pf.chats()[s].get("side_of"), sub)
+        self.assertIn("配图用落叶", pf._side_ctx(s, pf.chats()[s]))   # 带上子对话的进展
+        side = pf.run(pf.side_chat(main))                         # 侧边对话里 @ 出去的子对话不能再开
+        pf.run(pf.mentions.send(side, "看看", [self.helper]))
+        with self.assertRaises(Exception):
+            pf.run(pf.side_chat(f"m-{side}-{self.helper}"))
+
     def test_old_side_title(self):
         pf = self.pf
         main = self.group()

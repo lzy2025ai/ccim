@@ -1266,7 +1266,7 @@ class Platform:
             text = f"[用户在你于{where}的子会话里直接跟你说的，群里其他人看不到这段]\n{text}"
         if m.get("side_of") and text:          # 侧边对话：带上主对话的新进展
             text = self._side_ctx(cid, m) + text
-        elif text and not m.get("mention_of") and not m.get("side_at"):   # 主对话：带上侧边对话动过的文件、跑过的命令（#476）
+        elif text and not m.get("side_at"):   # 主对话（含群成员的子对话，#503）：带上侧边对话动过的文件、跑过的命令（#476）
             text = self._side_news(cid) + text
         if refs and text:                     # 用户指了以前的对话：告诉它在哪读，不用自己搜
             from .search import short
@@ -1508,7 +1508,8 @@ class Platform:
 
     def _side_ok(self, cid):
         m = self.meta(cid)
-        if m.get("side_of") or m.get("helper") or m.get("mention_of") or cid.startswith("x:"):
+        # 群成员的子对话也能开（#503），侧边对话里 @ 出去的子对话（side_at）不行
+        if m.get("side_of") or m.get("helper") or m.get("side_at") or cid.startswith("x:"):
             raise Problem("这个对话不能开侧边对话。")
         return m
 
@@ -1967,7 +1968,7 @@ class Platform:
         return {"id": cid, "title": m.get("title") or self._fork_title(cid, m) or "新对话", "agent": m.get("agent"),
                 "agent_name": a["name"] if a else None, "temp": bool(not m.get("agent")),
                 "dir": m.get("cwd") or (a.get("dir") if a else t.get("dir")), "busy": bool(m.get("busy")),
-                "mention_of": m.get("mention_of"), "side_of": m.get("side_of"), "group": self._group_of(m),
+                "mention_of": m.get("mention_of"), "side_of": m.get("side_of"), "side_at": bool(m.get("side_at")), "group": self._group_of(m),
                 "split_from": {"id": m["split_from"], "title": (self.chats().get(m["split_from"]) or {}).get("title") or "群聊"}
                 if m.get("split_from") else None,
                 "dispatched_from": {"id": m["dispatched_from"], "title": (self.chats().get(m["dispatched_from"]) or {}).get("title") or "另一个对话"}

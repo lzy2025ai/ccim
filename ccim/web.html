@@ -2312,17 +2312,19 @@ function fpScan(){
 function fpMark(el, v, c){
   if (!v || v.dir && !canReveal(c.mid)) return;   // 文件夹只能在访达里打开，打不开访达的就不给点
   el.classList.add("on"); el.tabIndex = 0; el.setAttribute("role", "button");
-  el.onclick = e => fpMenu(e, el, v, c);
-  el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fpMenu(e, el, v, c); } };
+  el.onclick = e => { e.stopPropagation(); fpOpen(v, c); };
+  el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fpOpen(v, c); } };
 }
-function fpMenu(e, el, v, c){
-  const b = (js, label) => `<button onclick="closePop();${esc(js)}">${label}</button>`;
-  const P = JSON.stringify(v.path), C = JSON.stringify(c.chat), M = JSON.stringify(c.mid || "");
-  pop({stopPropagation(){ e.stopPropagation(); }, currentTarget: el}, [
-    v.view === false || v.dir ? "" : b(`openDoc(${P},null,${C})`, "打开"),
-    canReveal(c.mid) ? b(`fpReveal(${C},${M},${P})`, "在访达中显示") : "",
-    v.dir ? "" : b(`fpDownload(${C},${M},${P})`, "下载"),
-  ].join(""));
+// 点路径（#523）：文件直接在右侧预览（下载、在访达中显示在面板右上角「⋯」里），预览不了的也开在右侧只给这两个按钮；
+// 文件夹预览不了，直接在访达里打开
+async function fpOpen(v, c){
+  if (v.dir) return fpReveal(c.chat, c.mid || "", v.path);
+  if (v.view !== false) return openDoc(v.path, null, c.chat);
+  if (DOC && DOC.dirty && !await confirmBox("还没保存", "刚才改的内容还没保存，现在离开就丢掉了。", "丢掉")) return;
+  if (SIDE) closeSide();
+  DOC = {chat: c.chat, machine: c.mid || ctxMachine, path: v.path, mode: "view", draft: "", dirty: false, ws: false,
+         d: {kind: "other", name: v.path.split("/").pop(), versions: [], latest: true, v: 0}};
+  drawDoc();
 }
 // 在放文件的那台电脑上打开访达（#322）：服务器、别人共享给我的电脑上不行；网页不在那台电脑上时说一声开在哪了
 function canReveal(mid){
@@ -2333,11 +2335,6 @@ function canReveal(mid){
 async function fpReveal(chat, mid, p){
   await act(() => api("/api/ws/reveal", {chat, path: p}, mid || null));
   if (isRemote(mid)) toast(`已在「${(machineOf(mid) || {}).name || "那台电脑"}」的访达里选中`);
-}
-function fpDownload(chat, mid, p){
-  const a = document.createElement("a");
-  a.href = fileUrl(chat, p) + (isRemote(mid) ? `&machine=${encodeURIComponent(mid)}` : ""); a.download = p.split("/").pop();
-  document.body.append(a); a.click(); a.remove();
 }
 new MutationObserver(() => { if (document.querySelector(".fp:not([data-ck])")) fpScan(); }).observe(document.body, {childList: true, subtree: true});
 
@@ -9543,7 +9540,7 @@ function drawDoc(){
       ${d && d.editable && d.latest ? `<span class="seg mini">${[["view", "预览"], ["edit", "编辑"]]
         .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
-      ${d ? docMoreBtn() : ""}
+      ${d && d.kind !== "other" ? docMoreBtn() : ""}
       ${d && d.editable && d.latest ? `<button class="btn primary" id="doc-save" ${DOC.dirty ? "" : "hidden"} onclick="docSave()">保存</button>` : ""}
     </div>
     ${d && !d.latest ? `<div class="doc-old"><span>${esc(verLabel(vs[d.v], d.v))}</span><span class="sp"></span>

@@ -148,7 +148,10 @@ def _secs(text):
 
 def tool_procs(root, within):
     """root 下面最近 within 秒里起的进程（正在跑的命令和它起的子进程；常驻的 MCP 服务起得早，不算）：进程号 → 用了多少秒 CPU。"""
-    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,etime=,time="], capture_output=True, text=True, timeout=10).stdout
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,etime=,time="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
     rows, kids = {}, {}
     for line in out.splitlines():
         f = line.split()

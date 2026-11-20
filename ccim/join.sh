@@ -78,6 +78,14 @@ if [ "$OS" = linux ] && [ "$(id -u)" = 0 ] && [ "${CCIM_AS_ROOT:-}" != 1 ]; then
     say "建好了用户 $RUN_USER"
     CREATED=1
   fi
+  # 精简系统可能没有 ps（procps），ccim 看进程要用
+  if ! command -v ps >/dev/null 2>&1; then
+    say "安装 procps"
+    { command -v apt-get >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq procps >/dev/null 2>&1; } \
+      || { command -v dnf >/dev/null 2>&1 && dnf install -y -q procps-ng >/dev/null 2>&1; } \
+      || { command -v yum >/dev/null 2>&1 && yum install -y -q procps-ng >/dev/null 2>&1; } \
+      || { command -v apk >/dev/null 2>&1 && apk add -q procps >/dev/null 2>&1; } || true
+  fi
   # 免密 sudo：只给 ccim 自己建的用户（或默认的 ccim 用户）；Agent 要用时在聊天里批准后才执行
   if [ -z "$NO_SUDO" ] && { [ -n "${CREATED:-}" ] || [ "$RUN_USER" = ccim ]; }; then
     if ! command -v sudo >/dev/null 2>&1; then

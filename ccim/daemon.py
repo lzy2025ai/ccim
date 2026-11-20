@@ -26,9 +26,23 @@ def _is_ccim(pid):
     hit = _ps_seen.get(pid)                   # 活没活着每次都看（上面那步不开子进程），只有命令行缓存
     if hit and time.time() - hit[0] < PS_TTL:
         return hit[1]
-    args = subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True).stdout
+    args = _cmdline(pid)
     _ps_seen[pid] = (time.time(), "ccim" in args)
     return "ccim" in args
+
+
+
+def _cmdline(pid):
+    """进程的命令行。Linux 读 /proc（精简系统可能没装 ps）。"""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        pass
+    try:
+        return subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True).stdout
+    except OSError:
+        return ""
 
 
 def running(path):

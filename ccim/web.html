@@ -3349,7 +3349,8 @@ function recHtml(r, i, src = "log"){
       <div class="ft">聊天记录${items.length > 4 ? ` · ${items.length} 条` : ""}</div></button>${timeActs(r)}</div>`;
   }
   if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card${diaryCls()}"><div class="dh">${ICON.kb}日记</div>${r.text ? `<div class="dt">${esc(r.text)}</div>` : ""}${diaryFiles(r.files)}</div>${timeActs(r)}</div></div>` : "";
-  if (r.type === "edit") return `<div class="doc-edit">改了 <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
+  if (r.type === "ver") return "";         // 助手直接改了文档，只是留一版（#511），回答下面已经列了改过的文件
+  if (r.type === "edit") return `<div class="doc-edit">${r.via === "word" ? "在 Word 里改了" : "改了"} <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
 }
@@ -9312,7 +9313,7 @@ function codeKey(e){
 }
 function verLabel(x, k){
   const t = x.at ? new Date(x.at * 1000) : null, p = n => String(n).padStart(2, "0");
-  return `第 ${k + 1} 版 · ${x.by === "me" ? "你改的" : "Agent 发的"}${t ? ` · ${t.getMonth() + 1}月${t.getDate()}日 ${p(t.getHours())}:${p(t.getMinutes())}` : ""}`;
+  return `第 ${k + 1} 版 · ${x.by !== "me" ? (x.via === "edit" ? "Agent 改的" : "Agent 发的") : x.via === "word" ? "你在 Word 里改的" : "你改的"}${t ? ` · ${t.getMonth() + 1}月${t.getDate()}日 ${p(t.getHours())}:${p(t.getMinutes())}` : ""}`;
 }
 const docRoot = () => DOC && DOC.ws ? $("#ws-ed") : $("#docpane");
 function drawWsDoc(){                    // 工作区：文档画在中间的编辑区，上面是标签

@@ -1309,6 +1309,10 @@ table.perf td.nm{max-width:320px;overflow:hidden;text-overflow:ellipsis}
 .doc-edit{text-align:right;font-size:12.5px;color:var(--muted);max-width:760px;margin:-6px auto 14px;padding:0 22px}
 #main.ws .doc-edit{padding:0 14px}
 .doc-edit button{color:var(--qing)}
+.doc-diff-note{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.5}
+.doc-body .dchg{background:rgba(245,190,40,.22)!important;box-shadow:-5px 0 0 rgba(245,190,40,.22),5px 0 0 rgba(245,190,40,.22);border-radius:2px}
+.doc-body .ddel{color:var(--faint)!important;text-decoration:line-through;font-size:13px;margin:4px 0;padding-left:8px;border-left:2px solid #E3A49C;list-style:none}
+.doc-top .vbtn.on{color:var(--qing)}
 /* 侧边栏（#476）：顶部一个侧边对话一个标签，下面嵌着那个对话的对话页；左边的竖线拖动改宽度 */
 .sd-head{flex:none;display:flex;align-items:center;gap:2px;padding:8px 8px 6px 10px;padding-top:max(8px,env(safe-area-inset-top));position:relative}
 .sd-head.scrolled::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
@@ -3364,7 +3368,7 @@ function recHtml(r, i, src = "log"){
     return `<div class="msg">${img ? `<a href="${src}" target="_blank"><img class="sentimg" src="${src}" alt="${esc(r.name)}"></a>`
       : isVideo(r.name) ? videoHtml(src, r.name)
       : isAudio(r.name) ? audioHtml(src, r.name)
-      : dk ? docChip(r.path, r.name, DOC_LABEL[dk])
+      : dk ? docChip(r.path, r.name, DOC_LABEL[dk]) + (diffText(r.diff) ? `<div class="doc-diff-note">${esc(diffText(r.diff))}</div>` : "")
       : fileChip(src, r.name, r.path)}${timeActs(r)}</div>`;
   }
   if (r.type === "app") return `<div class="msg">${appChip(r)}${timeActs(r)}</div>`;
@@ -3376,7 +3380,7 @@ function recHtml(r, i, src = "log"){
   }
   if (r.type === "diary") return diaryShown() ? `<div class="msg me"><div><div class="diary-card${diaryCls()}"><div class="dh">${ICON.kb}日记</div>${r.text ? `<div class="dt">${esc(r.text)}</div>` : ""}${diaryFiles(r.files)}</div>${timeActs(r)}</div></div>` : "";
   if (r.type === "ver") return "";         // 助手直接改了文档，只是留一版（#511），回答下面已经列了改过的文件
-  if (r.type === "edit") return `<div class="doc-edit">${r.via === "word" ? "在 Word 里改了" : "改了"} <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button></div>`;
+  if (r.type === "edit") return `<div class="doc-edit">${r.via === "word" ? "在 Word 里改了" : "改了"} <button onclick="openDoc(${q(r.path)})">${esc(r.name)}</button>${diffText(r.diff) ? `<div class="doc-diff-note">${esc(diffText(r.diff))}</div>` : ""}</div>`;
   if (r.divider) return `<div class="note" style="text-align:center;margin:6px auto 22px">${esc(r.text)}</div>`;
   return `<div class="note"><div class="answer">${md(r.text)}</div></div>`;
 }
@@ -9368,6 +9372,7 @@ function drawWsDoc(){                    // 工作区：文档画在中间的编
       ${DOC.savedAt ? `<span class="saved">已保存</span>` : ""}
       ${modes.length ? `<span class="seg mini">${modes.map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
+      ${diffBtn()}
       ${d && d.kind !== "other" ? docMoreBtn() : ""}
     </div>
     <div class="doc-body">${docBody()}</div>
@@ -9401,6 +9406,7 @@ function drawDoc(){
       ${DOC_ONLY ? `<a class="icon-btn" aria-label="回到对话" title="回到对话" href="${esc(docOnlyBack())}">${ICON.chat}</a>` : `<button class="icon-btn" aria-label="关闭" onclick="closeDoc()">${narrow() ? ICON.left : ICON.x}</button>`}
       <div class="nm" title="${esc(DOC.path)}">${esc(name)}${DOC.dirty ? `<span class="dot" title="没保存"></span>` : ""}</div>
       ${vs.length > 1 ? `<button class="vbtn" onclick="docVersions(event)">第 ${d.v + 1} 版${ICON.down}</button>` : ""}
+      ${diffBtn()}
       ${d && d.editable && d.latest ? `<span class="seg mini">${[["view", "预览"], ["edit", "编辑"]]
         .map(([m, l]) => `<button class="${DOC.mode === m ? "on" : ""}" onclick="docMode('${m}')">${l}</button>`).join("")}</span>` : ""}
       ${d && d.kind === "pdf" ? pdfTab() : ""}
@@ -9427,10 +9433,56 @@ function docMode(m){
   DOC.mode = m; drawDoc();
   if (m === "edit") { const r = docRoot(); r?.querySelector("#doc-ta")?.focus(); if (r?.querySelector("#doc-live")) liveFocus(); }
 }
-function docMounted(){   // 正文画好以后：预览里的图片工具、代码高亮、实时预览编辑器
+function docMounted(){   // 正文画好以后：预览里的图片工具、代码高亮、实时预览编辑器、标出改动
   if (DOC.d && DOC.d.kind === "md" && DOC.mode === "view") wxImgTools();
   codeSync();
   liveMount();
+  docDiff();
+}
+// ---- 新的一版和上一版比（#513）：按段比，改过、新增的段落标黄，删掉的用删除线标在原位置 ----
+// 对话里文档卡片下面的那句由后台算好（docs.change_summary），这里在页面上按画出来的段落再比一次
+const diffText = x => {
+  if (!x || !(x.mod || x.add || x.del)) return "";
+  const n = [x.mod && `改了 ${x.mod} 段`, x.add && `新增 ${x.add} 段`, x.del && `删了 ${x.del} 段`].filter(Boolean).join("、");
+  const w = (x.where || []).map(t => `「${t.length > 16 ? t.slice(0, 16) + "…" : t}」`).join("");
+  return `比上一版${n}${w ? `，在${w}${x.more ? "等处" : ""}` : ""}`;
+};
+let diffOff = false;                     // 顶上点掉了「标出改动」
+const diffOk = () => !!(DOC && DOC.d && (DOC.d.kind === "md" || DOC.d.kind === "docx") && DOC.mode === "view" && DOC.d.v > 0 && (DOC.d.versions || []).length > 1);
+const diffBtn = () => diffOk() ? `<button class="vbtn ${diffOff ? "" : "on"}" title="和上一版比，改过的段落标黄" aria-pressed="${!diffOff}" onclick="diffOff=!diffOff;drawDoc()">${diffOff ? "" : "✓ "}标出改动</button>` : "";
+const DIFF_SEL = "h1,h2,h3,h4,h5,h6,p,li,blockquote,pre";
+const diffLeaves = root => [...root.querySelectorAll(DIFF_SEL)].filter(e => !e.querySelector(DIFF_SEL) && !e.classList.contains("ddel"))
+  .map(e => [e, e.textContent.replace(/\s+/g, " ").trim()]).filter(([, t]) => t);
+async function docDiff(){
+  if (!diffOk() || diffOff) return;
+  const doc = DOC, d = doc.d, v = d.v - 1, key = `${doc.path}|${v}`;
+  let old = (doc.prevs || {})[key];
+  if (!old) {
+    try { old = await api(`/api/doc?chat=${encodeURIComponent(doc.chat)}&path=${encodeURIComponent(doc.path)}&v=${v}`, undefined, doc.machine); } catch { return; }
+    doc.prevs = {...(doc.prevs || {}), [key]: old};
+  }
+  if (!DOC || DOC.d !== d || !diffOk() || diffOff) return;
+  if (doc !== DOC) DOC.prevs = doc.prevs;
+  const body = docRoot()?.querySelector(".doc-body"); if (!body || body.querySelector(".dchg, .ddel")) return;
+  const od = new DOMParser().parseFromString(`<body>${old.kind === "md" ? docMd(old.text || "") : old.html || ""}</body>`, "text/html").body;
+  const a = diffLeaves(od).map(x => x[1]), bs = diffLeaves(body), b = bs.map(x => x[1]);
+  const n = a.length, m = b.length, W = m + 1;
+  if (n * m > 4e6) return;
+  const L = new Uint16Array((n + 1) * W);           // 最长公共部分，从后往前填
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    L[i * W + j] = a[i] === b[j] ? L[(i + 1) * W + j + 1] + 1 : Math.max(L[(i + 1) * W + j], L[i * W + j + 1]);
+  const dels = [];
+  for (let i = 0, j = 0; i < n || j < m;) {
+    if (i < n && j < m && a[i] === b[j]) { i++; j++; }
+    else if (j < m && (i >= n || L[i * W + j + 1] >= L[(i + 1) * W + j])) bs[j++][0].classList.add("dchg");
+    else dels.push([j, a[i++]]);
+  }
+  let tail = bs.length ? bs[bs.length - 1][0] : null;   // 删在最后的：依次接在末尾
+  for (const [j, t] of dels) {
+    const ref = bs[j] && bs[j][0], el = document.createElement((ref || tail) && (ref || tail).tagName === "LI" ? "li" : "div");
+    el.className = "ddel"; el.textContent = t;
+    if (ref) ref.before(el); else if (tail) { tail.after(el); tail = el; } else body.append(el);
+  }
 }
 // 右上角「更多」（#392）：下载、复制、在访达中显示、复制到公众号收在一起
 function docMoreBtn(){ return `<button class="icon-btn" aria-label="更多" title="更多" onclick="docMore(event)">${ICON.more}</button>`; }

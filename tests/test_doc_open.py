@@ -67,6 +67,42 @@ class DocOpenTests(base.SideMentionTests):                           # 只借它
         os.remove(lock)                                              # 关掉 Word
         self.assertNotIn("正在 Word 里编辑", pf._doc_edits(cid))
 
+    def test_lock_names(self):                                    # Word、WPS、LibreOffice 的锁文件
+        from ccim import docs
+        d = self.tmp.name
+        p = os.path.join(d, "HoYgent_二期页面功能清单.docx")
+        for lock in ("~$Ygent_二期页面功能清单.docx", ".~Ygent_二期页面功能清单.docx", ".~lock.HoYgent_二期页面功能清单.docx#"):
+            open(os.path.join(d, lock), "w").close()
+            self.assertTrue(docs.office_open(p), lock)
+            os.remove(os.path.join(d, lock))
+        self.assertFalse(docs.office_open(p))
+        open(os.path.join(d, "~$别的.docx"), "w").close()
+        self.assertFalse(docs.office_open(p))
+
+    def test_member_sub_chat_told(self):                         # 文档在外层对话打开，群成员在子对话里干活
+        pf = self.pf
+        cid = pf.call(pf.new_chat, title="临时对话")
+        path = os.path.join(self.tmp.name, "清单.docx")
+        with open(path, "wb") as f:
+            f.write(b"v1")
+        pf.channel.logs.append(cid, {"type": "file", "path": path, "name": "清单.docx"})
+        with patch("subprocess.run"):
+            pf.doc_open(cid, path)
+        open(os.path.join(self.tmp.name, ".~清单.docx"), "w").close()
+        pf.run(pf.mentions.send(cid, "改一下清单", [self.helper]))
+        for _ in range(50):
+            if self.tasks:
+                break
+            __import__("time").sleep(0.02)
+        sub, task = self.tasks[0]
+        self.assertIn("正在 Word 里编辑", str(task.prompt if hasattr(task, "prompt") else task))
+        pf.channel.logs.append(sub, {"type": "file", "path": path, "name": "清单.docx"})
+        with open(path, "wb") as f:
+            f.write(b"v2")
+        pf.channel.logs.append(sub, {"type": "answer", "text": "改好了", "changed": [{"path": path}]})
+        pf._doc_agent_vers(sub)
+        self.assertTrue(any(r.get("type") == "note" and "还在 Word 里开着" in r["text"] for r in pf.channel.logs.read(cid)))
+
     def test_only_files_in_chat(self):
         pf = self.pf
         cid = pf.call(pf.new_chat, agent=self.main_agent, title="写方案")

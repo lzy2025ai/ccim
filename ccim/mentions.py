@@ -216,7 +216,7 @@ class Mentions:
             return None
         from .progress import short
         from .session import Task
-        task = Task(prompt)                   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记
+        task = Task(self.pf.doc_word_note(sub) + prompt if isinstance(prompt, str) else prompt)   # 来晚了、Claude 没接着处理时会单独排一轮，到时候按它自己的回答记；还在 Word 里开着的文档（#515）
         if hasattr(prompt, "fence"):          # 多人群聊（#419）：权限不一样的不补进去（Chat.inject 会拒），照常排队
             task.fence = prompt.fence
         task.depth = depth
@@ -351,7 +351,7 @@ class Mentions:
                 # 它的对话里只显示用户说的那句，带过去的之前的内容不重复显示
                 self.pf.channel._emit(sub, self.pf.channel.logs.append(sub, {"type": "user", "text": text, "files": [], "from_chat": cid,
                                                                           **({"from_by": by} if by else {})}))
-                task = Task(prompt)
+                task = Task(self.pf.doc_word_note(sub) + prompt if isinstance(prompt, str) else prompt)   # 还在 Word 里开着的文档（#515）
                 if hasattr(prompt, "fence"):  # 多人群聊（#419）：按 @ 它的人的权限跑
                     task.fence = prompt.fence
                 task.depth = depth

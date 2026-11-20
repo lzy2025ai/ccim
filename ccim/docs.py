@@ -546,11 +546,14 @@ def prev_snap(rows, path):
 
 
 def office_open(path):
-    """这个文件是不是正在 Word（WPS 也一样）里开着（#515）：开着时同一个文件夹里有 ~$ 开头的锁文件，关掉就没了。
-    文件名长的，锁文件把开头两个字换成 ~$。"""
+    """这个文件是不是正在 Word、WPS、LibreOffice 里开着（#515）：开着时同一个文件夹里有锁文件，关掉就没了。
+    Word 是 ~$ 开头、WPS 是 .~ 开头（文件名长的，把开头两个字换掉），LibreOffice 是 .~lock.名字#。"""
     d, name = os.path.split(path)
     try:
-        locks = [x[2:] for x in os.listdir(d or ".") if x.startswith("~$")]
+        files = os.listdir(d or ".")
     except OSError:
         return False
+    if f".~lock.{name}#" in files:
+        return True
+    locks = [x[2:] for x in files if x.startswith(("~$", ".~")) and not x.startswith(".~lock.")]
     return any(r == name or len(r) >= len(name) - 2 and r and name.endswith(r) for r in locks)

@@ -543,3 +543,14 @@ def prev_snap(rows, path):
             if p and s and os.path.realpath(p) == rp and os.path.isfile(s):
                 return s
     return None
+
+
+def office_open(path):
+    """这个文件是不是正在 Word（WPS 也一样）里开着（#515）：开着时同一个文件夹里有 ~$ 开头的锁文件，关掉就没了。
+    文件名长的，锁文件把开头两个字换成 ~$。"""
+    d, name = os.path.split(path)
+    try:
+        locks = [x[2:] for x in os.listdir(d or ".") if x.startswith("~$")]
+    except OSError:
+        return False
+    return any(r == name or len(r) >= len(name) - 2 and r and name.endswith(r) for r in locks)

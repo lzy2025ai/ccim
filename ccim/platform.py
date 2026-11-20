@@ -2397,6 +2397,12 @@ class Platform:
         mine = {os.path.realpath(f.get("path") if isinstance(f, dict) else f) for f in last.get("changed") or []}
         if not mine:
             return
+        clash = [p for p in self._doc_in_word(cid) if os.path.realpath(p) in mine]
+        if clash:                             # 改了用户正在 Word 里开着的文档：提醒用户保存前先处理（#515）
+            names = "、".join(f"「{os.path.basename(p)}」" for p in clash)
+            self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "text":
+                f"Agent 刚改了{names}，它还在 Word 里开着。在 Word 里直接保存会盖掉 Agent 的改动："
+                "要保留 Agent 改的，先关掉不保存，再重新打开接着改；要保留你在 Word 里改的，就照常保存。"}))
         docs_in = {}
         for r in rows:
             for p in [r.get("path")] if r.get("type") in ("file", "edit", "ver") else \
@@ -2453,10 +2459,16 @@ class Platform:
         self._doc_scan(cid)
         chats = self.chats()
         paths = (chats.get(cid) or {}).pop("doc_edits", None)
-        if not paths:
-            return ""
-        self.store.write(chats)
-        return "（我直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n"
+        if paths:
+            self.store.write(chats)
+        busy = self._doc_in_word(cid)
+        return ("（我直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n" if paths else "") + \
+            ("（我正在 Word 里编辑这些文件，先别改它们，不然我在 Word 里保存时会盖掉你的改动。要改就先告诉我改哪里，"
+             "或者另存一份再改：" + "、".join(busy) + "）\n\n" if busy else "")
+
+    def _doc_in_word(self, cid):
+        """用 Word 打开过、现在还开着的文档（#515）。"""
+        return [p for p in (self.chats().get(cid) or {}).get("doc_opened") or {} if docs.office_open(p)]
 
     # ----- 飞书、微信、终端里的对话 -----
 

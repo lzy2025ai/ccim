@@ -19,7 +19,7 @@ import json, os, re, time
 from . import agents, registry
 
 GUEST_GET = {
-    "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/agent/recent", "/api/schedule", "/api/schedule/list",
+    "/api/state", "/api/chat", "/api/chat/sig", "/api/doc", "/api/agent", "/api/agent/recent", "/api/schedule", "/api/schedule/list", "/api/schedule/feed",
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/board/day", "/api/dirs", "/api/file", "/api/file/part",
     "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls", "/api/chat/people",
@@ -32,6 +32,7 @@ GUEST_POST = {
     "/api/kb/lib/save", "/api/kb/lib/delete", "/api/kb/entry/save", "/api/kb/entry/delete", "/api/kb/entry/move",
     "/api/agent/save", "/api/agent/delete", "/api/agent/pin", "/api/agent/draft",
     "/api/schedule/save", "/api/schedule/toggle", "/api/schedule/seen", "/api/schedule/delete", "/api/schedule/run", "/api/schedule/try",
+    "/api/schedule/reply", "/api/schedule/seen_all",
     "/api/agent/connect", "/api/channel/start", "/api/channel/stop", "/api/channel/restart", "/api/channel/disconnect",
     "/api/chat/continue", "/api/chat/people", "/api/chat/join",
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
@@ -357,6 +358,8 @@ def check(pf, acct, method, path, q, body):
                 raise Denied("选一下交给哪个 Agent。")
             f["account"] = acct
             b["fields"] = f
+        elif path == "/api/schedule/seen_all":
+            pass                              # 只记自己的（platform 里按账号挑）
         elif of_schedule(pf, pf.schedules.all().get(b.get("id") or "")) != acct:
             raise Denied("找不到这个定时任务。")
 

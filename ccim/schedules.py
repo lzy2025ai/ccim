@@ -22,6 +22,11 @@ CATCHUP_AFTER = 300                          # 比预定时间晚这么多秒才
 FREQS = ("daily", "workday", "weekly", "monthly", "once", "every")
 EVERY = (5, 24 * 60)                         # 每隔几分钟：最少、最多
 QUIET = "[无需通知]"
+# 动态（#520）：信息流里每条只显示第一句和后面几行，让结论放在最前面
+FEED_NOTE = "\n\n（回答的第一行用一句话写最重要的结论，不加标题符号，后面再展开。）"
+FEED_DAYS = 30            # 动态里显示最近几天的
+FEED_MAX = 80
+IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 QUIET_NOTE = (f"\n\n（这是定时任务到点自动发来的，用户这时不一定在看。这次没有值得告诉用户的新情况时，"
               f"只回复「{QUIET}」这几个字，不要别的；有就照常回答。）")
 PROJECT_WAIT = 4 * 3600                      # 项目任务最多等这么久
@@ -241,6 +246,104 @@ class Schedules:
                 n, last = n + 1, max(last, at)
         return n, last
 
+    def feed(self, sids):
+        """动态（#520）：这些定时任务最近跑出的结果，新的在前。没新情况的不算；每隔几分钟跑的一天合成一条（最近那次）。
+        出错的不当动态，最近一次出错的任务放在 failing。new：晚于上次看过。"""
+        data, chats, posts, failing = self.all(), self.pf.chats(), [], []
+        since = time.time() - FEED_DAYS * 86400
+        for sid in sids:
+            s = data.get(sid)
+            if not s:
+                continue
+            runs = [r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run"]
+            ended = [r for r in runs if r.get("state") in ("done", "error", "quiet")]
+            if ended and ended[-1]["state"] == "error":
+                failing.append({"id": sid, "name": s["name"], "at": ended[-1].get("done_at") or ended[-1].get("at")})
+            seen = s.get("seen_at") or 0
+            day = {}
+            for r in runs:
+                at = r.get("done_at") or r.get("at") or 0
+                if r.get("state") != "done" or at < since or not (r.get("text") or "").strip() or is_quiet(r.get("text")):
+                    continue
+                post = {"sid": sid, "rid": r["id"], "name": s["name"], "at": at, "start": r.get("at") or at, "text": r["text"], "chat": r.get("chat"),
+                        "project": r.get("project"), "agent": self._poster(s, chats), "kind": s["target"]["kind"],
+                        "new": at > max(seen, (chats.get(r.get("chat") or "") or {}).get("seen_at") or 0), "count": 1}
+                if s.get("freq") == "every":
+                    k = dt.datetime.fromtimestamp(at).date()
+                    if k in day:
+                        post["count"] = day[k]["count"] + 1
+                        post["new"] = post["new"] or day[k]["new"]
+                        posts.remove(day[k])
+                    day[k] = post
+                posts.append(post)
+        posts.sort(key=lambda p: -p["at"])
+        posts = posts[:FEED_MAX]
+        for p in posts:
+            self._replies(p)
+        failing.sort(key=lambda f: -(f["at"] or 0))
+        return {"posts": posts, "failing": failing}
+
+    @staticmethod
+    def _poster(s, chats):
+        t = s["target"]
+        if t["kind"] == "agent":
+            return t["id"]
+        if t["kind"] == "group" and t.get("agents"):
+            return t["agents"][0]
+        if t["kind"] in ("chat", "group"):
+            return (chats.get(t["id"]) or {}).get("agent")
+        return None
+
+    def _replies(self, p):
+        """这次结果的配图和追问：结果那一轮发的图；之后的追问——任务自己的对话（s-）里是到下一次运行前的所有问答，
+        发到别的对话里的只算在动态里追问的（feed_run）和紧跟着的回答。"""
+        cid = p.get("chat")
+        p["images"], p["replies"] = [], []
+        if not cid:
+            return
+        rows = self.pf.channel.logs.read(cid)
+        start = next((i for i, r in enumerate(rows) if r.get("type") == "answer" and p["start"] <= (r.get("at") or 0) <= p["at"] + 5), None)
+        if start is None:
+            return
+        own = cid.startswith("s-")
+        for r in rows[max(0, start - 30):start + 1]:
+            if r.get("type") == "file" and (r.get("at") or 0) >= p["start"] and (r.get("name") or "").lower().endswith(IMG_EXT):
+                p["images"].append({"path": r["path"], "name": r["name"]})
+        p["images"] = p["images"][-4:]
+        want = False
+        for r in rows[start + 1:]:
+            if r.get("type") == "user" and r.get("sched"):
+                break
+            if r.get("type") == "user":
+                want = own or r.get("feed_run") == p["rid"]
+                if want:
+                    p["replies"].append({"who": "me", "text": r.get("text") or "", "at": r.get("at")})
+            elif r.get("type") == "answer" and want:
+                p["replies"].append({"who": "agent", "text": r.get("text") or "", "at": r.get("at")})
+                want = own
+        p["replies"] = p["replies"][-6:]
+
+    async def reply(self, sid, rid, text, who=None):
+        """在动态下面追问：发到那次结果所在的对话。"""
+        text = (text or "").strip()
+        if not text:
+            raise Problem("先写点什么。")
+        run = next((r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run" and r.get("id") == rid and r.get("chat")), None)
+        if not run or run["chat"] not in self.pf.chats():
+            raise Problem("这次结果所在的对话已经删掉了。")
+        await self.pf.send(run["chat"], text, mark={"feed_run": rid}, who=who, call=True)
+        return {"chat": run["chat"]}
+
+    def seen_all(self, sids):
+        data, now = self.all(), time.time()
+        for sid in sids:
+            if sid in data:
+                data[sid]["seen_at"] = now
+        self._write(data)
+        for sid in sids:
+            self._emit(sid)
+        return {}
+
     def seen(self, sid):
         data = self.all()
         if sid in data:
@@ -319,6 +422,8 @@ class Schedules:
     async def _run(self, sid, rid, s):
         upd = {"type": "run", "id": rid}
         prompt = f"[定时任务「{s['name']}」] {s['prompt']}" + (QUIET_NOTE if s.get("quiet") and s["target"]["kind"] != "project" else "")
+        if s["target"]["kind"] != "project":
+            prompt += FEED_NOTE
         try:
             if s["target"]["kind"] == "chat":
                 upd.update(await self._run_chat(s["target"]["id"], s, prompt, sid, chapter=_chaptered(s)))

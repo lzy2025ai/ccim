@@ -1255,6 +1255,46 @@ html.embed .send{width:30px;height:30px;border-radius:50%}
 .skchip.on{border-color:var(--qing);color:var(--qing);background:var(--qing-soft)}
 .skchip svg{width:12px;height:12px}
 .agent-page{overflow:auto;flex:1}
+/* 动态（#520）：定时任务的结果像朋友圈一样刷 */
+.feed{overflow:auto;flex:1}
+.feed-in{max-width:640px;margin:0 auto;padding:0 0 60px}
+.feed-head{display:flex;align-items:center;gap:10px;padding:22px 22px 12px}
+.feed-head h2{font:600 22px/1.25 var(--song);margin:0;flex:1}
+.feed-fail{display:flex;align-items:center;gap:10px;margin:0 22px 8px;padding:9px 14px;border-radius:8px;background:var(--stuck-soft);color:var(--stuck-ink);font-size:13px}
+.feed-fail span{flex:1;min-width:0}
+.feed-fail a{color:inherit;font-weight:600;white-space:nowrap}
+.feed-day{padding:16px 22px 2px;color:var(--muted);font-size:12px}
+.fpost{display:flex;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line)}
+.fpost > .seal,.fpost > .chaticon,.fpost > .pmark{width:42px;height:42px;flex:none}
+.fpost .fb{flex:1;min-width:0}
+.fpost .fwho{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fpost .fwho b{color:var(--qing);font-size:15px;font-weight:600}
+.fpost .fwho a{color:var(--faint);font-size:12px;text-decoration:none}
+.fpost .fwho a:hover{color:var(--muted);text-decoration:underline}
+.fpost.new .fwho b::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-left:6px;vertical-align:2px}
+.fpost .ftitle{font-size:15.5px;font-weight:600;line-height:1.5;margin:3px 0 2px;overflow-wrap:anywhere}
+.fpost .ftext{color:var(--ink-2);font-size:14px;overflow-wrap:anywhere}
+.fpost .ftext.clamp{max-height:7.2em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent)}
+.fpost .ftext > :first-child{margin-top:0}.fpost .ftext > :last-child{margin-bottom:0}
+.fpost .fmore{color:var(--qing);font-size:13px;margin-top:2px}
+.fpost .fpics{display:grid;grid-template-columns:repeat(3,minmax(0,110px));gap:5px;margin-top:10px}
+.fpost .fpics img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;background:var(--sunk);cursor:zoom-in;display:block}
+.fpost .fpics.one{grid-template-columns:minmax(0,240px)}.fpost .fpics.one img{aspect-ratio:auto;max-height:240px}
+.fpost .fnote{color:var(--faint);font-size:12px;margin-top:6px}
+.fpost .ffoot{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--faint)}
+.fpost .ffoot time{flex:1}
+.fpost .ffoot .btn{padding:3px 10px;font-size:12px;min-height:0;color:var(--ink-2)}
+.fpost .frep{margin-top:10px;background:var(--sunk);border-radius:6px;padding:8px 12px;font-size:13px}
+.fpost .frep .fr{overflow-wrap:anywhere}.fpost .frep .fr + .fr{margin-top:6px}
+.fpost .frep .fr b{color:var(--qing);font-weight:600}
+.fpost .frep .fr .md{display:inline}.fpost .frep .fr .md > *{display:inline;margin:0}
+.fpost .frep .fr.long .md{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.fpost .frep .fr.long .md > *{display:block}
+.fpost .frep .fwait{color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:6px}
+.fpost .fask{display:flex;gap:6px;margin-top:8px;align-items:flex-end}
+.fpost .fask textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 10px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink);max-height:120px}
+.fpost .fask textarea:focus{outline:2px solid var(--qing);outline-offset:-1px;border-color:transparent}
+.item.feed-row .sico svg{width:20px;height:20px}
+@media (max-width:760px){.feed-head{padding:16px 16px 10px}.fpost{padding:14px 16px}.feed-fail{margin:0 16px 8px}.feed-day{padding:14px 16px 2px}.fpost > .seal,.fpost > .chaticon,.fpost > .pmark{width:38px;height:38px}}
 .agent-top{display:flex;gap:18px;align-items:center;padding:26px 32px 20px;border-bottom:1px solid var(--line)}
 .agent-top h2{font:600 24px/1.25 var(--song);margin:0}
 .agent-top .role{color:var(--muted);margin-top:2px;max-width:560px}
@@ -1473,7 +1513,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   .pback{display:grid;place-items:center;position:fixed;top:calc(8px + env(safe-area-inset-top));left:6px;z-index:11;width:36px;height:36px;border-radius:10px;color:var(--ink)}
   .pback svg{width:22px;height:22px}
   .app:not(.phone-main) .pback,.app.cards .pback{display:none}
-  .app.phone-main .chat-head,.app.phone-main .agent-top,.app.phone-main .d-head{padding-left:48px}
+  .app.phone-main .chat-head,.app.phone-main .agent-top,.app.phone-main .d-head,.app.phone-main .feed-head{padding-left:48px}
   .chat-head{padding:8px 12px;gap:8px;flex-wrap:wrap}
   .chat-head{flex-wrap:nowrap}
   .chat-head > .seal{display:none}
@@ -2076,6 +2116,7 @@ const ICON = {
   grow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
   shrink:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   expand:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+  feed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>`,
   ext:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
@@ -2730,6 +2771,7 @@ function onEvent(ev){
     const rec = {...ev};                  // 记录本身：外层的 chat 是「哪个对话的推送」，不是记录的字段（@ 回答自己的 chat 是它的子对话）
     delete rec.chat; delete rec.rec_chat;
     if (ev.rec_chat) rec.chat = ev.rec_chat;
+    feedEvent(ev);
     if (ev.type === "schedule") refreshSoon();   // 跑完了：侧栏「定时」的红点、列表跟着变（#447）
     if (sched && ev.type === "schedule" && ev.schedule === sched.id){
       clearTimeout(window._st); window._st = setTimeout(() => { if (sched) refreshSched(); }, 300);
@@ -2883,6 +2925,9 @@ function route(){
       localStorage.setItem("ccim.agentChats", JSON.stringify(m));
     }
   } catch {}
+  if (current.view === "schedules" && !current.id && narrow() && prev.view !== "schedules" && (S.schedules || []).length) {   // 手机上点「定时」先看动态（#520），返回是任务列表
+    history.replaceState(null, "", "#/schedules/feed"); current.id = "feed";
+  }
   if (current.view === "opc" && !current.id && !narrow() && opc() && (opc().group || opcMs().length)) current.id = "group";   // 电脑上进来先开大群
   if (current.view === "agents" && current.id && (S.staff || []).some(a => a.id === current.id)) {   // 员工的对话在一人公司里看（#470）
     history.replaceState(null, "", `#/opc/${encodeURIComponent(current.id)}`); current = {view: "opc", id: current.id, sub: null, tab: null};
@@ -2912,7 +2957,7 @@ function route(){
   if (current.view !== "schedules") sched = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
   else if (current.view === "opc") openOpc();
-  else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : current.id ? openSchedule(current.id) : renderScheduleEmpty(); }
+  else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : !current.id || current.id === "feed" ? renderScheduleFeed() : openSchedule(current.id); }
   else if (current.view === "agents") {
     // 从别处进来：先显示上次那份列表，再重新取（这期间终端里可能新开了对话，#95）
     if (agentSide && agentSide.id === current.id && (prev.view !== "agents" || prev.id !== current.id)) {
@@ -8494,15 +8539,101 @@ function renderScheduleList(){
   const rows = [...(S.schedules || [])].sort((a, b) => !!b.unseen - !!a.unseen || (b.unseen_at || 0) - (a.unseen_at || 0));   // 有新结果的在最上面（几台电脑的合在一起时也是）
   $("#list").innerHTML = `
     <div class="list-head"><h1>定时任务</h1><button class="fold" style="margin-left:auto;margin-right:6px" aria-label="收起列表" title="收起列表" onclick="toggleList(false)">${ICON.fold}</button><a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建</a></div>
-    <div class="scroll">${rows.length ? rows.map(s => `<a class="item ${current.id === s.id ? "on" : ""}" href="#/schedules/${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit">
+    <div class="scroll">${rows.length ? `<a class="item feed-row ${!current.id || current.id === "feed" ? "on" : ""}" href="#/schedules/feed" style="text-decoration:none;color:inherit">
+      <span class="sico"><span class="chaticon" style="--ic:var(--qing)">${ICON.feed}</span>${feedUnseen() ? `<span class="ucount">${feedUnseen() > 99 ? "99+" : feedUnseen()}</span>` : ""}</span><span class="t"><span class="title">动态</span><span class="sub">各个任务跑出的结果</span></span></a>` : ""}${rows.length ? rows.map(s => `<a class="item ${current.id === s.id ? "on" : ""}" href="#/schedules/${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit">
       <span class="sico">${schedMark(s)}${s.unseen ? `<span class="ucount" title="${+s.unseen} 次新结果没看">${+s.unseen > 99 ? "99+" : +s.unseen}</span>` : ""}</span><span class="t"><span class="title">${esc(s.name)}</span>${s.running ? `<span class="working"><span class="spin"></span>正在跑</span>` : `<span class="sub">${esc(freqText(s))}</span>`}</span>
       <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span class="when">${s.on ? esc(fmtTs(s.next_run)) : ""}</span>${mtag(s.machine)}${!s.on ? `<span class="tag">已暂停</span>` : s.last_state === "error" ? `<span class="tag" style="color:var(--bad)">上次出错</span>` : ""}</span></a>`).join("")
       : `<p class="muted" style="padding:10px">还没有定时任务。</p>`}</div>`;
 }
-function renderScheduleEmpty(){
+// ---- 动态（#520）：各任务跑出的结果按时间排成一条，像朋友圈；追问发回那次结果所在的对话 ----
+let FEED = null;                       // {posts, failing, open:Set(rid 展开全文), ask:Set(rid 开着追问框), wait:Set(chat 等回答)}
+const feedUnseen = () => (S.schedules || []).filter(x => !x.machine || x.machine === S.me).reduce((n, x) => n + (+x.unseen || 0), 0);
+const feedOn = () => current.view === "schedules" && (!current.id || current.id === "feed") && !!$("#feed");
+function feedSplit(text){                // 第一行当标题，后面的当正文
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const i = lines.findIndex(l => l.trim());
+  if (i < 0) return {title: "", rest: ""};
+  const title = lines[i].trim().replace(/^#{1,6}\s+/, "").replace(/^[-*+>]\s+/, "").replace(/^\*\*(.+)\*\*[:：]?$/, "$1").replace(/\*\*/g, "");
+  return {title, rest: lines.slice(i + 1).join("\n").trim()};
+}
+function feedWhen(sec){ const d = new Date(sec * 1000), now = new Date(); return d.toDateString() === now.toDateString() ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : fmtTs(sec); }
+function feedDay(sec){
+  const d = new Date(sec * 1000), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+  return d.toDateString() === now.toDateString() ? "今天" : d.toDateString() === y.toDateString() ? "昨天" : `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+async function renderScheduleFeed(){
   sched = null;
-  $("#main").innerHTML = `<div class="empty"><h2>定时任务</h2><p>让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。结果留在这里，也可以发到飞书、微信。</p>
-    <a class="btn primary" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a></div>`;
+  if (!$("#feed")) $("#main").innerHTML = `<div class="feed" id="feed"><div class="feed-in"><div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">正在加载…</p></div></div>`;
+  let d; try { d = await api("/api/schedule/feed"); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
+  if (!feedOn()) return;
+  FEED = {open: new Set(), ask: new Set(), wait: new Set(), waitAt: {}, draft: {}, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
+  FEED.wait.forEach(c => {             // 追问有了回答（那条动态下最后一句是 Agent 的），或等太久了：不再转圈
+    const last = (FEED.posts.find(p => p.chat === c && (p.replies || []).length) || {replies: []}).replies.slice(-1)[0];
+    if (last && last.who === "agent" || Date.now() - (FEED.waitAt[c] || 0) > 600000) FEED.wait.delete(c);
+  });
+  drawFeed();
+  if (feedUnseen()) {
+    (S.schedules || []).forEach(x => { if (!x.machine || x.machine === S.me) x.unseen = 0; });
+    drawAttention(); renderList(); api("/api/schedule/seen_all", {}).catch(() => {});
+  }
+}
+function feedMark(p){
+  if (p.kind === "project") return pmark(projSummary(p.project) || {name: "项"});
+  const a = p.agent && agentOf(p.agent);
+  return a ? seal(a, "", false) : chatIcon(chatById(p.chat));
+}
+function feedPost(p){
+  const a = p.agent && agentOf(p.agent), who = p.kind === "project" ? ((projSummary(p.project) || {}).name || "项目") : a ? a.name : "Agent";
+  const {title, rest} = feedSplit(p.text), open = FEED.open.has(p.rid), long = rest.length > 160 || rest.split("\n").length > 5;
+  const pics = (p.images || []).map(x => fileUrl(p.chat, x.path));
+  const go = p.chat ? `#/chats/${encodeURIComponent(p.chat)}` : p.project ? `#/projects/${encodeURIComponent(p.project)}` : "";
+  const reps = p.replies || [], ask = FEED.ask.has(p.rid), wait = p.chat && FEED.wait.has(p.chat);
+  return `<article class="fpost ${p.new ? "new" : ""}" data-rid="${esc(p.rid)}">${feedMark(p)}<div class="fb">
+    <div class="fwho"><b>${esc(who)}</b><a href="#/schedules/${encodeURIComponent(p.sid)}">${esc(p.name)}</a></div>
+    ${title ? `<div class="ftitle">${esc(title)}</div>` : ""}
+    ${rest ? `<div class="ftext md ${long && !open ? "clamp" : ""}">${md(rest)}</div>${long ? `<button class="fmore" onclick="feedToggle('${esc(p.rid)}')">${open ? "收起" : "全文"}</button>` : ""}` : ""}
+    ${pics.length ? `<div class="fpics ${pics.length === 1 ? "one" : ""}">${pics.map(u => `<img src="${u}" alt="" loading="lazy" onclick="showImage(this.src)">`).join("")}</div>` : ""}
+    ${p.count > 1 ? `<div class="fnote">这天有 ${p.count} 次结果，这是最近一次</div>` : ""}
+    <div class="ffoot"><time>${esc(feedWhen(p.at))}</time>${p.chat ? `<button class="btn" onclick="feedAsk('${esc(p.rid)}')">追问</button>` : ""}${go ? `<a class="btn" href="${go}" style="text-decoration:none">${p.chat ? "看对话" : "去项目里看"}</a>` : ""}</div>
+    ${reps.length || wait ? `<div class="frep">${reps.map(r => `<div class="fr ${r.who === "agent" && r.text.length > 120 ? "long" : ""}"><b>${r.who === "me" ? "我" : esc(who)}：</b><span class="md">${r.who === "me" ? esc(r.text) : md(r.text)}</span></div>`).join("")}
+      ${wait ? `<div class="fwait"><span class="spin"></span>${esc(who)}正在回复</div>` : ""}</div>` : ""}
+    ${ask ? `<div class="fask"><textarea rows="1" placeholder="追问${esc(who)}…" oninput="feedGrow(this,'${esc(p.rid)}')" onkeydown="feedKey(event,'${esc(p.rid)}')">${esc(FEED.draft[p.rid] || "")}</textarea><button class="btn primary" onclick="feedSend('${esc(p.rid)}')">发送</button></div>` : ""}
+  </div></article>`;
+}
+function drawFeed(){
+  const box = $("#feed"); if (!box || !FEED) return;
+  const top = box.scrollTop, act = document.activeElement, fr = act && act.closest && act.closest(".fpost");
+  let day = "", body = "";
+  for (const p of FEED.posts) { const dd = feedDay(p.at); if (dd !== day) { day = dd; body += `<div class="feed-day">${esc(dd)}</div>`; } body += feedPost(p); }
+  const has = (S.schedules || []).length;
+  box.innerHTML = `<div class="feed-in"><div class="feed-head"><h2>动态</h2><a class="btn" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a></div>
+    ${FEED.failing.map(f => `<div class="feed-fail"><span>「${esc(f.name)}」上次没跑成</span><a href="#/schedules/${encodeURIComponent(f.id)}">去看看</a></div>`).join("")}
+    ${body || `<div class="empty"><p>${has ? "定时任务跑出结果后，会一条条出现在这里。" : "让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。跑出的结果会一条条出现在这里。"}</p></div>`}</div>`;
+  box.scrollTop = top;
+  if (fr && act.tagName === "TEXTAREA") { const t = box.querySelector(`.fpost[data-rid="${CSS.escape(fr.dataset.rid)}"] textarea`); if (t) { t.focus(); t.selectionStart = t.selectionEnd = t.value.length; } }
+}
+function feedToggle(rid){ FEED.open.has(rid) ? FEED.open.delete(rid) : FEED.open.add(rid); drawFeed(); }
+function feedAsk(rid){
+  if (FEED.ask.has(rid)) { FEED.ask.delete(rid); drawFeed(); return; }
+  FEED.ask.add(rid); drawFeed();
+  const t = $(`#feed .fpost[data-rid="${CSS.escape(rid)}"] textarea`); if (t) t.focus();
+}
+function feedGrow(t, rid){ FEED.draft[rid] = t.value; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px"; }
+function feedKey(e, rid){ if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !TOUCH) { e.preventDefault(); feedSend(rid); } }
+async function feedSend(rid){
+  const p = FEED.posts.find(x => x.rid === rid), text = (FEED.draft[rid] || "").trim();
+  if (!p || !text) return;
+  try { await api("/api/schedule/reply", {id: p.sid, run: rid, text}); } catch (e) { toast(e.message); return; }
+  FEED.draft[rid] = ""; FEED.ask.delete(rid); FEED.wait.add(p.chat); FEED.waitAt[p.chat] = Date.now();
+  p.replies = [...(p.replies || []), {who: "me", text}];
+  drawFeed();
+}
+let feedTimer = 0;
+function feedSoon(){ clearTimeout(feedTimer); feedTimer = setTimeout(() => { if (feedOn()) renderScheduleFeed(); }, 400); }
+function feedEvent(ev){                  // 跑出新结果、追问有了回答：重取一次
+  if (!FEED || !feedOn()) return;
+  if (ev.type === "schedule") return feedSoon();
+  if (ev.chat && FEED.posts.some(p => p.chat === ev.chat) && (ev.type === "answer" || ev.type === "progress" && ev.state !== "working")) feedSoon();
 }
 function runState(r){
   return ({done: `<span class="status on"><i></i>完成${r.elapsed ? `，用时 ${fmtSec(r.elapsed)}` : ""}</span>`, error: `<span class="status err"><i></i>出错了</span>`,

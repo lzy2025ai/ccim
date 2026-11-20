@@ -53,6 +53,34 @@ report started
 
 printf '%s把这台电脑加入 ccim 总控%s %s\n' "$B" "$N" "$HUB"
 
+# ---------- Linux 上用 root 运行：换成普通用户（#522） ----------
+# ccim 和 Agent 不用 root 跑。用 sudo 运行的就用原来那个用户，直接用 root 登录的建一个 ccim 用户；
+# 再给它开 linger（开机没人登录也启动它的服务），然后换成它重新跑这个脚本。CCIM_USER 指定用户，CCIM_AS_ROOT=1 坚持用 root。
+if [ "$OS" = linux ] && [ "$(id -u)" = 0 ] && [ "${CCIM_AS_ROOT:-}" != 1 ]; then
+  RUN_USER="${CCIM_USER:-${SUDO_USER:-}}"
+  [ "$RUN_USER" = root ] && RUN_USER=""
+  [ -n "$RUN_USER" ] || RUN_USER=ccim
+  step "用普通用户 $RUN_USER 运行 ccim"
+  if id "$RUN_USER" >/dev/null 2>&1; then
+    say "用户 $RUN_USER 已经有了"
+  else
+    if command -v useradd >/dev/null 2>&1; then useradd -m -s /bin/bash "$RUN_USER" 2>/dev/null || useradd -m "$RUN_USER"
+    else adduser -D "$RUN_USER" 2>/dev/null || adduser --disabled-password --gecos "" "$RUN_USER"
+    fi || fail "建用户 $RUN_USER 失败" "自己建一个普通用户，再用 CCIM_USER=用户名 运行这条命令。"
+    say "建好了用户 $RUN_USER"
+    say "要让 Agent 能用管理员权限，给它设密码并加进 sudo 组：passwd $RUN_USER；usermod -aG sudo $RUN_USER"
+  fi
+  if command -v loginctl >/dev/null 2>&1; then
+    loginctl enable-linger "$RUN_USER" >/dev/null 2>&1 && say "开机后自动启动 $RUN_USER 的 ccim" \
+      || say "没开成开机自启（loginctl enable-linger $RUN_USER 失败），重启后要登录一次 $RUN_USER"
+    uid=$(id -u "$RUN_USER"); i=0
+    while [ ! -d "/run/user/$uid" ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+  fi
+  # 换成这个用户重新跑：从总控重新取脚本（curl | sh 时拿不到脚本本身）
+  su - "$RUN_USER" -c "curl -fsSL '$HUB/join.sh' | CCIM_MIRROR='${CCIM_MIRROR:-}' sh -s '$CODE'" </dev/null
+  exit $?
+fi
+
 # ---------- 1. 这台电脑上的 ccim ----------
 step "1/4 检查这台电脑上的 ccim"
 CCIM=""

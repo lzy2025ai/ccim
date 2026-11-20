@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import devices, docs, filesend, people, perf, share, tokens, voice, workspace
+from . import bases, devices, docs, filesend, people, perf, share, tokens, voice, workspace
 from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -3827,6 +3827,7 @@ def state(pf, acct=None):
         "global": g, "defaults": {"claude": _defaults("claude", os.path.expanduser("~")),
                                   "codex": _defaults("codex", os.path.expanduser("~"))},
         "codex": console._codex(), "dsh": dsh_status(), "home": os.path.expanduser("~"), "perms": devices.perms(),
+        "bases": bases.status(), "os": devices.os_kind(),   # 底座装没装、配好没有；哪种系统（#522）
         "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @，#290）
         "models": models_now()}, acct)
 

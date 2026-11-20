@@ -90,6 +90,11 @@ def _candidates():
            "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"]
     out += sorted(glob.glob(os.path.expanduser(
         "~/.nvm/versions/node/*/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-*/vendor/*/bin/codex")))
+    if sys.platform.startswith("linux"):      # Linux 服务器上多半是 npm 全局装的（#522）
+        for root in ("~/.nvm/versions/node/*/lib", "~/.npm-global/lib", "~/.local/lib", "/usr/local/lib", "/usr/lib"):
+            for tail in ("bin/codex", "codex/codex"):
+                out += sorted(glob.glob(os.path.expanduser(
+                    root + "/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*/" + tail)))
     return [p for p in out if os.access(p, os.X_OK)]
 
 

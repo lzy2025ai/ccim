@@ -187,7 +187,8 @@ def start():
         raise ValueError("正在升级，等一下。")
     _save_job(state="running", step="下载新版本", at=time.time(), **{"from": i["commit"]}, to=None, error=None)
     log = open(os.path.join(registry.HOME, "upgrade.log"), "ab")
-    subprocess.Popen([sys.executable, "-P", "-m", "ccim.upgrade", "run"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+    from . import daemon
+    subprocess.Popen(daemon.detach([sys.executable, "-P", "-m", "ccim.upgrade", "run"]), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                      start_new_session=True, cwd="/")
     return job()
 

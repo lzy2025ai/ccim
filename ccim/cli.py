@@ -316,7 +316,11 @@ def cmd_start(args):
         if r:
             daemon.stop(path)
         pid = daemon.start_always(path, entry["channel"])
-        print(f"「{name}」已常驻（进程 {pid}）：开机登录后自动启动，意外退出会自动重启。ccim stop 关停并取消常驻。")
+        if daemon.is_always(path):
+            boot = "开机登录后" if sys.platform == "darwin" else "开机后"
+            print(f"「{name}」已常驻（进程 {pid}）：{boot}自动启动，意外退出会自动重启。ccim stop 关停并取消常驻。")
+        else:
+            print(f"「{name}」已在后台运行（进程 {pid}），ccim stop 关停。")
         return
     if r:
         print(f"「{name}」已经在运行了（进程 {r[0]}）。")
@@ -1081,7 +1085,10 @@ def cmd_join(args):
         if daemon.running(h):
             daemon.stop(h)
         _keep_running(h)
-        print("ccim 已在后台运行，开机后自动启动。" if sys.platform == "darwin" else "ccim 已在后台运行。")
+        print("ccim 已在后台运行，开机后自动启动。" if daemon.is_always(h) else "ccim 已在后台运行。")
+        if sys.platform != "darwin" and daemon.is_always(h) and not daemon.linger():
+            print(f"注意：这台电脑重启后，要有人登录 {daemon._user()} 这个用户 ccim 才会启动。"
+                  f"让它开机就启动，用管理员运行一次：sudo loginctl enable-linger {daemon._user()}")
     else:
         print("ccim 在运行。")
     if args.code and not args.leave:
@@ -1090,12 +1097,9 @@ def cmd_join(args):
 
 
 def _keep_running(h):
-    """网页平台常驻：macOS 交给 launchd；别的系统（Linux）先在后台跑起来。"""
+    """网页平台常驻：macOS 交给 launchd，Linux 交给用户级 systemd，都没有就后台跑（#522）。"""
     from . import daemon
-    if sys.platform == "darwin":
-        daemon.start_always(h, "web")
-    else:
-        daemon.start_background(h, "web")
+    daemon.start_always(h, "web")
 
 
 def cmd_hub(args):

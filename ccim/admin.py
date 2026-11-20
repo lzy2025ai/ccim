@@ -5,7 +5,7 @@
 飞书、微信（消息要经过它们的服务器）：不收密码，用 osascript 的 with administrator privileges
 在 Mac 上弹系统自己的授权窗口。
 """
-import asyncio, logging
+import asyncio, logging, sys
 
 log = logging.getLogger("ccim.admin")
 
@@ -42,6 +42,9 @@ def _applescript(s):
 
 
 async def _dialog(command, reason):
+    if sys.platform != "darwin":              # Linux 服务器没有系统授权窗口（#522）
+        return False, ("这台电脑没有可以弹出的授权窗口，命令没有执行。请用户在这台电脑本机打开的网页里确认并输入密码，"
+                       "或者自己登录这台电脑用管理员执行：" + command)
     script = f"do shell script {_applescript(command)} with prompt {_applescript('ccim：' + reason)} with administrator privileges"
     p = await asyncio.create_subprocess_exec("/usr/bin/osascript", "-e", script, stdin=asyncio.subprocess.DEVNULL,
                                              stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -70,5 +73,6 @@ async def run(chat, command, reason):
             return await _sudo(command, pw)
         finally:
             pw = None
-    await ch.send_text(chat.chat_id, f"要用管理员权限执行命令（{reason}），Mac 上弹出了授权窗口，请在电脑上确认。")
+    if sys.platform == "darwin":
+        await ch.send_text(chat.chat_id, f"要用管理员权限执行命令（{reason}），Mac 上弹出了授权窗口，请在电脑上确认。")
     return await _dialog(command, reason)

@@ -537,8 +537,9 @@ class Dev:
             merged = trying.get("branch")
             r = _run(["git", "-C", main, "branch", "-r", "--list", f"origin/{merged}"], timeout=30)
             if not r.stdout.strip():          # 分支已经合并删掉了：等平台重启好（不再用这个目录）再清，平台重启也不影响
-                subprocess.Popen(["sh", "-c", 'sleep 300; git -C "$1" worktree remove "$2" && git -C "$1" branch -D "$3"', "sh",
-                                  main, trying["src"], merged], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                from . import daemon
+                subprocess.Popen(daemon.detach(["sh", "-c", 'sleep 300; git -C "$1" worktree remove "$2" && git -C "$1" branch -D "$3"', "sh",
+                                  main, trying["src"], merged]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, start_new_session=True, cwd="/")
         caller, self.caller = getattr(self, "caller", None), None
         runtime.set_try("main", caller=caller, label=label)   # 本机跑开发版的进程（网页平台也是）用上最新代码；平台会重启，网页断开一会儿

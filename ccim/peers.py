@@ -589,7 +589,8 @@ class Peers:
                 out[k] += [dict(x, machine=m["id"], **({} if m["online"] else {"busy": False})) for x in s.get(k) or []]
             out.setdefault("opcs", {})[m["id"]] = s.get("opc")   # 一人公司（#470）：每台电脑各有各的，网页只显示当前那台的
             extra[m["id"]] = {"models": s.get("models"), "defaults": s.get("defaults"), "codex": s.get("codex"), "dsh": s.get("dsh"),
-                              "home": s.get("home"), "ccim": s.get("ccim"), "perms": s.get("perms"), **({"guest": s["guest"]} if s.get("guest") else {}),
+                              "home": s.get("home"), "ccim": s.get("ccim"), "perms": s.get("perms"),
+                              "bases": s.get("bases"), "os": s.get("os"), **({"guest": s["guest"]} if s.get("guest") else {}),
                               "chat_more": s.get("chat_more"),     # 旧版本没有：它的整体状态里本来就是全部对话
                               "global": {k: v for k, v in (s.get("global") or {}).items()     # 那台电脑的默认模型（新对话页显示）、网页显示用的设置
                                          if k in ("model", "effort", "codex_model", "codex_effort") + PAGE_GLOBAL}}

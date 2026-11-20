@@ -2011,6 +2011,7 @@ class Platform:
         v["log"] = self.mentions.lost(self.channel.logs.read(cid))
         v["rewind"] = self.rewindable(cid, v["log"])
         v["chapters"] = self.meta(cid).get("chapters") or {}
+        v["forks"] = self._forks_of(cid)
         for r in v["log"]:                    # 平台重启过：没处理的密码卡片作废
             if r.get("type") == "secret" and r.get("state") == "pending" and r["id"] not in self.channel.secrets:
                 r.update(state="expired")
@@ -2061,6 +2062,17 @@ class Platform:
             v["elsewhere"], v["away"] = ew, True
             v["sig"] = history.sig(v["base"], sid, cwd) if sid else None
         return v
+
+    def _forks_of(self, cid):
+        """从这个对话分出去的：原回答下标「已分叉」。按 fork_at（会话里的消息编号）或 fork_row（那条回答的时间）对上，不按下标（#288）。"""
+        out = []
+        for k, c in self.chats().items():
+            if c.get("parent") != cid or c.get("hidden"):
+                continue
+            out.append({"id": k, "title": c.get("title") or self._fork_title(k, c) or "新对话",
+                        "uuid": c.get("fork_at"), "row": c.get("fork_row"), "created": c.get("created")})
+        out.sort(key=lambda f: f.get("created") or "")
+        return out
 
     @staticmethod
     def _elsewhere(rows, log):
@@ -2653,9 +2665,11 @@ class Platform:
         t = m.get("temp")
         # 标题留空：分出来以后的第一句话当标题
         new = self.new_chat(agent=m.get("agent"), temp=dict(t) if t else None, fork_from=sid, fork_at=at, parent=cid)
-        if t and not t.get("dir"):            # 没选目录的临时对话：接着用原来那个临时目录（会话记录按目录存）
-            chats = self.chats()
-            chats[new]["temp"]["scratch"] = t.get("scratch") or cid
+        chats = self.chats()
+        if new in chats:
+            chats[new]["fork_row"] = rows[index].get("at")   # 原对话里从哪条回答分的：Codex 没有 fork_at，靠它在原回答下标出来
+            if t and not t.get("dir"):        # 没选目录的临时对话：接着用原来那个临时目录（会话记录按目录存）
+                chats[new]["temp"]["scratch"] = t.get("scratch") or cid
             self.store.write(chats)
         for r in rows[:index + 1]:
             if r.get("type") in ("user", "answer", "file", "chatlog", "note", "mention"):
@@ -2720,6 +2734,10 @@ class Platform:
             raise Problem("这条回答分不了叉。")
         sid = d["sid"] if cid.startswith("x:") else self.meta(cid)["origin"]
         new = self.new_chat(agent=d.get("agent"), fork_from=sid, fork_at=rows[index]["uuid"], parent=cid)
+        chats = self.chats()
+        if new in chats:
+            chats[new]["fork_row"] = rows[index].get("at")
+            self.store.write(chats)
         for r in rows[:index + 1]:
             self.channel.logs.append(new, {k: v for k, v in r.items() if k not in ("uuid", "elsewhere")})
         return {"id": new}

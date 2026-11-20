@@ -45,6 +45,28 @@ class DocOpenTests(base.SideMentionTests):                           # 只借它
         self.assertEqual(pf._doc_edits(cid), "")
         self.assertNotIn("doc_opened", pf.chats()[cid])
 
+    def test_agent_told_while_open_in_word(self):                 # #515
+        pf = self.pf
+        cid = pf.call(pf.new_chat, agent=self.main_agent, title="写方案")
+        path = os.path.join(self.tmp.name, "HoYgent_二期页面功能清单.docx")
+        with open(path, "wb") as f:
+            f.write(b"v1")
+        pf.channel.logs.append(cid, {"type": "file", "path": path, "name": os.path.basename(path)})
+        with patch("subprocess.run"):
+            pf.doc_open(cid, path)
+        self.assertEqual(pf._doc_edits(cid), "")                     # 还没生成锁文件
+        lock = os.path.join(self.tmp.name, "~$Ygent_二期页面功能清单.docx")   # 名字长：开头两个字换成 ~$
+        open(lock, "w").close()
+        self.assertIn("正在 Word 里编辑", pf._doc_edits(cid))
+        self.assertIn("正在 Word 里编辑", pf._doc_edits(cid))         # 开着就每次都说
+        with open(path, "wb") as f:                                  # 助手还是改了
+            f.write(b"v2")
+        pf.channel.logs.append(cid, {"type": "answer", "text": "改好了", "changed": [{"path": path}]})
+        pf._doc_agent_vers(cid)
+        self.assertTrue(any(r.get("type") == "note" and "还在 Word 里开着" in r["text"] for r in pf.channel.logs.read(cid)))
+        os.remove(lock)                                              # 关掉 Word
+        self.assertNotIn("正在 Word 里编辑", pf._doc_edits(cid))
+
     def test_only_files_in_chat(self):
         pf = self.pf
         cid = pf.call(pf.new_chat, agent=self.main_agent, title="写方案")

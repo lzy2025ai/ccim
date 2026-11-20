@@ -255,6 +255,26 @@ class SideMentionTests(unittest.TestCase):
         logs.append(sub, {"type": "answer", "state": "done", "text": "私下的回答"})
         self.assertEqual(pf.chat_view(sub)["attention"], "done")
 
+    def test_overview_counts_direct_sub_turns(self):            # #526
+        from ccim import board
+        pf = self.pf
+        main = self.group()
+        sub = pf.mentions._ensure(main, self.member, None, "写公众号")
+        logs = pf.channel.logs
+        logs.append(sub, {"type": "user", "text": "群里的问题", "from_chat": main})
+        chats = pf.chats()
+        chats[sub]["busy"] = True
+        pf.store.write(chats)
+        self.assertNotIn(f"open_chat id={sub}", board.overview(pf))  # 群里 @ 它的那一轮：算在群聊上
+        logs.append(sub, {"type": "user", "text": "私下问一句"})
+        text = board.overview(pf)
+        self.assertIn(f"open_chat id={sub}", text.split("## 在干活")[1].split("## 今天")[0])
+        chats = pf.chats()
+        chats[sub]["busy"] = False
+        pf.store.write(chats)
+        logs.append(sub, {"type": "answer", "state": "done", "text": "私下的回答"})
+        self.assertIn(f"open_chat id={sub}", board.overview(pf).split("## 在干活")[0])   # 答完：等你处理
+
     def test_tools(self):
         from ccim import session
         pf = self.pf

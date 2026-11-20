@@ -308,9 +308,14 @@ def overview(pf, keep=None, acct=None, here=None):
     chats = pf.chats()
     wait, busy = [], []
     for cid, m in chats.items():
-        if cid == here or keep and not keep(cid) or m.get("helper") or m.get("side_of") or m.get("project") or m.get("mention_of"):
+        # 群成员的子对话：用户从单聊入口直接说的那一轮也算（#526，和任务面板一样，#417）；群里 @ 它的那一轮算在群聊上
+        direct = bool(m.get("mention_of")) and not m.get("archived") and pf._direct_turn(cid)
+        if cid == here or keep and not keep(cid) or m.get("helper") or m.get("side_of") or m.get("project") \
+                or m.get("mention_of") and not direct:
             continue
-        marks = pf._board_marks(cid, m) if top_level(m, cid) and not m.get("archived") else {}
+        marks = pf._board_marks(cid, m) if (top_level(m, cid) or direct) and not m.get("archived") else {}
+        if direct:
+            marks = dict(marks, answered=answered(m, summary(ch.logs, cid)))
         crew = marks.get("crew") or []
         att = marks.get("attention")
         if att == "ask":

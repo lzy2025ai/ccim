@@ -26,6 +26,7 @@ from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
 from . import opc
+from . import nodes as nodes_mod
 from . import diary as diary_mod
 from . import tower as tower_mod
 from .schedules import is_quiet as schedules_quiet, listed
@@ -427,6 +428,12 @@ class WebChannel(Channel):
         """Agent 用 app_open 打开应用（#103）：记一条，网页在对话右侧打开它，之后点这条还能再打开。"""
         self._post(chat_id, {"type": "app", "app": app["id"], "name": app["name"], "icon": app.get("icon") or ""})
 
+    async def send_node(self, chat_id, node, fresh):
+        """Agent 用 save_node 存了节点（#501）：对话里显示成节点卡片，点了打开节点页、运行。"""
+        steps, total = nodes_mod.step_titles(node.get("steps"))
+        self._post(chat_id, {"type": "node", "node": node["id"], "name": node["name"], "input": (node.get("input") or "")[:200],
+                             "steps": steps, "total": total, "runner": node.get("runner"), "fresh": fresh})
+
     async def send_chatlog(self, chat_id, log):
         """聊天记录（#218）：网页里显示成卡片。图片存一份，原图之后被删、被覆盖也还看得到。"""
         items = []
@@ -817,6 +824,46 @@ class Platform:
         role = role.strip()
         role = role.partition("：")[2].strip() if role.startswith("角色说明") else role
         return {"name": " ".join(name.split()).strip("「」\"'“”")[:20], "role": role[:2000]}
+
+    async def start_run(self, node_id, text, runners, account=None, rid=None):
+        """同题对比（#501）：同一段任务交给几个 Agent（或底座 + 模型），各开一个独立对话同时开始。
+        rid：往已有的对比里再加。"""
+        text = (text or "").strip()
+        if rid:
+            run = nodes_mod.get_run(rid, account)
+            node_id, text = run.get("node"), run.get("input") or ""
+        node = nodes_mod.get(node_id, account) if node_id else None
+        if not node and not text:
+            raise Problem("写一下要做的事。")
+        runners = [r for r in (runners or []) if isinstance(r, dict)][:nodes_mod.MAX_RUNNERS]
+        if not runners:
+            raise Problem("至少选一个 Agent 或模型。")
+        for r in runners:
+            if r.get("agent") and not agents.get(r["agent"]):
+                raise Problem("找不到这个 Agent。")
+        msg = nodes_mod.compose(node, text) if node else text
+        title = nodes_mod.run_title(node, text)
+        cids = []
+        for r in runners:
+            if r.get("agent"):
+                cid = self.new_chat(agent=r["agent"], title=title, account=account)
+            else:
+                t = r.get("temp") if isinstance(r.get("temp"), dict) else {}
+                cid = self.new_chat(temp={"base": t.get("base"), "model": t.get("model"), "effort": t.get("effort")},
+                                    title=title, account=account)
+            cids.append(cid)
+        if rid:
+            for cid in cids:
+                nodes_mod.add_chat(rid, cid, account)
+        else:
+            rid = nodes_mod.add_run(node_id if node else None, text, cids, title, account)
+        chats = self.chats()
+        for cid in cids:
+            chats[cid].update(run=rid, title_set=True)
+        self.store.write(chats)
+        for cid in cids:
+            self.bg(self.send(cid, msg, [], who=people.me(account)))
+        return {"id": rid, "chats": cids}
 
     def set_kbs(self, cid, ids):
         from . import kb
@@ -2010,7 +2057,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
-                "listed": listed(cid, m), "company": m.get("company"), "staff": m.get("staff"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
+                "listed": listed(cid, m), "company": m.get("company"), "staff": m.get("staff"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "run": m.get("run"), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
                 **{k: m.get(k) for k in MARKS if k != "title"}, "delete_at": delete_at(m, archive_days()), "kbs": m.get("kbs") or [],
@@ -3101,7 +3148,7 @@ def _handler(pf):
                 return
             try:
                 body = fn() or {}
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem,
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, nodes_mod.Problem,
                     ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
@@ -3231,6 +3278,9 @@ def _handler(pf):
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/apps": lambda: {"apps": apps_mod.listing()},
+                "/api/nodes": lambda: nodes_mod.listing(acct),                     # 节点、同题对比（#501）
+                "/api/node": lambda: nodes_mod.get(q.get("id", ""), acct),
+                "/api/node/run": lambda: nodes_mod.get_run(q.get("id", ""), acct),
                 "/api/app": lambda: apps_mod.page(q.get("id", "")),
                 "/api/app/sig": lambda: {"sig": apps_mod.data_sig(q.get("id", "")), "psig": apps_mod.page_sig(q.get("id", ""))},
                 "/api/app/query": lambda: {"rows": apps_mod.query(q.get("id", ""), q.get("coll", ""), q.get("q", ""))} if not q.get("rid")
@@ -3412,6 +3462,10 @@ def _handler(pf):
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
                 "/api/agent/delete": lambda: delete_agent(pf, b("id")),
                 "/api/agent/draft": lambda: pf.run(pf.draft_agent(b("chat")), timeout=120),
+                "/api/node/save": lambda: pf.call(nodes_mod.save, b("id"), b("fields") or {}, acct, None, b("runner")),   # 节点、同题对比（#501）
+                "/api/node/delete": lambda: pf.call(nodes_mod.delete, b("id"), acct),
+                "/api/node/start": lambda: pf.run(pf.start_run(b("node"), b("text"), b("runners"), acct, b("run"))),
+                "/api/node/run/delete": lambda: pf.call(nodes_mod.delete_run, b("id"), acct),
                 "/api/agent/connect": lambda: connect_agent(b("id"), b("channel")),
                 "/api/chat/handoff": lambda: handoff_chat(pf, b("id"), b("channel"), b("fresh")),
                 "/api/channel/start": lambda: console.start(b("proc")),

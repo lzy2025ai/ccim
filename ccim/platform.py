@@ -582,7 +582,10 @@ class Platform:
             threading.Thread(target=self._dev_loop, daemon=True).start()
         channel.kbs_of = lambda cid: (self.chats().get(cid) or {}).get("kbs") or []   # 挂在对话上的知识库（#27）
         from . import board                   # 任务面板（#48）：每轮回答完更新一句话进度
-        channel.on_answer = lambda cid: self.background.add(asyncio.ensure_future(board.refresh_brief(self, cid)))
+        def on_answer(cid):
+            self._doc_rebase(cid)
+            self.background.add(asyncio.ensure_future(board.refresh_brief(self, cid)))
+        channel.on_answer = on_answer
         st = registry.read_state(self.home)
         if not st.get("board_seen_init"):    # 第一次：已有的对话都算看过
             chats = self.chats()
@@ -2305,6 +2308,36 @@ class Platform:
             raise Problem("找不到这个文件了。")
         subprocess.run(["open", "-R", path], capture_output=True)
 
+    def doc_open(self, cid, path):
+        """用默认的程序打开对话里的这个文件（#511，Word 文档改原文件，不用下载一份）。记下打开时的修改时间，
+        之后存过盘，下一次发消息时告诉助手（_doc_edits）。"""
+        self.doc_versions(cid, path)
+        if not os.path.isfile(path):
+            raise Problem("找不到这个文件了。")
+        subprocess.run(["open", path], capture_output=True)
+        chats = self.chats()
+        if cid in chats:
+            opened = dict(chats[cid].get("doc_opened") or {})
+            opened.setdefault(path, os.path.getmtime(path))
+            chats[cid]["doc_opened"] = opened
+            self.store.write(chats)
+
+    def _doc_rebase(self, cid):
+        """助手这一轮自己改了用 Word 打开过的文件：不算用户改的，从现在的修改时间重新记。"""
+        chats = self.chats()
+        opened = (chats.get(cid) or {}).get("doc_opened")
+        if not opened:
+            return
+        rows = self.channel.logs.read(cid)
+        last = rows[-1] if rows and rows[-1].get("type") == "answer" else {}
+        mine = {os.path.realpath(f.get("path") if isinstance(f, dict) else f) for f in last.get("changed") or []}
+        hit = False
+        for p in opened:
+            if os.path.realpath(p) in mine and os.path.exists(p):
+                opened[p], hit = os.path.getmtime(p), True
+        if hit:
+            self.store.write(chats)
+
     def doc_save(self, cid, path, text, mtime):
         self.doc_versions(cid, path)
         if not isinstance(text, str):
@@ -2339,10 +2372,27 @@ class Platform:
 
     def _doc_edits(self, cid):
         chats = self.chats()
-        paths = (chats.get(cid) or {}).pop("doc_edits", None)
+        m = chats.get(cid) or {}
+        paths = list(m.pop("doc_edits", None) or [])
+        opened = m.get("doc_opened") or {}
+        for p, t in list(opened.items()):       # 用 Word 打开过的：存过盘就算改过，改过的从头再记
+            try:
+                now = os.path.getmtime(p)
+            except OSError:
+                opened.pop(p)
+                continue
+            if now != t:
+                paths.append(p)
+                opened[p] = now
+        if opened:
+            m["doc_opened"] = opened
+        else:
+            m.pop("doc_opened", None)
+        if cid in chats:
+            self.store.write(chats)
+        paths = list(dict.fromkeys(paths))
         if not paths:
             return ""
-        self.store.write(chats)
         return "（我在预览里直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n"
 
     # ----- 飞书、微信、终端里的对话 -----
@@ -3101,9 +3151,9 @@ def _handler(pf):
             u = urlparse(self.path)
             if self._remote():
                 return
-            # 别的电脑转来的：/api/ws/reveal、/api/doc/reveal 只给这台电脑的主人（#322），访客不行
+            # 别的电脑转来的：/api/ws/reveal、/api/doc/reveal、/api/doc/open 只给这台电脑的主人（#322），访客不行
             if self.headers.get("X-From-Peer") and (u.path in ("/api/pick", "/api/reveal")
-                                                     or u.path in ("/api/ws/reveal", "/api/doc/reveal") and share.account_of(self.headers)):
+                                                     or u.path in ("/api/ws/reveal", "/api/doc/reveal", "/api/doc/open") and share.account_of(self.headers)):
                 return self._send(403, {"error": "只能在这台电脑上用"})
             if u.path == "/api/upload":
                 if self._guest("POST", u.path, {}, None)[1]:
@@ -3181,6 +3231,7 @@ def _handler(pf):
                 "/api/board/review_views": lambda: (registry.set_global(review_views=board_mod.clean_views(b("views")), review_prompt=None),
                                                     {"views": board_mod.views(registry.global_config())})[1],
                 "/api/doc/reveal": lambda: pf.call(pf.doc_reveal, b("chat"), b("path")),
+                "/api/doc/open": lambda: pf.call(pf.doc_open, b("chat"), b("path")),
                 "/api/doc/save": lambda: pf.call(pf.doc_save, b("chat"), b("path"), b("text"), b("mtime")),
                 "/api/app/write": lambda: apps_mod.data_write(b("id"), b("path"), b("text")),
                 "/api/app/remove": lambda: apps_mod.data_remove(b("id"), b("path")),

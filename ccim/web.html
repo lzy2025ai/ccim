@@ -9398,6 +9398,7 @@ function docMore(e){
   pop(e, [
     d.kind === "md" ? b("wxCopy()", "复制到公众号") : "",
     typeof d.text === "string" ? b("docCopyText()", "复制全文") : "",
+    canReveal(DOC.machine) && d.kind === "docx" && DOC.chat !== "@fs" ? b("docOpenApp()", "用 Word 打开") : "",
     canReveal(DOC.machine) ? b("docReveal()", "在访达中显示") : "",
     DOC_ONLY || STANDALONE || d.kind === "app" ? "" : b("docNewTab()", "在新标签页打开"),
     b("docDownload()", docPics().length ? `下载（含 ${docPics().length} 张配图）` : "下载"),
@@ -9417,6 +9418,15 @@ function docOnlyBack(){   // 单独标签页左上角：回到这个文档所在
 }
 async function docCopyText(){
   try { await navigator.clipboard.writeText(DOC.draft); toast("已复制"); } catch { toast("复制没成功，再试一次"); }
+}
+async function docLeave(){               // 手机上从文档回到对话：改了没存的先存上
+  if (DOC && DOC.dirty && DOC.d && DOC.d.editable) await docSave(true);
+  closeDoc(true);
+}
+async function docOpenApp(){             // 在放文件的那台电脑上用默认的程序（Word）打开原文件，改完存盘还是这一份（#511）
+  const mid = DOC.machine;
+  await act(() => api("/api/doc/open", {chat: DOC.chat, path: DOC.path}, mid || null));
+  toast(isRemote(mid) ? `已在「${(machineOf(mid) || {}).name || "那台电脑"}」上打开` : "已打开，改完保存就行");
 }
 async function docReveal(){
   const mid = DOC.machine;
@@ -10430,10 +10440,13 @@ function changesHtml(r){
     ${fs.length > 8 ? `<div class="more">还有 ${fs.length - 8} 个</div>` : ""}</div>`;
 }
 // 编辑区里选中一段：让 AI 改 / 问一下（带上是哪个文件的哪段）
+// 选中文档里的一段：工作区的编辑区，和对话右侧打开的文档（#511，引用进的是这个文档所在的对话）
 function wsSelTool(sel){
   const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
-  const body = node && node.closest("#ws-ed .doc-body");
-  if (!body || !body.contains(sel.focusNode) || !DOC || !DOC.ws) return false;
+  const body = node && node.closest("#ws-ed .doc-body, #docpane .doc-body");
+  if (!body || !body.contains(sel.focusNode) || !DOC) return false;
+  const pane = !!body.closest("#docpane");
+  if (pane ? DOC.ws || DOC.app || DOC_ONLY || !detail || detail.id !== DOC.chat || !$("#input") : !DOC.ws) return false;
   const text = sel.toString().trim();
   if (text.length < 2) return true;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -10444,9 +10457,10 @@ function wsSelTool(sel){
   const [ed, ask] = t.querySelectorAll("button");
   const go = how => {
     t.remove(); getSelection().removeAllRanges();
-    const p = DOC.path;
-    if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (wsNoChat()) wsToggleChat();
-    setTimeout(() => { addQuote(`${wsRel(p)}：\n${text}`); const i = [...document.querySelectorAll("#quotes .qnote")].pop() || $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
+    const p = DOC.path, nm = pane ? (DOC.d && DOC.d.name) || p.split("/").pop() : wsRel(p);
+    if (pane) { if (narrow()) docLeave(); }     // 手机上文档是全屏的：回到对话
+    else if (narrow()) { WS.phoneCtx = true; wsGo("chat"); } else if (wsNoChat()) wsToggleChat();
+    setTimeout(() => { addQuote(`${nm}：\n${text}`); const i = [...document.querySelectorAll("#quotes .qnote")].pop() || $("#input"); if (i) i.placeholder = how === "edit" ? "要怎么改？比如：说得更口语一点" : "想问什么？"; }, 30);
   };
   ed.onclick = () => go("edit"); ask.onclick = () => go("ask");
   document.body.append(t);

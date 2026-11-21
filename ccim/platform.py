@@ -3406,7 +3406,7 @@ def _handler(pf):
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
                 "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
                 "/api/schedule/seen_all": lambda: pf.call(pf.schedules.seen_all, my_schedules(pf, acct)),
-                "/api/schedule/reply": lambda: pf.run(pf.schedules.reply(b("id"), b("run"), b("text"), people.me(acct)), 30),
+                "/api/schedule/reply": lambda: pf.call(pf.schedules.reply, b("id"), b("run"), b("text"), people.me(acct)),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
                 "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),

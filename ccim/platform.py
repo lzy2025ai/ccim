@@ -3247,6 +3247,7 @@ def _handler(pf):
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
                 "/api/schedule/list": lambda: {"schedules": [x for x in pf.call(pf.schedules.summary)
                                                              if share.of_schedule(pf, x) == acct]},   # ccim schedule list
+                "/api/schedule/feed": lambda: pf.call(pf.schedules.feed, my_schedules(pf, acct)),   # 动态（#520）
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -3407,6 +3408,8 @@ def _handler(pf):
                 "/api/opc/open": lambda: pf.call(opc.window, pf, b("id")),
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
                 "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
+                "/api/schedule/seen_all": lambda: pf.call(pf.schedules.seen_all, my_schedules(pf, acct)),
+                "/api/schedule/reply": lambda: pf.run(pf.schedules.reply(b("id"), b("run"), b("text"), people.me(acct)), 30),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
                 "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),
@@ -3617,6 +3620,10 @@ def sides_of(pf, cid, detail=False, acct=None):
         except Problem:
             pass
     return r
+
+
+def my_schedules(pf, acct):
+    return [sid for sid, s in pf.schedules.all().items() if share.of_schedule(pf, dict(s, id=sid)) == acct]
 
 
 def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=()):

@@ -101,6 +101,17 @@ def top_level(meta, cid):
                 or (meta.get("schedule") and not listed(cid, meta)))
 
 
+def board_kind(logs, cid, meta, summ=None):
+    """这个对话在任务面板上算不算、怎么算（#526）。任务面板、角标、「等你处理」、overview 都只认这一个口径，别各写一份：
+    "top" 顶层对话；"direct" 群成员的子对话里，最近一轮是用户从单聊入口直接说的（#409、#417；群里 @ 它的那一轮算在群聊上）；
+    None 不算（侧边对话、项目、助理、没列出来的定时任务、群里 @ 它的那一轮）。已完成的不在这里管。"""
+    if top_level(meta, cid):
+        return "top"
+    if meta.get("mention_of") and not meta.get("side_at") and (summ or summary(logs, cid)).get("direct"):
+        return "direct"
+    return None
+
+
 def _sid_owners(pf, chats):
     """会话 → 算在哪个对话上（#240）。每轮回答记着当时的会话编号，但分叉会把之前的记录原样复制过去：
     正在用这个会话的对话优先，其次是最早建的那个。"""
@@ -191,9 +202,13 @@ def open_rows(pf, chats, keep=None):
     定时任务刚回答过的不算（见 answered）。整体状态里只带了最近一部分对话，这一栏要的自己给。"""
     rows = []
     for cid, m in chats.items():
-        if not top_level(m, cid) or not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
+        if not _counted(cid, m, keep) or m.get("archived") or m.get("busy"):
             continue
         s = summary(pf.channel.logs, cid)
+        # 只要顶层的：群成员子对话里直接聊的那一轮（direct）答完看过就不再提示（整体状态里的 _direct_subs），
+        # 不用等标完成——子对话标完成会跟着到期清理，群里再 @ 它就没了
+        if board_kind(pf.channel.logs, cid, m, s) != "top":
+            continue
         if not answered(m, s):
             continue
         rows.append(pf.chat_view(cid))
@@ -308,14 +323,13 @@ def overview(pf, keep=None, acct=None, here=None):
     chats = pf.chats()
     wait, busy = [], []
     for cid, m in chats.items():
-        # 群成员的子对话：用户从单聊入口直接说的那一轮也算（#526，和任务面板一样，#417）；群里 @ 它的那一轮算在群聊上
-        direct = bool(m.get("mention_of")) and not m.get("archived") and pf._direct_turn(cid)
-        if cid == here or keep and not keep(cid) or m.get("helper") or m.get("side_of") or m.get("project") \
-                or m.get("mention_of") and not direct:
+        if cid == here or keep and not keep(cid):
             continue
-        marks = pf._board_marks(cid, m) if (top_level(m, cid) or direct) and not m.get("archived") else {}
-        if direct:
-            marks = dict(marks, answered=answered(m, summary(ch.logs, cid)))
+        kind = board_kind(ch.logs, cid, m)    # 和任务面板同一个口径（#526）；没列出来的定时任务在干活时也说
+        sched = m.get("schedule") and not (m.get("mention_of") or m.get("project") or m.get("helper") or m.get("side_of"))
+        if not kind and not sched:
+            continue
+        marks = pf._board_marks(cid, m) if kind and not m.get("archived") else {}
         crew = marks.get("crew") or []
         att = marks.get("attention")
         if att == "ask":
@@ -334,7 +348,7 @@ def overview(pf, keep=None, acct=None, here=None):
             if stall:
                 line += f"，卡在「{stall['step']}」{_dur(stall['secs'])}了"
             busy.append(line)
-        elif marks.get("answered"):
+        elif marks.get("answered") or kind == "direct" and att:   # 子对话直接聊的：答完没看、出错算（同上 open_rows）
             s = summary(ch.logs, cid)
             state = "出错停下了" if att == "err" else "回答了你还没看" if marks.get("unread") else "回答过了，还没标完成"
             line = head(cid, m) + f"，{_clock(s.get('answer_at') or 0, True)} {state}"

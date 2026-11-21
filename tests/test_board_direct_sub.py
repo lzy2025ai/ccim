@@ -74,5 +74,21 @@ class DirectSubBoardTests(unittest.TestCase):
         self.assertNotIn(self.sub, self.head_ids())
 
 
+    def test_same_rule_everywhere(self):                       # #526：任务面板、overview 用同一个口径
+        from ccim import board
+        logs = self.pf.channel.logs
+        logs.append(self.sub, {"type": "user", "id": "u1", "text": "@成员助手 看看", "from_chat": self.group})
+        self.set_busy(True)
+        self.assertNotIn(f"id={self.sub}", board.overview(self.pf))
+        logs.append(self.sub, {"type": "user", "id": "u2", "text": "私下问", "at": time.time()})
+        self.assertIn(self.sub, self.head_ids())
+        self.assertIn(f"id={self.sub}", board.overview(self.pf).split("## 在干活")[1])
+        chats = self.pf.chats()
+        chats[self.sub]["side_at"] = True                         # 侧边对话里 @ 出去的：哪都不算
+        self.pf.store.write(chats)
+        self.assertNotIn(self.sub, self.head_ids())
+        self.assertNotIn(f"id={self.sub}", board.overview(self.pf))
+
+
 if __name__ == "__main__":
     unittest.main()

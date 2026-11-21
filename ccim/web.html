@@ -1278,9 +1278,12 @@ html.embed .send{width:30px;height:30px;border-radius:50%}
 .feed-tabs button{padding:3px 12px;border-radius:6px;font-size:13px;color:var(--muted)}
 .feed-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .feed-pill{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;background:var(--qing);color:#fff;border-radius:16px;padding:6px 14px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
-.feed-top{position:absolute;right:22px;bottom:22px;z-index:5;width:40px;height:40px;border-radius:50%;background:var(--panel);border:1px solid var(--line-strong);display:grid;place-items:center;color:var(--ink-2);box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.feed-top{position:absolute;right:max(22px, calc(50% - 390px));bottom:22px;z-index:5;width:40px;height:40px;border-radius:50%;background:var(--panel);border:1px solid var(--line-strong);display:grid;place-items:center;color:var(--ink-2);box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .feed-pill[hidden],.feed-top[hidden]{display:none}
+@media (max-width:1100px){.feed-top{bottom:88px}}   /* 贴在动态那一栏右边；窄了贴边时让开右下角的浮动按钮 */
 @media (max-width:760px){.feed-top{bottom:88px;right:16px}}
+.bmodes .bm-n{display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 4px;margin-left:4px;border-radius:8px;background:var(--bad);color:#fff;font-size:10.5px;font-weight:600;text-align:center;vertical-align:1px}
+.bmodes .bm-n[hidden]{display:none}
 /* 电脑上「定时」页：动态在左、任务列表在右（#520） */
 .app.sched-right{grid-template-columns:var(--rail-w,76px) minmax(0,1fr) var(--list-w,300px)}
 .app.sched-right .rail{grid-column:1;grid-row:1}.app.sched-right .main{grid-column:2;grid-row:1}
@@ -5158,6 +5161,7 @@ addEventListener("visibilitychange", seeOpen);
 function waiting(){ return (S.chats || []).filter(c => onBoard(c) && c.attention && !schedTurn(c) && isOpen(c)); }
 function waitOf(aid){ return waiting().filter(c => c.agent === aid).length; }
 function drawAttention(){
+  feedBadgeSync();
   const n = waiting().length, b = $("#nav-board-n");
   const work = (S.chats || []).filter(c => onBoard(c) && working(c) && !c.attention && !schedTurn(c));   // 和任务面板「正在干活」同一口径
   if (b) {
@@ -5841,8 +5845,11 @@ function finCard(st){   // 已完成（#369）：今天、近 7 天、近 30 天
     <div class="haxis"><span>${+days[0].slice(5, 7)}月${+days[0].slice(8)}日</span><span>今天</span></div></div>`;
 }
 // 任务面板的几种看法（#464）：概览是默认，塔台不常用，收在这里切过去
+// 「动态」标签上：几次新结果没看（和侧栏「定时」同一个数）
+function feedBadge(){ const n = feedUnseen(); return `<span class="bm-n" ${n ? "" : "hidden"}>${n > 99 ? "99+" : n}</span>`; }
+function feedBadgeSync(){ document.querySelectorAll(".bmodes .bm-n").forEach(el => { const n = feedUnseen(); el.hidden = !n; el.textContent = n > 99 ? "99+" : n; }); }
 function boardModes(on){
-  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["feed", "动态", "#/board/feed"], ["tower", "塔台", "#/tower"]].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}</a>`).join("")}</span>`;
+  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["feed", "动态", "#/board/feed"], ["tower", "塔台", "#/tower"]].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}${k === "feed" ? feedBadge() : ""}</a>`).join("")}</span>`;
 }
 async function renderBoard(quick){
   if (current.view === "board" && current.id === "lanes") { history.replaceState(null, "", "#/board/feed"); current.id = "feed"; }   // 泳道拿掉了（#532）

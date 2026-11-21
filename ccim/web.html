@@ -1287,8 +1287,15 @@ html.embed .send{width:30px;height:30px;border-radius:50%}
 .fpost .frep{margin-top:10px;background:var(--sunk);border-radius:6px;padding:8px 12px;font-size:13px}
 .fpost .frep .fr{overflow-wrap:anywhere}.fpost .frep .fr + .fr{margin-top:6px}
 .fpost .frep .fr b{color:var(--qing);font-weight:600}
-.fpost .frep .fr .md{display:inline}.fpost .frep .fr .md > *{display:inline;margin:0}
-.fpost .frep .fr.long .md{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.fpost .frep .fr.long .md > *{display:block}
+.fpost .frep .fr .rt > :first-child{margin-top:2px}.fpost .frep .fr .rt > :last-child{margin-bottom:0}
+.fpost .frep .fr.long:not(.open) .rt{max-height:6.4em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent)}
+.fpost .frep .fr .fmore{font-size:12.5px}
+/* 电脑上「定时」页：动态在左、任务列表在右（#520） */
+.app.sched-right{grid-template-columns:var(--rail-w,76px) minmax(0,1fr) var(--list-w,300px)}
+.app.sched-right .rail{grid-column:1;grid-row:1}.app.sched-right .main{grid-column:2;grid-row:1}
+.app.sched-right .list{grid-column:3;grid-row:1;border-right:0;border-left:1px solid var(--line)}
+.app.sched-right .resizer{display:none}
+.app.sched-right.list-off{grid-template-columns:var(--rail-w,76px) minmax(0,1fr)}
 .fpost .frep .fwait{color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:6px}
 .fpost .fask{display:flex;gap:6px;margin-top:8px;align-items:flex-end}
 .fpost .fask textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 10px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink);max-height:120px}
@@ -2986,6 +2993,7 @@ function route(){
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
     || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "tower");
+  document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());   // 定时页：动态在左、任务列表在右（#520）
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -8625,7 +8633,7 @@ async function renderScheduleFeed(){
   if (!$("#feed")) $("#main").innerHTML = `<div class="feed" id="feed"><div class="feed-in"><div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">正在加载…</p></div></div>`;
   let d; try { d = await api("/api/schedule/feed"); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
   if (!feedOn()) return;
-  FEED = {open: new Set(), ask: new Set(), wait: new Set(), waitAt: {}, draft: {}, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
+  FEED = {open: new Set(), openRep: new Set(), ask: new Set(), wait: new Set(), waitAt: {}, draft: {}, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
   FEED.wait.forEach(c => {             // 追问有了回答（那条动态下最后一句是 Agent 的），或等太久了：不再转圈
     const last = (FEED.posts.find(p => p.chat === c && (p.replies || []).length) || {replies: []}).replies.slice(-1)[0];
     if (last && last.who === "agent" || Date.now() - (FEED.waitAt[c] || 0) > 600000) FEED.wait.delete(c);
@@ -8654,11 +8662,17 @@ function feedPost(p){
     ${pics.length ? `<div class="fpics ${pics.length === 1 ? "one" : ""}">${pics.map(u => `<img src="${u}" alt="" loading="lazy" onclick="showImage(this.src)">`).join("")}</div>` : ""}
     ${p.count > 1 ? `<div class="fnote">这天有 ${p.count} 次结果，这是最近一次</div>` : ""}
     <div class="ffoot"><time>${esc(feedWhen(p.at))}</time>${p.chat ? `<button class="btn" onclick="feedAsk('${esc(p.rid)}')">追问</button>` : ""}${go ? `<a class="btn" href="${go}" style="text-decoration:none">${p.chat ? "看对话" : "去项目里看"}</a>` : ""}</div>
-    ${reps.length || wait ? `<div class="frep">${reps.map(r => `<div class="fr ${r.who === "agent" && r.text.length > 120 ? "long" : ""}"><b>${r.who === "me" ? "我" : esc(who)}：</b><span class="md">${r.who === "me" ? esc(r.text) : md(r.text)}</span></div>`).join("")}
+    ${reps.length || wait ? `<div class="frep">${reps.map((r, i) => r.who === "me" ? `<div class="fr"><b>我：</b>${esc(r.text)}</div>` : feedReply(p, r, i, who)).join("")}
       ${wait ? `<div class="fwait"><span class="spin"></span>${esc(who)}正在回复</div>` : ""}</div>` : ""}
     ${ask ? `<div class="fask"><textarea rows="1" placeholder="追问${esc(who)}…" oninput="feedGrow(this,'${esc(p.rid)}')" onkeydown="feedKey(event,'${esc(p.rid)}')">${esc(FEED.draft[p.rid] || "")}</textarea><button class="btn primary" onclick="feedSend('${esc(p.rid)}')">发送</button></div>` : ""}
   </div></article>`;
 }
+function feedReply(p, r, i, who){         // Agent 的回答：长的先收起，点「展开」看全文
+  const k = `${p.rid}:${i}`, long = r.text.length > 140 || r.text.split("\n").length > 4, open = FEED.openRep.has(k);
+  return `<div class="fr ${long ? "long" : ""} ${open ? "open" : ""}"><b>${esc(who)}：</b><div class="md rt">${md(r.text)}</div>
+    ${long ? `<button class="fmore" onclick="feedRepToggle('${esc(k)}')">${open ? "收起" : "展开"}</button>` : ""}</div>`;
+}
+function feedRepToggle(k){ FEED.openRep.has(k) ? FEED.openRep.delete(k) : FEED.openRep.add(k); drawFeed(); }
 function drawFeed(){
   const box = $("#feed"); if (!box || !FEED) return;
   const top = box.scrollTop, act = document.activeElement, fr = act && act.closest && act.closest(".fpost");

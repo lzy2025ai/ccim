@@ -8756,7 +8756,7 @@ function feedPost(p){
   return `<article class="fpost ${p.new ? "new" : ""}" data-rid="${esc(p.rid)}">${feedMark(p)}<div class="fb">
     <div class="fwho"><b>${esc(who)}</b><a href="#/schedules/${encodeURIComponent(p.sid)}">${esc(p.name)}</a></div>
     ${title ? `<div class="ftitle">${esc(title)}</div>` : ""}
-    ${rest ? `<div class="ftext md ${long && !open ? "clamp" : ""}">${md(rest)}</div>${long ? `<button class="fmore" onclick="feedToggle(${q})">${open ? "收起" : "全文"}</button>` : ""}` : ""}
+    ${rest ? `<div class="ftext md answer ${long && !open ? "clamp" : ""}">${md(rest)}</div>${long ? `<button class="fmore" onclick="feedToggle(${q})">${open ? "收起" : "全文"}</button>` : ""}` : ""}
     ${pics.length ? `<div class="fpics ${pics.length === 1 ? "one" : ""}">${pics.map(u => `<img src="${u}" alt="" loading="lazy" onclick="showImage(this.src)">`).join("")}</div>` : ""}
     ${p.count > 1 ? `<div class="fnote">这天有 ${p.count} 次结果，这是最近一次</div>` : ""}
     <div class="ffoot"><time>${esc(feedWhen(p.at))}</time>

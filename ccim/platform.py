@@ -28,7 +28,7 @@ from . import board as board_mod
 from . import opc
 from . import diary as diary_mod
 from . import tower as tower_mod
-from .schedules import is_quiet as schedules_quiet, listed
+from .schedules import feed_hidden, is_quiet as schedules_quiet, listed
 from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_path
 
 log = logging.getLogger("ccim.platform")
@@ -2036,7 +2036,7 @@ class Platform:
         if cid.startswith("x:"):
             return self.external_detail(cid)
         v = self.chat_view(cid)
-        v["log"] = self.mentions.lost(self.channel.logs.read(cid))
+        v["log"] = feed_hidden(self.mentions.lost(self.channel.logs.read(cid)), self.meta(cid).get("feed_shown"))
         v["rewind"] = self.rewindable(cid, v["log"])
         v["chapters"] = self.meta(cid).get("chapters") or {}
         v["forks"] = self._forks_of(cid)
@@ -3406,7 +3406,10 @@ def _handler(pf):
                 "/api/schedule/toggle": lambda: pf.call(pf.schedules.toggle, b("id"), b("on")),
                 "/api/schedule/seen": lambda: pf.call(pf.schedules.seen, b("id")),
                 "/api/schedule/seen_all": lambda: pf.call(pf.schedules.seen_all, my_schedules(pf, acct)),
-                "/api/schedule/reply": lambda: pf.call(pf.schedules.reply, b("id"), b("run"), b("text"), people.me(acct)),
+                "/api/schedule/reply": lambda: pf.call(pf.schedules.reply, b("id"), b("run"), b("text"), people.me(acct), b("quote")),
+                "/api/schedule/star": lambda: pf.call(pf.schedules.star, b("id"), b("run"), bool(b("on"))),
+                "/api/schedule/bring": lambda: pf.call(pf.schedules.bring, b("id"), b("run")),
+                "/api/schedule/seen_upto": lambda: pf.call(pf.schedules.seen_upto, b("items"), my_schedules(pf, acct)),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
                 "/api/schedule/run": lambda: pf.call(pf.schedules.run_now, b("id")),
                 "/api/schedule/try": lambda: pf.run(pf.schedules.try_once(b("fields") or {}), 60),

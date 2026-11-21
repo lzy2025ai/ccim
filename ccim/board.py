@@ -48,6 +48,11 @@ def summary(logs, cid):
             s["sids"].append(sid)
         if t == "user":
             s["direct"] = not r.get("from_chat")     # 群成员的子对话：最近一轮是用户在子对话里直接说的（#409、#417）
+        if t == "user" and r.get("feed_run"):     # 在动态里回复的（#520）：不算你在对话里说话，它的回答也不算要你看的
+            s["sched_last"] = s["feed_last"] = True
+            continue
+        if t == "user":
+            s["feed_last"] = False
         if t == "user" and not r.get("by"):
             lt = time.localtime(r.get("at") or 0)
             day = time.strftime("%Y-%m-%d", lt)
@@ -75,7 +80,7 @@ def attention(meta, summ):
         return None
     if summ.get("pending"):
         return "ask"
-    if meta.get("busy"):
+    if meta.get("busy") or summ.get("feed_last"):     # 动态里回复的那几轮（#520）：等批准的照常算，回答不算
         return None
     if summ.get("answer_at", 0) > max(meta.get("seen_at") or 0, meta.get("dismissed_at") or 0):
         return "err" if summ.get("answer_state") == "error" else "done"
@@ -84,7 +89,7 @@ def attention(meta, summ):
 
 def unread(meta, summ):
     """回答还没打开看过（任务面板里点了「知道了」的也算，#65）。"""
-    return bool(summ) and not meta.get("busy") and summ.get("answer_at", 0) > (meta.get("seen_at") or 0)
+    return bool(summ) and not meta.get("busy") and not summ.get("feed_last") and summ.get("answer_at", 0) > (meta.get("seen_at") or 0)
 
 
 def answered(meta, summ):

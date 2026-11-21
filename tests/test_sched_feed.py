@@ -3,7 +3,8 @@
 import time
 import unittest
 
-from ccim.schedules import Schedules
+from ccim import board
+from ccim.schedules import Schedules, feed_hidden, split_quote
 
 
 def make(logs, data, chats):
@@ -67,6 +68,30 @@ class FeedTests(unittest.TestCase):
         self.assertEqual([x["text"] for x in ps["b:2"]["replies"]], ["追问", "答"])   # 别的对话里只算在动态里追问的
         self.assertEqual(ps["b:2"]["agent"], "y")
         self.assertEqual([f["id"] for f in r["failing"]], ["b"])
+
+
+    def test_hidden(self):
+        """动态里回复的那几轮对话里不显示，带进对话的照常；等批准的卡片总显示"""
+        rows = [{"type": "user", "text": "a"}, {"type": "answer", "text": "A"},
+                {"type": "user", "text": "q1", "feed_run": "r1"}, {"type": "answer", "text": "x1"},
+                {"type": "card", "buttons": [1]}, {"type": "note", "text": "n"},
+                {"type": "user", "text": "q2", "feed_run": "r2"}, {"type": "answer", "text": "x2"},
+                {"type": "user", "text": "b"}, {"type": "answer", "text": "B"}]
+        self.assertEqual([r["text"] for r in feed_hidden(rows, []) if "text" in r], ["a", "A", "b", "B"])
+        self.assertEqual([r["type"] for r in feed_hidden(rows, [])].count("card"), 1)
+        self.assertEqual([r["text"] for r in feed_hidden(rows, ["r2"]) if "text" in r], ["a", "A", "q2", "x2", "b", "B"])
+
+    def test_quote(self):
+        self.assertEqual(split_quote("> 上一条\n> 第二行\n\n我的话"), ("> 上一条\n> 第二行", "我的话"))
+        self.assertEqual(split_quote("没有引用"), ("", "没有引用"))
+
+    def test_board(self):
+        """动态里回复的那一轮回答不算要你看的，你在对话里说话后照常"""
+        s = {"answer_at": 10, "feed_last": True}
+        self.assertIsNone(board.attention({"seen_at": 0}, s))
+        self.assertFalse(board.unread({"seen_at": 0}, s))
+        self.assertEqual(board.attention({"seen_at": 0}, {"answer_at": 10, "pending": True, "feed_last": True}), "ask")
+        self.assertEqual(board.attention({"seen_at": 0}, {"answer_at": 10}), "done")
 
 
 if __name__ == "__main__":

@@ -37,6 +37,27 @@ def listed(cid, meta):
     return bool(meta.get("schedule")) and cid == f"s-{meta['schedule']}-{meta.get('agent')}"
 
 
+def split_quote(text):
+    """开头的引用（> 行）和后面的话分开。"""
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines) and lines[i].startswith(">"):
+        i += 1
+    return "\n".join(lines[:i]), "\n".join(lines[i:]).strip()
+
+
+def feed_hidden(rows, shown):
+    """在动态里回复的那几轮（#520）：对话里不显示，从那条动态点「去对话回复」带进来的（shown）照常显示。
+    从那句回复起到下一句别的话之前（回答、过程卡片等）都藏起来。"""
+    out, hide, shown = [], False, set(shown or ())
+    for r in rows:
+        if r.get("type") == "user":
+            hide = bool(r.get("feed_run")) and r["feed_run"] not in shown
+        if not hide or r.get("type") == "card" and r.get("buttons") or r.get("type") == "secret" and r.get("state") == "pending":
+            out.append(r)                     # 等你批准的卡片照常显示，不然在对话里找不到
+    return out
+
+
 def is_quiet(text):
     return (text or "").strip().strip("。.").strip() == QUIET
 
@@ -263,13 +284,14 @@ class Schedules:
             day = {}
             for r in runs:
                 at = r.get("done_at") or r.get("at") or 0
-                if r.get("state") != "done" or at < since or not (r.get("text") or "").strip() or is_quiet(r.get("text")):
+                star = r["id"] in (s.get("stars") or [])
+                if r.get("state") != "done" or (at < since and not star) or not (r.get("text") or "").strip() or is_quiet(r.get("text")):
                     continue
                 c = chats.get(s["target"]["id"]) if s["target"]["kind"] in ("chat", "group") else None
                 post = {"sid": sid, "rid": r["id"], "chat_meta": {"title": c.get("title") or "", "color": c.get("color")} if c else None, "name": s["name"], "at": at, "start": r.get("at") or at, "text": r["text"], "chat": r.get("chat"),
                         "project": r.get("project"), "agent": self._poster(s, chats), "kind": s["target"]["kind"],
-                        "new": at > max(seen, (chats.get(r.get("chat") or "") or {}).get("seen_at") or 0), "count": 1}
-                if s.get("freq") == "every":
+                        "new": at > max(seen, (chats.get(r.get("chat") or "") or {}).get("seen_at") or 0), "count": 1, "star": star}
+                if s.get("freq") == "every" and not star:
                     k = dt.datetime.fromtimestamp(at).date()
                     if k in day:
                         post["count"] = day[k]["count"] + 1
@@ -278,7 +300,7 @@ class Schedules:
                     day[k] = post
                 posts.append(post)
         posts.sort(key=lambda p: -p["at"])
-        posts = posts[:FEED_MAX]
+        posts = posts[:FEED_MAX] + [p for p in posts[FEED_MAX:] if p["star"]]
         for p in posts:
             self._replies(p)
         failing.sort(key=lambda f: -(f["at"] or 0))
@@ -318,13 +340,14 @@ class Schedules:
             if r.get("type") == "user":
                 want = own or r.get("feed_run") == p["rid"]
                 if want:
-                    p["replies"].append({"who": "me", "text": r.get("text") or "", "at": r.get("at")})
+                    q, t = split_quote(r.get("text") or "")
+                    p["replies"].append({"who": "me", "text": t, "to": bool(q), "at": r.get("at")})
             elif r.get("type") == "answer" and want:
                 p["replies"].append({"who": "agent", "text": r.get("text") or "", "at": r.get("at")})
                 want = own
         p["replies"] = p["replies"][-6:]
 
-    def reply(self, sid, rid, text, who=None):
+    def reply(self, sid, rid, text, who=None, quote=None):
         """在动态下面追问：发到那次结果所在的对话。和对话页发消息一样不等交给助手，回答靠推送。"""
         text = (text or "").strip()
         if not text:
@@ -332,8 +355,44 @@ class Schedules:
         run = next((r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run" and r.get("id") == rid and r.get("chat")), None)
         if not run or run["chat"] not in self.pf.chats():
             raise Problem("这次结果所在的对话已经删掉了。")
+        if quote:                             # 回复某一条回答：像对话页的引用一样拼在前面
+            lines = [x for x in str(quote).strip().splitlines() if x.strip()][:3]
+            text = "\n".join("> " + x[:200] for x in lines) + "\n\n" + text
         self.pf.bg(self.pf.send(run["chat"], text, mark={"feed_run": rid}, who=who, call=True))
         return {"chat": run["chat"]}
+
+    def star(self, sid, rid, on):
+        data = self.all()
+        if sid not in data:
+            raise Problem("找不到这个定时任务。")
+        stars = [x for x in data[sid].get("stars") or [] if x != rid]
+        data[sid]["stars"] = stars + [rid] if on else stars
+        self._write(data)
+        return {}
+
+    def bring(self, sid, rid):
+        """从动态「去对话回复」：这条动态下的问答以后在对话里显示。"""
+        run = next((r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run" and r.get("id") == rid and r.get("chat")), None)
+        chats = self.pf.chats()
+        if not run or run["chat"] not in chats:
+            raise Problem("这次结果所在的对话已经删掉了。")
+        m = chats[run["chat"]]
+        if rid not in (m.get("feed_shown") or []):
+            m["feed_shown"] = (m.get("feed_shown") or [])[-199:] + [rid]
+            self.pf.store.write(chats)
+        return {"chat": run["chat"]}
+
+    def seen_upto(self, items, sids):
+        """滚到哪条算看过哪条：每个任务看过的时间推到那条动态的时间。"""
+        data, mine = self.all(), set(sids)
+        for it in items or []:
+            sid, at = (it or {}).get("id"), (it or {}).get("at")
+            if sid in data and sid in mine and isinstance(at, (int, float)):
+                data[sid]["seen_at"] = max(data[sid].get("seen_at") or 0, float(at))
+        self._write(data)
+        for sid in {(it or {}).get("id") for it in items or []} & set(data):
+            self._emit(sid)
+        return {}
 
     def seen_all(self, sids):
         data, now = self.all(), time.time()

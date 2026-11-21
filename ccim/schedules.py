@@ -284,6 +284,8 @@ class Schedules:
             day = {}
             for r in runs:
                 at = r.get("done_at") or r.get("at") or 0
+                if r["id"] in (s.get("hidden") or []):    # 不显示这条（#537）
+                    continue
                 star = r["id"] in (s.get("stars") or [])
                 if r.get("state") != "done" or (at < since and not star) or not (r.get("text") or "").strip() or is_quiet(r.get("text")):
                     continue
@@ -333,7 +335,7 @@ class Schedules:
             if r.get("type") == "file" and (r.get("at") or 0) >= p["start"] and (r.get("name") or "").lower().endswith(IMG_EXT):
                 p["images"].append({"path": r["path"], "name": r["name"]})
         p["images"] = p["images"][-4:]
-        want = False
+        want, mids = False, set()
         for r in rows[start + 1:]:
             if r.get("type") == "user" and r.get("sched"):
                 break
@@ -341,13 +343,17 @@ class Schedules:
                 want = own or r.get("feed_run") == p["rid"]
                 if want:
                     q, t = split_quote(r.get("text") or "")
-                    p["replies"].append({"who": "me", "text": t, "to": bool(q), "at": r.get("at")})
+                    p["replies"].append({"who": "me", "text": t, "to": bool(q), "at": r.get("at"), "at_agents": r.get("to") or []})
+                    if r.get("id"):
+                        mids.add(r["id"])
             elif r.get("type") == "answer" and want:
                 p["replies"].append({"who": "agent", "text": r.get("text") or "", "at": r.get("at")})
                 want = own
+            elif r.get("type") == "mention" and r.get("msg") in mids and r.get("state") in ("done", "error"):   # 回复里 @ 的 Agent 的回答（#537）
+                p["replies"].append({"who": "agent", "agent": r.get("agent"), "text": r.get("text") or "", "at": r.get("at")})
         p["replies"] = p["replies"][-6:]
 
-    def reply(self, sid, rid, text, who=None, quote=None):
+    def reply(self, sid, rid, text, who=None, quote=None, to=None):
         """在动态下面追问：发到那次结果所在的对话。和对话页发消息一样不等交给助手，回答靠推送。"""
         text = (text or "").strip()
         if not text:
@@ -358,7 +364,18 @@ class Schedules:
         if quote:                             # 回复某一条回答：像对话页的引用一样拼在前面
             lines = [x for x in str(quote).strip().splitlines() if x.strip()][:3]
             text = "\n".join("> " + x[:200] for x in lines) + "\n\n" + text
-        self.pf.bg(self.pf.send(run["chat"], text, mark={"feed_run": rid}, who=who, call=True))
+        cid, mark = run["chat"], {"feed_run": rid}
+        main = self.pf.meta(cid).get("agent")
+        to = [a for a in dict.fromkeys(to or []) if isinstance(a, str)][:10]
+        others = [a for a in to if a != main]
+        if not others:
+            self.pf.bg(self.pf.send(cid, text, mark=mark, who=who, call=True))
+        else:                                 # @ 了别的 Agent（#537）：和对话里 @ 一样交给它们；同时 @ 了主 Agent 的它也答
+            async def go():
+                out = await self.pf.mentions.send(cid, text, others, mark=mark)
+                if main in to and out.get("id"):
+                    await self.pf.send(cid, text, who=who, call=True, logged=out["id"])
+            self.pf.bg(go())
         return {"chat": run["chat"]}
 
     def star(self, sid, rid, on):
@@ -367,6 +384,16 @@ class Schedules:
             raise Problem("找不到这个定时任务。")
         stars = [x for x in data[sid].get("stars") or [] if x != rid]
         data[sid]["stars"] = stars + [rid] if on else stars
+        self._write(data)
+        return {}
+
+    def hide(self, sid, rid, on=True):
+        """不显示这条（#537）：动态里去掉；on=False 是撤销。"""
+        data = self.all()
+        if sid not in data:
+            raise Problem("找不到这个定时任务。")
+        hid = [x for x in data[sid].get("hidden") or [] if x != rid]
+        data[sid]["hidden"] = (hid + [rid])[-500:] if on else hid
         self._write(data)
         return {}
 

@@ -265,7 +265,8 @@ class Schedules:
                 at = r.get("done_at") or r.get("at") or 0
                 if r.get("state") != "done" or at < since or not (r.get("text") or "").strip() or is_quiet(r.get("text")):
                     continue
-                post = {"sid": sid, "rid": r["id"], "name": s["name"], "at": at, "start": r.get("at") or at, "text": r["text"], "chat": r.get("chat"),
+                c = chats.get(s["target"]["id"]) if s["target"]["kind"] in ("chat", "group") else None
+                post = {"sid": sid, "rid": r["id"], "chat_meta": {"title": c.get("title") or "", "color": c.get("color")} if c else None, "name": s["name"], "at": at, "start": r.get("at") or at, "text": r["text"], "chat": r.get("chat"),
                         "project": r.get("project"), "agent": self._poster(s, chats), "kind": s["target"]["kind"],
                         "new": at > max(seen, (chats.get(r.get("chat") or "") or {}).get("seen_at") or 0), "count": 1}
                 if s.get("freq") == "every":
@@ -323,15 +324,15 @@ class Schedules:
                 want = own
         p["replies"] = p["replies"][-6:]
 
-    async def reply(self, sid, rid, text, who=None):
-        """在动态下面追问：发到那次结果所在的对话。"""
+    def reply(self, sid, rid, text, who=None):
+        """在动态下面追问：发到那次结果所在的对话。和对话页发消息一样不等交给助手，回答靠推送。"""
         text = (text or "").strip()
         if not text:
             raise Problem("先写点什么。")
         run = next((r for r in self.pf.channel.logs.read(self._log(sid)) if r.get("type") == "run" and r.get("id") == rid and r.get("chat")), None)
         if not run or run["chat"] not in self.pf.chats():
             raise Problem("这次结果所在的对话已经删掉了。")
-        await self.pf.send(run["chat"], text, mark={"feed_run": rid}, who=who, call=True)
+        self.pf.bg(self.pf.send(run["chat"], text, mark={"feed_run": rid}, who=who, call=True))
         return {"chat": run["chat"]}
 
     def seen_all(self, sids):

@@ -8647,10 +8647,11 @@ async function renderScheduleFeed(){
 function feedMark(p){
   if (p.kind === "project") return pmark(projSummary(p.project) || {name: "项"});
   const a = p.agent && agentOf(p.agent);
-  return a ? seal(a, "", false) : chatIcon(chatById(p.chat));
+  return a ? seal(a, "", false) : chatIcon(chatById(p.chat) || p.chat_meta);
 }
 function feedPost(p){
-  const a = p.agent && agentOf(p.agent), who = p.kind === "project" ? ((projSummary(p.project) || {}).name || "项目") : a ? a.name : "Agent";
+  const a = p.agent && agentOf(p.agent), who = p.kind === "project" ? ((projSummary(p.project) || {}).name || "项目") : a ? a.name
+    : ((chatById(p.chat) || p.chat_meta || {}).title || "对话");   // 发到没绑定 Agent 的对话：用对话的名字
   const {title, rest} = feedSplit(p.text), open = FEED.open.has(p.rid), long = rest.length > 160 || rest.split("\n").length > 5;
   const pics = (p.images || []).map(x => fileUrl(p.chat, x.path));
   const go = p.chat ? `#/chats/${encodeURIComponent(p.chat)}` : p.project ? `#/projects/${encodeURIComponent(p.project)}` : "";
@@ -8696,10 +8697,12 @@ function feedKey(e, rid){ if (e.key === "Enter" && !e.shiftKey && !e.isComposing
 async function feedSend(rid){
   const p = FEED.posts.find(x => x.rid === rid), text = (FEED.draft[rid] || "").trim();
   if (!p || !text) return;
-  try { await api("/api/schedule/reply", {id: p.sid, run: rid, text}); } catch (e) { toast(e.message); return; }
+  const before = p.replies || [];           // 先显示出来，不等后台（发不出去再撤回）
   FEED.draft[rid] = ""; FEED.ask.delete(rid); FEED.wait.add(p.chat); FEED.waitAt[p.chat] = Date.now();
-  p.replies = [...(p.replies || []), {who: "me", text}];
+  p.replies = [...before, {who: "me", text}];
   drawFeed();
+  try { await api("/api/schedule/reply", {id: p.sid, run: rid, text}); }
+  catch (e) { toast(e.message); p.replies = before; FEED.wait.delete(p.chat); FEED.draft[rid] = text; FEED.ask.add(rid); drawFeed(); }
 }
 let feedTimer = 0;
 function feedSoon(){ clearTimeout(feedTimer); feedTimer = setTimeout(() => { if (feedOn()) renderScheduleFeed(); }, 400); }

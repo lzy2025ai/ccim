@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import bases, devices, docs, filesend, people, perf, share, tokens, voice, workspace
+from . import bases, devices, docs, filesend, people, perf, share, tokens, uselog, voice, workspace
 from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -3256,6 +3256,7 @@ def _handler(pf):
                 "/api/models": lambda: models_now(),                             # 打开模型选择时取最新的（#499）
                 "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or "", q.get("base")), timeout=90)},   # 新对话页的 /usage
                 "/api/perf": lambda: perf.summary(q.get("hours") or 24),
+                "/api/feature_usage": lambda: uselog.summary(),
                 "/api/diary/home": lambda: pf.diary_home_view(),         # 日记存在哪台电脑（#376）
                 "/api/diary/info": lambda: {"path": diary_mod.root(), "apps": diary_mod.apps()},   # 这台上的日记文件夹、能用什么打开
             }
@@ -3424,7 +3425,7 @@ def _handler(pf):
                 "/api/global": lambda: save_global(body),
                 "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
                 "/api/dev/check": lambda: pf._dev().check(b("prs") or []),
-                "/api/perf": lambda: perf.web(b("items"), b("machine")) or {},
+                "/api/perf": lambda: (perf.web(b("items"), b("machine")), uselog.record(b("uses"), b("machine"))) and {},   # 功能使用跟着一起报（#533）
                 "/api/dev/ship": lambda: pf._dev().ship(b("prs") or [], b("caller")),
                 "/api/dev/update": lambda: pf._dev().update(),
                 "/api/pick": lambda: {"path": console.pick_folder()},

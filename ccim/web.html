@@ -2165,12 +2165,39 @@ async function api(path, body, machine){
 const PERF_SLOW = 1000, PERFQ = [];
 function perfMark(k, n, ms, extra){ if (PERFQ.length < 300) PERFQ.push({k, n, ms: Math.round(ms), ...(extra || {})}); }
 function perfFlush(){
-  if (!PERFQ.length || typeof S === "undefined" || !S) return;
+  if (!(PERFQ.length || USEQ.length) || typeof S === "undefined" || !S) return;
   const to = devMachine() || (S.hub ? null : S.me);
-  if (!to && S.hub) { PERFQ.length = 0; return; }
-  const items = PERFQ.splice(0);
+  if (!to && S.hub) { PERFQ.length = 0; USEQ.length = 0; return; }
+  const items = PERFQ.splice(0), uses = USEQ.splice(0);
   fetch("/api/perf", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(to)},
-                      body: JSON.stringify({items, machine: S.me})}).catch(() => {});
+                      body: JSON.stringify({items, uses, machine: S.me}), keepalive: true}).catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) perfFlush(); });   // 切走、关掉前先报
+// 功能使用（#533）：打开了哪个页面、点了哪些关键操作，跟性能数据一起报回去，开发页「功能使用」里看哪些常用、哪些基本没用。
+// 有哪些、叫什么都在 USE_NAMES；新加页面或值得统计的按钮时在这里加一项，再在那个地方 useMark
+const USEQ = [];
+const USE_NAMES = {
+  "chats": "对话列表", "chats.chat": "打开对话", "chats.new": "新对话",
+  "schedules.feed": "定时页的动态", "schedules.task": "打开定时任务", "schedules.runs": "定时任务的运行记录", "schedules.edit": "新建或编辑定时任务",
+  "board": "任务面板概览", "board.feed": "任务面板的动态", "board.day": "任务面板某一天", "tower": "塔台",
+  "agents": "AI 员工总览", "agents.agent": "打开某个 AI 员工", "agents.settings": "AI 员工设置", "agents.new": "新建 AI 员工",
+  "opc": "一人公司", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
+  "settings": "设置", "settings.dev": "开发页", "settings.machines": "电脑", "settings.accounts": "账号", "settings.chats": "对话设置", "settings.models": "模型",
+  "act.send": "发消息", "act.voice": "语音输入", "act.fork": "分叉", "act.rewind": "退回", "act.side": "侧边对话", "act.ws": "工作区", "act.board_reply": "在任务面板里回复",
+  "feed.reply": "动态里回复", "feed.star": "动态里收藏", "feed.star_tab": "看收藏的动态", "feed.go_chat": "动态去对话回复", "feed.new_pill": "点「N 条新动态」", "feed.top": "回到顶部",
+};
+let useLast = "";
+function useMark(f){ if (USE_NAMES[f] && USEQ.length < 300) USEQ.push({f, at: Math.round(Date.now() / 1000)}); }
+function useView(){                       // 当前页面算哪个功能；同一个页面连着刷新只记一次
+  const v = current.view, id = current.id, sub = current.sub;
+  const f = v === "chats" ? (id === "new" ? "chats.new" : id ? "chats.chat" : "chats")
+    : v === "schedules" ? (!id || id === "feed" ? "schedules.feed" : id === "new" || id.startsWith("edit-") ? "schedules.edit" : sub === "runs" ? "schedules.runs" : "schedules.task")
+    : v === "board" ? (id === "feed" ? "board.feed" : id === "day" ? "board.day" : "board")
+    : v === "agents" ? (!id ? "agents" : id === "new" ? "agents.new" : sub === "settings" ? "agents.settings" : "agents.agent")
+    : v === "settings" ? (USE_NAMES["settings." + id] ? "settings." + id : "settings") : v;
+  const k = f + "|" + (id || "") + "|" + (sub || "");
+  if (k === useLast || EMBED) return;
+  useLast = k; useMark(f);
 }
 setInterval(perfFlush, 30000);
 const serverMs = r => { const m = /dur=([\d.]+)/.exec(r.headers.get("Server-Timing") || ""); return m ? +m[1] : undefined; };
@@ -2996,6 +3023,7 @@ function route(){
   closePop();
   if (SIDE && SIDE.of !== (current.view === "agents" ? current.sub : current.view === "chats" ? current.id : null)) closeSide();
   renderList();
+  useView();
   if (current.view !== "projects") proj = null;
   if (current.view !== "schedules") sched = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
@@ -3370,6 +3398,7 @@ const timeActs = r => r.at && !r.sending ? `<div class="msg-acts">${msgTime(r.at
 let rewindFiles = true;
 let rewindHas = false;
 async function rewindAt(i){
+  useMark("act.rewind");
   const r = detail.log[i], info = (detail.rewind || {})[i];
   if (!r || !info) return;
   rewindFiles = true; rewindHas = false;
@@ -4027,6 +4056,7 @@ function userText(t){
     : lead || i < segs.length - 1 ? `<div class="bq-note">${esc(g.txt)}</div>` : esc(g.txt)).join("");
 }
 async function sendChat(){
+  useMark("act.send");
   const typed = $("#input").value.trim(), files = pendingFiles.filter(f => f.key), qs = quoteList().slice(), v = withQuotes(qs, typed);
   if (pendingFiles.some(f => !f.key)) return toast("文件还在上传");
   if (!v && !files.length) return;
@@ -4572,6 +4602,7 @@ function quotePick(btn, src, i){
 function quoteMsg(btn, src, i){ addQuote(quotePick(btn, src, i)); }
 function quoteMain(btn, src, i){ parent.sideToMain(quotePick(btn, src, i)); }   // 侧边栏里嵌着的（#476）：放进主对话的输入框
 async function forkAt(i, src = "log"){
+  useMark("act.fork");
   const r = (src === "earlier" ? detail.earlier : detail.log)[i] || {}, from = detail;
   const {id} = await act(() => api("/api/chat/fork", {id: from.id, index: i, at: r.at, src}), "已分叉，在新对话里接着聊");
   await loadState();
@@ -4701,6 +4732,7 @@ function micInner(target){
 }
 function drawMic(){ document.querySelectorAll("[data-mic]").forEach(el => { el.innerHTML = micInner(el.dataset.mic); }); }
 async function voiceStart(target){
+  useMark("act.voice");
   if (VOICE.on) return;
   if (!navigator.mediaDevices?.getUserMedia)
     return toast(isSecureContext ? "这个浏览器用不了麦克风" : "这个网址用不了麦克风，换成 https 开头的地址再试");
@@ -5545,6 +5577,7 @@ function openBoardReply(id){
 }
 function closeBoardReply(){ boardReply = null; renderBoard(true); }
 async function sendBoardReply(){
+  useMark("act.board_reply");
   const r = boardReply, v = (r && r.text || "").trim();
   if (!r) return;
   if (!v) return $("#br-text") && $("#br-text").focus();
@@ -7454,9 +7487,32 @@ function drawDev(){
         <label class="search dev-q" style="flex:1;min-width:160px;max-width:280px">${ICON.search}<input placeholder="编号或标题" aria-label="搜索已上线的需求" value="${esc(shippedQ)}" oninput="shippedQ=this.value;shippedN=20;drawShipped()"></label></div>
         <div id="dev-shipped"></div></div>` : ""}
       <div class="sect" id="dev-perf"></div>
+      <div class="sect" id="dev-usage"></div>
     </div></div>`;
-  drawShipped(); drawPerf();
+  drawShipped(); drawPerf(); drawUsage();
   if (typing) { const i = $(".dev-q input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+// 功能使用（#533）：每个功能近 7 天、近 30 天用了几次、最后一次；30 天没用过的单独列出来
+let USAGE = {data: null, loading: false, error: null};
+async function loadUsage(){
+  USAGE.loading = true; drawUsage();
+  try { USAGE.data = await api("/api/feature_usage", undefined, devMachine()); USAGE.error = null; } catch (e) { USAGE.error = e.message; }
+  USAGE.loading = false; drawUsage();
+}
+function drawUsage(){
+  const box = $("#dev-usage"); if (!box) return;
+  if (!USAGE.data && !USAGE.loading && !USAGE.error) return loadUsage();
+  const head = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><h3 style="margin:0">功能使用</h3>${USAGE.loading ? `<span class="spin"></span>` : `<button class="lnk" onclick="loadUsage()">刷新</button>`}</div>`;
+  if (USAGE.error) { box.innerHTML = head + `<p class="muted">${esc(USAGE.error)}</p>`; return; }
+  const d = USAGE.data; if (!d) { box.innerHTML = head; return; }
+  const fs = d.features || {}, days = d.since ? Math.floor((Date.now() / 1000 - d.since) / 86400) : 0;
+  const rows = Object.keys(USE_NAMES).map(k => ({k, name: USE_NAMES[k], ...(fs[k] || {d7: 0, d30: 0, last: 0})}));
+  const used = rows.filter(r => r.d30).sort((a, b) => b.d30 - a.d30 || b.d7 - a.d7), idle = rows.filter(r => !r.d30).sort((a, b) => (b.last || 0) - (a.last || 0));
+  const last = r => r.last ? whenTs(r.last) : "没用过";
+  box.innerHTML = head + (!d.since ? `<p class="muted">还没有数据，用一阵子再来看。</p>` : `<p class="muted" style="margin:0 0 8px">从 ${esc(whenTs(d.since))} 开始记，已经 ${days} 天。</p>
+    <div class="perf-wrap"><table class="perf"><thead><tr><th>功能</th><th>近 7 天</th><th>近 30 天</th><th>最后一次</th></tr></thead><tbody>
+    ${used.map(r => `<tr><td class="nm">${esc(r.name)}</td><td>${r.d7}</td><td>${r.d30}</td><td>${esc(last(r))}</td></tr>`).join("")}</tbody></table></div>
+    ${idle.length ? `<h4 class="perf-h">${days >= 30 ? "30 天没用过" : "开始记以来没用过"}</h4><p class="muted" style="margin:0">${idle.map(r => `${esc(r.name)}${r.last ? `（${esc(whenTs(r.last))}）` : ""}`).join("、")}</p>` : ""}`);
 }
 // 性能（#286）：开发版那台电脑记下的接口耗时、网页报回来的耗时；慢的几次带现场（参数、同时几个、卡在哪段代码）
 let PERF = {hours: 24, data: null, all: false, loading: false};
@@ -8589,8 +8645,8 @@ async function renderScheduleFeed(){
   const live = feedOn();               // 已经开着（推送来了重取）：按眼前那条对齐；刚进来：回到上次看到的地方
   if (!live) {
     $("#main").innerHTML = `${current.view === "board" ? `<div class="bhead bmodes-h feed-bhead"><h1>任务面板</h1>${boardModes("feed")}</div>` : ""}<div class="feed-wrap"><div class="feed" id="feed" onscroll="feedScroll()"><div class="feed-in"><div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">正在加载…</p></div></div>
-      <button class="feed-pill" id="feed-pill" hidden onclick="feedToTop()"></button>
-      <button class="feed-top" id="feed-top" hidden onclick="feedToTop()" aria-label="回到顶部" title="回到顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>`;
+      <button class="feed-pill" id="feed-pill" hidden onclick="useMark('feed.new_pill');feedToTop()"></button>
+      <button class="feed-top" id="feed-top" hidden onclick="useMark('feed.top');feedToTop()" aria-label="回到顶部" title="回到顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>`;
   }
   let d; try { d = await api("/api/schedule/feed"); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
   if (!feedOn()) return;
@@ -8670,6 +8726,7 @@ function feedTab(star){                  // 全部 / 收藏：收藏从头看，
   if (FEED.starOnly === star) return;
   if (star) feedSavePos();
   FEED.starOnly = star;
+  if (star) useMark("feed.star_tab");
   if (star) { drawFeed(); $("#feed").scrollTop = 0; } else drawFeed(feedPos() || {rid: null});
 }
 function feedMark(p){
@@ -8714,12 +8771,14 @@ function feedAsk(rid, i){
   const t = $(`#feed .fpost[data-rid="${CSS.escape(rid)}"] textarea`); if (t) t.focus();
 }
 async function feedStar(rid){
+  useMark("feed.star");
   const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
   p.star = !p.star; drawFeed();
   try { await api("/api/schedule/star", {id: p.sid, run: rid, on: p.star}); toast(p.star ? "已收藏" : "已取消收藏"); }
   catch (e) { p.star = !p.star; drawFeed(); toast(e.message); }
 }
 async function feedGoChat(rid){           // 去对话里接着聊：这条动态下的问答带进对话
+  useMark("feed.go_chat");
   const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
   feedSavePos();
   try { const r = await api("/api/schedule/bring", {id: p.sid, run: rid}); location.hash = `#/chats/${encodeURIComponent(r.chat)}`; }
@@ -8735,6 +8794,7 @@ async function feedSend(rid){
   FEED.draft[rid] = ""; delete FEED.ask[rid]; FEED.wait.add(p.chat); FEED.waitAt[p.chat] = Date.now();
   p.replies = [...before, {who: "me", text, to: !!quote}];
   drawFeed();
+  useMark("feed.reply");
   try { await api("/api/schedule/reply", {id: p.sid, run: rid, text, quote}); }
   catch (e) { toast(e.message); p.replies = before; FEED.wait.delete(p.chat); FEED.draft[rid] = text; FEED.ask[rid] = ask; drawFeed(); }
 }
@@ -9035,6 +9095,7 @@ let SIDE = null;   // {of（主对话）, mid（在哪台电脑）, tabs: [{id, 
 const sideMax = () => +((S.global || {}).side_tabs) || 3;
 const sideTitle = t => t.title || "新的侧边对话";
 async function openSide(quote){
+  useMark("act.side");
   const c = detail; if (!c) return;
   if (DOC && !DOC.ws) { await closeDoc(); if (DOC) return; }
   const fresh = !SIDE || SIDE.of !== c.id;
@@ -10408,6 +10469,7 @@ function wsVt(kind, fn){
 }
 function wsSetMode(on){
   if (!WS || WS.on === on) return;
+  if (on) useMark("act.ws");
   wsVt(on ? "to-ws" : "to-chat", () => {
     if (!on && DOC && DOC.ws) { WS.docs[DOC.path] = DOC; DOC = null; }
     WS.on = on; wsStore(); wsApply();

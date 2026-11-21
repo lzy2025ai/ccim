@@ -4,9 +4,10 @@
 另外每 30 秒写一次心跳；在不在线以「pid 活着且确实是 ccim 进程」为准。
 
 运行方式：fg 前台；bg 后台（脱离终端，进程没了就没了）；
-always 常驻：交给 macOS 的 launchd 托管，登录后自动启动，崩溃或启动失败（比如开机时还没联网）30 秒后自动重启。
+always 常驻：交给系统托管，开机（macOS 是登录后）自动启动，崩溃或启动失败（比如开机时还没联网）30 秒后自动重启。
+macOS 用 launchd；Linux 用用户级 systemd（#522，选它的原因见 docs/模块/运行与升级.md）；都没有就退回后台跑。
 """
-import os, plistlib, signal, subprocess, time
+import os, plistlib, shutil, signal, subprocess, sys, time
 
 from . import registry
 
@@ -25,9 +26,23 @@ def _is_ccim(pid):
     hit = _ps_seen.get(pid)                   # 活没活着每次都看（上面那步不开子进程），只有命令行缓存
     if hit and time.time() - hit[0] < PS_TTL:
         return hit[1]
-    args = subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True).stdout
+    args = _cmdline(pid)
     _ps_seen[pid] = (time.time(), "ccim" in args)
     return "ccim" in args
+
+
+
+def _cmdline(pid):
+    """进程的命令行。Linux 读 /proc（精简系统可能没装 ps）。"""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        pass
+    try:
+        return subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True).stdout
+    except OSError:
+        return ""
 
 
 def running(path):
@@ -93,7 +108,9 @@ def plist_path(path):
 
 
 def is_always(path):
-    return os.path.exists(plist_path(path))
+    if sys.platform == "darwin":
+        return os.path.exists(plist_path(path))
+    return os.path.exists(unit_path(path))
 
 
 def _launchctl(*args):
@@ -105,6 +122,16 @@ def _domain():
 
 
 def start_always(path, channel, python=None):
+    """常驻：macOS 交给 launchd，Linux 交给用户级 systemd，都没有就后台跑（开机不会自动启动）。"""
+    if sys.platform == "darwin":
+        return _launchd_start(path, channel, python)
+    if systemd_ok():
+        return _systemd_start(path, channel, python)
+    print("（这台电脑没有可用的 systemd，先在后台跑；重启电脑后要再运行一次 ccim start）")
+    return start_background(path, channel, python)
+
+
+def _launchd_start(path, channel, python=None):
     """写 LaunchAgent 并加载：登录后自动启动，异常退出 30 秒后重启；ccim stop 才真正停。"""
     home = os.path.expanduser("~")
     env_path = ":".join([os.path.join(home, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin",
@@ -148,11 +175,151 @@ def start_always(path, channel, python=None):
 
 
 def _stop_always(path):
+    if sys.platform != "darwin":
+        return _systemd_stop(path)
     _launchctl("bootout", f"{_domain()}/{label(path)}")
     try:
         os.remove(plist_path(path))
     except FileNotFoundError:
         pass
+
+
+# ---------- 常驻：Linux 的用户级 systemd（#522） ----------
+# 用户级而不是系统级：ccim 以普通用户运行，自己要能随时停、起、重启（升级、试用、安全重启都会做），系统级每次都要 root。
+# 用户级的服务默认要有人登录才跑，所以要 loginctl enable-linger（join.sh 以 root 运行时替它开，见 linger()）。
+
+def unit_name(path):
+    return f"ccim-{registry.key(path)}.service"
+
+
+def unit_path(path):
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "systemd", "user", unit_name(path))
+
+
+def _user_env():
+    """su / sudo -u / ssh 进来时常常没有 XDG_RUNTIME_DIR，systemctl --user 就连不上；补上 /run/user/<uid>。"""
+    env = dict(os.environ)
+    if not env.get("XDG_RUNTIME_DIR"):
+        d = f"/run/user/{os.getuid()}"
+        if os.path.isdir(d):
+            env["XDG_RUNTIME_DIR"] = d
+    if env.get("XDG_RUNTIME_DIR") and not env.get("DBUS_SESSION_BUS_ADDRESS"):
+        bus = os.path.join(env["XDG_RUNTIME_DIR"], "bus")
+        if os.path.exists(bus):
+            env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus}"
+    return env
+
+
+def _systemctl(*args):
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, env=_user_env())
+
+
+_SYSTEMD = []
+
+
+def systemd_ok():
+    """这台电脑能不能用用户级 systemd（容器、没开 systemd 的 WSL 不行）。"""
+    if sys.platform == "darwin" or not shutil.which("systemctl"):
+        return False
+    if not _SYSTEMD:
+        try:
+            _SYSTEMD.append(_systemctl("show-environment").returncode == 0)
+        except OSError:
+            _SYSTEMD.append(False)
+    return _SYSTEMD[0]
+
+
+def linger():
+    """开机没人登录时用户级服务也跑：查 linger，没开就试着自己开（有的系统允许）。返回开没开。"""
+    if not shutil.which("loginctl"):
+        return False
+    user = _user()
+    on = lambda: "Linger=yes" in subprocess.run(["loginctl", "show-user", user, "-p", "Linger"],
+                                                capture_output=True, text=True).stdout
+    if on():
+        return True
+    subprocess.run(["loginctl", "enable-linger", user], capture_output=True, text=True)
+    return on()
+
+
+def _user():
+    import pwd
+    return pwd.getpwuid(os.getuid()).pw_name
+
+
+def _quote(arg):
+    """systemd 单元里的一个参数：双引号括起来，反斜杠、双引号转义，% 写成 %%。"""
+    return '"' + str(arg).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
+def unit_text(path, channel, python=None):
+    argv = _argv(path, channel, "always", python)
+    home = os.path.expanduser("~")
+    env = {"PATH": ":".join([os.path.join(home, ".local/bin"), "/usr/local/bin", "/usr/bin", "/bin",
+                             "/usr/local/sbin", "/usr/sbin", "/sbin"]),
+           "HOME": home, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1", **_launch_env(argv[0])}
+    log = log_path(path).replace("%", "%%")
+    return "\n".join([
+        "[Unit]",
+        f"Description=ccim {registry.key(path)}",
+        "StartLimitIntervalSec=0",
+        "",
+        "[Service]",
+        "Type=simple",
+        "ExecStart=" + " ".join(_quote(a).replace("$", "$$") for a in argv),   # 命令行里 $ 会被当成变量
+        "WorkingDirectory=" + path.replace("%", "%%"),
+        *[f"Environment={_quote(f'{k}={v}')}" for k, v in env.items()],
+        "Restart=on-failure",                 # 正常退出（ccim stop）不拉起，崩溃、启动失败才拉起
+        "RestartSec=30",
+        f"StandardOutput=append:{log}",
+        f"StandardError=append:{log}",
+        "",
+        "[Install]",
+        "WantedBy=default.target",
+        "",
+    ])
+
+
+def _systemd_start(path, channel, python=None):
+    os.makedirs(os.path.dirname(unit_path(path)), exist_ok=True)
+    _systemctl("stop", unit_name(path))
+    with open(unit_path(path), "w", encoding="utf-8") as f:
+        f.write(unit_text(path, channel, python))
+    _systemctl("daemon-reload")
+    started = registry.now()
+    r = _systemctl("enable", "--now", unit_name(path))
+    if r.returncode != 0:
+        try:
+            os.remove(unit_path(path))
+        except FileNotFoundError:
+            pass
+        _systemctl("daemon-reload")
+        raise SystemExit(f"交给系统托管失败：{(r.stderr or r.stdout).strip()}")
+    try:
+        return _wait_online(path, started, exited=lambda: False)
+    except SystemExit:
+        print("（系统会每 30 秒自动重试；不想要了就 ccim stop）")
+        raise
+
+
+def _systemd_stop(path):
+    if not os.path.exists(unit_path(path)):
+        return
+    _systemctl("disable", "--now", unit_name(path))
+    try:
+        os.remove(unit_path(path))
+    except FileNotFoundError:
+        pass
+    _systemctl("daemon-reload")
+
+
+def detach(argv):
+    """另起一个不跟着当前进程走的进程（安全重启、升级等）要用的命令。Linux 上当前进程由 systemd 托管时，
+    子进程默认和它在同一个控制组里，停这个服务会连子进程一起停掉，所以换到单独的 scope 里跑。"""
+    if sys.platform != "darwin" and os.environ.get("INVOCATION_ID") and shutil.which("systemd-run") and systemd_ok():
+        return ["systemd-run", "--user", "--scope", "--quiet", "--collect", *argv]
+    return list(argv)
 
 
 def _last_line(p):

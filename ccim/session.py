@@ -60,6 +60,11 @@ APPS = """
   可以做成新的应用，做法先读 ~/.ccim/apps/README.md；一次性的事直接做，不用做成应用。"""
 GH_ISSUE = __import__("re").compile(r"\bgh\s+(issue\s+(create|reopen)|pr\s+create)\b")   # 建 / 重开 issue、开 PR（#156）
 GH_REF = __import__("re").compile(r"github\.com/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)")
+# Linux 上 ccim 的用户多半有免密 sudo（#522）：Bash 里直接提权一律拦下，改用 run_as_admin（用户在聊天里批准后才执行）。
+# 只认命令开头的位置（行首、; & | ( ` 引号、$( 之后，前面可以有 VAR=值、env、command、exec、nohup、time、绝对路径）
+SUDO_CMD = __import__("re").compile(
+    r"(?:^|[;&|(`'\"\n]|\$\()\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:(?:env|command|exec|nohup|time|xargs)\s+(?:-\S+\s+)*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*)*"
+    r"(?:\S*/)?(?:sudo|su|pkexec|doas|run0|sudoedit)(?=$|[\s;&|)`'\"])")
 PR_MERGE = __import__("re").compile(r"\bgh\s+pr\s+merge\b")   # 合并 ccim 的 PR 改用 ccim ship（#230）
 PROMOTE = __import__("re").compile(r"(^|[\s;&|/(])ccim\s+promote(?![\w-])(?!.*--help)")   # 升级稳定版：先让用户确认（#146）
 # 从桌面端接过来的对话会照着之前的记录调桌面端的 SendUserFile（这里没有，报「disabled」），钩子接不到，看到就补一句（#190）
@@ -143,7 +148,10 @@ def _secs(text):
 
 def tool_procs(root, within):
     """root 下面最近 within 秒里起的进程（正在跑的命令和它起的子进程；常驻的 MCP 服务起得早，不算）：进程号 → 用了多少秒 CPU。"""
-    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,etime=,time="], capture_output=True, text=True, timeout=10).stdout
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,etime=,time="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
     rows, kids = {}, {}
     for line in out.splitlines():
         f = line.split()
@@ -1119,6 +1127,11 @@ class Chat:
     async def _pre_bash(self, data, tool_use_id, ctx):
         """对话里不升级 ccim（ccim promote）：由用户在网页「设置 → 开发」里点（#156，原来是在对话里弹确认卡片，#146）。"""
         cmd = ((data or {}).get("tool_input") or {}).get("command") or ""
+        if sys.platform.startswith("linux") and SUDO_CMD.search(cmd):
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": "不要在命令里直接用 sudo / su 提权。需要管理员权限的命令，调用 "
+                                                                       "mcp__ccim__run_as_admin（command 写完整命令、不带 sudo，reason 写原因），"
+                                                                       "用户在聊天里批准后才执行。"}}
         if PR_MERGE.search(cmd) and self._ccim_merge(cmd, (data or {}).get("cwd") or self.b.path):
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": "ccim 的 PR 用 `ccim ship PR编号` 上线（和网页开发页的「上线」一样，"

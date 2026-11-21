@@ -4,6 +4,8 @@
 # 先看这台电脑上的 ccim：没装就装（uv + Python + ccim，ccim 从总控下载），比总控旧就换成总控的版本，
 # 一样就不动；然后加入总控、设成开机常驻。连不上 PyPI、GitHub 时依赖和 Python 走国内镜像。
 # 环境变量：CCIM_MIRROR=1 一律走镜像，CCIM_MIRROR=0 一律不走。
+# Linux 上用 root 运行时建的 ccim 用户默认有免密 sudo（Agent 要用管理员权限时在聊天里批准后执行），
+# 不要的话加 --no-sudo：curl -fsSL <总控地址>/join.sh | sh -s <配对码> --no-sudo
 set -u
 
 HUB="@@HUB@@"
@@ -37,7 +39,13 @@ sha256() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -
 
 # 整个放在函数里：curl | sh 时 sh 边读边执行，先读完再跑，里面的命令也就读不到后面的脚本
 main() {
-CODE="${1:-}"
+CODE=""; NO_SUDO="${CCIM_NO_SUDO:-}"
+for a in "$@"; do
+  case "$a" in
+    --no-sudo) NO_SUDO=1 ;;
+    *) CODE="$a" ;;
+  esac
+done
 
 case "$CODE" in
   ""|[0-9][0-9][0-9][0-9][0-9][0-9]) ;;
@@ -52,6 +60,68 @@ esac
 report started
 
 printf '%s把这台电脑加入 ccim 总控%s %s\n' "$B" "$N" "$HUB"
+
+# ---------- Linux 上用 root 运行：换成普通用户（#522） ----------
+# ccim 和 Agent 不用 root 跑。用 sudo 运行的就用原来那个用户，直接用 root 登录的建一个 ccim 用户；
+# 再给它开 linger（开机没人登录也启动它的服务），然后换成它重新跑这个脚本。CCIM_USER 指定用户，CCIM_AS_ROOT=1 坚持用 root。
+if [ "$OS" = linux ] && [ "$(id -u)" = 0 ] && [ "${CCIM_AS_ROOT:-}" != 1 ]; then
+  RUN_USER="${CCIM_USER:-${SUDO_USER:-}}"
+  [ "$RUN_USER" = root ] && RUN_USER=""
+  [ -n "$RUN_USER" ] || RUN_USER=ccim
+  step "用普通用户 $RUN_USER 运行 ccim"
+  if id "$RUN_USER" >/dev/null 2>&1; then
+    say "用户 $RUN_USER 已经有了"
+  else
+    if command -v useradd >/dev/null 2>&1; then useradd -m -s /bin/bash "$RUN_USER" 2>/dev/null || useradd -m "$RUN_USER"
+    else adduser -D "$RUN_USER" 2>/dev/null || adduser --disabled-password --gecos "" "$RUN_USER"
+    fi || fail "建用户 $RUN_USER 失败" "自己建一个普通用户，再用 CCIM_USER=用户名 运行这条命令。"
+    say "建好了用户 $RUN_USER"
+    CREATED=1
+  fi
+  # 精简系统可能没有 ps（procps），ccim 看进程要用
+  if ! command -v ps >/dev/null 2>&1; then
+    say "安装 procps"
+    { command -v apt-get >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq procps >/dev/null 2>&1; } \
+      || { command -v dnf >/dev/null 2>&1 && dnf install -y -q procps-ng >/dev/null 2>&1; } \
+      || { command -v yum >/dev/null 2>&1 && yum install -y -q procps-ng >/dev/null 2>&1; } \
+      || { command -v apk >/dev/null 2>&1 && apk add -q procps >/dev/null 2>&1; } || true
+  fi
+  # 免密 sudo：只给 ccim 自己建的用户（或默认的 ccim 用户）；Agent 要用时在聊天里批准后才执行
+  if [ -z "$NO_SUDO" ] && { [ -n "${CREATED:-}" ] || [ "$RUN_USER" = ccim ]; }; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      say "安装 sudo"
+      { command -v apt-get >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo >/dev/null 2>&1; } \
+        || { command -v dnf >/dev/null 2>&1 && dnf install -y -q sudo >/dev/null 2>&1; } \
+        || { command -v yum >/dev/null 2>&1 && yum install -y -q sudo >/dev/null 2>&1; } \
+        || { command -v apk >/dev/null 2>&1 && apk add -q sudo >/dev/null 2>&1; } || true
+    fi
+    if command -v sudo >/dev/null 2>&1 && command -v visudo >/dev/null 2>&1; then
+      mkdir -p /etc/sudoers.d
+      printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$RUN_USER" > /etc/sudoers.d/.ccim.tmp && chmod 440 /etc/sudoers.d/.ccim.tmp
+      if visudo -cf /etc/sudoers.d/.ccim.tmp >/dev/null 2>&1; then
+        mv /etc/sudoers.d/.ccim.tmp /etc/sudoers.d/ccim
+        say "$RUN_USER 可以免密使用 sudo：Agent 要用管理员权限时，在聊天里批准后执行（不要的话加 --no-sudo 重新运行）"
+      else
+        rm -f /etc/sudoers.d/.ccim.tmp
+        say "没设成免密 sudo（sudoers 校验没通过），Agent 用不了管理员权限"
+      fi
+    else
+      say "这台电脑上没有 sudo，Agent 用不了管理员权限"
+    fi
+  elif [ -n "$NO_SUDO" ] && [ "$RUN_USER" = ccim ] && [ -f /etc/sudoers.d/ccim ]; then
+    rm -f /etc/sudoers.d/ccim
+    say "已取消 $RUN_USER 的免密 sudo"
+  fi
+  if command -v loginctl >/dev/null 2>&1; then
+    loginctl enable-linger "$RUN_USER" >/dev/null 2>&1 && say "开机后自动启动 $RUN_USER 的 ccim" \
+      || say "没开成开机自启（loginctl enable-linger $RUN_USER 失败），重启后要登录一次 $RUN_USER"
+    uid=$(id -u "$RUN_USER"); i=0
+    while [ ! -d "/run/user/$uid" ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+  fi
+  # 换成这个用户重新跑：从总控重新取脚本（curl | sh 时拿不到脚本本身）
+  su - "$RUN_USER" -c "curl -fsSL '$HUB/join.sh' | CCIM_MIRROR='${CCIM_MIRROR:-}' CCIM_NO_SUDO='$NO_SUDO' sh -s '$CODE'" </dev/null
+  exit $?
+fi
 
 # ---------- 1. 这台电脑上的 ccim ----------
 step "1/4 检查这台电脑上的 ccim"
@@ -232,6 +302,11 @@ set -- "$HUB"
 if ! command -v ccim >/dev/null 2>&1 && [ -n "$UV" ]; then
   "$UV" tool update-shell >/dev/null 2>&1 || true
   say "新开一个终端窗口就能用 ccim 命令"
+fi
+# Linux：Agent 要用管理员权限，是在聊天里批准后用免密 sudo 执行的，这里看这个用户有没有
+if [ "$OS" = linux ] && [ "$(id -u)" != 0 ] && [ -z "$NO_SUDO" ] && ! sudo -n true >/dev/null 2>&1; then
+  say "$(id -un) 不能免密使用 sudo，Agent 要用管理员权限时会执行不了。需要的话，用管理员运行："
+  say "echo '$(id -un) ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/ccim-$(id -un) && sudo chmod 440 /etc/sudoers.d/ccim-$(id -un)"
 fi
 printf '\n%s✓ 好了%s 这台电脑已经加入总控，在网页「设置 → 电脑」里能看到它。\n' "$G" "$N"
 }

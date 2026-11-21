@@ -422,6 +422,7 @@ def filter_state(pf, st, acct):
                         if k in ("model", "effort", "codex_model", "codex_effort", "archive_days", "kb")}   # kb：知识库开关跟着主人（#477）
         st["ccim"] = {k: v for k, v in (st.get("ccim") or {}).items() if k != "dev"}   # 开发页只给电脑主人
         st.pop("perms", None)
+        st.pop("bases", None)
         st["guest"] = {"root": root(acct), "codex": bool(g.get("codex")), "own": bool(g.get("own", True))}
     return st
 

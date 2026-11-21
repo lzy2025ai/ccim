@@ -75,6 +75,9 @@ def describe_request(name, inp):
         return f"修改文件 `{inp.get('file_path') or inp.get('notebook_path')}`"
     if name == "WebFetch":
         return f"访问网页 {inp.get('url')}"
+    if name == "run_as_admin":                 # Linux 上用管理员权限执行（#522）
+        return (f"用管理员权限（root）执行：{inp.get('reason')}\n" if inp.get("reason") else "用管理员权限（root）执行：\n") + \
+            f"```\n{short(inp.get('command'), 1500)}\n```"
     if name.endswith("skill_delete"):
         return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"
     if name.endswith("share_skill_to_platform"):

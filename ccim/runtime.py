@@ -264,7 +264,8 @@ def schedule_restart(path, delay=15, target=None, notify=True, env=None):
     log = open(os.path.join(registry.pdir(path), "restart.log"), "ab")
     env = dict(os.environ, **({} if notify else {"CCIM_RESTART_QUIET": "1"}), **(env or {}))
     env.pop("PYTHONPATH", None)               # 在试用某个需求的进程里调用时带着那个工作目录；要试哪个由 launch_env 决定（#111）
-    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
+    from . import daemon
+    subprocess.Popen(daemon.detach(args), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd="/", env=env)
 
 
 def safe_restart(path, delay=0, target=None, notify=True):
@@ -341,6 +342,8 @@ def _run(cmd, env=None, timeout=60):
         return subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(cmd, TIMEOUT_RC, "", "")
+    except FileNotFoundError:                 # 服务器上常常没装 git（#522）
+        return subprocess.CompletedProcess(cmd, 127, "", f"找不到 {cmd[0]}")
 
 
 def _pins():
@@ -526,7 +529,8 @@ def start_promote():
     py = dev_python() or sys.executable
     os.makedirs(_stable(), exist_ok=True)
     log = open(os.path.join(_stable(), "promote.log"), "ab")
-    subprocess.Popen([py, "-P", "-m", "ccim.cli", "promote-run"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+    from . import daemon
+    subprocess.Popen(daemon.detach([py, "-P", "-m", "ccim.cli", "promote-run"]), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                      start_new_session=True, cwd="/")
 
 

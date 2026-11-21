@@ -16,7 +16,7 @@ TIMEOUT = 600
 YES = {"y", "yes", "允许", "同意", "可以", "好", "ok"}
 NO = {"n", "no", "拒绝", "不行", "不要", "不"}
 _ids = itertools.count(1)
-LABELS = {}                                   # 按钮上的字（默认 允许 / 拒绝）
+LABELS = {"run_as_admin": ("执行", "不执行")}  # 按钮上的字（默认 允许 / 拒绝）
 
 
 class Pending:

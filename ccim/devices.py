@@ -3,6 +3,7 @@
 每台电脑只处理自己的文件，网页请求按 X-Machine 转到那台电脑（和其他接口一样）。范围是用户主目录：
 主目录外的不给看；主目录本身、里面的系统文件夹（桌面、文稿、资源库等）和 ccim 自己的目录不能删、不能改名。
 删除一律移到废纸篓；磁盘清理里的缓存直接清空（能重新生成），清理只认最近一次扫描出来的路径。每次操作记一条（ops.jsonl）。
+Linux（#522）：废纸篓用 freedesktop 的 ~/.local/share/Trash（文件管理器认得、能还原）；~/.local、~/.config 里有 ccim 自己和 systemd 的东西，不能删。
 """
 import json, logging, os, platform as _platform, re, shutil, subprocess, threading, time
 
@@ -10,7 +11,10 @@ log = logging.getLogger("ccim.devices")
 
 HOME = os.path.realpath(os.path.expanduser("~"))
 FS_CHAT = "@fs"                     # 文件预览、下载时代替对话编号：不是对话里出现过的文件，按设备管理的范围放行
+LINUX = _platform.system() == "Linux"
 KEEP = {"Desktop", "Documents", "Downloads", "Library", "Pictures", "Movies", "Music", "Applications", "Public", ".Trash", ".ccim"}
+if LINUX:
+    KEEP |= {".local", ".config", ".ssh", ".cache"}
 HIDE_TOP = {"Library"}              # 主目录下默认不显示（访达也不显示），打开「显示隐藏文件」才有
 LIST_MAX = 2000
 DAY = 86400
@@ -47,6 +51,8 @@ def _removable(p):
 
 
 def _no_access(p):
+    if LINUX:
+        return Problem("没有权限打开这个文件夹。")
     return Problem("没有权限打开这个文件夹。到这台 Mac 的「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里，"
                    f"打开 ccim 用的 Python（{os.path.realpath(_python())}）。")
 
@@ -82,10 +88,51 @@ def _model_name():
     return _model
 
 
+def os_kind():
+    return {"Darwin": "mac", "Linux": "linux", "Windows": "windows"}.get(_platform.system(), "other")
+
+
+def _linux_model():
+    """云服务器、PC 的型号（DMI）· CPU · 内存。"""
+    parts = []
+    try:
+        with open("/sys/devices/virtual/dmi/id/product_name", encoding="utf-8") as f:
+            name = f.read().strip()
+        if name and name.lower() not in ("none", "to be filled by o.e.m.", "system product name"):
+            parts.append(name)
+    except OSError:
+        pass
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as f:
+            cpus = [l.split(":", 1)[1].strip() for l in f if l.startswith("model name")]
+        if cpus:
+            parts.append(f"{cpus[0]} × {len(cpus)}" if len(cpus) > 1 else cpus[0])
+    except OSError:
+        pass
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as f:
+            kb = next(int(l.split()[1]) for l in f if l.startswith("MemTotal"))
+        parts.append(f"{round(kb / 1024 / 1024)} GB" if kb >= 1024 * 1024 else f"{kb // 1024} MB")
+    except (OSError, StopIteration, ValueError):
+        pass
+    return " · ".join(parts)
+
+
+def _os_name():
+    ver = _platform.mac_ver()[0]
+    if ver:
+        return f"macOS {ver}"
+    if LINUX:
+        try:
+            return _platform.freedesktop_os_release().get("PRETTY_NAME") or _platform.platform()
+        except OSError:
+            pass
+    return _platform.platform()
+
+
 def overview(pdir):
     du = shutil.disk_usage(HOME)
-    ver = _platform.mac_ver()[0]
-    return {"model": _model_name(), "os": f"macOS {ver}" if ver else _platform.platform(),
+    return {"model": _linux_model() if LINUX else _model_name(), "os": _os_name(), "kind": os_kind(),
             "home": HOME, "disk": {"total": du.total, "free": du.free, "used": du.total - du.free},
             "ops": recent_ops(pdir), "perms": perms(wait=True)}
 
@@ -245,10 +292,24 @@ def _unique(folder, name):
     return q
 
 
+def trash_dir():
+    """放被删文件的地方：macOS 的 ~/.Trash，Linux 的 ~/.local/share/Trash/files。"""
+    if LINUX:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share")
+        return os.path.join(base, "Trash", "files")
+    return os.path.join(HOME, ".Trash")
+
+
 def _to_trash(p):
-    trash = os.path.join(HOME, ".Trash")
+    trash = trash_dir()
     os.makedirs(trash, exist_ok=True)
     q = _unique(trash, os.path.basename(p))
+    if LINUX:                             # 记下原来在哪，文件管理器里能还原（freedesktop 规范）
+        from urllib.parse import quote
+        info = os.path.join(os.path.dirname(trash), "info")
+        os.makedirs(info, exist_ok=True)
+        with open(os.path.join(info, os.path.basename(q) + ".trashinfo"), "w", encoding="utf-8") as f:
+            f.write(f"[Trash Info]\nPath={quote(p)}\nDeletionDate={time.strftime('%Y-%m-%dT%H:%M:%S')}\n")
     try:
         os.rename(p, q)
     except OSError:                       # 不在同一个卷上
@@ -431,7 +492,7 @@ class Cleaner:
             if os.path.isdir(p):
                 seen.add(p)
                 add("cache", p, _du(p), name=name, note=note)
-        caches = os.path.join(HOME, "Library", "Caches")
+        caches = os.path.join(HOME, ".cache") if LINUX else os.path.join(HOME, "Library", "Caches")
         try:
             for n in sorted(os.listdir(caches)):
                 p = os.path.join(caches, n)
@@ -441,7 +502,7 @@ class Cleaner:
             pass
 
         self._step("废纸篓")
-        add("trash", os.path.join(HOME, ".Trash"), _du(os.path.join(HOME, ".Trash")), name="废纸篓")
+        add("trash", trash_dir(), _du(trash_dir()), name="废纸篓")
 
         self._step("下载文件夹")
         dl = os.path.join(HOME, "Downloads")
@@ -532,6 +593,10 @@ class Cleaner:
             try:
                 if x["group"] in ("cache", "trash"):
                     _empty(p)
+                    if x["group"] == "trash" and LINUX:     # 还原用的记录一起清掉
+                        info = os.path.join(os.path.dirname(p), "info")
+                        if os.path.isdir(info):
+                            _empty(info)
                 else:
                     _real(p)
                     _removable(p)

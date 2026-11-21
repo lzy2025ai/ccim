@@ -2373,6 +2373,7 @@ function folderClick(k){
 function folderBack(){ if (!DOC_BACK) return; DOC = DOC_BACK; DOC_BACK = null; drawDoc(); }
 // 在放文件的那台电脑上打开访达（#322）：服务器、别人共享给我的电脑上不行；网页不在那台电脑上时说一声开在哪了
 function canReveal(mid){
+  if (osOf(mid) === "linux") return false;       // Linux（多是服务器）上没有访达（#522）
   if (!isRemote(mid)) return true;
   const m = machineOf(mid);
   return !!m && !m.shared && !m.hub;
@@ -2676,6 +2677,7 @@ const machineOf = id => (S.machines || []).find(m => m.id === id);
 const sharedM = id => !!(machineOf(id) || {}).shared;     // 别人共享给我的电脑（#154）：只能用自己的那块
 const guestOf = id => ((S.machine_info || {})[id] || {}).guest || {};
 const hasDsh = id => !!(((S.machine_info || {})[id] || {}).dsh ?? S.dsh ?? {}).ready;
+const osOf = id => (((S.machine_info || {})[id || S.me] || {}).os) || (!isRemote(id) ? S.os : null);
 const basesOf = id => noCodex(id) ? ["claude"] : ["claude", "codex"].concat(!sharedM(id) && hasDsh(id) ? ["dsh"] : []);
 const noCodex = id => sharedM(id) && !guestOf(id).codex;              // 主人没让用 Codex
 const canCreate = id => !sharedM(id) || guestOf(id).own !== false;     // 主人没让在这台上自己建 Agent
@@ -7408,7 +7410,7 @@ function renderMachines(){
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span></div>` : `<div class="mem" style="padding:10px 0">
         <a class="t mlink" href="${devHref(m.id)}" style="flex:1;min-width:0"><span class="title">${esc(m.name)}${m.me ? `<span class="muted" style="font-weight:400">（这台）</span>` : ""}</span>
         <span class="sub">${m.hub ? "总控" : "加入的电脑"}${verLine(m)}${sharedTo(m)}</span></a>
-        ${upgradeBox(m)}${permChip(m)}
+        ${upgradeBox(m)}${permChip(m)}${baseChip(m)}
         <span class="status ${m.online ? "on" : ""}" style="margin-right:12px"><i></i>${m.online ? "在线" : "离线"}</span>
         ${!joined && !m.me ? `<button class="link danger-link" onclick="removeMachine(${q(m.id)},${q(m.name)})">移除</button>` : ""}</div>`).join("")}</div>
       ${joined ? `<div class="sect"><h3>已加入「${esc(hub.name || "")}」</h3><p class="muted">要添加别的电脑，到「${esc(hub.name || "")}」上操作。</p>
@@ -7589,6 +7591,20 @@ function permMiss(p){ return p ? p.items.filter(i => i.ok === false) : []; }
 function permChip(m){
   const miss = m.online ? permMiss(((S.machine_info || {})[m.id] || {}).perms) : [];
   return miss.length ? `<a class="upg new" href="${devHref(m.id)}">缺${miss.map(i => esc(i.name)).join("、")}权限</a>` : "";
+}
+// 底座（#522）：装没装、配好没有。没装底座的电脑也能接入，在这里标出来
+const BASE_NEED = {install: "没装", login: "没登录", key: "没填 Key"};
+function basesInfo(mid){ return ((S.machine_info || {})[mid] || {}).bases || (!isRemote(mid) ? S.bases : null); }
+function baseChip(m){
+  const b = m.online && !m.hub ? basesInfo(m.id) : null;
+  if (!b || Object.values(b).some(x => x.ready)) return "";
+  return `<a class="upg new" href="${devHref(m.id)}">${Object.values(b).some(x => x.installed) ? "底座没配好" : "没装底座"}</a>`;
+}
+function baseSect(b){
+  if (!b) return "";
+  return `<div class="sect"><h3>底座</h3>${Object.keys(BASE).filter(k => b[k]).map(k => `<div class="mem" style="padding:8px 0">
+      <span class="t" style="flex:1;min-width:0"><span class="title">${BASE[k]}</span></span>
+      <span class="status ${b[k].ready ? "on" : ""}"><i></i>${b[k].ready ? "可以用" : BASE_NEED[b[k].need] || "不能用"}</span></div>`).join("")}</div>`;
 }
 function permSect(p, me){
   if (!p) return "";
@@ -7798,6 +7814,7 @@ async function devOverview(){
     <div class="sect"><h3>这台电脑</h3><dl class="kv">
       ${d.model ? `<dt>型号</dt><dd>${esc(d.model)}</dd>` : ""}<dt>系统</dt><dd>${esc(d.os)}</dd>
       ${v ? `<dt>ccim</dt><dd>${esc([v.kind === "dev" ? "开发版" : "", v.version, v.commit].filter(Boolean).join(" "))}</dd>` : ""}</dl></div>
+    ${baseSect(basesInfo(mid))}
     ${permSect(d.perms, m.me)}
     <div class="sect"><h3>Agent</h3>${ags.length ? ags.map(a => `<a class="mem" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a, "sm", false)}
         <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${BASE[a.base || "claude"]}</span></span>

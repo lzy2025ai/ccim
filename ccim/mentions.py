@@ -103,7 +103,7 @@ class Mentions:
             self.pf.store.write(chats)
         return sub
 
-    async def send(self, cid, text, to, files=(), by=None, depth=0, person=None, quiet=False):
+    async def send(self, cid, text, to, files=(), by=None, depth=0, person=None, quiet=False, mark=None):
         """在主循环里调。by：是对话里的助手自己 @ 的（ask_agent 工具），不是用户。
         depth：被 @ 的人是第几层派出来的（#179），交给它的任务带上，它再往下派时按这个拦。"""
         from . import groups
@@ -141,7 +141,7 @@ class Mentions:
         log = self.pf.channel.logs
         user = log.append(cid, {"type": "user", "id": mid, "text": text, "files": shown, "to": to,
                                 **({"by": by} if by else {}), **({"person": person} if person else {}),   # 多人群聊里谁说的（#419）
-                                **({"quiet": True} if quiet else {})})
+                                **({"quiet": True} if quiet else {}), **(mark or {})})   # mark：动态里 @ 的（#537）
         self.pf.channel._emit(cid, user)
         att = "".join(f"\n（附件：{f['key']}）" for f in files)
         text = plain

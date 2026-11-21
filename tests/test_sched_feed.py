@@ -70,6 +70,25 @@ class FeedTests(unittest.TestCase):
         self.assertEqual([f["id"] for f in r["failing"]], ["b"])
 
 
+    def test_hide_and_at(self):
+        """不显示的那条不出现；回复里 @ 的 Agent 的回答挂在这条下面"""
+        now = time.time()
+        logs = {"schedule-a": [
+                    {"type": "run", "id": "a:1", "state": "done", "at": now - 300, "done_at": now - 290, "text": "一", "chat": "c1"},
+                    {"type": "run", "id": "a:2", "state": "done", "at": now - 100, "done_at": now - 90, "text": "二", "chat": "c1"}],
+                "c1": [{"type": "answer", "text": "一", "at": now - 291},
+                       {"type": "answer", "text": "二", "at": now - 91},
+                       {"type": "user", "id": "u1", "text": "问问", "feed_run": "a:2", "to": ["y"], "at": now - 50},
+                       {"type": "mention", "id": "u1:y", "msg": "u1", "agent": "y", "state": "done", "text": "我来答", "at": now - 40}]}
+        data = {"a": {"name": "t", "freq": "daily", "target": {"kind": "chat", "id": "c1"}, "seen_at": 0, "hidden": ["a:1"]}}
+        sc = make(logs, data, {"c1": {"agent": "x"}})
+        sc._log = lambda sid: f"schedule-{sid}"
+        r = sc.feed(["a"])
+        self.assertEqual([p["rid"] for p in r["posts"]], ["a:2"])
+        reps = r["posts"][0]["replies"]
+        self.assertEqual(reps[0]["at_agents"], ["y"])
+        self.assertEqual((reps[1]["agent"], reps[1]["text"]), ("y", "我来答"))
+
     def test_hidden(self):
         """动态里回复的那几轮对话里不显示，带进对话的照常；等批准的卡片总显示"""
         rows = [{"type": "user", "text": "a"}, {"type": "answer", "text": "A"},

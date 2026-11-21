@@ -1270,6 +1270,10 @@ html.embed .send{width:30px;height:30px;border-radius:50%}
 .fpost .frep .fr.long:not(.open) .rt{max-height:6.4em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent)}
 .fpost .frep .fr .fmore{font-size:12.5px}
 .fpost .frep .fr-acts{display:flex;align-items:center;gap:12px}.fpost .frep .fr-re{margin-left:auto;color:var(--muted)}.fpost .frep .fr-re:hover{color:var(--qing)}
+.fpost .ffoot .btn.fmenu{padding:3px 6px;display:inline-grid;place-items:center}.fpost .ffoot .btn.fmenu svg{width:16px;height:16px}
+.fpost .fat{color:var(--qing)}
+.fpost .fat-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fpost .fask .fat-btn{padding:4px 10px;font-weight:600;color:var(--ink-2)}
 .fpost .ffoot .btn.starred{color:var(--huang);border-color:color-mix(in srgb,var(--huang) 45%,var(--line))}
 .feed-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 .feed-bhead{flex:none}
@@ -2187,7 +2191,7 @@ const USE_NAMES = {
   "opc": "一人公司", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
   "settings": "设置", "settings.dev": "开发页", "settings.machines": "电脑", "settings.accounts": "账号", "settings.chats": "对话设置", "settings.models": "模型",
   "act.send": "发消息", "act.voice": "语音输入", "act.fork": "分叉", "act.rewind": "退回", "act.side": "侧边对话", "act.ws": "工作区", "act.board_reply": "在任务面板里回复",
-  "feed.reply": "动态里回复", "feed.star": "动态里收藏", "feed.star_tab": "看收藏的动态", "feed.go_chat": "动态去对话回复", "feed.new_pill": "点「N 条新动态」", "feed.top": "回到顶部",
+  "feed.reply": "动态里回复", "feed.star": "动态里收藏", "feed.star_tab": "看收藏的动态", "feed.go_chat": "动态去对话回复", "feed.hide": "动态里不显示某条", "feed.at": "动态回复里 @ Agent", "feed.new_pill": "点「N 条新动态」", "feed.top": "回到顶部",
 };
 let useLast = "";
 function useMark(f){ if (USE_NAMES[f] && USEQ.length < 300) USEQ.push({f, at: Math.round(Date.now() / 1000)}); }
@@ -8657,7 +8661,7 @@ async function renderScheduleFeed(){
   }
   let d; try { d = await api("/api/schedule/feed"); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
   if (!feedOn()) return;
-  FEED = {open: new Set(), openRep: new Set(), ask: {}, wait: new Set(), waitAt: {}, draft: {}, sent: new Set(), starOnly: false, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
+  FEED = {open: new Set(), openRep: new Set(), ask: {}, at: {}, wait: new Set(), waitAt: {}, draft: {}, sent: new Set(), starOnly: false, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
   FEED.wait.forEach(c => {             // 回复有了回答（那条动态下最后一句是 Agent 的），或等太久了：不再转圈
     const last = (FEED.posts.find(p => p.chat === c && (p.replies || []).length) || {replies: []}).replies.slice(-1)[0];
     if (last && last.who === "agent" || Date.now() - (FEED.waitAt[c] || 0) > 600000) FEED.wait.delete(c);
@@ -8758,10 +8762,12 @@ function feedPost(p){
     <div class="ffoot"><time>${esc(feedWhen(p.at))}</time>
       ${p.chat ? `<button class="btn" onclick="feedAsk(${q})">回复</button>` : ""}
       <button class="btn ${p.star ? "starred" : ""}" aria-pressed="${!!p.star}" onclick="feedStar(${q})">${p.star ? "已收藏" : "收藏"}</button>
-      ${p.chat ? `<button class="btn" onclick="feedGoChat(${q})">去对话回复</button>` : p.project ? `<a class="btn" href="#/projects/${encodeURIComponent(p.project)}" style="text-decoration:none">去项目里看</a>` : ""}</div>
-    ${reps.length || wait ? `<div class="frep">${reps.map((r, i) => r.who === "me" ? `<div class="fr"><b>我${r.to ? `</b> 回复 <b>${esc(who)}` : ""}：</b>${esc(r.text)}</div>` : feedReply(p, r, i, who)).join("")}
+      <button class="btn fmenu" aria-label="更多" title="更多" onclick="feedMenu(event,${q})">${ICON.more}</button></div>
+    ${reps.length || wait ? `<div class="frep">${reps.map((r, i) => r.who === "me" ? `<div class="fr"><b>我${r.to ? `</b> 回复 <b>${esc(who)}` : ""}：</b>${(r.at_agents || []).map(a => `<span class="fat">@${esc((agentOf(a) || {name: "Agent"}).name)}</span> `).join("")}${esc(r.text)}</div>`
+      : feedReply(p, r, i, r.agent ? (agentOf(r.agent) || {name: "Agent"}).name : who)).join("")}
       ${wait ? `<div class="fwait"><span class="spin"></span>${esc(who)}正在回复</div>` : ""}</div>` : ""}
-    ${ask ? `<div class="fask"><textarea rows="1" placeholder="${esc(quoted ? `回复${who}：${quoted.text.replace(/\s+/g, " ").slice(0, 24)}…` : `回复${who}…`)}" oninput="feedGrow(this,${q})" onkeydown="feedKey(event,${q})">${esc(FEED.draft[p.rid] || "")}</textarea><button class="btn primary" onclick="feedSend(${q})">发送</button></div>` : ""}
+    ${ask ? `${(FEED.at[p.rid] || []).length ? `<div class="fat-row">${FEED.at[p.rid].map(a => `<span class="at">${seal(agentOf(a), "sm", false)}${esc((agentOf(a) || {name: "Agent"}).name)}<button aria-label="去掉" onclick="feedAtDrop(${q},'${esc(a)}')">${ICON.x}</button></span>`).join("")}</div>` : ""}
+      <div class="fask"><textarea rows="1" placeholder="${esc(quoted ? `回复${who}：${quoted.text.replace(/\s+/g, " ").slice(0, 24)}…` : `回复${who}，打 @ 叫别的 Agent`)}" oninput="feedGrow(this,${q},event)" onkeydown="feedKey(event,${q})">${esc(FEED.draft[p.rid] || "")}</textarea><button class="btn fat-btn" aria-label="@ 其他 Agent" title="@ 其他 Agent" onclick="feedAtPick(event,${q})">@</button><button class="btn primary" onclick="feedSend(${q})">发送</button></div>` : ""}
   </div></article>`;
 }
 function feedReply(p, r, i, who){         // Agent 的回答：长的先收起，点「展开」看全文；右下角能回复这一条
@@ -8769,6 +8775,42 @@ function feedReply(p, r, i, who){         // Agent 的回答：长的先收起�
   return `<div class="fr ${long ? "long" : ""} ${open ? "open" : ""}"><b>${esc(who)}：</b><div class="md rt">${md(r.text)}</div>
     <div class="fr-acts">${long ? `<button class="fmore" onclick="feedRepToggle('${esc(k)}')">${open ? "收起" : "展开"}</button>` : ""}<button class="fmore fr-re" onclick="feedAsk(${q},${i})">回复</button></div></div>`;
 }
+function feedMenu(e, rid){                // 「⋯」：去对话回复、不显示这条（#537）
+  const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
+  const q = JSON.stringify(rid).replace(/"/g, "&quot;");
+  pop(e, `${p.chat ? `<button onclick="closePop();feedGoChat(${q})">去对话回复</button>` : p.project ? `<button onclick="closePop();location.hash='#/projects/${encodeURIComponent(p.project)}'">去项目里看</button>` : ""}
+    <button onclick="closePop();feedHide(${q})">不显示这条</button>`, true);
+}
+async function feedHide(rid){
+  const i = FEED.posts.findIndex(x => x.rid === rid); if (i < 0) return;
+  const p = FEED.posts[i];
+  useMark("feed.hide");
+  FEED.posts.splice(i, 1); drawFeed();
+  try { await api("/api/schedule/hide", {id: p.sid, run: rid}); }
+  catch (e) { FEED.posts.splice(i, 0, p); drawFeed(); toast(e.message); return; }
+  wsToast("这条不再显示", async () => {
+    try { await api("/api/schedule/hide", {id: p.sid, run: rid, on: false}); } catch (e) { toast(e.message); return; }
+    if (!FEED.posts.some(x => x.rid === rid)) { FEED.posts.splice(Math.min(i, FEED.posts.length), 0, p); drawFeed(); }
+  });
+}
+function feedAtList(p){                   // 能 @ 的：这台电脑上的 Agent，发这条的排最前
+  const mine = S.agents.filter(a => !a.machine || a.machine === S.me);
+  return [...mine.filter(a => a.id === p.agent), ...mine.filter(a => a.id !== p.agent)];
+}
+function feedAtPick(e, rid){
+  const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
+  const list = feedAtList(p), on = FEED.at[rid] || [];
+  if (!list.length) return toast("还没有别的 Agent");
+  const pp = pop(e, `<div class="sec">让谁回答</div>` + list.map(a => `<button data-m="${esc(a.id)}">${seal(a, "sm", false)}<span><div>${esc(a.name)}</div>${a.id === p.agent ? `<div class="desc">发这条的</div>` : ""}</span>${on.includes(a.id) ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);
+  pp.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+    const m = b.dataset.m, cur = FEED.at[rid] || [];
+    FEED.at[rid] = cur.includes(m) ? cur.filter(x => x !== m) : [...cur, m];
+    FEED.draft[rid] = (FEED.draft[rid] || "").replace(/[@＠]$/, "");   // 打的 @ 换成上面的标签
+    closePop(); drawFeed();
+    const t = $(`#feed .fpost[data-rid="${CSS.escape(rid)}"] textarea`); if (t) { t.focus(); t.selectionStart = t.selectionEnd = t.value.length; }
+  });
+}
+function feedAtDrop(rid, a){ FEED.at[rid] = (FEED.at[rid] || []).filter(x => x !== a); drawFeed(); }
 function feedRepToggle(k){ FEED.openRep.has(k) ? FEED.openRep.delete(k) : FEED.openRep.add(k); drawFeed(); }
 function feedToggle(rid){ FEED.open.has(rid) ? FEED.open.delete(rid) : FEED.open.add(rid); drawFeed(); }
 function feedAsk(rid, i){
@@ -8791,19 +8833,23 @@ async function feedGoChat(rid){           // 去对话里接着聊：这条动�
   try { const r = await api("/api/schedule/bring", {id: p.sid, run: rid}); location.hash = `#/chats/${encodeURIComponent(r.chat)}`; }
   catch (e) { toast(e.message); }
 }
-function feedGrow(t, rid){ FEED.draft[rid] = t.value; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px"; }
+function feedGrow(t, rid, e){
+  FEED.draft[rid] = t.value; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px";
+  if (e && (e.data === "@" || e.data === "＠")) setTimeout(() => feedAtPick({currentTarget: t, stopPropagation(){}}, rid), 0);   // 打了 @：选 Agent
+}
 function feedKey(e, rid){ if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !TOUCH) { e.preventDefault(); feedSend(rid); } }
 async function feedSend(rid){
   const p = FEED.posts.find(x => x.rid === rid), text = (FEED.draft[rid] || "").trim();
   if (!p || !text) return;
-  const ask = FEED.ask[rid] || {}, quote = ask.i != null && p.replies[ask.i] ? p.replies[ask.i].text : null;
+  const ask = FEED.ask[rid] || {}, quote = ask.i != null && p.replies[ask.i] ? p.replies[ask.i].text : null, to = FEED.at[rid] || [];
   const before = p.replies || [];           // 先显示出来，不等后台（发不出去再撤回）
-  FEED.draft[rid] = ""; delete FEED.ask[rid]; FEED.wait.add(p.chat); FEED.waitAt[p.chat] = Date.now();
-  p.replies = [...before, {who: "me", text, to: !!quote}];
+  FEED.draft[rid] = ""; delete FEED.ask[rid]; delete FEED.at[rid]; FEED.wait.add(p.chat); FEED.waitAt[p.chat] = Date.now();
+  p.replies = [...before, {who: "me", text, to: !!quote, at_agents: to}];
+  if (to.length) useMark("feed.at");
   drawFeed();
   useMark("feed.reply");
-  try { await api("/api/schedule/reply", {id: p.sid, run: rid, text, quote}); }
-  catch (e) { toast(e.message); p.replies = before; FEED.wait.delete(p.chat); FEED.draft[rid] = text; FEED.ask[rid] = ask; drawFeed(); }
+  try { await api("/api/schedule/reply", {id: p.sid, run: rid, text, quote, to}); }
+  catch (e) { toast(e.message); p.replies = before; FEED.wait.delete(p.chat); FEED.draft[rid] = text; FEED.ask[rid] = ask; FEED.at[rid] = to; drawFeed(); }
 }
 let feedTimer = 0;
 function feedSoon(){ clearTimeout(feedTimer); feedTimer = setTimeout(() => { if (feedOn()) renderScheduleFeed(); }, 400); }

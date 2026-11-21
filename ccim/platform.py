@@ -659,13 +659,13 @@ class Platform:
             return None
 
     def _board_marks(self, cid, m):
-        if m.get("mention_of") and self._direct_turn(cid):
-            summ = board_mod.summary(self.channel.logs, cid)   # 群成员的子对话里直接聊的那一轮（#409）：答完在它的列表里提示
-            return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ), "direct": True,   # 任务面板也算它（#417）
-                    "ask": board_mod.ask_preview(summ.get("last_user"))}
-        if not board_mod.top_level(m, cid):     # 群里 @ 它的那一轮：只在群聊里提示，子对话不重复
-            return {"attention": None, "unread": False, "ask": ""}
         summ = board_mod.summary(self.channel.logs, cid)
+        kind = board_mod.board_kind(self.channel.logs, cid, m, summ)   # 算不算、怎么算只看这一个口径（#526）
+        if kind == "direct":                   # 群成员的子对话里直接聊的那一轮（#409）：答完在它的列表里提示，任务面板也算它（#417）
+            return {"attention": board_mod.attention(m, summ), "unread": board_mod.unread(m, summ), "direct": True,
+                    "ask": board_mod.ask_preview(summ.get("last_user"))}
+        if not kind:                           # 群里 @ 它的那一轮：只在群聊里提示，子对话不重复
+            return {"attention": None, "unread": False, "ask": ""}
         rounds = summ.get("rounds") or 0
         crew = self.mentions.crew(cid)         # 群里被 @ 的成员在干活：和主 Agent 在干活一样，先不算等你处理（#192）
         sched = bool(summ.get("sched_last"))   # 定时任务发起的那一轮（#447）：任务面板不算，你在里面回了话才算
@@ -674,9 +674,6 @@ class Platform:
                 "ask": board_mod.ask_preview(summ.get("last_user")), "last_by": summ.get("last_by"), "crew": crew,
                 "rounds": rounds, "answered": board_mod.answered(m, summ), "sched_turn": sched}
 
-    def _direct_turn(self, cid):
-        """子对话里最近一轮是用户直接说的（不是群里 @ 它的）。"""
-        return bool(board_mod.summary(self.channel.logs, cid).get("direct"))
 
     def dismiss(self, cid):
         """任务面板里「知道了」：不再等你处理，不算看过（#65）。"""
@@ -2199,7 +2196,7 @@ class Platform:
             if not m.get("mention_of") or m.get("archived") or not ok(cid, m.get("agent")):
                 continue
             summ = board_mod.summary(self.channel.logs, cid)
-            if summ.get("direct") and (m.get("busy") or self._stall(cid) or board_mod.attention(m, summ)):
+            if board_mod.board_kind(self.channel.logs, cid, m, summ) == "direct" and (m.get("busy") or self._stall(cid) or board_mod.attention(m, summ)):
                 out.append(self.chat_view(cid))
         return out
 

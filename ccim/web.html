@@ -7576,13 +7576,15 @@ async function upgradeMachine(mid, name, force, known){
     return upgradeMachine(mid, name, true, known);
   }
   toast(known ? `「${name}」开始升级，装好后会自动重启` : `「${name}」正在检查更新`);
-  await loadState(); renderMachines(); watchUpgrade();
+  await loadState(); if (onMachinesPage()) renderMachines(); watchUpgrade();
 }
+// 现在显示的是不是电脑列表页（服务器上设置页默认就是它）
+const onMachinesPage = () => current.view === "settings" && !current.sub && (current.id === "machines" || S.hub && !["models", "dev", "chats", "accounts"].includes(current.id));
 function watchUpgrade(){              // 有电脑在升级：每 4 秒刷新一次，直到都结束
   clearInterval(window._upw);
   window._upw = setInterval(async () => {
     await loadState().catch(() => {});
-    if (current.view === "settings") renderMachines();
+    if (onMachinesPage()) renderMachines();     // 只刷电脑页：停在开发页等别的设置页时不能被换掉
     const any = (S.machines || []).some(m => ((verOf(m) || {}).job || {}).state === "running");
     if (!any) { clearInterval(window._upw); window._upw = null; }
   }, 4000);
@@ -7625,7 +7627,7 @@ function pairEvent(ev){
       if (current.view === "settings" && current.id === "machines" && !current.sub) renderMachines();
       if (++n >= 20 || (S.machines || []).some(m => m.name === ev.name && m.online)) clearInterval(window._pairWatch);
     }, 3000);
-    loadState().then(() => { if (current.view === "settings") renderMachines(); });
+    loadState().then(() => { if (onMachinesPage()) renderMachines(); });
   }
   else drawPair();
 }

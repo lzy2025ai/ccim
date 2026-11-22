@@ -61,6 +61,116 @@ body{overflow:hidden}
 .rail a.on{background:var(--panel);color:var(--qing);box-shadow:0 0 0 1px var(--line)}
 .rail .spacer{flex:1}
 .rail .rmore{display:none}
+/* ---------- 个人空间（#542）：列表栏是分类，右边只显示当前这一类 ---------- */
+.list-head.sp-head{justify-content:flex-start;gap:10px}
+.sp-me{width:38px;height:38px;border-radius:50%;background:#8A8F87;color:#fff;font-size:16px;display:grid;place-items:center;flex:none}
+.sp-head .nm{font-size:12px;color:var(--muted);margin-top:2px}
+.item.sp-cat{align-items:center}
+.sp-cat .ic{width:18px;height:18px;color:var(--muted);flex:none;display:grid;place-items:center} .sp-cat .ic svg{width:17px;height:17px}
+.sp-cat.on .ic{color:var(--qing)}
+.sp-cat .n{font-size:12px;color:var(--faint)}
+.sp-main{height:100%;overflow:auto;background:var(--paper)}
+.sp-in{max-width:1040px;margin:0 auto;padding:22px 28px 60px}
+.sp-h{display:flex;align-items:baseline;gap:8px;margin:0 0 14px}
+.sp-h h1{font:600 21px/1.2 var(--song);margin:0}
+.sp-h .n{color:var(--faint);font-size:13px}
+.sp-h .r{margin-left:auto;display:flex;gap:6px;align-self:center}
+.sp-tab{padding:3px 12px;border-radius:14px;font-size:12.5px;color:var(--muted);border:1px solid var(--line)}
+.sp-tab.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.sp-add{display:flex;align-items:center;gap:8px;border:1px dashed var(--line-strong);border-radius:10px;padding:9px 14px;color:var(--faint);margin-bottom:6px}
+.sp-add svg{width:15px;height:15px;flex:none}
+.sp-add input{flex:1;border:0;background:none;outline:none;font:inherit;color:var(--ink)}
+.sp-todo{display:flex;align-items:center;gap:12px;padding:9px 4px 9px 2px;border-bottom:1px solid var(--line);min-height:44px}
+.sp-ck{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line-strong);background:var(--panel);display:grid;place-items:center;flex:none;color:#fff;padding:0}
+.sp-ck svg{width:13px;height:13px;opacity:0}
+.sp-ck:hover{border-color:var(--qing)}
+.sp-todo.done .sp-ck{background:var(--qing);border-color:var(--qing)} .sp-todo.done .sp-ck svg{opacity:1}
+.sp-todo .mid{flex:1;min-width:0;display:flex;align-items:center;gap:12px}
+.sp-todo .tx{flex:1;min-width:0;cursor:text;word-break:break-word}
+.sp-todo.done .tx{color:var(--faint);text-decoration:line-through}
+.sp-todo .tx input{width:100%;border:0;border-bottom:1px solid var(--qing);background:none;outline:none;font:inherit;padding:0}
+.sp-src{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--qing);text-decoration:none;max-width:280px;min-width:0;flex:none}
+.sp-src span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-src .seal{width:18px;height:18px;border-radius:4px;font-size:10px;padding:1px}
+.sp-src.self{color:var(--faint)}
+a.sp-src:hover span.t{text-decoration:underline}
+.sp-todo .del{opacity:0;width:26px;height:26px} .sp-todo:hover .del,.sp-todo:focus-within .del{opacity:1}
+@media (hover:none){.sp-todo .del{opacity:1}}
+.sp-fold{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;padding:14px 0 8px}
+.sp-fold svg{width:14px;height:14px;transition:transform .15s} .sp-fold.open svg{transform:rotate(90deg)}
+.sp-grp{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin:16px 0 8px}
+.sp-grp::after{content:"";flex:1;height:1px;background:var(--line)}
+.sp-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.sp-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px 11px;cursor:pointer;min-width:0}
+.sp-card:hover{border-color:var(--line-strong)}
+.sp-card .bd{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.7;color:var(--ink-2);word-break:break-word}
+.sp-card.open{grid-column:1/-1;cursor:default;border-color:var(--qing);box-shadow:0 0 0 1px var(--qing)}
+.sp-card.open .bd{display:block;-webkit-line-clamp:unset;color:var(--ink)}
+.sp-card .ft{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--faint)}
+.sp-card .ft .when{margin-left:auto;white-space:nowrap}
+.sp-kind{font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--qing) 12%,transparent);color:var(--qing);flex:none}
+.sp-kind.feed{background:color-mix(in srgb,var(--lu) 14%,transparent);color:var(--lu)}
+.sp-card .acts{display:flex;gap:8px;margin-top:10px;align-items:center}
+.sp-card .acts .link{color:var(--muted);font-size:13px;padding:0 6px}
+.sp-notes{display:grid;grid-template-columns:300px 1fr;height:100%;min-height:0}
+.sp-nlist{border-right:1px solid var(--line);overflow:auto;background:var(--paper)}
+.sp-nlist .sp-h{padding:20px 16px 0;align-items:center}
+.sp-nlist .sp-grp{margin:12px 16px 4px}
+.sp-note{display:block;padding:11px 16px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.sp-note:hover{background:var(--sunk)} .sp-note.on{background:color-mix(in srgb,var(--qing) 10%,var(--panel))}
+.sp-note b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-note .pv{display:flex;gap:8px;font-size:12px;color:var(--muted);margin-top:2px}
+.sp-note .pv span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sp-note .pv span:first-child{color:var(--faint);flex:none}
+.sp-ed{overflow:auto;background:var(--panel);display:flex;flex-direction:column}
+.sp-ed-in{max-width:760px;width:100%;margin:0 auto;padding:22px 40px 60px;flex:1;display:flex;flex-direction:column}
+.sp-ed-top{display:flex;align-items:center;font-size:12px;color:var(--faint);margin-bottom:18px;min-height:30px}
+.sp-ed-top .icon-btn{margin-left:auto}
+.sp-ed .ti{font:600 26px/1.3 var(--song);border:0;outline:none;background:none;padding:0;margin-bottom:14px;color:var(--ink);width:100%}
+.sp-ed textarea{flex:1;min-height:360px;border:0;outline:none;resize:none;font:15px/1.85 var(--sans);color:var(--ink);background:none;padding:0}
+.sp-empty{color:var(--muted);padding:40px 0;text-align:center}
+.sp-hit{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;cursor:pointer}
+.sp-hit:hover{background:var(--sunk)}
+.sp-hit .ic{color:var(--muted);flex:none;display:grid} .sp-hit .ic svg{width:16px;height:16px}
+.sp-hit .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-hit .sub{font-size:12px;color:var(--faint);flex:none}
+.msg-acts .fav-mk{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--huang);padding:0 6px}
+.msg-acts .fav-mk svg{width:13px;height:13px}
+.msg-acts .fav-mk[hidden]{display:none}
+.toast.top{top:84px;bottom:auto}
+.msheet-box.list{display:block;align-self:end;height:auto;max-height:85vh;overflow:auto;padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
+.msheet-box.list .grip{width:36px;height:4px;border-radius:2px;background:var(--line-strong);margin:2px auto 10px}
+.msheet-box.list .pv{background:var(--sunk);border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.6;color:var(--muted);margin:0 4px 6px}
+.msheet-box.list button.row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:13px 12px;border-radius:10px;font-size:15px}
+.msheet-box.list button.row svg{width:19px;height:19px;color:var(--ink-2);flex:none}
+.msheet-box.list button.row .d{display:block;font-size:12px;color:var(--faint)}
+.msheet-box.list button.row:active{background:var(--sunk)}
+.msheet-box.list .cancel{display:block;width:100%;padding:13px;margin-top:4px;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
+/* 手机上的分类页 */
+.sp-group{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:4px 16px 14px;overflow:hidden}
+.sp-row{display:flex;align-items:center;gap:12px;padding:13px 14px;text-decoration:none;color:inherit;border-bottom:1px solid var(--line)}
+.sp-row:last-child{border-bottom:0}
+.sp-row .bx{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;color:#fff;flex:none} .sp-row .bx svg{width:18px;height:18px}
+.sp-row .t{flex:1;min-width:0} .sp-row .t b{display:block;font-weight:600}
+.sp-row .t .sub{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-row .n{color:var(--faint)} .sp-row .chev{color:var(--faint);display:grid} .sp-row .chev svg{width:15px;height:15px}
+.sp-row .ic{color:var(--muted);display:grid;flex:none} .sp-row .ic svg{width:16px;height:16px}
+.sp-sec{font-size:12.5px;color:var(--muted);margin:6px 22px 6px}
+@media (max-width:760px){
+  .sp-in{padding:14px 14px 90px}
+  .sp-cards{grid-template-columns:1fr}
+  .sp-todo .mid{flex-direction:column;align-items:stretch;gap:2px}
+  .sp-todo .mid .sp-src{max-width:100%;font-size:12px}
+  .sp-todo .mid .sp-src.self{display:none}
+  .sp-notes{display:block}
+  .sp-nlist{border-right:0;height:100%}
+  .sp-ed-in{padding:16px 18px 80px}
+  .sp-ed textarea{font-size:16px}
+  .sp-add input,.sp-todo .tx input{font-size:16px}
+  .toast.top{top:auto}
+  .app.phone-main .sp-in > .sp-h,.app.phone-main .sp-nlist .sp-h,.app.phone-main .sp-ed-top{padding-left:40px;min-height:36px}
+  .app.phone-main .sp-in > .sp-h{align-items:center}
+}
 .bmodes-h{display:flex;align-items:center;gap:6px}
 .bmodes a{padding:3px 12px;border-radius:6px;font-size:13px;color:var(--muted);text-decoration:none}
 .bmodes a.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
@@ -2055,9 +2165,10 @@ html.ws-dark .code-ed .hl-t{color:#F08A7E}
     <!--<a href="#/apps" data-nav="apps" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>应用</a>-->
     <a href="#/skills" data-nav="skills" class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6L12 15.4 7 18.2l1.2-5.6L4 8.8l5.6-.6z"/></svg>共享 Skill</a>
     <a href="#/board" data-nav="board" class="has-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>任务面板<span class="nbadge" id="nav-board-n" hidden></span></a>
-    <a href="#/settings" data-nav="settings" class="has-badge mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
     <div class="spacer"></div>
-    <a href="#/opc" data-nav="opc" class="mi" id="nav-opc"><span class="rail-me" aria-hidden="true">我</span><span class="rail-nm">我</span></a>
+    <!-- 一人公司（#470）的入口先拿掉（#542），#/opc 照常能打开；加回来时在这里放回 <a href="#/opc" data-nav="opc" class="mi"> -->
+    <a href="#/space" data-nav="space" class="mi" id="nav-me"><span class="rail-me" aria-hidden="true">我</span><span class="rail-nm">我</span></a>
+    <a href="#/settings" data-nav="settings" class="has-badge mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>设置<span class="nbadge" id="nav-set-n" hidden></span></a>
     <button class="rmore has-badge" id="nav-more" onclick="openMore()" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>更多<span class="nbadge" id="nav-more-n" hidden></span></button>
   </nav>
   <button class="pback" id="pback" aria-label="返回" onclick="phoneBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg></button>
@@ -2188,7 +2299,8 @@ const USE_NAMES = {
   "schedules.feed": "定时页的动态", "schedules.task": "打开定时任务", "schedules.runs": "定时任务的运行记录", "schedules.edit": "新建或编辑定时任务",
   "board": "任务面板概览", "board.feed": "任务面板的动态", "board.day": "任务面板某一天", "tower": "塔台",
   "agents": "AI 员工总览", "agents.agent": "打开某个 AI 员工", "agents.settings": "AI 员工设置", "agents.new": "新建 AI 员工",
-  "opc": "一人公司", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
+  "opc": "一人公司", "space": "个人空间", "space.todo": "个人空间的待办", "space.fav": "个人空间的收藏", "space.note": "个人空间的笔记",
+  "act.fav": "收藏回答", "act.todo": "回答转成待办", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
   "settings": "设置", "settings.dev": "开发页", "settings.machines": "电脑", "settings.accounts": "账号", "settings.chats": "对话设置", "settings.models": "模型",
   "act.send": "发消息", "act.voice": "语音输入", "act.fork": "分叉", "act.rewind": "退回", "act.side": "侧边对话", "act.ws": "工作区", "act.board_reply": "在任务面板里回复",
   "feed.reply": "动态里回复", "feed.star": "动态里收藏", "feed.star_tab": "看收藏的动态", "feed.go_chat": "动态去对话回复", "feed.hide": "动态里不显示某条", "feed.at": "动态回复里 @ Agent", "feed.new_pill": "点「N 条新动态」", "feed.top": "回到顶部",
@@ -2201,7 +2313,8 @@ function useView(){                       // 当前页面算哪个功能；同�
     : v === "schedules" ? (!id || id === "feed" ? "schedules.feed" : id === "new" || id.startsWith("edit-") ? "schedules.edit" : sub === "runs" ? "schedules.runs" : "schedules.task")
     : v === "board" ? (id === "feed" ? "board.feed" : id === "day" ? "board.day" : "board")
     : v === "agents" ? (!id ? "agents" : id === "new" ? "agents.new" : sub === "settings" ? "agents.settings" : "agents.agent")
-    : v === "settings" ? (USE_NAMES["settings." + id] ? "settings." + id : "settings") : v;
+    : v === "settings" ? (USE_NAMES["settings." + id] ? "settings." + id : "settings")
+    : v === "space" ? (USE_NAMES["space." + id] ? "space." + id : "space") : v;
   const k = f + "|" + (id || "") + "|" + (sub || "");
   if (k === useLast || EMBED) return;
   useLast = k; useMark(f);
@@ -2620,7 +2733,8 @@ function afterState(){
   if (!S._split) {                       // 一人公司的员工（#470）不在 AI 员工里：单独放，别处的选择、列表都看不到它们
     S.staff = (S.agents || []).filter(a => a.staff); S.agents = (S.agents || []).filter(a => !a.staff); S._split = true;
   }
-  const no = $("#nav-opc"); if (no) { no.hidden = !!S.guest; const me = opcMe(); no.querySelector(".rail-me").textContent = [...me][0]; no.querySelector(".rail-nm").textContent = me; }
+  const no = $("#nav-me"); if (no) { const me = opcMe(); no.querySelector(".rail-me").textContent = [...me][0]; no.querySelector(".rail-nm").textContent = me; }
+  if (!SP.d && !SP.loading) spaceLoad();   // 个人空间（#542）：对话里的「已收藏」要用
   opcAfterState();
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
@@ -2948,6 +3062,7 @@ function phoneBack(){
   const to = v === "agents" ? (current.sub && id !== "new" ? `#/agents/${encodeURIComponent(id)}` : "#/agents")
     : v === "kb" && current.sub ? `#/kb/${encodeURIComponent(id)}`
     : v === "schedules" && id && id.startsWith("edit-") ? `#/schedules/${encodeURIComponent(id.slice(5))}`
+    : v === "space" && id === "note" && current.sub ? "#/space/note"
     : `#/${v}`;
   location.hash = to;
 }
@@ -3035,6 +3150,7 @@ function route(){
   if (current.view !== "schedules") sched = null;
   if (current.view === "projects") { current.id ? openProject(current.id) : renderProjectCards(); }
   else if (current.view === "opc") openOpc();
+  else if (current.view === "space") renderSpace();
   else if (current.view === "schedules") { current.id === "new" ? renderScheduleForm(null) : current.id && current.id.startsWith("edit-") ? renderScheduleForm(current.id.slice(5)) : !current.id || current.id === "feed" ? renderScheduleFeed() : openSchedule(current.id); }
   else if (current.view === "agents") {
     // 从别处进来：先显示上次那份列表，再重新取（这期间终端里可能新开了对话，#95）
@@ -3102,6 +3218,7 @@ function renderList(){
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
   else if (current.view === "schedules") renderScheduleList();
   else if (current.view === "opc") renderOpcSide();
+  else if (current.view === "space") renderSpaceList();
   else if (current.view === "settings") renderSettingsList();
   else renderChatList();
 }
@@ -3388,11 +3505,12 @@ function msgActs(src, i, r){
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (EMBED_SIDE && r.type === "answer" && r.text) btns.push(`<button onclick="quoteMain(this,${ref})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.type === "answer" && r.text && kbEnabled()) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
-  if (notCreator()) return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
+  const more = r.type === "answer" && r.text && detail && detail.id ? msgMoreBtn(src, i, r) : "";   // 「⋯」：收藏、转成待办（#542）
+  if (notCreator()) return `<div class="msg-acts">${btns.join("")}${more}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (src === "log" && r.type === "user" && !detail.busy && (detail.rewind || {})[i]) btns.push(`<button onclick="rewindAt(${i})" title="撤掉这条和之后的内容，原文放回输入框">${ICON.undo}退回到这里</button>`);
-  return `<div class="msg-acts">${btns.join("")}${msgTime(r.at)}</div>`;
+  return `<div class="msg-acts">${btns.join("")}${more}${msgTime(r.at)}</div>`;
 }
 // 消息的发送时间（#288）：今天的只写时:分，更早的带日期，不是今年的带年份
 function msgTime(ts){
@@ -4548,7 +4666,8 @@ function mentionActs(i, r, live){
   if (r.text && EMBED_SIDE) btns.push(`<button onclick="quoteMain(this,'log',${i})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.text && !notCreator() && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
-  return `<div class="msg-acts">${btns.join("")}${msgTime(r.done_at || r.at)}</div>`;
+  const more = r.text && detail && detail.id ? msgMoreBtn("log", i, r) : "";   // 「⋯」：收藏、转成待办（#542）
+  return `<div class="msg-acts">${btns.join("")}${more}${msgTime(r.done_at || r.at)}</div>`;
 }
 function fpScope(r, html){   // 被 @ 的 Agent 回答里的路径按它自己那个对话的目录认（#400）
   return r.chat ? `<div style="display:contents" data-fpchat="${esc(r.chat)}" data-fpmid="${esc(r.machine || "")}">${html}</div>` : html;
@@ -7246,6 +7365,342 @@ function renderAgentForm(){
 }
 
 // ================= 设置 =================
+// ================= 个人空间（#542）：自己的待办、收藏、笔记 =================
+// 列表栏是分类（手机上是分类页），右边只显示当前这一类；数据在本机（S.me）那台存取，动态里收藏的也合在收藏里。
+// 对话里 Agent 回答下面的「⋯」能收藏、转成待办；收藏过的回答显示「已收藏」（SP.favs：对话|那条回答）。
+const SP = {d: null, loading: null, q: "", tab: "all", open: null, doneOpen: false, newText: "", favs: new Set(), noteT: null, noteDirty: null};
+const SP_IC = {
+  todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
+  fav: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/></svg>',
+};
+const SP_CATS = [["todo", "待办", "var(--zhu)"], ["fav", "收藏", "var(--huang)"], ["note", "笔记", "var(--qing)"]];
+const spM = () => S.me || null;
+const spErr = () => `${esc(SP.err)}<div style="margin-top:12px"><button class="btn" onclick="SP.err='';spaceLoad(true)">再试一次</button></div>`;
+const spCat = () => current.id === "fav" || current.id === "note" ? current.id : current.id === "todo" || !narrow() ? "todo" : null;
+const spOpenTodos = () => SP.d ? SP.d.todos.filter(t => !t.done) : [];
+const spMsgKey = r => r.type === "mention" ? r.id : (r.id || r.at);
+const spRedraw = () => { if (current.view === "space") { renderSpaceList(); renderSpace(); } };
+async function spaceLoad(draw){
+  if (SP.loading) { if (draw) SP.loading.then(spRedraw); return SP.loading; }
+  SP.loading = (async () => {
+    try { SP.d = await api0("/api/space", undefined, spM()); SP.err = ""; } catch (e) { SP.err = e.message; }
+    SP.favs = new Set(((SP.d || {}).favs || []).filter(f => f.kind === "chat" && f.src).map(f => f.src.chat + "|" + String(f.src.msg)));
+    document.querySelectorAll("[data-favk]").forEach(el => { el.hidden = !SP.favs.has(el.dataset.favk); });
+    SP.loading = null;
+    if (draw) spRedraw();
+  })();
+  return SP.loading;
+}
+function spPlain(text, n, all){
+  if (!all) {                             // 只要一句：跳过开头的小标题，取第一段正文
+    const ls = (text || "").replace(/```[\s\S]*?```/g, " ").split("\n").map(x => x.trim()).filter(Boolean);
+    const body = ls.find(x => !/^#{1,6}\s/.test(x));
+    if (body) text = body;
+  }
+  let t = (text || "").replace(/```[\s\S]*?```/g, " ").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/^\s*([-+]|\d+\.)\s+/gm, "").replace(/[#>*_`|]/g, "").trim();
+  t = all ? t.replace(/\s*\n+\s*/g, " ") : (t.split("\n").map(x => x.trim()).find(Boolean) || "");
+  return t.length > n ? t.slice(0, n) + "…" : t;
+}
+function spWhen(sec){
+  if (!sec) return "";
+  const d = new Date(sec * 1000), now = new Date(), hm = d.toTimeString().slice(0, 5);
+  if (d.toDateString() === now.toDateString()) return hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "昨天";
+  return (d.getFullYear() === now.getFullYear() ? "" : d.getFullYear() + "年") + (d.getMonth() + 1) + "月" + d.getDate() + "日";
+}
+function spGroup(sec){
+  const d = new Date((sec || 0) * 1000), now = new Date();
+  if (d.toDateString() === now.toDateString()) return "今天";
+  return Date.now() / 1000 - sec < 7 * 86400 ? "本周" : "更早";
+}
+function spGrouped(list, at, today = true){
+  const out = [];
+  for (const x of list) {
+    let g = spGroup(at(x)); if (!today && g === "今天") g = "本周";
+    if (!out.length || out[out.length - 1][0] !== g) out.push([g, []]);
+    out[out.length - 1][1].push(x);
+  }
+  return out;
+}
+function spToast(text, acts){   // 带按钮的轻提示（撤销、去看看）
+  document.querySelector(".toast.sp-t")?.remove();
+  const t = document.createElement("div"); t.className = "toast ws-t sp-t" + (current.view === "chats" || current.view === "agents" ? " top" : "");
+  t.innerHTML = `<span>${esc(text)}</span>${(acts || []).map((a, i) => `<button data-i="${i}">${esc(a[0])}</button>`).join("")}`;
+  document.body.append(t);
+  t.querySelectorAll("button").forEach(b => { b.onclick = () => { t.remove(); acts[+b.dataset.i][1](); }; });
+  setTimeout(() => t.remove(), 5000);
+}
+// ---- 回答下面的「⋯」 ----
+function msgMoreBtn(src, i, r){
+  const k = detail.id + "|" + String(spMsgKey(r));
+  return `<button onclick="msgMore(event,${q(src)},${i})" title="更多" aria-label="更多" aria-haspopup="menu">${ICON.more}</button><span class="fav-mk" data-favk="${esc(k)}" ${SP.favs.has(k) ? "" : "hidden"}>${ICON.star}已收藏</span>`;
+}
+const spRow = (src, i) => (src === "earlier" ? detail.earlier : src === "elsewhere" ? detail.elsewhere : detail.log)[i];
+function msgMore(e, src, i){
+  const r = spRow(src, i); if (!r) return;
+  const on = SP.favs.has(detail.id + "|" + String(spMsgKey(r)));
+  const items = [[SP_IC.fav, on ? "取消收藏" : "收藏", "放进个人空间的收藏", `spFavMsg(${q(src)},${i},${!on})`],
+                 [SP_IC.todo, "转成待办", "放进个人空间的待办", `spTodoMsg(${q(src)},${i})`]];
+  if (!narrow()) return pop(e, items.map(([, l, , js]) => `<button onclick="closePop();${js}">${l}</button>`).join(""));
+  e.stopPropagation();
+  document.querySelector(".msheet")?.remove();
+  const el = document.createElement("div"); el.className = "scrim msheet";
+  el.innerHTML = `<div class="msheet-box list" role="menu" aria-label="更多"><div class="grip"></div><div class="pv">${esc(spPlain(r.text, 48, true))}</div>
+    ${items.map(([ic, l, d, js]) => `<button class="row" role="menuitem" onclick="${js}">${ic}<span>${l}<span class="d">${d}</span></span></button>`).join("")}
+    <button class="cancel">取消</button></div>`;
+  el.onclick = ev => { if (ev.target === el || ev.target.closest("button")) el.remove(); };
+  document.body.appendChild(el);
+}
+function spSrcOf(r){
+  return {chat: detail.id, msg: spMsgKey(r), title: detail.title || "", agent: r.agent || detail.agent || "", machine: ctxMachine || S.me || ""};
+}
+async function spFavMsg(src, i, on){
+  const r = spRow(src, i); if (!r) return;
+  const body = {on, src: spSrcOf(r), text: r.text};
+  await act(() => api("/api/space/fav", body, spM()));
+  useMark("act.fav");
+  await spaceLoad();
+  spToast(on ? "已收藏" : "已取消收藏", on ? [["撤销", () => api("/api/space/fav", {...body, on: false}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/fav"; }]] : []);
+}
+async function spTodoMsg(src, i){
+  const r = spRow(src, i); if (!r) return;
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(r.text, 80), src: spSrcOf(r)}, spM()));
+  useMark("act.todo");
+  spaceLoad();
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad(true))], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+}
+// ---- 列表栏：分类 ----
+function renderSpaceList(){
+  if (!SP.d && !SP.err) spaceLoad(true);
+  if (!$("#sp-list")) $("#list").innerHTML = `<div class="list-head sp-head"><span class="sp-me" id="sp-me"></span><div><h1>个人空间</h1><div class="nm" id="sp-nm"></div></div></div>
+    <label class="search">${ICON.search}<input id="sp-q" placeholder="搜索待办、收藏、笔记" aria-label="搜索待办、收藏、笔记" value="${esc(SP.q)}" oninput="spSearch(this.value)"></label>
+    <div class="scroll" id="sp-list"></div>`;
+  const me = opcMe(); $("#sp-me").textContent = [...me][0]; $("#sp-nm").textContent = me;
+  $("#sp-list").innerHTML = narrow() ? spPhoneCats() : spCats();
+}
+function spCount(k){
+  const d = SP.d; if (!d) return "";
+  return k === "todo" ? spOpenTodos().length : k === "fav" ? d.favs.length : d.notes.length;
+}
+function spCats(){
+  const cat = SP.q ? null : spCat();
+  return SP_CATS.map(([k, n]) => `<a class="item sp-cat ${cat === k ? "on" : ""}" href="#/space/${k}" style="text-decoration:none;color:inherit" onclick="spClearQ()"><span class="ic">${SP_IC[k]}</span><span class="t"><span class="title">${n}</span></span><span class="n">${spCount(k)}</span></a>`).join("");
+}
+function spPhoneCats(){
+  if (!SP.d) return `<div class="sp-empty">${SP.err ? spErr() : "…"}</div>`;
+  if (SP.q) return `<div style="padding:0 10px">${spHits()}</div>`;
+  const d = SP.d, t0 = spOpenTodos()[0], f0 = d.favs[0], n0 = d.notes[0];
+  const sub = {todo: t0 ? t0.text : "没有要做的", fav: f0 ? spPlain(f0.text, 60, true) : "还没有收藏", note: n0 ? spNoteTitle(n0) : "还没有笔记"};
+  const recent = [...spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]), ...d.favs.map(f => ["fav", spPlain(f.text, 60, true), f.at, "#/space/fav", f.id]),
+                  ...d.notes.map(n => ["note", spNoteTitle(n), n.updated || n.at, `#/space/note/${encodeURIComponent(n.id)}`])].sort((a, b) => b[2] - a[2]).slice(0, 6);
+  return `<div class="sp-group">${SP_CATS.map(([k, n, c]) => `<a class="sp-row" href="#/space/${k}"><span class="bx" style="background:${c}">${SP_IC[k]}</span>
+      <span class="t"><b>${n}</b><span class="sub">${esc(sub[k])}</span></span><span class="n">${spCount(k)}</span><span class="chev">${ICON.chev}</span></a>`).join("")}</div>
+    ${recent.length ? `<div class="sp-sec">最近加的</div><div class="sp-group">${recent.map(([k, t, at, h, fid]) => `<a class="sp-row" href="${h}" ${fid ? `onclick="SP.open=${q(fid)}"` : ""}><span class="ic">${SP_IC[k]}</span>
+      <span class="t"><b style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</b><span class="sub">${{todo: "待办", fav: "收藏", note: "笔记"}[k]} · ${spWhen(at)}</span></span></a>`).join("")}</div>` : ""}`;
+}
+// ---- 搜索：三类一起搜 ----
+function spSearch(v){
+  SP.q = v.trim();
+  if (narrow()) { $("#sp-list").innerHTML = spPhoneCats(); return; }
+  $("#sp-list").innerHTML = spCats();
+  renderSpace();
+}
+function spClearQ(){ if (!SP.q) return; SP.q = ""; const el = $("#sp-q"); if (el) el.value = ""; }
+function spHits(){
+  const k = SP.q.toLowerCase(), has = (...xs) => xs.some(x => (x || "").toLowerCase().includes(k)), d = SP.d;
+  const todos = d.todos.filter(t => has(t.text, (t.src || {}).title)), favs = d.favs.filter(f => has(f.text, (f.src || {}).title, (f.src || {}).name)),
+        notes = d.notes.filter(n => has(n.title, n.body));
+  const row = (ic, t, sub, js) => `<div class="sp-hit" role="button" tabindex="0" onclick="${js}" onkeydown="if(event.key==='Enter')this.click()"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="sub">${esc(sub)}</span></div>`;
+  const sec = (n, xs) => xs.length ? `<div class="sp-grp">${n} ${xs.length}</div>${xs.join("")}` : "";
+  const out = sec("待办", todos.map(t => row(SP_IC.todo, t.text, t.done ? "已完成" : spWhen(t.at), `spGoHit('#/space/todo')`)))
+    + sec("收藏", favs.map(f => row(SP_IC.fav, spPlain(f.text, 80, true), spWhen(f.at), `SP.open=${q(f.id)};spGoHit('#/space/fav')`)))
+    + sec("笔记", notes.map(n => row(SP_IC.note, spNoteTitle(n), spWhen(n.updated || n.at), `spGoHit('#/space/note/${encodeURIComponent(n.id)}')`)));
+  return out || `<div class="sp-empty">没有找到「${esc(SP.q)}」</div>`;
+}
+function spGoHit(h){ if (h.startsWith("#/space/todo")) SP.doneOpen = true; spClearQ(); if (location.hash === h) { renderSpaceList(); renderSpace(); } else location.hash = h; }
+// ---- 右边 ----
+function renderSpace(){
+  if (!SP.d) { $("#main").innerHTML = `<div class="sp-main">${SP.err ? `<div class="sp-empty">${spErr()}</div>` : ""}</div>`; if (!SP.err) spaceLoad(true); return; }
+  if (SP.q && !narrow()) { $("#main").innerHTML = `<div class="sp-main"><div class="sp-in"><div class="sp-h"><h1>搜索</h1></div>${spHits()}</div></div>`; return; }
+  const cat = spCat();
+  if (cat === "fav") drawSpFav(); else if (cat === "note") drawSpNotes(); else drawSpTodo();
+}
+function spSrc(src, fallback){
+  if (!src || !src.chat) return `<span class="sp-src self">${esc(fallback || "自己记的")}</span>`;
+  const a = src.agent ? agentOf(src.agent) : null;
+  return `<a class="sp-src" href="#/chats/${encodeURIComponent(src.chat)}" onclick="return spGoSrc(event,${esc(JSON.stringify(src))})">${a ? seal(a, "", false) : ""}<span class="t">${esc(src.title || src.name || "对话")}</span></a>`;
+}
+function spGoSrc(e, src){
+  e.stopPropagation(); e.preventDefault();
+  if (src.machine) ctxMachine = src.machine;
+  if (src.msg !== undefined && src.msg !== "") jumpTo = typeof src.msg === "number" ? {chat: src.chat, at: src.msg} : {chat: src.chat, rid: src.msg};
+  location.hash = "#/chats/" + encodeURIComponent(src.chat);
+  return false;
+}
+// 待办
+function drawSpTodo(){
+  const had = document.activeElement && document.activeElement.id === "sp-new";
+  const open = spOpenTodos(), done = SP.d.todos.filter(t => t.done).sort((a, b) => (b.done_at || 0) - (a.done_at || 0));
+  $("#main").innerHTML = `<div class="sp-main"><div class="sp-in">
+    <div class="sp-h"><h1>待办</h1><span class="n">${open.length}</span></div>
+    <label class="sp-add">${ICON.plus}<input id="sp-new" placeholder="加一条待办" maxlength="500" value="${esc(SP.newText)}" oninput="SP.newText=this.value"
+      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();spTodoAdd()}"></label>
+    ${open.map(spTodoRow).join("") || `<div class="sp-empty">没有要做的</div>`}
+    ${done.length ? `<button class="sp-fold ${SP.doneOpen ? "open" : ""}" aria-expanded="${SP.doneOpen}" onclick="SP.doneOpen=!SP.doneOpen;drawSpTodo()">${ICON.chev}已完成 ${done.length}</button>${SP.doneOpen ? done.map(spTodoRow).join("") : ""}` : ""}
+  </div></div>`;
+  if (had) $("#sp-new").focus();
+}
+function spTodoRow(t){
+  return `<div class="sp-todo ${t.done ? "done" : ""}">
+    <button class="sp-ck" role="checkbox" aria-checked="${!!t.done}" aria-label="${t.done ? "改回没做完" : "做完了"}" onclick="spTodoDone(${q(t.id)},${!t.done})">${ICON.check}</button>
+    <div class="mid"><div class="tx" tabindex="0" onclick="spTodoEdit(this,${q(t.id)})" onkeydown="if(event.key==='Enter'){event.preventDefault();this.click()}">${esc(t.text)}</div>
+    ${t.src ? spSrc(t.src) : `<span class="sp-src self">自己记的</span>`}</div>
+    <button class="icon-btn del" aria-label="删除" title="删除" onclick="spTodoDel(${q(t.id)})">${ICON.x}</button></div>`;
+}
+async function spTodoAdd(){
+  const text = SP.newText.trim(); if (!text) return;
+  const d = await act(() => api("/api/space/todo/add", {text}, spM()));
+  SP.newText = ""; SP.d.todos.unshift(d.item); drawSpTodo(); renderSpaceList(); $("#sp-new")?.focus();
+}
+async function spTodoDone(id, done){
+  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
+  t.done = done; t.done_at = done ? Date.now() / 1000 : undefined; drawSpTodo(); renderSpaceList();
+  try { await api("/api/space/todo/set", {id, done}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
+}
+function spTodoEdit(el, id){
+  const t = SP.d.todos.find(x => x.id === id); if (!t || el.querySelector("input")) return;
+  el.innerHTML = `<input maxlength="500" aria-label="改待办">`;
+  const inp = el.firstChild; inp.value = t.text; inp.focus();
+  let done = false;
+  const save = async keep => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (!keep || !v || v === t.text) { drawSpTodo(); return; }
+    t.text = v; drawSpTodo();
+    try { await api("/api/space/todo/set", {id, text: v}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
+  };
+  inp.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(true); } else if (e.key === "Escape") save(false); };
+  inp.onblur = () => save(true);
+}
+async function spTodoDel(id){
+  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
+  SP.d.todos = SP.d.todos.filter(x => x.id !== id); drawSpTodo(); renderSpaceList();
+  try { await api("/api/space/todo/del", {id}, spM()); } catch (e) { toast(e.message); spaceLoad(true); return; }
+  spToast("已删除", [["撤销", () => api("/api/space/todo/restore", {item: t}, spM()).then(() => spaceLoad(true))]]);
+}
+// 收藏
+function drawSpFav(){
+  const tabs = [["all", "全部"], ["chat", "对话"], ["feed", "动态"]];
+  const list = SP.d.favs.filter(f => SP.tab === "all" || f.kind === SP.tab);
+  $("#main").innerHTML = `<div class="sp-main"><div class="sp-in">
+    <div class="sp-h"><h1>收藏</h1><span class="n">${SP.d.favs.length}</span><span class="r" role="tablist">${tabs.map(([k, n]) => `<button class="sp-tab ${SP.tab === k ? "on" : ""}" role="tab" aria-selected="${SP.tab === k}" onclick="SP.tab='${k}';drawSpFav()">${n}</button>`).join("")}</span></div>
+    ${list.length ? spGrouped(list, f => f.at).map(([g, xs]) => `<div class="sp-grp">${g}</div><div class="sp-cards">${xs.map(spFavCard).join("")}</div>`).join("")
+      : `<div class="sp-empty">${SP.d.favs.length ? "这一类还没有收藏" : "还没有收藏。对话里点回答下面的「⋯」就能收藏"}</div>`}
+  </div></div>`;
+  const o = document.querySelector(".sp-card.open"); if (o && SP.scrollOpen) { SP.scrollOpen = false; o.scrollIntoView({block: "nearest"}); }
+}
+function spFavCard(f){
+  const open = SP.open === f.id, feed = f.kind === "feed";
+  const src = feed ? null : f.src;
+  const from = feed ? `<a class="sp-src" href="#/schedules/feed" onclick="event.stopPropagation()">${f.src.agent && agentOf(f.src.agent) ? seal(agentOf(f.src.agent), "", false) : ""}<span class="t">${esc(f.src.name || "定时任务")}</span></a>` : spSrc(src);
+  return `<div class="sp-card ${open ? "open" : ""}" onclick="spFavOpen(event,${q(f.id)})">
+    <div class="bd">${open ? `<div class="answer">${md(f.text)}</div>` : esc(spPlain(f.text, 300, true))}</div>
+    <div class="ft"><span class="sp-kind ${feed ? "feed" : ""}">${feed ? "动态" : "对话"}</span>${from}<span class="when">${spWhen(f.at)}</span></div>
+    ${open ? `<div class="acts">${feed ? `<a class="btn" href="#/schedules/feed" style="text-decoration:none" onclick="event.stopPropagation()">回到动态</a>`
+      : `<button class="btn" onclick="spGoSrc(event,${esc(JSON.stringify(f.src))})">回到对话</button>`}
+      <button class="btn" onclick="event.stopPropagation();spFavTodo(${q(f.id)})">${SP_IC.todo.replace("<svg", '<svg width="14" height="14"')}转成待办</button>
+      <button class="link" onclick="event.stopPropagation();spFavDel(${q(f.id)})">取消收藏</button></div>` : ""}</div>`;
+}
+function spFavOpen(e, id){
+  if (e.target.closest("a,button") || String(getSelection()).length) return;
+  SP.open = SP.open === id ? null : id; drawSpFav();
+}
+async function spFavTodo(id){
+  const f = SP.d.favs.find(x => x.id === id); if (!f) return;
+  const src = f.kind === "feed" ? (f.src.chat ? {chat: f.src.chat, title: f.src.name, agent: f.src.agent} : null) : f.src;
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(f.text, 80), src}, spM()));
+  SP.d.todos.unshift(d.item); renderSpaceList();
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad(true))], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+}
+async function spFavDel(id){
+  const f = SP.d.favs.find(x => x.id === id); if (!f) return;
+  await act(() => api("/api/space/fav/del", {id}, spM()));
+  SP.d.favs = SP.d.favs.filter(x => x.id !== id); if (SP.open === id) SP.open = null;
+  drawSpFav(); renderSpaceList(); spaceLoad();
+  const [, sid, ...rest] = f.kind === "feed" ? f.id.split(":") : [], rid = (rest || []).join(":");   // 运行编号里本来就带冒号
+  spToast("已取消收藏", [["撤销", () => (f.kind === "feed" ? api("/api/schedule/star", {id: sid, run: rid, on: true}, spM())
+                                               : api("/api/space/fav", {on: true, src: f.src, text: f.text}, spM())).then(() => spaceLoad(true))]]);
+}
+// 笔记：左边列表，右边正文（手机上一层层点进去）
+const spNoteTitle = n => (n.title || "").trim() || spPlain(n.body, 30) || "新笔记";
+function drawSpNotes(){
+  spNoteFlush();
+  const notes = SP.d.notes, sel = current.sub || (!narrow() && notes[0] ? notes[0].id : null);
+  const n = sel ? notes.find(x => x.id === sel) : null;
+  const list = `<div class="sp-nlist"><div class="sp-h"><h1>笔记</h1><span class="n">${notes.length}</span><span class="r"><button class="btn" onclick="spNoteNew()">${ICON.plus}新笔记</button></span></div>
+    <div id="sp-nl">${spNoteList(sel)}</div></div>`;
+  const ed = n ? `<div class="sp-ed"><div class="sp-ed-in"><div class="sp-ed-top"><span id="sp-ed-at">${spWhen(n.updated || n.at)} 改过</span>
+      <button class="icon-btn" aria-label="更多" title="更多" onclick="spNoteMenu(event,${q(n.id)})">${ICON.more}</button></div>
+      <input class="ti" id="sp-ti" placeholder="标题" maxlength="200" value="${esc(n.title || "")}" oninput="spNoteEdit(${q(n.id)})">
+      <textarea id="sp-body" placeholder="写点什么…" oninput="spNoteEdit(${q(n.id)})" onblur="spNoteFlush()">${esc(n.body || "")}</textarea></div></div>`
+    : `<div class="sp-ed"><div class="sp-empty" style="margin:auto">${notes.length ? "笔记已经删掉了" : "还没有笔记"}</div></div>`;
+  $("#main").innerHTML = narrow() ? (sel ? `<div class="sp-notes">${ed}</div>` : `<div class="sp-notes">${list}</div>`) : `<div class="sp-notes">${list}${ed}</div>`;
+}
+function spNoteList(sel){
+  const notes = SP.d.notes;
+  if (!notes.length) return `<div class="sp-empty">还没有笔记</div>`;
+  return spGrouped(notes, n => n.updated || n.at, false).map(([g, xs]) => `<div class="sp-grp">${g}</div>${xs.map(n => `<a class="sp-note ${n.id === sel ? "on" : ""}" href="#/space/note/${encodeURIComponent(n.id)}">
+    <b>${esc(spNoteTitle(n))}</b><span class="pv"><span>${spWhen(n.updated || n.at)}</span><span>${esc(spPlain(n.body, 80, true))}</span></span></a>`).join("")}`).join("");
+}
+function spNoteEdit(id){
+  const n = SP.d.notes.find(x => x.id === id); if (!n) return;
+  n.title = $("#sp-ti").value; n.body = $("#sp-body").value; n.updated = Date.now() / 1000;
+  SP.noteDirty = id; clearTimeout(SP.noteT); SP.noteT = setTimeout(spNoteFlush, 700);
+}
+async function spNoteFlush(){
+  clearTimeout(SP.noteT);
+  const id = SP.noteDirty; if (!id) return;
+  SP.noteDirty = null;
+  const n = SP.d.notes.find(x => x.id === id); if (!n) return;
+  try { await api0("/api/space/note/save", {id, title: n.title, body: n.body}, spM()); }
+  catch (e) { toast(e.message); return; }
+  if (current.view === "space" && current.id === "note") {
+    SP.d.notes.sort((a, b) => (b.updated || b.at) - (a.updated || a.at));
+    const nl = $("#sp-nl"); if (nl) nl.innerHTML = spNoteList(id);
+    const at = $("#sp-ed-at"); if (at) at.textContent = spWhen(n.updated) + " 改过";
+  }
+}
+addEventListener("hashchange", () => {
+  if (SP.noteDirty) spNoteFlush();
+  const id = SP.fresh;                    // 新建了没写东西就走开：不留空笔记
+  if (!id || (current.view === "space" && current.sub === id)) return;
+  SP.fresh = null;
+  const n = SP.d && SP.d.notes.find(x => x.id === id);
+  if (!n || (n.title || "").trim() || (n.body || "").trim()) return;
+  SP.d.notes = SP.d.notes.filter(x => x.id !== id);
+  api0("/api/space/note/del", {id}, spM()).catch(() => {});
+  if (current.view === "space") { renderSpaceList(); if (current.id === "note") renderSpace(); }
+});
+addEventListener("pagehide", () => { if (SP.noteDirty) spNoteFlush(); });
+async function spNoteNew(){
+  const d = await act(() => api("/api/space/note/save", {title: "", body: ""}, spM()));
+  SP.d.notes.unshift(d.item); SP.fresh = d.item.id; renderSpaceList();
+  location.hash = "#/space/note/" + encodeURIComponent(d.item.id);
+  setTimeout(() => $("#sp-ti")?.focus(), 50);
+}
+function spNoteMenu(e, id){
+  pop(e, `<button class="danger-link" onclick="closePop();spNoteDel(${q(id)})">删除这篇笔记</button>`);
+}
+async function spNoteDel(id){
+  if (!await confirmBox("删除这篇笔记？", "删除后找不回来。", "删除")) return;
+  if (SP.noteDirty === id) { clearTimeout(SP.noteT); SP.noteDirty = null; }
+  await act(() => api("/api/space/note/del", {id}, spM()));
+  SP.d.notes = SP.d.notes.filter(x => x.id !== id); renderSpaceList();
+  location.hash = "#/space/note";
+}
+
 function renderSettingsList(){
   const onChats = current.id === "chats", onAccounts = current.id === "accounts" && isOwner();
   const onMachines = !onChats && !onAccounts && (current.id === "machines" || (S.hub && current.id !== "models" && current.id !== "dev"));

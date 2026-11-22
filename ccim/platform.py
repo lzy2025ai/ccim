@@ -26,6 +26,7 @@ from . import kb as kb_mod
 from . import skills as skills_mod
 from . import board as board_mod
 from . import opc
+from . import space as space_mod
 from . import diary as diary_mod
 from . import desk as desk_mod
 from .schedules import feed_hidden, is_quiet as schedules_quiet, listed
@@ -3101,7 +3102,7 @@ def _handler(pf):
                 return
             try:
                 body = fn() or {}
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, desk_mod.Problem,
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, desk_mod.Problem, space_mod.Problem,
                     ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
@@ -3248,6 +3249,7 @@ def _handler(pf):
                 "/api/schedule/list": lambda: {"schedules": [x for x in pf.call(pf.schedules.summary)
                                                              if share.of_schedule(pf, x) == acct]},   # ccim schedule list
                 "/api/schedule/feed": lambda: pf.call(pf.schedules.feed, my_schedules(pf, acct)),   # 动态（#520）
+                "/api/space": lambda: space_mod.view(acct, pf.call(pf.schedules.starred, my_schedules(pf, acct))),   # 个人空间（#542）
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -3415,6 +3417,14 @@ def _handler(pf):
                 "/api/schedule/reply": lambda: pf.call(pf.schedules.reply, b("id"), b("run"), b("text"), people.me(acct), b("quote"), b("to")),
                 "/api/schedule/hide": lambda: pf.call(pf.schedules.hide, b("id"), b("run"), b("on") is not False),
                 "/api/schedule/star": lambda: pf.call(pf.schedules.star, b("id"), b("run"), bool(b("on"))),
+                "/api/space/todo/add": lambda: space_mod.todo_add(acct, b("text"), b("src")),   # 个人空间（#542）
+                "/api/space/todo/set": lambda: space_mod.todo_set(acct, b("id"), b("done"), b("text")),
+                "/api/space/todo/del": lambda: space_mod.todo_del(acct, b("id")),
+                "/api/space/todo/restore": lambda: space_mod.todo_restore(acct, b("item")),
+                "/api/space/fav": lambda: space_mod.fav(acct, bool(b("on")), b("src"), b("text") or ""),
+                "/api/space/fav/del": lambda: space_fav_del(pf, acct, b("id")),
+                "/api/space/note/save": lambda: space_mod.note_save(acct, b("id"), b("title"), b("body")),
+                "/api/space/note/del": lambda: space_mod.note_del(acct, b("id")),
                 "/api/schedule/bring": lambda: pf.call(pf.schedules.bring, b("id"), b("run")),
                 "/api/schedule/seen_upto": lambda: pf.call(pf.schedules.seen_upto, b("items"), my_schedules(pf, acct)),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),
@@ -3631,6 +3641,16 @@ def sides_of(pf, cid, detail=False, acct=None):
 
 def my_schedules(pf, acct):
     return [sid for sid, s in pf.schedules.all().items() if share.of_schedule(pf, dict(s, id=sid)) == acct]
+
+
+def space_fav_del(pf, acct, fid):
+    """个人空间里取消收藏（#542）：动态里收藏的改回那个定时任务上，别的从个人空间删掉。"""
+    feed = space_mod.feed_id(fid)
+    if not feed:
+        return space_mod.fav_del(acct, fid)
+    if feed[0] not in my_schedules(pf, acct):
+        raise Problem("找不到这个定时任务。")
+    return pf.call(pf.schedules.star, feed[0], feed[1], False)
 
 
 def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=()):

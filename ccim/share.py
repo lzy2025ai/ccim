@@ -23,6 +23,7 @@ GUEST_GET = {
     "/api/kb", "/api/kb/lib", "/api/kb/entry", "/api/kb/search", "/api/skills", "/api/skills/detail", "/api/skills/file",
     "/api/agent/skills", "/api/agent/skill", "/api/agent/skill/file", "/api/board", "/api/board/day", "/api/dirs", "/api/file", "/api/file/part",
     "/api/job", "/api/logs", "/api/skills/market", "/api/ws/ls", "/api/chat/people",
+    "/api/space",
 }
 GUEST_POST = {
     "/api/upload", "/api/voice/prepare", "/api/voice/transcribe", "/api/chat/new", "/api/chat/send", "/api/chat/stop", "/api/chat/skip", "/api/chat/action", "/api/chat/set",
@@ -38,6 +39,8 @@ GUEST_POST = {
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
     "/api/chat/side",
     "/api/pocket",
+    "/api/space/todo/add", "/api/space/todo/set", "/api/space/todo/del", "/api/space/todo/restore", "/api/space/fav", "/api/space/fav/del",
+    "/api/space/note/save", "/api/space/note/del",
     "/api/ws/paths", "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
 }
 

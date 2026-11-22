@@ -387,6 +387,20 @@ class Schedules:
         self._write(data)
         return {}
 
+    def starred(self, sids):
+        """动态里收藏的那些次运行（个人空间的收藏用，#542）：不受 30 天限制，没内容的跳过。"""
+        data, chats, out = self.all(), self.pf.chats(), []
+        for sid in sids:
+            s = data.get(sid)
+            if not s or not s.get("stars"):
+                continue
+            want = set(s["stars"])
+            for r in self.pf.channel.logs.read(self._log(sid)):
+                if r.get("type") == "run" and r.get("id") in want and (r.get("text") or "").strip():
+                    out.append({"sid": sid, "rid": r["id"], "name": s["name"], "text": r["text"], "chat": r.get("chat") or "",
+                                "agent": self._poster(s, chats) or "", "at": r.get("done_at") or r.get("at") or 0})
+        return out
+
     def hide(self, sid, rid, on=True):
         """不显示这条（#537）：动态里去掉；on=False 是撤销。"""
         data = self.all()

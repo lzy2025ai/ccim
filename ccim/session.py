@@ -703,13 +703,13 @@ class Chat:
                                "mcp__ccim__ask_agent", "mcp__ccim__platform_agents",   # 找人问话、派活，用户看得到
                                "mcp__ccim__start_work",                             # 侧边栏、群里有卡片，用户看得到
                                "mcp__ccim__search_chats", "mcp__ccim__open_chat", "mcp__ccim__review_material", "mcp__ccim__overview",   # 只读
-                               "mcp__ccim__send_to_chat", "mcp__ccim__notify_user"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
+                               "mcp__ccim__send_to_chat", "mcp__ccim__notify_user"] + DIARY_TOOLS + SKILL_TOOLS + APP_TOOLS + DESK_TOOLS,             # 用户让转交才用，对方对话里标明来源；Skill 的（删除除外，同步到平台自己弹确认）
                 plugins=[{"type": "local", "path": view}] if view else [],
                 hooks={"PreToolUse": [HookMatcher(hooks=[self._pre_tool])],
                        "PermissionDenied": [HookMatcher(hooks=[self._denied], timeout=approval.TIMEOUT + 30)],
                        "PostToolUse": [HookMatcher(matcher="Bash", hooks=[self._post_bash])]},
                 include_partial_messages=True, max_buffer_size=MAX_BUFFER,
-                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest else ("" if self.b.entry.get("side") else SCHEDULE) + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + notify_note(_notify_kinds(self)) + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
+                system_prompt={"type": "preset", "preset": "claude_code", "append": prompt_note(APPEND, self.b.channel) + devices.perm_note() + role_note(self.b.entry) if _is_desk(self) else prompt_note(APPEND, self.b.channel) + devices.perm_note() + ("" if guest else ("" if self.b.entry.get("side") else SCHEDULE) + (APPS if _searchable(self) else "")) + ((LOOK_AROUND_PF if _searchable(self) and not self.fenced() else "" if self.b.entry.get("lent") or self.fenced() else LOOK_AROUND) + ("" if guest else ADMIN) if self.chat_type == "p2p" else "") + (SKILL_SHARE if _can_sync(self) else "") + notify_note(_notify_kinds(self)) + role_note(self.b.entry) + kb_note(kbs)}, cli_path=CLI,
                 stderr=lambda line: log.debug("claude: %s", line))
             client = ClaudeSDKClient(options=opts)
             try:
@@ -1286,6 +1286,8 @@ class Chat:
 
         tools = [send_file, send_chatlog]
         pf = getattr(chat.b.channel, "platform", None)
+        if _is_desk(chat):                    # 总台（#543）：只管看全局、找对话、派活
+            return [send_file] + _desk_tools(chat, pf)
         side = chat.b.entry.get("side")      # 侧边对话（#196）：@ 人走输入框，不给 ask_agent、不转交
         fenced = chat.fenced()               # 被拉进群的访客叫的这一轮（#419）：只留发文件，别的都是主人的
         if pf and chat.chat_id in pf.chats() and not chat.b.entry.get("helper") and not fenced:
@@ -1744,6 +1746,94 @@ def _overview_tool(chat, pf):
         return {"content": [{"type": "text", "text": text}]}
 
     return overview
+
+
+DESK_TOOLS = ["mcp__ccim__assign_work", "mcp__ccim__ask_which"]   # 总台派活、反问：对话里有卡片，用户看得到、能改派
+
+
+def _is_desk(chat):
+    return chat.b.entry.get("helper") == "desk"
+
+
+def _desk_tools(chat, pf):
+    """总台（#543）：看全局、在用户所有的对话里找、派活给这台电脑上的 Agent、判断不了时反问。"""
+    from . import desk, search, share
+
+    def acct():
+        return share.owner_map(pf).get(chat.chat_id)
+
+    @tool("platform_agents", "列出这台电脑上能派活的 AI 员工（Agent）：名字、底座和模型、角色说明。新开对话派活前先看这里。", {})
+    async def platform_agents(args):
+        rows = desk.local_agents()
+        if not rows:
+            return {"content": [{"type": "text", "text": "这台电脑上还没有 Agent。"}]}
+        lines = []
+        for aid, name, a in rows:
+            role = " ".join((a.get("role") or "").split())
+            base = {"codex": "Codex", "dsh": "DeepSeek"}.get(a.get("base"), "Claude")
+            lines.append(f"- {name} · {base}{' · ' + a['model'] if a.get('model') else ''}" + (f" · {role[:80]}" if role else ""))
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+    @tool("search_chats", "在用户所有的对话里（各个 Agent 的私聊、群聊、定时任务）按关键词找，或者列出所有对话。"
+          "用户说的事可能和以前的哪件有关时用。query 写一两个关键词，用空格分开，几个词都要出现在同一条消息里；留空就列出所有对话。"
+          "给出对话编号和位置，再用 open_chat 读前后文；要接着在那个对话里做，把编号写进 assign_work 的 chat。",
+          {"type": "object", "properties": {"query": {"type": "string", "description": "关键词，留空就列出所有对话"}}})
+    async def search_chats(args):
+        text = await asyncio.to_thread(search.search, pf, search.ALL, acct(), args.get("query") or "", chat.chat_id)
+        return {"content": [{"type": "text", "text": text}]}
+
+    @tool("open_chat", "读 search_chats / overview 找到的对话：id 是结果里的编号，at 是位置（读它前后几条），不写 at 就读最后几条。",
+          {"type": "object", "properties": {"id": {"type": "string", "description": "对话编号"},
+                                             "at": {"type": "integer", "description": "search_chats 给的位置"},
+                                             "count": {"type": "integer", "description": "读几条，默认 10，最多 40"}},
+           "required": ["id"]})
+    async def open_chat(args):
+        n = max(2, min(int(args.get("count") or 10), 40))
+        text = await asyncio.to_thread(search.open_chat, pf, search.ALL, acct(), (args.get("id") or "").strip(), args.get("at"), n)
+        return {"content": [{"type": "text", "text": text}]} if text else _err("没有这个对话，编号用 search_chats / overview 给的。")
+
+    @tool("assign_work", "把一件事交给 AI 员工去做。新的事：agent 写 Agent 的名字（platform_agents 列出的），新开它的对话；"
+          "和以前某个对话是同一件事：chat 写那个对话的编号，接着在那个对话里做。两个写一个。"
+          "text 写清楚来龙去脉、要做什么、做完怎么算好（对方看不到总台里的话）；title 是新对话的标题，十几个字。"
+          "总台里会出现一张卡片显示进度；做完后结果会作为一条新消息交给你，由你向用户汇报。",
+          {"type": "object", "properties": {"agent": {"type": "string", "description": "新开对话交给谁（Agent 名字）"},
+                                             "chat": {"type": "string", "description": "接着在哪个对话里做（对话编号）"},
+                                             "text": {"type": "string", "description": "交代给它的话"},
+                                             "title": {"type": "string", "description": "新对话的标题"}},
+           "required": ["text"]})
+    async def assign_work(args):
+        t = chat.turn
+        if t and getattr(t, "asks", 0) >= MAX_ASKS:
+            return _err(f"这一轮已经派了 {MAX_ASKS} 件，先跟用户说一下进展。")
+        try:
+            card = desk.dispatch(pf, chat.chat_id, args.get("text"), agent=args.get("agent") or None,
+                                 chat=args.get("chat") or None, title=args.get("title"))
+        except desk.Problem as e:
+            return _err(str(e))
+        except Exception as e:
+            return _err(f"没派出去：{e}")
+        if t:
+            t.asks = getattr(t, "asks", 0) + 1
+        who = desk.local_name(card["agent"])
+        where = f"新开了对话「{card['title']}」" if card["desk"] == "new" else f"转进了它的对话「{card['title']}」"
+        return {"content": [{"type": "text", "text": f"已交给{who}，{where}，对话编号 {card['chat']}。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
+
+    @tool("ask_which", "用户说的事判断不了是哪一件（有两三个对话都像）时，列出候选对话让用户点选，不要猜。"
+          "chats 写候选对话的编号（2～4 个，overview / search_chats 给的）。调用后这一轮只说一句「你说的是哪一件？」就收尾；"
+          "用户点了以后，他的消息前面括号里会带上选的对话编号，「都不是」就是要新开一个。",
+          {"type": "object", "properties": {"chats": {"type": "array", "items": {"type": "string"}, "description": "候选对话的编号"},
+                                             "question": {"type": "string", "description": "问的话，默认「你说的是哪一件？」"}},
+           "required": ["chats"]})
+    async def ask_which(args):
+        ids = args.get("chats") or []
+        ids = [ids] if isinstance(ids, str) else ids
+        try:
+            rec = desk.choices(pf, chat.chat_id, args.get("question"), ids)
+        except desk.Problem as e:
+            return _err(str(e))
+        return {"content": [{"type": "text", "text": f"已列出 {len(rec['items'])} 个候选对话给用户点。这一轮只说一句「你说的是哪一件？」。"}]}
+
+    return [platform_agents, search_chats, open_chat, _overview_tool(chat, pf), assign_work, ask_which]
 
 
 def _app_tools(chat, pf):

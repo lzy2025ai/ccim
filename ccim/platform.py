@@ -28,7 +28,7 @@ from . import board as board_mod
 from . import opc
 from . import space as space_mod
 from . import diary as diary_mod
-from . import tower as tower_mod
+from . import desk as desk_mod
 from .schedules import feed_hidden, is_quiet as schedules_quiet, listed
 from .channels.base import CardAction, Channel, Incoming, chatlog_text, inbox_path
 
@@ -104,7 +104,8 @@ HELPERS = {"skills": {"title": "Skill 助手", "role": (
     "https://skillsmp.com/api/skills?search=关键词，也可以上网搜；找到 GitHub 地址后用 skill_install 装，装之前说清楚装的是什么。\n"
     "- 删除前工具会弹出确认，用户点了才会删。\n"
     "- 用户消息开头括号里是他在页面上正看着的 Skill 和文件，「这个」一般就指它。\n"
-    "- 回答用中文，简短。")}}
+    "- 回答用中文，简短。")},
+           desk_mod.KIND: {"title": desk_mod.TITLE, "role": desk_mod.ROLE}}   # 总台（#543，实验）
 # 侧边对话（#196）：主对话干活时，在侧栏里另开一个对话问问题，不打断它
 SIDE_ROLE = ("\n\n## 侧边对话\n"
              "你在「侧边对话」里：用户的主对话可能正在干活，用户不想打断它，在旁边另开了你。你是从主对话分出来的，知道之前聊过的内容，"
@@ -1472,6 +1473,8 @@ class Platform:
         """页面专用的助手对话（#116，现在只有 Skill 页）：每台电脑一个（共享电脑上的访客各自一个），不进对话列表；fresh 就换一个新的。"""
         if kind not in HELPERS:
             raise Problem("没有这个助手。")
+        if kind == desk_mod.KIND and account:
+            raise Problem("没有这个助手。")   # 总台只给电脑的主人
         old = [cid for cid, m in self.chats().items() if m.get("helper") == kind and (m.get("account") or None) == account]
         if old and not fresh:
             return old[0]
@@ -3099,7 +3102,7 @@ def _handler(pf):
                 return
             try:
                 body = fn() or {}
-            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, space_mod.Problem,
+            except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, desk_mod.Problem, space_mod.Problem,
                     ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
@@ -3222,7 +3225,7 @@ def _handler(pf):
                 "/api/board/material": lambda: _snapshot(lambda: {"material": board_mod.material(
                     pf, *board_mod.check_range(q.get("from", ""), q.get("to", "")), lambda cid: share.owner_map(pf).get(cid) == acct, local=False, acct=acct)}),
                 "/api/board/review_views": lambda: {"views": board_mod.views(registry.global_config())},
-                "/api/tower": lambda: _snapshot(lambda: tower_mod.today(pf)),     # 塔台（#438）：只读，访客不给
+                "/api/desk": lambda: _snapshot(lambda: desk_mod.panel(pf, acct)),   # 总台右边一栏（#543）：访客不给
                 "/api/dev": lambda: pf._dev().overview(fresh=bool(q.get("fresh"))),
                 "/api/chat": lambda: chat_detail(pf, q.get("id", ""), acct),
                 "/api/chat/people": lambda: pf.call(people.view, pf, q.get("id", ""), people.me(acct)),
@@ -3308,6 +3311,8 @@ def _handler(pf):
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct,
                                                bool(b("call")), b("at") or []),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
+                "/api/desk/reassign": lambda: {"card": pf.run(desk_mod.reassign(pf, b("desk") or "", b("card") or "",
+                                                                                b("agent") or None, b("chat") or None))},
                 "/api/pocket": lambda: {"id": pf.call(pf.pocket_chat, acct, bool(b("fresh")), b("base"))},
                 "/api/pocket/settings": lambda: set_pocket(body),
                 "/api/chat/side": lambda: side_new(pf, b("id"), bool(b("fresh")), acct),

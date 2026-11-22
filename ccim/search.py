@@ -16,6 +16,7 @@ HITS = 15                                     # 最多给这么多条结果
 PER_CHAT = 3                                  # 每个对话最多几条
 SNIP = 100                                    # 关键词前后各留这么多字
 ME = object()                                 # sources 里「说话的是这个 Agent 自己」
+ALL = "*"                                     # 总台（#543）：用户所有的网页对话，不分 Agent
 _CACHE = {}                                   # (底座, 会话) → ((大小, 修改时间), 记录)：别处的对话记录，不占 history 的缓存
 
 
@@ -39,9 +40,11 @@ def _ext_log(base, sid, cwd):
 
 def sources(pf, aid, acct):
     """{编号: (标题, 在哪, 读记录的函数, 说话的人, 补充说明, 最近时间)}。编号：网页对话的编号，或 x:<会话>。"""
-    a = agents.get(aid) or {}
     owners = share.owner_map(pf)
     chats = pf.chats()
+    if aid == ALL:
+        return _everyone(pf, acct, owners, chats)
+    a = agents.get(aid) or {}
     out = {}
     pick = []
     for cid, m in chats.items():
@@ -95,6 +98,22 @@ def sources(pf, aid, acct):
     return out
 
 
+def _everyone(pf, acct, owners, chats):
+    """总台搜的范围：这个账号所有的网页对话（私聊、群聊、定时任务），群里被 @ 的内容在外层群聊里都有。"""
+    out = {}
+    for cid, m in chats.items():
+        if owners.get(cid) != acct or m.get("helper") or m.get("side_of") or m.get("mention_of") or m.get("project"):
+            continue
+        ms = members(m)
+        where = "群聊" if ms else "定时任务" if m.get("schedule") else "网页对话"
+        who = pf.mentions._name(m, {})
+        title = m.get("title") or pf.chat_view(cid).get("title") or "对话"
+        note = f"{who}的对话" + (f"，成员：{'、'.join(pf.mentions._agent_name(x) for x in ms)}" if ms else "") + \
+            ("（已完成）" if m.get("archived") else "")
+        out[cid] = (title, where, (lambda cid=cid: pf.channel.logs.read(cid)), who, note, m.get("last_active") or "")
+    return out
+
+
 def _speaker(r, owner, pf, aid):
     """谁说的。是这个 Agent 自己说的写「你」：它不一定记得自己叫什么，写名字会被当成别人。"""
     if r.get("type") == "user":
@@ -107,7 +126,7 @@ def _speaker(r, owner, pf, aid):
 
 
 def _me(aid):
-    return "Agent「%s」" % ((agents.get(aid) or {}).get("name") or "") if aid else "助理"
+    return "总台" if aid == ALL else "Agent「%s」" % ((agents.get(aid) or {}).get("name") or "") if aid else "助理"
 
 
 def _when(at):

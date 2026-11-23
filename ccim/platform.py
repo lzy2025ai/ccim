@@ -518,6 +518,19 @@ class Problem(Exception):
     """给用户看的错误。"""
 
 
+
+APP_NOTE_MAX = 20000
+APP_NOTE = "这个对话是用户在本机的「{app}」里开的，下面是这个应用给你的说明：\n"
+
+
+def _app_of(v):
+    """临时对话来自哪个应用（#550）：{id, name}，id 只留字母数字和 ._-、以字母数字开头，缺一样就不算。"""
+    if not isinstance(v, dict):
+        return None
+    aid = re.sub(r"[^\w.-]", "", str(v.get("id") or ""))[:64]
+    name = " ".join(str(v.get("name") or "").split())[:40]
+    return {"id": aid, "name": name} if re.match(r"\w", aid) and name else None
+
 class Platform:
     def __init__(self, home, entry):
         self.home, self.entry = home, entry
@@ -1068,6 +1081,8 @@ class Platform:
             os.makedirs(path, exist_ok=True)
             entry = {"agent": None if t.get("base", "claude") == "claude" else t["base"], "model": t.get("model"),
                      "effort": t.get("effort"), "guest": viewer}
+            if t.get("note"):                 # 应用说明（#550）：和 Agent 的角色说明放同一个位置，三个底座都带
+                entry["role"] = APP_NOTE.format(app=(t.get("app") or {}).get("name") or "应用") + t["note"]
             name = "临时对话"
             if m.get("helper") in HELPERS:        # 页面专用的助手（#116）：带上它的角色和工具
                 h = HELPERS[m["helper"]]
@@ -1109,6 +1124,12 @@ class Platform:
                     raise Problem("找不到这个文件夹。")
             rec["temp"] = {"base": t.get("base") if t.get("base") in registry.BASES else "claude", "dir": d or None,
                            "model": t.get("model") or None, "effort": t.get("effort") or None}
+            app = _app_of(t.get("app"))       # 本机别的应用开的（#550）：记下是谁，应用说明接在系统提示后面
+            if app:
+                rec["temp"]["app"] = app
+                note = str(t.get("note") or "").strip()
+                if note:
+                    rec["temp"]["note"] = note[:APP_NOTE_MAX]
         if fork_from:                         # 接着别处的对话聊：origin 留着，网页里把之前的内容也显示出来
             rec.update(fork_from=fork_from, origin=fork_from, source=source)
         if link:                              # 接着终端、桌面端的对话聊：就用原来的会话，不分支（#94）
@@ -2011,7 +2032,8 @@ class Platform:
                 if m.get("dispatched_from") else None,
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
-                else "群聊" if m.get("mention_of") else m["source"] if self._linked(m) else "网页", "project": m.get("project"), "schedule": m.get("schedule"),
+                else "群聊" if m.get("mention_of") else m["source"] if self._linked(m)
+                else (t.get("app") or {}).get("name") or "网页", "app": t.get("app"), "project": m.get("project"), "schedule": m.get("schedule"),
                 "listed": listed(cid, m), "company": m.get("company"), "staff": m.get("staff"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),

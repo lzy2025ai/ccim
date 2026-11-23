@@ -3363,10 +3363,10 @@ def _handler(pf):
                 if self._guest("POST", u.path, {}, None)[1]:
                     return
                 return self._api(self._upload)
-            if u.path == "/api/voice/transcribe":        # 语音输入（#445）：录音是裸 PCM，不是 JSON
+            if u.path in ("/api/voice/transcribe", "/api/voice/chunk"):   # 语音输入（#445、#556）：录音是裸 PCM，不是 JSON
                 if self._guest("POST", u.path, {}, None)[1]:
                     return
-                return self._api(self._voice)
+                return self._api(lambda: self._voice(parse_qs(u.query)))
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except ValueError:
@@ -3422,6 +3422,7 @@ def _handler(pf):
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/voice/prepare": lambda: voice.ENGINE.prepare(),
+                "/api/voice/polish": lambda: pf.run(voice.polish(str(b("text") or "")), 120),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),
@@ -3556,7 +3557,7 @@ def _handler(pf):
                 raise Problem("文件没传完，再试一次。")
             return {"key": key, "name": name, "size": n}
 
-        def _voice(self):
+        def _voice(self, q):
             n = int(self.headers.get("Content-Length") or 0)
             if n > voice.LIMIT:
                 self.close_connection = True
@@ -3564,7 +3565,12 @@ def _handler(pf):
             data = self.rfile.read(n)
             if len(data) < n:
                 raise Problem("录音没传完，再试一次。")
-            return voice.ENGINE.transcribe(data)
+            if "sid" not in q:
+                return voice.ENGINE.transcribe(data)
+            try:
+                return voice.ENGINE.chunk(q["sid"][0], int(q.get("seq", ["0"])[0]), data, q.get("final", ["0"])[0] == "1")
+            except ValueError as e:
+                raise Problem(str(e))
 
         def _file_ok(self, chat, path):
             """只给这个对话记录里出现过的文件：Agent 发出来的、用户发过去的。设备管理里的按它的范围（#100）。"""

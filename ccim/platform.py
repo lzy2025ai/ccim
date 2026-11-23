@@ -532,6 +532,51 @@ def _app_of(v):
     name = " ".join(str(v.get("name") or "").split())[:40]
     return {"id": aid, "name": name} if re.match(r"\w", aid) and name else None
 
+
+def app_bound(app_id):
+    """应用绑定的 Agent（#574）：本机的、还在的才算。"""
+    aid = (registry.global_config().get("app_agents") or {}).get(app_id)
+    a = agents.get(aid) if aid else None
+    return a if a and not a.get("account") else None
+
+
+def app_info(app_id, acct=None):
+    """给本机应用（#574）：底座能不能用、本机有哪些 Agent、绑定的是哪个，一次查齐。"""
+    if acct:
+        raise Problem("只有这台电脑的主人能用。")
+    rows = []
+    for aid in agents.all_agents():
+        a = agents.get(aid)
+        if a and not a.get("account"):       # 共享电脑上访客的 Agent 不列
+            rows.append({k: a.get(k) for k in ("id", "name", "avatar", "seal", "color", "base", "model", "effort", "role")})
+    a = app_bound(_app_id(app_id))
+    av = sorted(f[:-5] for f in os.listdir(os.path.join(os.path.dirname(__file__), "static", "avatars")) if f.endswith(".webp"))
+    return {"bases": bases.status(), "agents": rows, "bound": a["id"] if a else None, "avatars": av, "models": models_now()}
+
+
+def _app_id(v):
+    return re.sub(r"[^\w.-]", "", str(v or ""))[:64]
+
+
+def app_bind(app_id, agent, acct=None):
+    """绑定 / 解绑（agent 为空）应用的 Agent（#574）。"""
+    if acct:
+        raise Problem("只有这台电脑的主人能用。")
+    app_id = _app_id(app_id)
+    if not re.match(r"\w", app_id):
+        raise Problem("缺少应用。")
+    if agent:
+        a = agents.get(agent)
+        if not a or a.get("account"):
+            raise Problem("找不到这个 Agent。")
+    m = dict(registry.global_config().get("app_agents") or {})
+    if agent:
+        m[app_id] = agent
+    else:
+        m.pop(app_id, None)
+    registry.set_global(app_agents=m or None)
+    return {"bound": agent or None}
+
 class Platform:
     def __init__(self, home, entry):
         self.home, self.entry = home, entry
@@ -1115,9 +1160,13 @@ class Platform:
                 key += "|side"
             elif m.get("side_at"):            # 侧边对话里被 @ 的（#290）
                 key += "|sideat" + ("-far" if m.get("remote_project") else "")
+            app = m.get("app") or {}
+            if app.get("id"):                 # 应用开的（#574）：同一个目录，角色说明多了应用说明，单独一个 Bridge
+                key += "|app:" + app["id"]
             os.makedirs(path, exist_ok=True)
+            note = "\n\n" + APP_NOTE.format(app=app.get("name") or "应用") + m["app_note"] if m.get("app_note") else ""
             entry = {"agent": None if a.get("base") == "claude" else a.get("base"), "model": a.get("model"),
-                     "effort": a.get("effort"), "role": (a.get("role") or "") + opc.note_for(self, a["id"]),
+                     "effort": a.get("effort"), "role": (a.get("role") or "") + opc.note_for(self, a["id"]) + note,
                      "chrome": a.get("chrome") and not viewer,
                      "agent_id": a["id"], "guest": viewer, "lent": lent}
             name = a["name"]
@@ -1158,12 +1207,20 @@ class Platform:
         account = account or (self.chats().get(parent) or {}).get("account") if parent else account
         if account:                           # 共享电脑上访客开的对话（#154）
             rec["account"] = account
+        t = temp or {}
+        app = None if agent or account else _app_of(t.get("app"))
+        bound = app and t.get("bound") is not False and app_bound(app["id"])
+        if bound:                             # 应用绑定了 Agent（#574）：就是这个 Agent 的对话，应用说明照样带上
+            agent = bound["id"]
+            rec["app"] = app
+            note = str(t.get("note") or "").strip()
+            if note:
+                rec["app_note"] = note[:APP_NOTE_MAX]
         if agent:
             if not agents.get(agent):
                 raise Problem("找不到这个 Agent。")
             rec["agent"] = agent
         else:
-            t = temp or {}
             d = (t.get("dir") or "").strip()
             if d:
                 d = os.path.realpath(os.path.expanduser(d))
@@ -1171,8 +1228,7 @@ class Platform:
                     raise Problem("找不到这个文件夹。")
             rec["temp"] = {"base": t.get("base") if t.get("base") in registry.BASES else "claude", "dir": d or None,
                            "model": t.get("model") or None, "effort": t.get("effort") or None}
-            app = _app_of(t.get("app"))       # 本机别的应用开的（#550）：记下是谁，应用说明接在系统提示后面
-            if app:
+            if app:                           # 本机别的应用开的（#550）：记下是谁，应用说明接在系统提示后面
                 rec["temp"]["app"] = app
                 note = str(t.get("note") or "").strip()
                 if note:
@@ -2080,7 +2136,7 @@ class Platform:
                 "members": [a for a in m.get("members") or [] if a != m.get("agent")], "note": m.get("note") or "",
                 "source": f"项目「{m.get('title')}」" if m.get("project") else f"定时任务「{m.get('title')}」" if m.get("schedule")
                 else "群聊" if m.get("mention_of") else m["source"] if self._linked(m)
-                else (t.get("app") or {}).get("name") or "网页", "app": t.get("app"), "project": m.get("project"), "schedule": m.get("schedule"),
+                else (t.get("app") or m.get("app") or {}).get("name") or "网页", "app": t.get("app") or m.get("app"), "project": m.get("project"), "schedule": m.get("schedule"),
                 "listed": listed(cid, m), "company": m.get("company"), "staff": m.get("staff"), "pocket": bool(m.get("pocket")), "review": bool(m.get("review")), "review_span": board_mod.span(m),
                 "origin_source": m.get("source"),
                 "parent": m.get("parent") or ("x:" + m["origin"] if m.get("origin") and not self._linked(m) else None),
@@ -3304,6 +3360,7 @@ def _handler(pf):
                 "/api/chat/sig": lambda: pf.chat_sig(q.get("id", "")),
                 "/api/doc": lambda: pf.doc_view(q.get("chat", ""), q.get("path", ""), q.get("v")),
                 "/api/apps": lambda: {"apps": apps_mod.listing()},
+                "/api/appagent": lambda: app_info(q.get("app", ""), acct),
                 "/api/app": lambda: apps_mod.page(q.get("id", "")),
                 "/api/app/sig": lambda: {"sig": apps_mod.data_sig(q.get("id", "")), "psig": apps_mod.page_sig(q.get("id", ""))},
                 "/api/app/query": lambda: {"rows": apps_mod.query(q.get("id", ""), q.get("coll", ""), q.get("q", ""))} if not q.get("rid")
@@ -3380,7 +3437,8 @@ def _handler(pf):
                 return
             b = body.get
             routes = {
-                "/api/chat/new": lambda: {"id": pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)},
+                "/api/chat/new": lambda: _new_reply(pf, pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)),
+                "/api/appagent/bind": lambda: app_bind(b("app"), b("agent"), acct),
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct,
                                                bool(b("call")), b("at") or []),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
@@ -3928,6 +3986,10 @@ def state(pf, acct=None):
         "bases": bases.status(), "os": devices.os_kind(),   # 底座装没装、配好没有；哪种系统（#522）
         "caps": ["side_at"],                  # 别的电脑看这台支持什么（side_at：侧边对话里被 @，#290）
         "models": models_now()}, acct)
+
+
+def _new_reply(pf, cid):
+    return {"id": cid, "agent": (pf.chats().get(cid) or {}).get("agent")}
 
 
 def models_now():

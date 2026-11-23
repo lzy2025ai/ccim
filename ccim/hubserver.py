@@ -550,7 +550,8 @@ document.getElementById("f").onsubmit = async e => { e.preventDefault();
     body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked})}).catch(() => null);
   const d = r ? await r.json().catch(() => ({})) : {error: "连不上服务器，稍后再试"};
   // 登录页就在 / 上时跳到同一个地址，有的手机浏览器不重新加载（带 # 时按规范也不加载），停在登录页（#460）
-  if (r && r.ok) { if (location.pathname === "/") location.reload(); else location.assign("/" + location.hash); return; }
+  if (r && r.ok) { try { localStorage.removeItem("ccim.snap"); localStorage.removeItem("ccim.snapChat"); } catch {}   // 上一个账号存的（#560）
+    if (location.pathname === "/") location.reload(); else location.assign("/" + location.hash); return; }
   btn.disabled = false;
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
   err.textContent = d.error || "出错了"; code.value = ""; };"""

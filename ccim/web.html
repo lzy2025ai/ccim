@@ -75,8 +75,6 @@ body{overflow:hidden}
 .sp-h h1{font:600 21px/1.2 var(--song);margin:0}
 .sp-h .n{color:var(--faint);font-size:13px}
 .sp-h .r{margin-left:auto;display:flex;gap:6px;align-self:center}
-.sp-tab{padding:3px 12px;border-radius:14px;font-size:12.5px;color:var(--muted);border:1px solid var(--line)}
-.sp-tab.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .sp-add{display:flex;align-items:center;gap:8px;border:1px dashed var(--line-strong);border-radius:10px;padding:9px 14px;color:var(--faint);margin-bottom:6px}
 .sp-add svg{width:15px;height:15px;flex:none}
 .sp-add input{flex:1;border:0;background:none;outline:none;font:inherit;color:var(--ink)}
@@ -100,18 +98,6 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-fold svg{width:14px;height:14px;transition:transform .15s} .sp-fold.open svg{transform:rotate(90deg)}
 .sp-grp{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin:16px 0 8px}
 .sp-grp::after{content:"";flex:1;height:1px;background:var(--line)}
-.sp-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
-.sp-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px 11px;cursor:pointer;min-width:0}
-.sp-card:hover{border-color:var(--line-strong)}
-.sp-card .bd{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.7;color:var(--ink-2);word-break:break-word}
-.sp-card.open{grid-column:1/-1;cursor:default;border-color:var(--qing);box-shadow:0 0 0 1px var(--qing)}
-.sp-card.open .bd{display:block;-webkit-line-clamp:unset;color:var(--ink)}
-.sp-card .ft{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--faint)}
-.sp-card .ft .when{margin-left:auto;white-space:nowrap}
-.sp-kind{font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--qing) 12%,transparent);color:var(--qing);flex:none}
-.sp-kind.feed{background:color-mix(in srgb,var(--lu) 14%,transparent);color:var(--lu)}
-.sp-card .acts{display:flex;gap:8px;margin-top:10px;align-items:center}
-.sp-card .acts .link{color:var(--muted);font-size:13px;padding:0 6px}
 .sp-notes{display:grid;grid-template-columns:300px 1fr;height:100%;min-height:0}
 .sp-nlist{border-right:1px solid var(--line);overflow:auto;background:var(--paper)}
 .sp-nlist .sp-h{padding:20px 16px 0;align-items:center}
@@ -134,9 +120,6 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-hit .ic{color:var(--muted);flex:none;display:grid} .sp-hit .ic svg{width:16px;height:16px}
 .sp-hit .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sp-hit .sub{font-size:12px;color:var(--faint);flex:none}
-.msg-acts .fav-mk{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--huang);padding:0 6px}
-.msg-acts .fav-mk svg{width:13px;height:13px}
-.msg-acts .fav-mk[hidden]{display:none}
 .toast.top{top:84px;bottom:auto}
 .msheet-box.list{display:block;align-self:end;height:auto;max-height:85vh;overflow:auto;padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
 .msheet-box.list .grip{width:36px;height:4px;border-radius:2px;background:var(--line-strong);margin:2px auto 10px}
@@ -158,7 +141,6 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-sec{font-size:12.5px;color:var(--muted);margin:6px 22px 6px}
 @media (max-width:760px){
   .sp-in{padding:14px 14px 90px}
-  .sp-cards{grid-template-columns:1fr}
   .sp-todo .mid{flex-direction:column;align-items:stretch;gap:2px}
   .sp-todo .mid .sp-src{max-width:100%;font-size:12px}
   .sp-todo .mid .sp-src.self{display:none}
@@ -637,7 +619,7 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .item .t{display:flex;align-items:center;min-width:0}
 .item:not(.child) .t{display:block}
 .item .mk svg{width:13px;height:13px}
-.item .mk.dot{width:8px;height:8px;border-radius:50%;vertical-align:1px;flex:none}
+.item .mk.todo{color:var(--zhu)}
 .item.child .t .title{min-width:0}
 .arch-toggle{display:flex;align-items:center;gap:4px;width:100%;text-align:left}
 .more-chats{display:block;width:100%;text-align:left;color:var(--qing)}
@@ -645,10 +627,6 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .more-chats:disabled{color:var(--faint);text-decoration:none}
 .arch-toggle .chev{transition:transform .15s}
 .arch-toggle.open .chev{transform:rotate(90deg)}
-.pop .marks{display:flex;gap:4px;padding:2px 6px}
-.pop .marks button{width:30px;height:30px;padding:0;justify-content:center;border-radius:7px}
-.pop .marks button.on{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
-.pop .marks .sw i{display:block;width:14px;height:14px;border-radius:50%}
 .pop button.danger{color:var(--bad)}
 .quote-box{border-left:3px solid var(--line-strong);padding:4px 10px;color:var(--ink-2);margin:0 0 12px;background:var(--paper);border-radius:0 6px 6px 0;white-space:pre-wrap;max-height:120px;overflow:auto}
 .checkrow{display:flex;gap:9px;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;text-align:left}
@@ -2296,8 +2274,8 @@ const USE_NAMES = {
   "schedules.feed": "定时页的动态", "schedules.task": "打开定时任务", "schedules.runs": "定时任务的运行记录", "schedules.edit": "新建或编辑定时任务",
   "board": "任务面板概览", "board.feed": "任务面板的动态", "board.day": "任务面板某一天", "board.desk": "总台",
   "agents": "AI 员工总览", "agents.agent": "打开某个 AI 员工", "agents.settings": "AI 员工设置", "agents.new": "新建 AI 员工",
-  "opc": "一人公司", "space": "个人空间", "space.todo": "个人空间的待办", "space.fav": "个人空间的收藏", "space.note": "个人空间的笔记",
-  "act.fav": "收藏回答", "act.todo": "回答转成待办", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
+  "opc": "一人公司", "space": "个人空间", "space.todo": "个人空间的待办", "space.note": "个人空间的笔记",
+  "act.todo": "回答转成待办", "act.chat_todo": "对话加到待办", "feed.todo": "动态加到待办", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
   "settings": "设置", "settings.dev": "开发页", "settings.machines": "电脑", "settings.accounts": "账号", "settings.chats": "对话设置", "settings.models": "模型",
   "act.send": "发消息", "act.voice": "语音输入", "act.fork": "分叉", "act.rewind": "退回", "act.side": "侧边对话", "act.ws": "工作区", "act.board_reply": "在任务面板里回复",
   "feed.reply": "动态里回复", "feed.star": "动态里收藏", "feed.star_tab": "看收藏的动态", "feed.go_chat": "动态去对话回复", "feed.hide": "动态里不显示某条", "feed.at": "动态回复里 @ Agent", "feed.new_pill": "点「N 条新动态」", "feed.top": "回到顶部",
@@ -2406,10 +2384,9 @@ function sendKey(e){
   return TOUCH ? (e.metaKey || e.ctrlKey) : !e.shiftKey;
 }
 function sendHint(){ return TOUCH ? "点右边的按钮发送，Enter 换行" : "Enter 发送，Shift + Enter 换行"; }
-// 临时对话的图标：聊天气泡，给对话选了颜色就跟着变（#52）
+// 临时对话的图标：聊天气泡（#52）。#554 起不再按对话的颜色标记变色
 function chatIcon(c, size = ""){
-  const col = (c && MARK_COLORS[c.color]) || "var(--muted)";
-  return `<span class="chaticon ${size}" style="--ic:${col}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke-width="2.4" stroke-linecap="round"/></svg></span>`;
+  return `<span class="chaticon ${size}" style="--ic:var(--muted)" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke-width="2.4" stroke-linecap="round"/></svg></span>`;
 }
 const iconOf = (c, a, size = "", dot = false) => a ? seal(a, size, dot) : chatIcon(c, size);
 
@@ -2732,7 +2709,7 @@ function afterState(){
     S.staff = (S.agents || []).filter(a => a.staff); S.agents = (S.agents || []).filter(a => !a.staff); S._split = true;
   }
   const no = $("#nav-me"); if (no) { const me = opcMe(); no.querySelector(".rail-me").textContent = [...me][0]; no.querySelector(".rail-nm").textContent = me; }
-  if (!SP.d && !SP.loading) spaceLoad();   // 个人空间（#542）：对话里的「已收藏」要用
+  if (!SP.d && !SP.loading) spaceLoad();   // 个人空间（#542）：对话列表上的待办标识要用（#554）
   opcAfterState();
   if (SKC && SKC.mid && $("#sk-chat")) {   // Skill 助手那台电脑上线 / 离线了：标题下那行跟着变
     const on = (machineOf(SKC.mid) || {}).online !== false;
@@ -3318,20 +3295,10 @@ function chatSections(rows, inAgent){
       ? `<button class="group more-chats" ${MORE.loading ? "disabled" : ""} onclick="loadPage('arch')">${MORE.loading ? "正在加载…" : "加载更多已完成的"}</button>` : "") : "");
   return html;
 }
-const MARK_COLORS = {red: "var(--zhu)", orange: "var(--zhe)", yellow: "var(--huang)", green: "var(--lu)", blue: "var(--qing)", purple: "#7B5BA6"};
-const MARK_ICONS = {
-  star: ICON.star,
-  flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 21V4h11l-1.5 4L16 12H7v9z"/></svg>',
-  bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
-  bug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="8" width="10" height="12" rx="5"/><path d="M9 8a3 3 0 0 1 6 0M12 12v8M3 13h4M17 13h4M4 7l3 2M20 7l-3 2M4 20l3-2M20 20l-3-2"/></svg>',
-  heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>',
-  bookmark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12v18l-6-4-6 4z"/></svg>',
-};
+// 列表上的标记：置顶（星标）、待办（#554：这个对话在个人空间里有没做完的待办）。老的图标、颜色标记不再显示
 function markOf(c){
   const star = c.pin != null ? `<span class="mk star" title="置顶">${ICON.star}</span>` : "";   // 置顶就是星标（#347）
-  if (!c.icon && !c.color) return star;
-  const col = MARK_COLORS[c.color] || "var(--muted)";
-  return star + (c.icon ? `<span class="mk" style="color:${col}">${MARK_ICONS[c.icon] || ""}</span>` : `<span class="mk dot" style="background:${col}"></span>`);
+  return star + (SP.chats.has(c.id) ? `<span class="mk todo" title="待办">${SP_IC.todo}</span>` : "");
 }
 function nest(c, me, kids, child, inAgent, depth){
   const ks = (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
@@ -3564,7 +3531,7 @@ function msgActs(src, i, r){
   if (r.type === "answer") btns.push(`<button onclick="quoteMsg(this,${ref})" title="引用到输入框">${ICON.quote}引用</button>`);
   if (EMBED_SIDE && r.type === "answer" && r.text) btns.push(`<button onclick="quoteMain(this,${ref})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.type === "answer" && r.text && kbEnabled()) btns.push(`<button onclick="saveToKb(${ref})" title="以后可以在知识库里找到，也能挂到对话里用">${ICON.save}存到知识库</button>`);
-  const more = r.type === "answer" && r.text && detail && detail.id ? msgMoreBtn(src, i, r) : "";   // 「⋯」：收藏、转成待办（#542）
+  const more = r.type === "answer" && r.text && detail && detail.id ? msgMoreBtn(src, i) : "";   // 「⋯」：转成待办（#542）
   if (notCreator()) return `<div class="msg-acts">${btns.join("")}${more}${msgTime(r.at)}</div>`;   // 被拉进群的人（#419）：分叉、退回这些只有建群的人能做
   if (canFork(i, r, src)) btns.push(`<button onclick="forkAt(${i},${q(src)})" title="从这条回答另开一个对话，之后两边互不影响">${ICON.branch}分叉</button>`);
   if (src === "log" && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
@@ -4413,11 +4380,7 @@ function itemMenu(e, id, below){
     c.pin != null ? b(`markChat(${q(id)},{pin:null})`, "取消置顶") : b(`markChat(${q(id)},{pin:true,archived:null})`, "置顶"),
     i > 0 ? b(`moveChat(${q(id)},-1)`, "上移") : "",
     i >= 0 && i < pinned.length - 1 ? b(`moveChat(${q(id)},1)`, "下移") : "",
-    `<div class="sec">标记</div><div class="marks">${Object.entries(MARK_ICONS).map(([k, svg]) =>
-      `<button class="${c.icon === k ? "on" : ""}" aria-label="图标" style="color:${MARK_COLORS[c.color] || "var(--ink-2)"}" onclick="markChat(${q(id)},{icon:${c.icon === k ? "null" : q(k)}})">${svg}</button>`).join("")}</div>
-     <div class="marks">${Object.entries(MARK_COLORS).map(([k, col]) =>
-      `<button class="sw ${c.color === k ? "on" : ""}" aria-label="颜色" onclick="markChat(${q(id)},{color:${c.color === k ? "null" : q(k)}})"><i style="background:${col}"></i></button>`).join("")}</div>`,
-    c.icon || c.color ? b(`markChat(${q(id)},{icon:null,color:null})`, "清除标记") : "",
+    SP.d ? b(`chatTodo(${q(id)},${!SP.chats.has(id)})`, SP.chats.has(id) ? "完成待办" : "加到待办") : "",
     c.archived ? b(`markChat(${q(id)},{archived:null})`, "取消已完成") : b(`markChat(${q(id)},{archived:true,pin:null})`, "标为已完成"),
     mem ? "" : b(`deleteChat(${q(id)})`, "删除", "danger"),
   ].join(""), below);
@@ -4439,8 +4402,21 @@ async function markChat(id, changes){
   if (!c) return;
   await act(() => api("/api/chat/mark", {id, changes}, machineOfChat(c)));
   closePop();
-  if (changes.archived) toast("已标为完成");
+  if (changes.archived) {
+    toast("已标为完成");
+    if (SP.chats.has(id)) api("/api/space/todo/chat", {chat: id, on: false}, spM()).then(() => spaceLoad()).catch(() => {});   // 名下的待办一起勾掉（#554）
+  }
   await refreshLists();
+}
+// 对话加到待办 / 完成待办（#554）：待办存在个人空间，列表上的标识跟着个人空间走
+async function chatTodo(id, on){
+  const c = rowOf(id); if (!c) return;
+  const src = {title: c.title || "", agent: c.agent || "", machine: machineOfChat(c) || ""};
+  const d = await act(() => api("/api/space/todo/chat", {chat: id, on, src}, spM()));
+  if (on) useMark("act.chat_todo");
+  await spaceLoad();
+  if (on) spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+  else spToast("待办已完成", [["撤销", () => Promise.all((d.ids || []).map(x => api("/api/space/todo/set", {id: x, done: false}, spM()))).then(() => spaceLoad())]]);
 }
 async function refreshLists(){
   if (current.view === "agents" && agentSide) await fetchAgentSide(agentSide.id);
@@ -4729,7 +4705,7 @@ function mentionActs(i, r, live){
   if (r.text && EMBED_SIDE) btns.push(`<button onclick="quoteMain(this,'log',${i})" title="引用到主对话">${ICON.side}引用到主对话</button>`);
   if (r.text && !notCreator() && chapKey(r) && !(detail.chapters || {})[chapKey(r)]) btns.push(`<button onclick="editChapter(${i})" title="长对话里方便找到这里">${ICON.flag}标为章节</button>`);
   if (r.chat) btns.push(`<a href="#/chats/${encodeURIComponent(r.chat)}" style="text-decoration:none" onclick="ctxMachine=${q(r.machine || ctxMachine || S.me)}"><button title="打开它的对话接着聊">单独聊</button></a>`);
-  const more = r.text && detail && detail.id ? msgMoreBtn("log", i, r) : "";   // 「⋯」：收藏、转成待办（#542）
+  const more = r.text && detail && detail.id ? msgMoreBtn("log", i) : "";   // 「⋯」：转成待办（#542）
   return `<div class="msg-acts">${btns.join("")}${more}${msgTime(r.done_at || r.at)}</div>`;
 }
 function fpScope(r, html){   // 被 @ 的 Agent 回答里的路径按它自己那个对话的目录认（#400）
@@ -7331,19 +7307,18 @@ function renderAgentForm(){
 }
 
 // ================= 设置 =================
-// ================= 个人空间（#542）：自己的待办、收藏、笔记 =================
-// 列表栏是分类（手机上是分类页），右边只显示当前这一类；数据在本机（S.me）那台存取，动态里收藏的也合在收藏里。
-// 对话里 Agent 回答下面的「⋯」能收藏、转成待办；收藏过的回答显示「已收藏」（SP.favs：对话|那条回答）。
-const SP = {d: null, loading: null, q: "", tab: "all", open: null, doneOpen: false, newText: "", favs: new Set(), noteT: null, noteDirty: null};
+// ================= 个人空间（#542）：自己的待办、笔记 =================
+// 列表栏是分类（手机上是分类页），右边只显示当前这一类；数据在本机（S.me）那台存取。
+// 对话里 Agent 回答下面的「⋯」、动态的「⋯」、对话列表的菜单都能加到待办（#554）；SP.chats：有没做完的待办的对话，列表上画待办标识。
+const SP = {d: null, loading: null, q: "", doneOpen: false, newText: "", chats: new Set(), noteT: null, noteDirty: null};
 const SP_IC = {
   todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
-  fav: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>',
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/></svg>',
 };
-const SP_CATS = [["todo", "待办", "var(--zhu)"], ["fav", "收藏", "var(--huang)"], ["note", "笔记", "var(--qing)"]];
+const SP_CATS = [["todo", "待办", "var(--zhu)"], ["note", "笔记", "var(--qing)"]];
 const spM = () => S.me || null;
 const spErr = () => `${esc(SP.err)}<div style="margin-top:12px"><button class="btn" onclick="SP.err='';spaceLoad(true)">再试一次</button></div>`;
-const spCat = () => current.id === "fav" || current.id === "note" ? current.id : current.id === "todo" || !narrow() ? "todo" : null;
+const spCat = () => current.id === "note" ? "note" : current.id === "todo" || current.id === "fav" || !narrow() ? "todo" : null;   // 老的 #/space/fav 链接去待办
 const spOpenTodos = () => SP.d ? SP.d.todos.filter(t => !t.done) : [];
 const spMsgKey = r => r.type === "mention" ? r.id : (r.id || r.at);
 const spRedraw = () => { if (current.view === "space") { renderSpaceList(); renderSpace(); } };
@@ -7351,12 +7326,16 @@ async function spaceLoad(draw){
   if (SP.loading) { if (draw) SP.loading.then(spRedraw); return SP.loading; }
   SP.loading = (async () => {
     try { SP.d = await api0("/api/space", undefined, spM()); SP.err = ""; } catch (e) { SP.err = e.message; }
-    SP.favs = new Set(((SP.d || {}).favs || []).filter(f => f.kind === "chat" && f.src).map(f => f.src.chat + "|" + String(f.src.msg)));
-    document.querySelectorAll("[data-favk]").forEach(el => { el.hidden = !SP.favs.has(el.dataset.favk); });
     SP.loading = null;
+    spChatsSync();
     if (draw) spRedraw();
   })();
   return SP.loading;
+}
+function spChatsSync(){                  // 待办变了：重算哪些对话有待办，列表上的标识有变化就重画列表
+  const was = [...SP.chats].sort().join("|");
+  SP.chats = new Set(spOpenTodos().map(t => (t.src || {}).chat).filter(Boolean));
+  if ([...SP.chats].sort().join("|") !== was && (current.view === "chats" || current.view === "agents")) renderList();
 }
 function spPlain(text, n, all){
   if (!all) {                             // 只要一句：跳过开头的小标题，取第一段正文
@@ -7399,16 +7378,13 @@ function spToast(text, acts){   // 带按钮的轻提示（撤销、去看看）
   setTimeout(() => t.remove(), 5000);
 }
 // ---- 回答下面的「⋯」 ----
-function msgMoreBtn(src, i, r){
-  const k = detail.id + "|" + String(spMsgKey(r));
-  return `<button onclick="msgMore(event,${q(src)},${i})" title="更多" aria-label="更多" aria-haspopup="menu">${ICON.more}</button><span class="fav-mk" data-favk="${esc(k)}" ${SP.favs.has(k) ? "" : "hidden"}>${ICON.star}已收藏</span>`;
+function msgMoreBtn(src, i){
+  return `<button onclick="msgMore(event,${q(src)},${i})" title="更多" aria-label="更多" aria-haspopup="menu">${ICON.more}</button>`;
 }
 const spRow = (src, i) => (src === "earlier" ? detail.earlier : src === "elsewhere" ? detail.elsewhere : detail.log)[i];
 function msgMore(e, src, i){
   const r = spRow(src, i); if (!r) return;
-  const on = SP.favs.has(detail.id + "|" + String(spMsgKey(r)));
-  const items = [[SP_IC.fav, on ? "取消收藏" : "收藏", "放进个人空间的收藏", `spFavMsg(${q(src)},${i},${!on})`],
-                 [SP_IC.todo, "转成待办", "放进个人空间的待办", `spTodoMsg(${q(src)},${i})`]];
+  const items = [[SP_IC.todo, "转成待办", "放进个人空间的待办", `spTodoMsg(${q(src)},${i})`]];
   if (!narrow()) return pop(e, items.map(([, l, , js]) => `<button onclick="closePop();${js}">${l}</button>`).join(""));
   e.stopPropagation();
   document.querySelector(".msheet")?.remove();
@@ -7422,14 +7398,6 @@ function msgMore(e, src, i){
 function spSrcOf(r){
   return {chat: detail.id, msg: spMsgKey(r), title: detail.title || "", agent: r.agent || detail.agent || "", machine: ctxMachine || S.me || ""};
 }
-async function spFavMsg(src, i, on){
-  const r = spRow(src, i); if (!r) return;
-  const body = {on, src: spSrcOf(r), text: r.text};
-  await act(() => api("/api/space/fav", body, spM()));
-  useMark("act.fav");
-  await spaceLoad();
-  spToast(on ? "已收藏" : "已取消收藏", on ? [["撤销", () => api("/api/space/fav", {...body, on: false}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/fav"; }]] : []);
-}
 async function spTodoMsg(src, i){
   const r = spRow(src, i); if (!r) return;
   const d = await act(() => api("/api/space/todo/add", {text: spPlain(r.text, 80), src: spSrcOf(r)}, spM()));
@@ -7441,14 +7409,14 @@ async function spTodoMsg(src, i){
 function renderSpaceList(){
   if (!SP.d && !SP.err) spaceLoad(true);
   if (!$("#sp-list")) $("#list").innerHTML = `<div class="list-head sp-head"><span class="sp-me" id="sp-me"></span><div><h1>个人空间</h1><div class="nm" id="sp-nm"></div></div></div>
-    <label class="search">${ICON.search}<input id="sp-q" placeholder="搜索待办、收藏、笔记" aria-label="搜索待办、收藏、笔记" value="${esc(SP.q)}" oninput="spSearch(this.value)"></label>
+    <label class="search">${ICON.search}<input id="sp-q" placeholder="搜索待办、笔记" aria-label="搜索待办、笔记" value="${esc(SP.q)}" oninput="spSearch(this.value)"></label>
     <div class="scroll" id="sp-list"></div>`;
   const me = opcMe(); $("#sp-me").textContent = [...me][0]; $("#sp-nm").textContent = me;
   $("#sp-list").innerHTML = narrow() ? spPhoneCats() : spCats();
 }
 function spCount(k){
   const d = SP.d; if (!d) return "";
-  return k === "todo" ? spOpenTodos().length : k === "fav" ? d.favs.length : d.notes.length;
+  return k === "todo" ? spOpenTodos().length : d.notes.length;
 }
 function spCats(){
   const cat = SP.q ? null : spCat();
@@ -7457,16 +7425,16 @@ function spCats(){
 function spPhoneCats(){
   if (!SP.d) return `<div class="sp-empty">${SP.err ? spErr() : "…"}</div>`;
   if (SP.q) return `<div style="padding:0 10px">${spHits()}</div>`;
-  const d = SP.d, t0 = spOpenTodos()[0], f0 = d.favs[0], n0 = d.notes[0];
-  const sub = {todo: t0 ? t0.text : "没有要做的", fav: f0 ? spPlain(f0.text, 60, true) : "还没有收藏", note: n0 ? spNoteTitle(n0) : "还没有笔记"};
-  const recent = [...spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]), ...d.favs.map(f => ["fav", spPlain(f.text, 60, true), f.at, "#/space/fav", f.id]),
+  const d = SP.d, t0 = spOpenTodos()[0], n0 = d.notes[0];
+  const sub = {todo: t0 ? t0.text : "没有要做的", note: n0 ? spNoteTitle(n0) : "还没有笔记"};
+  const recent = [...spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]),
                   ...d.notes.map(n => ["note", spNoteTitle(n), n.updated || n.at, `#/space/note/${encodeURIComponent(n.id)}`])].sort((a, b) => b[2] - a[2]).slice(0, 6);
   return `<div class="sp-group">${SP_CATS.map(([k, n, c]) => `<a class="sp-row" href="#/space/${k}"><span class="bx" style="background:${c}">${SP_IC[k]}</span>
       <span class="t"><b>${n}</b><span class="sub">${esc(sub[k])}</span></span><span class="n">${spCount(k)}</span><span class="chev">${ICON.chev}</span></a>`).join("")}</div>
-    ${recent.length ? `<div class="sp-sec">最近加的</div><div class="sp-group">${recent.map(([k, t, at, h, fid]) => `<a class="sp-row" href="${h}" ${fid ? `onclick="SP.open=${q(fid)}"` : ""}><span class="ic">${SP_IC[k]}</span>
-      <span class="t"><b style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</b><span class="sub">${{todo: "待办", fav: "收藏", note: "笔记"}[k]} · ${spWhen(at)}</span></span></a>`).join("")}</div>` : ""}`;
+    ${recent.length ? `<div class="sp-sec">最近加的</div><div class="sp-group">${recent.map(([k, t, at, h]) => `<a class="sp-row" href="${h}"><span class="ic">${SP_IC[k]}</span>
+      <span class="t"><b style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</b><span class="sub">${{todo: "待办", note: "笔记"}[k]} · ${spWhen(at)}</span></span></a>`).join("")}</div>` : ""}`;
 }
-// ---- 搜索：三类一起搜 ----
+// ---- 搜索：待办、笔记一起搜 ----
 function spSearch(v){
   SP.q = v.trim();
   if (narrow()) { $("#sp-list").innerHTML = spPhoneCats(); return; }
@@ -7476,12 +7444,11 @@ function spSearch(v){
 function spClearQ(){ if (!SP.q) return; SP.q = ""; const el = $("#sp-q"); if (el) el.value = ""; }
 function spHits(){
   const k = SP.q.toLowerCase(), has = (...xs) => xs.some(x => (x || "").toLowerCase().includes(k)), d = SP.d;
-  const todos = d.todos.filter(t => has(t.text, (t.src || {}).title)), favs = d.favs.filter(f => has(f.text, (f.src || {}).title, (f.src || {}).name)),
+  const todos = d.todos.filter(t => has(t.text, (t.src || {}).title, (t.src || {}).name)),
         notes = d.notes.filter(n => has(n.title, n.body));
   const row = (ic, t, sub, js) => `<div class="sp-hit" role="button" tabindex="0" onclick="${js}" onkeydown="if(event.key==='Enter')this.click()"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="sub">${esc(sub)}</span></div>`;
   const sec = (n, xs) => xs.length ? `<div class="sp-grp">${n} ${xs.length}</div>${xs.join("")}` : "";
   const out = sec("待办", todos.map(t => row(SP_IC.todo, t.text, t.done ? "已完成" : spWhen(t.at), `spGoHit('#/space/todo')`)))
-    + sec("收藏", favs.map(f => row(SP_IC.fav, spPlain(f.text, 80, true), spWhen(f.at), `SP.open=${q(f.id)};spGoHit('#/space/fav')`)))
     + sec("笔记", notes.map(n => row(SP_IC.note, spNoteTitle(n), spWhen(n.updated || n.at), `spGoHit('#/space/note/${encodeURIComponent(n.id)}')`)));
   return out || `<div class="sp-empty">没有找到「${esc(SP.q)}」</div>`;
 }
@@ -7491,12 +7458,23 @@ function renderSpace(){
   if (!SP.d) { $("#main").innerHTML = `<div class="sp-main">${SP.err ? `<div class="sp-empty">${spErr()}</div>` : ""}</div>`; if (!SP.err) spaceLoad(true); return; }
   if (SP.q && !narrow()) { $("#main").innerHTML = `<div class="sp-main"><div class="sp-in"><div class="sp-h"><h1>搜索</h1></div>${spHits()}</div></div>`; return; }
   const cat = spCat();
-  if (cat === "fav") drawSpFav(); else if (cat === "note") drawSpNotes(); else drawSpTodo();
+  if (cat === "note") drawSpNotes(); else drawSpTodo();
 }
 function spSrc(src, fallback){
+  if (src && src.feed) {                 // 动态里加的（#554）：点了回到动态里那一条
+    const a = src.agent ? agentOf(src.agent) : null;
+    return `<a class="sp-src" href="#/schedules/feed" onclick="return spGoFeed(event,${esc(JSON.stringify(src))})">${a ? seal(a, "", false) : ""}<span class="t">${esc(src.name || "动态")}</span></a>`;
+  }
   if (!src || !src.chat) return `<span class="sp-src self">${esc(fallback || "自己记的")}</span>`;
   const a = src.agent ? agentOf(src.agent) : null;
   return `<a class="sp-src" href="#/chats/${encodeURIComponent(src.chat)}" onclick="return spGoSrc(event,${esc(JSON.stringify(src))})">${a ? seal(a, "", false) : ""}<span class="t">${esc(src.title || src.name || "对话")}</span></a>`;
+}
+function spGoFeed(e, src){               // 动态记着看到哪条（feedPos），改成这条再进去，就停在它上面
+  e.stopPropagation(); e.preventDefault();
+  const pos = feedPos() || {};
+  try { localStorage.setItem("ccim.feedPos", JSON.stringify({rid: src.run, off: 0, top: pos.top || null})); } catch {}
+  location.hash = "#/schedules/feed";
+  return false;
 }
 function spGoSrc(e, src){
   e.stopPropagation(); e.preventDefault();
@@ -7528,11 +7506,11 @@ function spTodoRow(t){
 async function spTodoAdd(){
   const text = SP.newText.trim(); if (!text) return;
   const d = await act(() => api("/api/space/todo/add", {text}, spM()));
-  SP.newText = ""; SP.d.todos.unshift(d.item); drawSpTodo(); renderSpaceList(); $("#sp-new")?.focus();
+  SP.newText = ""; SP.d.todos.unshift(d.item); drawSpTodo(); renderSpaceList(); spChatsSync(); $("#sp-new")?.focus();
 }
 async function spTodoDone(id, done){
   const t = SP.d.todos.find(x => x.id === id); if (!t) return;
-  t.done = done; t.done_at = done ? Date.now() / 1000 : undefined; drawSpTodo(); renderSpaceList();
+  t.done = done; t.done_at = done ? Date.now() / 1000 : undefined; drawSpTodo(); renderSpaceList(); spChatsSync();
   try { await api("/api/space/todo/set", {id, done}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
 }
 function spTodoEdit(el, id){
@@ -7552,52 +7530,9 @@ function spTodoEdit(el, id){
 }
 async function spTodoDel(id){
   const t = SP.d.todos.find(x => x.id === id); if (!t) return;
-  SP.d.todos = SP.d.todos.filter(x => x.id !== id); drawSpTodo(); renderSpaceList();
+  SP.d.todos = SP.d.todos.filter(x => x.id !== id); drawSpTodo(); renderSpaceList(); spChatsSync();
   try { await api("/api/space/todo/del", {id}, spM()); } catch (e) { toast(e.message); spaceLoad(true); return; }
   spToast("已删除", [["撤销", () => api("/api/space/todo/restore", {item: t}, spM()).then(() => spaceLoad(true))]]);
-}
-// 收藏
-function drawSpFav(){
-  const tabs = [["all", "全部"], ["chat", "对话"], ["feed", "动态"]];
-  const list = SP.d.favs.filter(f => SP.tab === "all" || f.kind === SP.tab);
-  $("#main").innerHTML = `<div class="sp-main"><div class="sp-in">
-    <div class="sp-h"><h1>收藏</h1><span class="n">${SP.d.favs.length}</span><span class="r" role="tablist">${tabs.map(([k, n]) => `<button class="sp-tab ${SP.tab === k ? "on" : ""}" role="tab" aria-selected="${SP.tab === k}" onclick="SP.tab='${k}';drawSpFav()">${n}</button>`).join("")}</span></div>
-    ${list.length ? spGrouped(list, f => f.at).map(([g, xs]) => `<div class="sp-grp">${g}</div><div class="sp-cards">${xs.map(spFavCard).join("")}</div>`).join("")
-      : `<div class="sp-empty">${SP.d.favs.length ? "这一类还没有收藏" : "还没有收藏。对话里点回答下面的「⋯」就能收藏"}</div>`}
-  </div></div>`;
-  const o = document.querySelector(".sp-card.open"); if (o && SP.scrollOpen) { SP.scrollOpen = false; o.scrollIntoView({block: "nearest"}); }
-}
-function spFavCard(f){
-  const open = SP.open === f.id, feed = f.kind === "feed";
-  const src = feed ? null : f.src;
-  const from = feed ? `<a class="sp-src" href="#/schedules/feed" onclick="event.stopPropagation()">${f.src.agent && agentOf(f.src.agent) ? seal(agentOf(f.src.agent), "", false) : ""}<span class="t">${esc(f.src.name || "定时任务")}</span></a>` : spSrc(src);
-  return `<div class="sp-card ${open ? "open" : ""}" onclick="spFavOpen(event,${q(f.id)})">
-    <div class="bd">${open ? `<div class="answer">${md(f.text)}</div>` : esc(spPlain(f.text, 300, true))}</div>
-    <div class="ft"><span class="sp-kind ${feed ? "feed" : ""}">${feed ? "动态" : "对话"}</span>${from}<span class="when">${spWhen(f.at)}</span></div>
-    ${open ? `<div class="acts">${feed ? `<a class="btn" href="#/schedules/feed" style="text-decoration:none" onclick="event.stopPropagation()">回到动态</a>`
-      : `<button class="btn" onclick="spGoSrc(event,${esc(JSON.stringify(f.src))})">回到对话</button>`}
-      <button class="btn" onclick="event.stopPropagation();spFavTodo(${q(f.id)})">${SP_IC.todo.replace("<svg", '<svg width="14" height="14"')}转成待办</button>
-      <button class="link" onclick="event.stopPropagation();spFavDel(${q(f.id)})">取消收藏</button></div>` : ""}</div>`;
-}
-function spFavOpen(e, id){
-  if (e.target.closest("a,button") || String(getSelection()).length) return;
-  SP.open = SP.open === id ? null : id; drawSpFav();
-}
-async function spFavTodo(id){
-  const f = SP.d.favs.find(x => x.id === id); if (!f) return;
-  const src = f.kind === "feed" ? (f.src.chat ? {chat: f.src.chat, title: f.src.name, agent: f.src.agent} : null) : f.src;
-  const d = await act(() => api("/api/space/todo/add", {text: spPlain(f.text, 80), src}, spM()));
-  SP.d.todos.unshift(d.item); renderSpaceList();
-  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad(true))], ["去看看", () => { location.hash = "#/space/todo"; }]]);
-}
-async function spFavDel(id){
-  const f = SP.d.favs.find(x => x.id === id); if (!f) return;
-  await act(() => api("/api/space/fav/del", {id}, spM()));
-  SP.d.favs = SP.d.favs.filter(x => x.id !== id); if (SP.open === id) SP.open = null;
-  drawSpFav(); renderSpaceList(); spaceLoad();
-  const [, sid, ...rest] = f.kind === "feed" ? f.id.split(":") : [], rid = (rest || []).join(":");   // 运行编号里本来就带冒号
-  spToast("已取消收藏", [["撤销", () => (f.kind === "feed" ? api("/api/schedule/star", {id: sid, run: rid, on: true}, spM())
-                                               : api("/api/space/fav", {on: true, src: f.src, text: f.text}, spM())).then(() => spaceLoad(true))]]);
 }
 // 笔记：左边列表，右边正文（手机上一层层点进去）
 const spNoteTitle = n => (n.title || "").trim() || spPlain(n.body, 30) || "新笔记";
@@ -9226,11 +9161,20 @@ function feedReply(p, r, i, who){         // Agent 的回答：长的先收起�
   return `<div class="fr ${long ? "long" : ""} ${open ? "open" : ""}"><b>${esc(who)}：</b><div class="md rt">${md(r.text)}</div>
     <div class="fr-acts">${long ? `<button class="fmore" onclick="feedRepToggle('${esc(k)}')">${open ? "收起" : "展开"}</button>` : ""}<button class="fmore fr-re" onclick="feedAsk(${q},${i})">回复</button></div></div>`;
 }
-function feedMenu(e, rid){                // 「⋯」：去对话回复、不显示这条（#537）
+function feedMenu(e, rid){                // 「⋯」：去对话回复、加到待办（#554）、不显示这条（#537）
   const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
   const q = JSON.stringify(rid).replace(/"/g, "&quot;");
   pop(e, `${p.chat ? `<button onclick="closePop();feedGoChat(${q})">去对话回复</button>` : p.project ? `<button onclick="closePop();location.hash='#/projects/${encodeURIComponent(p.project)}'">去项目里看</button>` : ""}
+    <button onclick="closePop();feedTodo(${q})">加到待办</button>
     <button onclick="closePop();feedHide(${q})">不显示这条</button>`, true);
+}
+async function feedTodo(rid){            // 加到个人空间的待办（#554）：内容取第一段，来源记这个任务的这次运行
+  const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
+  const src = {feed: p.sid, run: rid, name: p.name || "", agent: p.agent || ""};
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(p.text, 80) || p.name || "动态", src}, spM()));
+  useMark("feed.todo");
+  spaceLoad();
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/todo"; }]]);
 }
 async function feedHide(rid){
   const i = FEED.posts.findIndex(x => x.rid === rid); if (i < 0) return;

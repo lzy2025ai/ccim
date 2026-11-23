@@ -39,7 +39,7 @@ GUEST_POST = {
     "/api/skills/install", "/api/skills/toggle", "/api/skills/delete", "/api/skills/update", "/api/skills/file/save", "/api/helper",
     "/api/chat/side",
     "/api/pocket",
-    "/api/space/todo/add", "/api/space/todo/set", "/api/space/todo/del", "/api/space/todo/restore", "/api/space/fav", "/api/space/fav/del",
+    "/api/space/todo/add", "/api/space/todo/set", "/api/space/todo/del", "/api/space/todo/restore", "/api/space/todo/chat",
     "/api/space/note/save", "/api/space/note/del",
     "/api/ws/paths", "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
 }

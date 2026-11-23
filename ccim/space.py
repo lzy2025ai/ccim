@@ -1,8 +1,10 @@
-"""个人空间（#542）：用户自己的待办、收藏、笔记。头像点进去看，对话里 Agent 的回答「⋯」能收藏、转成待办。
+"""个人空间（#542）：用户自己的待办、笔记。头像点进去看。
 
-存在这台电脑 ~/.ccim/space/<账号>.json（主人是 owner.json），访客各看各的。
-动态里的收藏（定时任务的 stars）不搬过来：读的时候合进收藏，编号是 feed:<任务>:<那次运行>，取消收藏改回任务上。
-几台电脑的时候，网页只找本机（S.me）那台存取，动态的收藏也只合那台上的。
+待办的来源：自己记的、对话里某条回答「转成待办」、对话列表里「加到待办」（#554，来源只有对话、没有那条回答）、
+动态里某条结果「加到待办」（来源是 feed + run）。对话列表上的待办标识就看这个对话有没有没做完的待办，不另外存。
+
+存在这台电脑 ~/.ccim/space/<账号>.json（主人是 owner.json），访客各看各的。几台电脑的时候，网页只找本机（S.me）那台存取。
+#554 起不再有收藏：文件里老的 favs 原样留着，不读不删。
 """
 import json, os, re, secrets, threading, time
 
@@ -48,14 +50,17 @@ def _id():
 
 
 def _src(src):
-    """来源：哪个对话的哪条回答。只留认识的字段。"""
+    """来源：哪个对话（的哪条回答），或动态里哪个任务的哪次运行。只留认识的字段。"""
     if not isinstance(src, dict):
         return None
-    out = {k: str(src[k])[:200] for k in ("chat", "title", "agent", "machine") if isinstance(src.get(k), str) and src[k]}
+    out = {k: str(src[k])[:200] for k in ("chat", "title", "agent", "machine", "feed", "run", "name") if isinstance(src.get(k), str) and src[k]}
     m = src.get("msg")
-    if isinstance(m, (int, float, str)) and m != "":
+    if out.get("chat") and isinstance(m, (int, float, str)) and m != "":
         out["msg"] = m if not isinstance(m, str) else m[:80]
-    return out if out.get("chat") else None
+    if out.get("chat"):
+        out.pop("feed", None); out.pop("run", None)
+        return out
+    return out if out.get("feed") and out.get("run") else None
 
 
 def _text(t, n):
@@ -65,19 +70,25 @@ def _text(t, n):
 
 # ---------- 读 ----------
 
-def view(acct, starred=()):
-    """整个个人空间。starred：动态里收藏的（Schedules.starred 给的），合进收藏。"""
+def view(acct):
+    """整个个人空间。"""
     d = _read(acct)
-    favs = [dict(f, kind="chat") for f in d["favs"]]
-    for s in starred:
-        favs.append({"id": f"feed:{s['sid']}:{s['rid']}", "kind": "feed", "text": s.get("text") or "", "at": s.get("at") or 0,
-                     "src": {"name": s.get("name") or "", "agent": s.get("agent") or "", "chat": s.get("chat") or "", "sid": s["sid"]}})
-    favs.sort(key=lambda f: -(f.get("at") or 0))
     notes = sorted(d["notes"], key=lambda n: -(n.get("updated") or n.get("at") or 0))
-    return {"todos": d["todos"], "favs": favs, "notes": notes}
+    return {"todos": d["todos"], "notes": notes}
 
 
 # ---------- 待办 ----------
+
+def _add(d, text, src):
+    if len([t for t in d["todos"] if not t.get("done")]) >= MAX_TODO:
+        raise Problem("待办太多了，先勾掉一些。")
+    item = {"id": _id(), "text": text, "done": False, "at": time.time()}
+    s = _src(src)
+    if s:
+        item["src"] = s
+    d["todos"].insert(0, item)
+    return item
+
 
 def todo_add(acct, text, src=None):
     text = _text(text, 500)
@@ -85,15 +96,35 @@ def todo_add(acct, text, src=None):
         raise Problem("先写点什么。")
     with _lock:
         d = _read(acct)
-        if len([t for t in d["todos"] if not t.get("done")]) >= MAX_TODO:
-            raise Problem("待办太多了，先勾掉一些。")
-        item = {"id": _id(), "text": text, "done": False, "at": time.time()}
-        s = _src(src)
-        if s:
-            item["src"] = s
-        d["todos"].insert(0, item)
+        item = _add(d, text, src)
         _write(acct, d)
     return {"item": item}
+
+
+def todo_chat(acct, chat, on, src=None):
+    """对话列表里的「加到待办」/「完成待办」（#554）。
+    加：这个对话已经有没做完的待办就不再加；没有就加一条，内容是对话标题。
+    完成：这个对话名下没做完的待办（包括从某条回答转来的）全部勾掉，返回勾掉的编号，好撤销。"""
+    if not isinstance(chat, str) or not chat:
+        raise Problem("找不到这个对话。")
+    with _lock:
+        d = _read(acct)
+        mine = [t for t in d["todos"] if not t.get("done") and (t.get("src") or {}).get("chat") == chat]
+        if on:
+            if mine:
+                return {"item": mine[0]}
+            s = dict(src) if isinstance(src, dict) else {}
+            s["chat"] = chat
+            s.pop("msg", None)
+            item = _add(d, _text(s.get("title"), 500) or "对话", s)
+            _write(acct, d)
+            return {"item": item}
+        now = time.time()
+        for t in mine:
+            t["done"], t["done_at"] = True, now
+        if mine:
+            _write(acct, d)
+        return {"ids": [t["id"] for t in mine]}
 
 
 def todo_set(acct, tid, done=None, text=None):
@@ -143,44 +174,6 @@ def todo_restore(acct, item):
             d["todos"].sort(key=lambda x: -(x.get("at") or 0))
             _write(acct, d)
     return {}
-
-
-# ---------- 收藏（对话里的回答） ----------
-
-def fav(acct, on, src, text=""):
-    """收藏 / 取消收藏一条回答，按「对话 + 那条回答」认。"""
-    s = _src(src)
-    if not s or "msg" not in s:
-        raise Problem("找不到这条回答。")
-    with _lock:
-        d = _read(acct)
-        old = next((f for f in d["favs"] if (f.get("src") or {}).get("chat") == s["chat"] and (f.get("src") or {}).get("msg") == s["msg"]), None)
-        if on and not old:
-            text = _text(text, MAX_TEXT)
-            if not text:
-                raise Problem("这条回答没有内容。")
-            old = {"id": _id(), "text": text, "at": time.time(), "src": s}
-            d["favs"].insert(0, old)
-        elif not on and old:
-            d["favs"].remove(old)
-        _write(acct, d)
-    return {"id": old["id"] if on and old else None}
-
-
-def fav_del(acct, fid):
-    with _lock:
-        d = _read(acct)
-        d["favs"] = [f for f in d["favs"] if f.get("id") != fid]
-        _write(acct, d)
-    return {}
-
-
-def feed_id(fid):
-    """feed:<任务>:<那次运行> → (任务, 运行)；不是动态的收藏返回 None。"""
-    if not isinstance(fid, str) or not fid.startswith("feed:"):
-        return None
-    parts = fid.split(":", 2)
-    return (parts[1], parts[2]) if len(parts) == 3 and parts[1] and parts[2] else None
 
 
 # ---------- 笔记 ----------

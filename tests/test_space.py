@@ -1,4 +1,4 @@
-"""个人空间（#542）：待办、收藏、笔记按账号分开存；动态里收藏的合进收藏，取消收藏改回定时任务上。"""
+"""个人空间（#542）：待办、笔记按账号分开存；对话、动态加到待办（#554）。"""
 import os
 import tempfile
 import time
@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import patch
 
 from ccim import registry, share, space
-from ccim.schedules import Schedules
 
 
 class SpaceTests(unittest.TestCase):
@@ -53,32 +52,39 @@ class SpaceTests(unittest.TestCase):
         for f in os.listdir(os.path.join(registry.HOME, "space")):
             self.assertRegex(f, r"^[A-Za-z0-9_.-]+\.json$")
 
-    def test_fav(self):
-        src = {"chat": "w-1", "msg": 100.25, "title": "方案", "agent": "x"}
-        r = space.fav(None, True, src, "回答原文")
-        again = space.fav(None, True, src, "回答原文")
-        self.assertEqual(r["id"], again["id"])     # 同一条回答只收一次
-        v = space.view(None)
-        self.assertEqual(len(v["favs"]), 1)
-        self.assertEqual((v["favs"][0]["kind"], v["favs"][0]["text"]), ("chat", "回答原文"))
-        space.fav(None, False, src)
-        self.assertEqual(space.view(None)["favs"], [])
+    def test_chat_todo(self):
+        src = {"title": "接口联调", "agent": "x", "machine": "m1", "msg": 3}
+        a = space.todo_chat(None, "w-1", True, src)["item"]
+        self.assertEqual(a["text"], "接口联调")
+        self.assertEqual(a["src"], {"chat": "w-1", "title": "接口联调", "agent": "x", "machine": "m1"})   # 整个对话，不带哪条回答
+        self.assertEqual(space.todo_chat(None, "w-1", True, src)["item"]["id"], a["id"])   # 已经有了不再加
+        m = space.todo_add(None, "回答里的", {"chat": "w-1", "msg": 9})["item"]
+        other = space.todo_chat(None, "w-2", True, {})["item"]
+        self.assertEqual(other["text"], "对话")
+        r = space.todo_chat(None, "w-1", False)
+        self.assertEqual(sorted(r["ids"]), sorted([a["id"], m["id"]]))   # 这个对话名下没做完的全部勾掉
+        todos = {t["id"]: t for t in space.view(None)["todos"]}
+        self.assertTrue(todos[a["id"]]["done"] and todos[m["id"]]["done"])
+        self.assertFalse(todos[other["id"]]["done"])
+        self.assertEqual(space.todo_chat(None, "w-1", False)["ids"], [])
+        b = space.todo_chat(None, "w-1", True, src)["item"]   # 都做完了再加：新的一条
+        self.assertNotEqual(b["id"], a["id"])
         with self.assertRaises(space.Problem):
-            space.fav(None, True, {"chat": "w-1"}, "没有指明哪条")
-        r = space.fav(None, True, src, "x")
-        space.fav_del(None, r["id"])
-        self.assertEqual(space.view(None)["favs"], [])
+            space.todo_chat(None, "", True)
 
-    def test_feed_stars_merged(self):
-        space.fav(None, True, {"chat": "w-1", "msg": "m1"}, "对话里的")
-        now = time.time()
-        stars = [{"sid": "a", "rid": "a:1", "name": "风向标", "text": "动态里的", "chat": "s-a", "agent": "x", "at": now + 10}]
-        favs = space.view(None, stars)["favs"]
-        self.assertEqual([f["kind"] for f in favs], ["feed", "chat"])   # 按时间新的在前
-        self.assertEqual(favs[0]["id"], "feed:a:a:1")             # 那次运行的编号里本来就带冒号
-        self.assertEqual(space.feed_id(favs[0]["id"]), ("a", "a:1"))
-        self.assertEqual(space.feed_id("feed:a:b:c"), ("a", "b:c"))
-        self.assertIsNone(space.feed_id("abc"))
+    def test_feed_todo(self):
+        t = space.todo_add(None, "看一下", {"feed": "a", "run": "a:1", "name": "风向标", "agent": "x"})["item"]
+        self.assertEqual(t["src"], {"feed": "a", "run": "a:1", "name": "风向标", "agent": "x"})
+        t = space.todo_add(None, "缺了运行", {"feed": "a"})["item"]
+        self.assertNotIn("src", t)
+
+    def test_no_favs(self):
+        os.makedirs(os.path.dirname(space._file(None)))
+        with open(space._file(None), "w", encoding="utf-8") as f:
+            f.write('{"favs": [{"id": "1", "text": "老收藏"}]}')
+        self.assertNotIn("favs", space.view(None))
+        space.todo_add(None, "x")
+        self.assertEqual(space._read(None)["favs"], [{"id": "1", "text": "老收藏"}])   # 老数据不删
 
     def test_notes(self):
         n = space.note_save(None, None, "标题", "正文")["item"]
@@ -97,36 +103,8 @@ class SpaceTests(unittest.TestCase):
 
     def test_guest_allowed(self):
         self.assertIn("/api/space", share.GUEST_GET)
-        for p in ("/api/space/todo/add", "/api/space/fav", "/api/space/fav/del", "/api/space/note/save"):
+        for p in ("/api/space/todo/add", "/api/space/todo/chat", "/api/space/note/save"):
             self.assertIn(p, share.GUEST_POST)
-
-
-class StarredTests(unittest.TestCase):
-    def test_starred(self):
-        logs = {"schedule-a": [{"type": "run", "id": "a:0", "state": "done", "at": 1, "done_at": 2, "text": "老的也算", "chat": "s-a"},
-                               {"type": "run", "id": "a:1", "state": "done", "at": 3, "done_at": 4, "text": "没收藏", "chat": "s-a"},
-                               {"type": "run", "id": "a:2", "state": "done", "at": 5, "done_at": 6, "text": " ", "chat": "s-a"}],
-                "schedule-b": [{"type": "run", "id": "b:0", "state": "done", "at": 1, "text": "x"}]}
-
-        class L:
-            def read(self, k):
-                return logs.get(k, [])
-
-        class PF:
-            class channel:
-                pass
-
-            def chats(self):
-                return {}
-
-        PF.channel.logs = L()
-        sc = Schedules.__new__(Schedules)
-        sc.pf = PF()
-        sc.all = lambda: {"a": {"name": "风向标", "target": {"kind": "agent", "id": "x"}, "stars": ["a:0", "a:2"]},
-                          "b": {"name": "没收藏的", "target": {"kind": "agent", "id": "y"}}}
-        sc._log = lambda sid: f"schedule-{sid}"
-        r = sc.starred(["a", "b", "gone"])
-        self.assertEqual([(x["rid"], x["text"], x["agent"], x["at"]) for x in r], [("a:0", "老的也算", "x", 2)])
 
 
 if __name__ == "__main__":

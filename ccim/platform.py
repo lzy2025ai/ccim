@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import agents, registry
 from .peers import Server
-from . import bases, devices, docs, filesend, people, perf, share, tokens, uselog, voice, workspace
+from . import bases, devices, docs, filesend, limits, people, perf, share, tokens, uselog, voice, workspace
 from . import apps as apps_mod
 from . import kb as kb_mod
 from . import skills as skills_mod
@@ -267,6 +267,7 @@ class WebChannel(Channel):
     label = "网页"
     cards = False
     live = True
+    resumes = True                            # 额度用完停下的对话，刷新后平台来唤醒（#563，Platform._limit_loop）
     style = "可以用 Markdown（标题、加粗、列表、表格、代码块、链接）。写到本机的文件、文件夹时，路径用反引号包起来，不要写成 file:// 链接。"
 
     def __init__(self, project_path, entry, secret, handlers):
@@ -602,6 +603,7 @@ class Platform:
         self.background.add(asyncio.ensure_future(self._models()))
         threading.Thread(target=self._warm, daemon=True).start()
         self.background.add(asyncio.ensure_future(self._cleanup_loop()))
+        self.background.add(asyncio.ensure_future(self._limit_loop()))
         if self.dev:
             threading.Thread(target=self._dev_loop, daemon=True).start()
         channel.kbs_of = lambda cid: (self.chats().get(cid) or {}).get("kbs") or []   # 挂在对话上的知识库（#27）
@@ -865,6 +867,51 @@ class Platform:
             except Exception:
                 log.exception("清理已完成的对话出错")
             await asyncio.sleep(3600)
+
+    async def _limit_loop(self):
+        """额度用完停下的对话（#563）：刷新后一个一个唤醒，接着做原来的事。"""
+        last = 0
+        while True:
+            await asyncio.sleep(20)
+            try:
+                last = self.wake_limited(last) or last
+            except Exception:
+                log.exception("唤醒额度用完的对话出错")
+
+    def wake_limited(self, last=0, now=None):
+        """到点了就唤醒一个在等额度的对话，返回唤醒的时刻；没到点返回 None。"""
+        now = now or time.time()
+        chats = self.chats()
+        waiting, drop = [], []
+        for cid, m in chats.items():
+            lim = m.get("limit")
+            if not isinstance(lim, dict):
+                continue
+            if m.get("archived") or now - (lim.get("at") or 0) > limits.KEEP:
+                drop.append(cid)
+            elif not m.get("busy"):
+                waiting.append((cid, lim))
+        if drop:
+            for cid in drop:
+                chats[cid].pop("limit", None)
+            self.store.write(chats)
+        cid = limits.due(waiting, last, now)
+        if not cid:
+            return None
+        from .session import Task
+        try:
+            c = self._bridge(cid).chat(cid, "p2p")
+        except Problem:                       # Agent 删掉了
+            c = None
+        chats = self.chats()
+        chats[cid].pop("limit", None)
+        self.store.write(chats)
+        if not c or c.busy:                   # 已经有人接着在做了
+            return None
+        log.info("[%s] 额度刷新了，接着做", cid[-6:])
+        self.channel._emit(cid, self.channel.logs.append(cid, {"type": "note", "text": "额度刷新了，接着做刚才没做完的事"}))
+        c.submit(Task(limits.RESUME))
+        return now
 
     async def cleanup_archived(self):
         now = time.time()
@@ -2041,6 +2088,8 @@ class Platform:
                 **self._board_marks(cid, m), "issue": self._issue(cid, m),
                 "brief": m.get("brief"), "doing": ((self.channel.progress_of.get(cid) or {}).get("steps") or [None])[-1],
                 "stall": self._stall(cid), "bg": self.channel.bg_of.get(cid) or [],
+                "limit": {"until": m["limit"].get("until"), "text": limits.text(m["limit"].get("until") or 0)}
+                if isinstance(m.get("limit"), dict) and not m.get("busy") else None,
                 "last_active": m.get("last_active"), "created": m.get("created"), "ctx": m.get("ctx"),
                 "member_ctx": self.mentions.member_ctx(cid, m), **self._effective(m, m),
                 "perm_ok": not (share.chat_owner(self, cid) or m.get("helper"))}

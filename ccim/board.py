@@ -7,7 +7,7 @@
 """
 import asyncio, datetime, logging, os, re, time, uuid
 
-from . import registry, tokens, usage
+from . import limits, registry, tokens, usage
 from .schedules import listed
 from urllib.parse import quote
 
@@ -80,8 +80,8 @@ def attention(meta, summ):
         return None
     if summ.get("pending"):
         return "ask"
-    if meta.get("busy") or summ.get("feed_last"):     # 动态里回复的那几轮（#520）：等批准的照常算，回答不算
-        return None
+    if meta.get("busy") or summ.get("feed_last") or meta.get("limit"):   # 动态里回复的那几轮（#520）：等批准的照常算，回答不算；
+        return None                                                     # 在等额度刷新后自动接着做的（#563）不用你出手
     if summ.get("answer_at", 0) > max(meta.get("seen_at") or 0, meta.get("dismissed_at") or 0):
         return "err" if summ.get("answer_state") == "error" else "done"
     return None
@@ -95,6 +95,8 @@ def unread(meta, summ):
 def answered(meta, summ):
     """算不算「等你处理」里的回答过（#390）：定时任务每次到点都会回答，它自己的对话你没说过话的不算；
     发到普通对话、群聊里的，最近一条是定时任务发的也不算，你在里面回了话才算。"""
+    if meta.get("limit"):                         # 在等额度刷新后自动接着做（#563）
+        return False
     if meta.get("staff") or meta.get("company"):   # 一人公司里员工的窗口、大群一直开着（#470）：有没看的回答才算
         return unread(meta, summ)
     return (bool(summ.get("answer_at")) and not summ.get("sched_last")
@@ -339,6 +341,8 @@ def overview(pf, keep=None, acct=None, here=None):
         att = marks.get("attention")
         if att == "ask":
             wait.append((now, head(cid, m) + "，等你批准"))
+        elif isinstance(m.get("limit"), dict):    # 额度用完，等刷新后自动接着做（#563）
+            busy.append(head(cid, m) + "，" + limits.text(m["limit"].get("until") or 0))
         elif m.get("busy") or crew:
             line = head(cid, m)
             if m.get("busy"):

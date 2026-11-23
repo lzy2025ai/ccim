@@ -9,7 +9,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               StreamEvent, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
                               HookMatcher, PermissionResultAllow, create_sdk_mcp_server, tool)
 
-from . import approval, devices, registry, usage
+from . import approval, devices, limits, registry, usage
 from .channels.base import chatlog_as_text
 from .progress import clock, describe_tool, short
 
@@ -265,6 +265,8 @@ class Chat:
         self.current = None                   # 正在做的这一轮：(消息, reply_to)
         self.skipping = False                 # 正在结束卡住的一步（打断后接着做）
         self.outcome = None                   # 这一轮的结果 (状态, 回答)，交给 ccim ask 派的任务
+        self.limited = False                  # 这一轮因为额度用完停下了，在等刷新后接着做（#563）
+        self.parked = []                      # 额度用完时还没做完的派活（Task）：接着做完的那一轮再交结果
         self.tasks = {}                       # 正在跑的任务（子 agent、后台命令）：task_id → 说明、开始时刻、最近一步（#271）
         self.detached = set()                 # 其中工具调用已经返回、转到后台的那些 tool_use_id
 
@@ -313,12 +315,21 @@ class Chat:
             self.worker = asyncio.create_task(self._work())
 
     async def stop(self):
+        self.unpark("stopped")
         while not self.queue.empty():
             prompt, _, react = self.queue.get_nowait()
             if isinstance(prompt, Task):
                 prompt.finish("stopped")
             asyncio.create_task(self._unreact(react))
         return await self._interrupt()
+
+    def unpark(self, state, answer=""):
+        """不再等额度刷新了（停下、人自己接着做完）：在等的派活交结果，不再自动唤醒（#563）。"""
+        for p in self.parked:
+            p.finish(state, answer)
+        self.parked = []
+        if state == "stopped" and self.b.saved(self.chat_id).get("limit"):
+            self.b.save(self.chat_id, limit=None)
 
     async def skip(self):
         """结束卡住的那一步：打断这一轮，马上接着做（#109）。补充过的话一起带上；ccim ask、@ 派的任务接着等新的这一轮。"""
@@ -533,7 +544,7 @@ class Chat:
                 elif self.client and prompt is not AWAKE and self._stale():
                     log.info("[%s] 对话在别处接着聊过，重新接上", self.chat_id[-6:])
                     await self._disconnect()
-                self.stopping = self.skipping = False
+                self.stopping = self.skipping = self.limited = False
                 self.outcome = None
                 self.current = (prompt, reply_to)
                 self.b.caffeinate.acquire()
@@ -547,6 +558,8 @@ class Chat:
                 finally:
                     if isinstance(prompt, Task) and not getattr(prompt, "carried", False):
                         prompt.finish(*(self.outcome or ("stopped", "")))
+                    if self.parked and not self.limited:    # 额度用完前派来的活：这一轮接着做完了，结果交过去
+                        self.unpark(*(self.outcome or ("stopped", "")))
                     self.turn = self.current = None
                     self.b.caffeinate.release()
                     await self._unreact(react)
@@ -758,7 +771,8 @@ class Chat:
     async def _turn(self, prompt, reply_to):
         # busy：桌面端同步飞书内容时，据此跳过还没答完的这一轮；asked / since / steps 给 ccim web 显示它在做什么
         own = prompt is AWAKE
-        self.b.save(self.chat_id, busy=True, asked=None if own else short(str(prompt), 80), since=registry.now(), steps=[])
+        self.b.save(self.chat_id, busy=True, asked=None if own else short(str(prompt), 80), since=registry.now(), steps=[],
+                    **({} if own else {"limit": None}))   # 有人接着聊了：不用再等额度刷新后唤醒（#563）
         if not own and not self.b.saved(self.chat_id).get("title"):
             self.b.save(self.chat_id, title=short(str(prompt), 30))   # 第一句话当标题，ccim web 里区分各个话题
         pub = asyncio.create_task(self._publish())
@@ -928,6 +942,19 @@ class Chat:
 
     async def _finish(self, t, result, error, reply_to):
         """这一轮结束：先发回答，再收尾工作中卡片。Claude Code 和 Codex 共用。"""
+        quota = bool(error) and not self.stopping and limits.hit(error)
+        if quota:                             # 额度用完（#563）：中文说清楚几点继续；网页对话记下来，刷新后平台来唤醒
+            auto = bool(getattr(self.b.channel, "resumes", False))
+            until = limits.until(error)
+            error = limits.text(until, auto)
+            if auto:
+                self.limited = True
+                self.b.save(self.chat_id, limit={"until": until, "at": time.time()})
+                prompt = (self.current or (None,))[0]
+                if isinstance(prompt, Task) and not getattr(prompt, "carried", False):
+                    prompt.carried = True     # 派来的活不先报出错，等接着做完再交结果
+                    self.parked.append(prompt)
+            log.info("[%s] 额度用完，%s", self.chat_id[-6:], error)
         if self.stopping:
             title, color = "已停止", "grey"
         elif error:
@@ -942,7 +969,7 @@ class Chat:
         answer = None if error or self.stopping else result or t.text
         self.outcome = ("stopped", "") if self.stopping else ("error", error) if error else ("ok", answer or "")
         if error:
-            await self._safe_text(f"出错了：{short(error, 500)}", reply_to)
+            await self._safe_text(error if quota else f"出错了：{short(error, 500)}", reply_to)
         elif self.skipping:
             if not t.card_id:
                 await self._safe_text("结束了卡住的一步，接着做。", reply_to)

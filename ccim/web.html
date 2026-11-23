@@ -3373,7 +3373,8 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   const by = !a && !working(c) && c.last_by ? agentOf(c.last_by) : null;
   const sub = c.stall ? `<span class="working stuck">${stallText(c.stall)}</span>`
     : working(c) ? `<span class="working"><span class="spin"></span>${c.busy && !(c.crew || []).length ? "干活中" : esc(crewText(c))}</span>`
-    : (c.bg || []).length ? `<span class="working"><span class="spin"></span>后台 ${c.bg.length} 个任务在跑</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
+    : (c.bg || []).length ? `<span class="working"><span class="spin"></span>后台 ${c.bg.length} 个任务在跑</span>`
+    : c.limit ? `<span class="working">${esc(c.limit.text)}</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
         <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`

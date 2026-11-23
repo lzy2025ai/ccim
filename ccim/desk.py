@@ -7,7 +7,7 @@
 """
 import asyncio, time, uuid
 
-from . import agents, registry, share
+from . import agents, board, registry, share
 
 KIND = "desk"
 TITLE = "总台"
@@ -238,12 +238,19 @@ def panel(pf, acct=None):
         att = v.get("attention")
         row = {"card": r["id"], "chat": r["chat"], "title": v.get("title") or r.get("title"), "agent": r.get("agent"),
                "state": r.get("state"), "start": r.get("start") or r.get("at"), "done_at": r.get("done_at")}
+        # 出错、被停下的那张卡片之后那个对话没再答过：不算做完（#563）
+        failed = r.get("state") in ("error", "stopped") and \
+            (board.summary(pf.channel.logs, r["chat"]).get("answer_at") or 0) <= (r.get("done_at") or 0) + 5
         if att == "ask":
             out["waiting"].append(dict(row, line="等你批准"))
+        elif v.get("limit"):                  # 额度用完，等刷新后自动接着做
+            out["working"].append(dict(row, line=v["limit"]["text"]))
         elif v.get("busy") or (r.get("state") == "working" and r["id"] in pf.works):
             out["working"].append(dict(row, line=v.get("doing") or "在处理"))
-        elif att in ("done", "err"):
-            out["waiting"].append(dict(row, line="出错停下了，等你看看" if att == "err" else "做完了，等你验收"))
+        elif att in ("done", "err") or failed:
+            line = "做完了，等你验收" if att == "done" and not failed else \
+                "被停下了，等你看看" if r.get("state") == "stopped" else "出错停下了，等你看看"
+            out["waiting"].append(dict(row, line=line))
         elif _today(r.get("done_at") or 0):
             out["done"].append(dict(row, line=v.get("brief") or "做完了"))
     return out

@@ -32,6 +32,10 @@ def _seen(sub):
     return v if isinstance(v, (int, float)) else 0
 
 
+# 别的 Agent @ 它的（#576）：回答会自动交回去；回答里写「@名字」只是文字，网页上显示成普通文字，像是 @ 没成功
+AT_HINT = "（你的回答会自动交回给它，回答里不用 @ 它；要别的 Agent 接手用 ask_agent，回答里写的 @ 只是文字，对方收不到）"
+
+
 class Mentions:
     def __init__(self, pf):
         self.pf = pf
@@ -171,7 +175,7 @@ class Mentions:
                 prompt = groups.note_prefix(self.pf, cid, aid) + (people.note(self.pf, cid) if person else "") + \
                     (f"（下面是这个对话之前的内容，供参考。你是「{self._agent_name(aid)}」，每段开头写的是谁说的，都不是你；"
                      f"你自己在这个对话里说过的在你的记忆里，没再列出来）\n{ctx[aid]}\n\n" if ctx[aid] else "") + \
-                    f"[{(person or {}).get('name') or self._who(cid, by)}在对话里 @ 了你]{also} {text}{att}"
+                    f"[{(person or {}).get('name') or self._who(cid, by)}在对话里 @ 了你]{also}{AT_HINT if by else ''} {text}{att}"
                 if person:                    # 多人群聊（#419）：这一轮按 @ 它的人的权限跑
                     from .session import Speaker
                     prompt = Speaker(prompt, people.fence_for(self.pf, cid, person["id"]))

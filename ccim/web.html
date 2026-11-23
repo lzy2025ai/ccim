@@ -1469,7 +1469,9 @@ html.embed-desk .pk-empty{max-width:760px;margin:0 auto;padding:0 24px 12px;widt
 .dk-h b{color:var(--ink);font-weight:500}
 .dk-tag{padding:0 6px;border-radius:4px;background:var(--qing-soft);color:var(--qing);font-size:11px;line-height:17px}
 .dk-title{margin:6px 0 4px;font:600 16px/1.4 var(--song)}
-.dk-st{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--huang)}
+.dk-st{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--huang);min-width:0;line-height:18px}
+.dk-st .sx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* 进度文字长短不改卡片高度（#564） */
+.dk-st>.spin,.dk-st>svg{flex:none}
 .dk-card.s-done .dk-st{color:var(--lu)}
 .dk-card.s-error .dk-st,.dk-card.s-stopped .dk-st,.dk-card.s-lost .dk-st{color:var(--zhu)}
 .dk-card.s-moved .dk-st{color:var(--muted)}
@@ -3029,7 +3031,8 @@ function onEvent(ev){
         if (ev.type === "note" && detail.progress?.guess) { detail.busy = false; detail.progress = null; drawComposerState(); }   // 斜杠命令只回一句，不会开始干活
         if (own >= 0) detail.log[own] = rec;
         else if (i >= 0) detail.log[i] = ev.type === "card" ? rec : {...detail.log[i], ...rec, at: detail.log[i].at}; else detail.log.push(rec);
-        drawThread();
+        const wk = EMBED_DESK && ev.type === "work" && i >= 0 && $("#thread")?.querySelector(`.msg[data-wk="${CSS.escape(ev.id)}"]`);
+        if (wk) deskCardSwap(wk, detail.log[i]); else drawThread();   // 总台：派活卡片更新只换这一张（#564）
         if (ev.type === "file" || ev.type === "edit") docChanged(rec, ev.chat);
         if (ev.type === "app") openAppPane(rec.app, rec.mid || ownerOf(ev.chat) || ctxMachine);
         if (ev.type === "answer") wsAnswer(rec);
@@ -3706,9 +3709,19 @@ function threadOrder(log, from){
   }
   return {order, liveAt: at};
 }
+// 新内容进来时要不要跟到底：离底部很近、并且用户没往上翻过（#564：往上翻了一点也会被拉回去）；回到底部又照常跟
+function followBottom(t){
+  if (!t.upOn) { t.upOn = true; let last = t.scrollTop;
+    t.addEventListener("scroll", () => {
+      if (t.scrollHeight - t.scrollTop - t.clientHeight < 4) t.upBy = false;   // 到底了（内容变短被挤到底也算）
+      else if (t.scrollTop < last - 1) t.upBy = true;
+      last = t.scrollTop;
+    }, {passive: true}); }
+  return !t.upBy && t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+}
 function drawThread(){
   const t = $("#thread"); if (!t) return;
-  const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+  const near = followBottom(t);
   // 正在输的密码：重画前记下，重画后放回去（进度每零点几秒刷新一次）
   const typed = [...t.querySelectorAll("form[data-sid]")].map(f => [f.dataset.sid, f.pw.value, document.activeElement === f.pw]);
   // 视频也一样：把原来那个元素放回去，正在放的不会被打断
@@ -3748,7 +3761,7 @@ function drawLiveSoon(){
     liveRaf = 0;
     const t = $("#thread"), el = t && t.querySelector("#live");
     if (!t || !el || !detail || !detail.progress) return drawThread();
-    const near = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+    const near = followBottom(t);
     const box = document.createElement("div"); box.innerHTML = liveHtml();
     const nu = box.firstElementChild; if (!nu) return drawThread();
     el.replaceWith(nu);
@@ -5931,7 +5944,7 @@ function boardModes(on){
 // ================= 总台（#543，实验）：一个固定的对话 + 右边「它手上的事」 =================
 // 对话是嵌着的对话页（?embed=desk，和右下角助理同一套），派活卡片、反问的候选在对话页里画（deskCard / choicesHtml）；
 // 右边一栏取 /api/desk，推送来了节流着重取。总台在这台电脑上（S.me），访客没有。
-const DESK = {id: null, mid: null, panel: null, t: 0, more: false, err: null};
+const DESK = {id: null, mid: null, panel: null, t: 0, more: false, err: null, html: ""};
 function deskWin(){ try { const w = $("#desk-frame")?.contentWindow; return w && w.pkReady ? w : null; } catch { return null; } }
 function deskForward(ev){ if (current.view === "board" && current.id === "desk") try { deskWin()?.pkEvent(structuredClone(ev)); } catch {} }
 function deskGo(hash){ location.hash = hash; }
@@ -5971,8 +5984,12 @@ function deskEvent(ev){
   const p = DESK.panel, mine = ev.chat === DESK.id || (p && ["working", "waiting", "done"].some(k => p[k].some(r => r.chat === ev.chat)));
   if (!mine) return;
   if (ev.type === "progress" && ev.state === "working" && ev.chat !== DESK.id && p && p.working.some(r => r.chat === ev.chat)) {
-    const r = p.working.find(r => r.chat === ev.chat), step = (ev.steps || []).slice(-1)[0];   // 干活中的进度很密：只换这一行
-    if (step && r.line !== step) { r.line = step; drawDeskSide(); }
+    const r = p.working.find(r => r.chat === ev.chat), step = (ev.steps || []).slice(-1)[0];   // 干活中的进度很密：只换这一行的字（#564）
+    if (step && r.line !== step) {
+      r.line = step;
+      const el = $("#desk-side")?.querySelector(`.dk-row[data-chat="${CSS.escape(r.chat)}"] .ln>span:last-child`);
+      if (el) { el.textContent = step; DESK.html = deskSideHtml(); } else drawDeskSide();
+    }
     return;
   }
   deskPanelSoon();
@@ -5983,22 +6000,32 @@ const deskHM = ts => { const d = new Date(ts * 1000), now = new Date();
   const y = new Date(now); y.setDate(now.getDate() - 1);
   return d.toDateString() === y.toDateString() ? "昨天" : `${d.getMonth() + 1} 月 ${d.getDate()} 日`; };
 function deskDur(start){ const m = Math.max(0, Math.floor((Date.now() / 1000 - (start || 0)) / 60)); return m < 1 ? "刚开始" : m < 60 ? `${m} 分钟` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`; }
+// 右边一栏：内容没变不重写（整栏重写时头像重建、转圈重来，看着在闪）（#564）
 function drawDeskSide(){
   const p = DESK.panel, side = $("#desk-side"); if (!p || !side) return;
+  const h = deskSideHtml();
+  if (h !== DESK.html || !side.firstElementChild) { side.innerHTML = h; DESK.html = h; }
+  const nums = $("#desk-nums");
+  if (nums) { const n = [["working", "在干活"], ["waiting", "等你"], ["done", "今天做完"]].map(([k, n]) =>
+    `<div class="dk-num k-${k}"><b>${p[k].length}</b><span>${n}</span></div>`).join(""); if (nums.innerHTML !== n) nums.innerHTML = n; }
+}
+function deskSideHtml(){
+  const p = DESK.panel; if (!p) return "";
   const row = (r, k) => { const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
-    return `<a class="dk-row" href="#/chats/${encodeURIComponent(r.chat)}" title="${esc(a.name)}">${seal(a, "sm", false)}<span class="t"><b>${esc(r.title)}</b>
+    return `<a class="dk-row" data-chat="${esc(r.chat)}" href="#/chats/${encodeURIComponent(r.chat)}" title="${esc(a.name)}">${seal(a, "sm", false)}<span class="t"><b>${esc(r.title)}</b>
       <span class="ln k-${k}">${k === "working" ? `<span class="spin"></span>` : ""}<span>${esc(r.line)}</span></span></span>
-      <span class="tm">${k === "working" ? deskDur(r.start) : r.done_at ? deskHM(r.done_at) : ""}</span></a>`; };
+      <span class="tm" ${k === "working" ? `data-start="${r.start || 0}"` : ""}>${k === "working" ? deskDur(r.start) : r.done_at ? deskHM(r.done_at) : ""}</span></a>`; };
   const sec = (k, name, none) => { const rows = p[k], cut = k === "done" && !DESK.more && rows.length > 5;
     return `<section class="dk-sec k-${k}"><h3><i></i>${name}<span class="n">${rows.length}</span></h3>
       ${rows.length ? (cut ? rows.slice(0, 5) : rows).map(r => row(r, k)).join("") : `<div class="dk-none">${none}</div>`}
       ${cut ? `<button class="link dk-more" onclick="DESK.more=true;drawDeskSide()">再看 ${rows.length - 5} 件</button>` : ""}</section>`; };
-  side.innerHTML = sec("working", "在干活", "现在没有") + sec("waiting", "等你", "没有要你处理的") + sec("done", "今天做完", "今天还没有");
-  const nums = $("#desk-nums");
-  if (nums) nums.innerHTML = [["working", "在干活"], ["waiting", "等你"], ["done", "今天做完"]].map(([k, n]) =>
-    `<div class="dk-num k-${k}"><b>${p[k].length}</b><span>${n}</span></div>`).join("");
+  return sec("working", "在干活", "现在没有") + sec("waiting", "等你", "没有要你处理的") + sec("done", "今天做完", "今天还没有");
 }
-setInterval(() => { if (current.view === "board" && current.id === "desk" && !document.hidden && DESK.panel) drawDeskSide(); }, 60000);
+setInterval(() => {   // 每分钟只改「已做几分钟」
+  if (current.view !== "board" || current.id !== "desk" || document.hidden || !DESK.panel) return;
+  document.querySelectorAll("#desk-side .tm[data-start]").forEach(el => { const v = deskDur(+el.dataset.start); if (el.textContent !== v) el.textContent = v; });
+  DESK.html = deskSideHtml();
+}, 60000);
 // ---- 嵌着的总台对话页里 ----
 function deskEmpty(){
   const list = ["现在都在忙什么，有什么要我处理的", "帮我找个合适的人去做一件事", "昨天交代的那件做到哪了"];
@@ -6018,13 +6045,31 @@ function deskOrder(log, from){
   order.push(...held);
   return {order, liveAt: order.length};
 }
+// 派出去的对话走一步就来一条推送：只改卡片上的状态那一行和时间，不重画整条对话（#564：整条重画在 iPad 上会抖、转圈会重来）
 let deskRaf = 0;
-function deskDrawSoon(){ if (deskRaf) return; deskRaf = setTimeout(() => { deskRaf = 0; drawThread(); }, 1000); }
+function deskDrawSoon(){ if (deskRaf) return; deskRaf = setTimeout(() => { deskRaf = 0; deskPatch(); }, 1000); }
+function deskPatch(){
+  const t = $("#thread"); if (!t || !detail) return;
+  for (const el of t.querySelectorAll(".msg[data-wk]")){
+    const r = detail.log.find(x => x.type === "work" && x.id === el.dataset.wk); if (!r) continue;
+    deskCardSwap(el, r);
+  }
+}
+// 状态没变只换文字（转圈不重来）；状态变了换这一张卡片
+function deskCardSwap(el, r){
+  const box = document.createElement("div"); box.innerHTML = deskCard(r);
+  const nu = box.firstElementChild; if (!nu) return;
+  if (el.dataset.st !== nu.dataset.st) { el.replaceWith(nu); return; }
+  for (const sel of [".dk-st .sx", ".dk-tm"]){
+    const a = el.querySelector(sel), b = nu.querySelector(sel);
+    if (a && b && a.textContent !== b.textContent) a.textContent = b.textContent;
+  }
+}
 function deskCard(r){
   const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
   const sp = (detail.sub_progress || {})[r.chat], step = sp && (sp.steps || []).slice(-1)[0];
-  const st = {working: `<span class="spin"></span>${esc(step || "在处理")}`, done: `${ICON.check}做完了`, error: "出错停下了",
-              stopped: "停下了", lost: "没做完（ccim 重启过）", moved: "已改派"}[r.state] || "";
+  const st = (r.state === "working" ? `<span class="spin"></span>` : r.state === "done" ? ICON.check : "")
+    + `<span class="sx">${esc({working: step || "在处理", done: "做完了", error: "出错停下了", stopped: "停下了", lost: "没做完（ccim 重启过）", moved: "已改派"}[r.state] || "")}</span>`;
   const head = r.desk === "new" ? `交给 ${seal(a, "xs", false)}<b>${esc(a.name)}</b><span class="dk-tag">新对话</span>`
     : `接着原来的对话 ${seal(a, "xs", false)}<b>${esc(a.name)}</b><span class="dk-tag">接着做</span>`;
   const href = `#/chats/${encodeURIComponent(r.chat)}`;
@@ -6032,7 +6077,7 @@ function deskCard(r){
   const move = `<button class="btn sm ghost" onclick="deskMove(event,${q(r.id)})">${ICON.swap}改派</button>`;
   const btns = r.state === "moved" ? "" : r.state === "done" ? `<a class="btn sm primary" href="${href}">去验收</a>` : open + move;
   const dur = deskDur(r.start || r.at), tm = r.state === "working" ? (dur === "刚开始" ? dur : `已做 ${dur}`) : r.done_at && r.state !== "moved" ? `${deskHM(r.done_at)}${r.state === "done" ? " 做完" : ""}` : "";
-  return `<div class="msg"><div class="dk-card s-${esc(r.state || "")}"><div class="dk-h">${head}</div>
+  return `<div class="msg" data-wk="${esc(r.id || "")}" data-st="${esc(r.state || "")}"><div class="dk-card s-${esc(r.state || "")}"><div class="dk-h">${head}</div>
     <div class="dk-title">${esc(r.title)}</div><div class="dk-st">${st}</div>
     ${btns || tm ? `<div class="dk-f">${btns}<span class="sp"></span><span class="dk-tm">${tm}</span></div>` : ""}</div></div>`;
 }

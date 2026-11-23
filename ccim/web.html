@@ -5967,8 +5967,9 @@ async function renderDesk(){
   const box = $("#desk-chat");
   if (DESK.err) { box.innerHTML = `<div class="empty"><h2>总台打不开</h2><p>${esc(DESK.err)}</p></div>`; return; }
   if (box && !box.querySelector("iframe")) {
-    const f = document.createElement("iframe"); f.id = "desk-frame"; f.title = "总台"; box.append(f);
-    embedSrc(f, "desk", null, `#/chats/${encodeURIComponent(DESK.id)}`);
+    const f = document.createElement("iframe"); f.id = "desk-frame"; f.title = "总台";
+    embedSrc(f, "desk", DESK.mid, `#/chats/${encodeURIComponent(DESK.id)}`);   // 带上电脑：经服务器打开时图片地址要指明哪台（#570）
+    box.append(f);   // name 要在插进页面前设好，插进去以后再改 name 页面里拿不到
   }
   deskPanelSoon(DESK.panel ? 1500 : 0);
 }
@@ -10034,7 +10035,8 @@ const EMBED_KIND = window.parent !== window ? new URLSearchParams(location.searc
 const EMBED_SIDE = EMBED_KIND === "side";      // 侧边栏里嵌的（#476），和助理同一套
 const EMBED_DESK = EMBED_KIND === "desk";      // 任务面板的总台（#543），也是同一套
 const EMBED = EMBED_KIND === "pocket" || EMBED_SIDE || EMBED_DESK;
-if (EMBED_SIDE) ctxMachine = new URLSearchParams(location.search).get("m") || (window.name.startsWith("ccim-m:") ? window.name.slice(7) : "") || null;
+// 对话在哪台电脑（#570）：总台、助理是不进对话列表的助手对话，查不到主人，靠这里；不然经服务器打开时图片地址里的电脑是空的
+if (EMBED) ctxMachine = new URLSearchParams(location.search).get("m") || (window.name.startsWith("ccim-m:") ? window.name.slice(7) : "") || null;
 // 嵌着的页面的地址带上网页版本（服务器把下面的占位换成内容摘要），浏览器直接用缓存、不再问服务器；电脑编号放在 name 里，
 // 不进地址，几台电脑共用一份缓存（#490）
 const PAGE_V = "__CCIM_V__";
@@ -10105,8 +10107,10 @@ function pocketFrame(){
   const w = pocketWin();
   if (w) { w.pkGo(POCKET.id); return; }
   let f = p.querySelector("iframe");
-  if (!f) { f = document.createElement("iframe"); f.title = "助理"; p.append(f); }
-  embedSrc(f, "pocket", null, `#/chats/${encodeURIComponent(POCKET.id)}`);
+  const nu = !f;
+  if (nu) { f = document.createElement("iframe"); f.title = "助理"; }
+  embedSrc(f, "pocket", S.me, `#/chats/${encodeURIComponent(POCKET.id)}`);
+  if (nu) p.append(f);   // name（电脑）要在插进页面前设好
 }
 function pocketFocus(){ const w = pocketWin(); if (w) w.pkFocus(); else if (POCKET.open) setTimeout(pocketFocus, 150); }
 async function pocketOpen(){

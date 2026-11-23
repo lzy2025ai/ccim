@@ -3480,7 +3480,7 @@ def _handler(pf):
                 "/api/chat/dismiss": lambda: pf.call(pf.dismiss, b("id")),
                 "/api/chat/kbs": lambda: pf.call(pf.set_kbs, b("id"), b("kbs")),
                 "/api/voice/prepare": lambda: voice.ENGINE.prepare(),
-                "/api/voice/polish": lambda: pf.run(voice.polish(str(b("text") or "")), 120),
+                "/api/voice/polish": lambda: pf.run(voice.polish(str(b("text") or ""), str(b("context") or ""), bool(b("light"))), 120),
                 "/api/upgrade": lambda: start_upgrade(bool(b("force"))),
                 "/api/archive_days": lambda: set_archive_days(str(b("value"))),
                 "/api/workspace": lambda: set_workspace(bool(b("on"))),

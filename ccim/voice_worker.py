@@ -7,7 +7,7 @@
 依赖（sherpa-onnx、numpy）写在上面，uv 第一次跑时装进它自己的缓存，不进 ccim 的环境（体积大，大多数人用不到）。
 模型第一次用时下载。一行一个 JSON 和父进程说话：
   收：{"id": ..., "path": 16kHz 单声道 int16 的裸 PCM 文件}；边说边识别时多带 "sid"（同一次录音）和 "final"（最后一块），
-      只回这一块里说完的句子，没说完的留到下一块；{"drop": sid} 丢掉这次录音
+      回这一块里说完的句子（text）和还没说完那句目前识别出的字（partial）；{"drop": sid} 丢掉这次录音
   发：{"stage": "model", "pct": 0-100}（下载模型）、{"ready": true}、{"id": ..., "text": ...} 或 {"id": ..., "error": ...}
 """
 import json
@@ -157,6 +157,11 @@ def main():
                 pieces = []
                 rest = feed(vad, pcm, rest)
                 drain(vad, pieces)
+                part = ""
+                if not req.get("final") and vad.is_speech_detected():   # 这句还没说完：先识别出来给网页看，断句后换成准确的
+                    cur = vad.current_segment.samples
+                    if len(cur) > RATE * 0.6:
+                        part = join(decode([np.array(cur[-RATE * 15:], dtype=np.float32)]))
                 if req.get("final"):
                     if len(rest):
                         vad.accept_waveform(np.concatenate([rest, np.zeros(cfg.silero_vad.window_size - len(rest), np.float32)]))
@@ -165,7 +170,7 @@ def main():
                     sessions.pop(sid, None)
                 else:
                     sessions[sid][1] = rest
-                say(id=req.get("id"), text=join(decode(pieces)))
+                say(id=req.get("id"), text=join(decode(pieces)), partial=part)
                 continue
             vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=max(30, len(pcm) // RATE + 10))
             pieces = []

@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -29,6 +30,12 @@ POLISH_PROMPT = """下面是一段语音识别出来的原话，是用户要发�
 - 补全标点；内容长、有好几件事时分段或列成要点
 - 不增加、不删减意思，不回答里面的问题，不加任何说明，保持原来的语言和人称
 只输出整理后的文字，放在 <整理后></整理后> 里。"""
+
+LIGHT_PROMPT = """下面是一段语音识别出来的原话，是用户在群聊里发给别人的消息。只做最少的修改：
+- 修正明显的同音错字、识别错的词，补全标点
+- 去掉「嗯」「啊」这类没有意思的语气词和重复
+- 保留口语的说法和语气，不改写句子，不分段列要点，不增删意思，不加任何说明
+只输出改好的文字，放在 <整理后></整理后> 里。"""
 
 STEPS = {"start": "正在安装语音识别", "model": "正在下载识别模型", "unpack": "正在解压识别模型", "load": "正在加载识别模型"}
 
@@ -137,7 +144,7 @@ class Engine:
             if r.get("error"):
                 log.warning("语音识别出错：%s", r["error"])
                 raise ValueError("识别出错了，再试一次。")
-            return r.get("text") or ""
+            return r
         finally:
             self.waits.pop(rid, None)
             self.used = time.time()
@@ -160,7 +167,7 @@ class Engine:
 
     def transcribe(self, pcm, wait=8):
         """pcm：16kHz 单声道 int16。返回 {"text"}，还没准备好时返回 {"preparing": 状态}。"""
-        return self._wait_ready(wait) or {"text": self._ask({}, pcm)}
+        return self._wait_ready(wait) or {"text": self._ask({}, pcm).get("text") or ""}
 
     def chunk(self, sid, seq, pcm, final):
         """边说边识别（#556）：一次录音分块传来，seq 从 0 数起，重发的块不重复收。
@@ -199,13 +206,14 @@ class Engine:
             new = new[:len(new) // 2 * 2]
             if not new and not final:
                 return {"text": ""}
-            text = self._ask({"sid": sid, "final": bool(final)}, new)
+            r = self._ask({"sid": sid, "final": bool(final)}, new)
+            text = r.get("text") or ""
             ses["fed"] += len(new)
             if final:
                 with self.lock:
                     self.sessions.pop(sid, None)
                 return {"text": text, "lost": ses["lost"]}
-            return {"text": text}
+            return {"text": text, "partial": r.get("partial") or ""}
 
     def _recent(self):
         d = os.path.join(self._dir(), "recent")
@@ -239,13 +247,17 @@ class Engine:
                         pass
 
 
-async def polish(text):
-    """识别出的原话整理一遍（#556）：去口头禅、修正明显的同音错字、补标点、长了分段；整理不出来就原样返回。"""
+async def polish(text, context="", light=False):
+    """识别出的原话整理一遍（#556）：去口头禅、修正明显的同音错字、补标点、长了分段；整理不出来就原样返回。
+
+    context：当前对话最近的内容；再加上 Agent、项目、Skill 的名字，用来纠正同音的专有名词（#578）。
+    light：有真人在的群聊，只修错字和标点，保留口语。
+    """
     text = (text or "").strip()
     if not 6 <= len(text) <= 6000:                       # 太长的整理不全，宁可不整理
         return {"text": text}
     try:
-        out = await asyncio.wait_for(_polish(text), 90)
+        out = await asyncio.wait_for(_polish(text, (context or "")[-2000:], light), 90)
     except Exception:
         log.warning("整理语音文字出错", exc_info=True)
         return {"text": text}
@@ -254,14 +266,50 @@ async def polish(text):
     return {"text": out}
 
 
-async def _polish(text):
+def vocab(limit=120):
+    """这台电脑上常出现的名字：Agent、项目、Skill。"""
+    seen, out = set(), []
+
+    def add(w):
+        w = (w or "").strip()
+        if 2 <= len(w) <= 30 and w.lower() not in seen and not re.fullmatch(r"w-[0-9a-f]{6,}|[\d\W_]+", w):   # 工作目录编号、纯数字不要
+            seen.add(w.lower())
+            out.append(w)
+    try:
+        from . import agents
+        for a in agents.all_agents().values():
+            add(a.get("name"))
+            add(os.path.basename((a.get("dir") or "").rstrip("/")))
+    except Exception:
+        log.debug("读 Agent 名字出错", exc_info=True)
+    try:
+        for path in registry.all_projects():
+            add(os.path.basename(path.rstrip("/")))
+    except Exception:
+        log.debug("读项目名字出错", exc_info=True)
+    try:
+        from . import skills
+        for m in skills.listing():
+            add(m.get("name"))
+    except Exception:
+        log.debug("读 Skill 名字出错", exc_info=True)
+    return out[:limit]
+
+
+async def _polish(text, context="", light=False):
     from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
     from .session import CLI
     opts = ClaudeAgentOptions(model=POLISH_MODEL, max_turns=1, allowed_tools=[], setting_sources=[],
                               cwd=os.path.expanduser("~"), cli_path=CLI, permission_mode="default",
                               extra_args={"no-session-persistence": None})   # 不留对话记录（#67）
+    prompt = LIGHT_PROMPT if light else POLISH_PROMPT
+    words = await asyncio.to_thread(vocab)
+    if words:
+        prompt += "\n\n用户常提到的名字（同音的按这些写）：" + "、".join(words)
+    if context.strip():
+        prompt += "\n\n这段话发在下面这段对话里，里面出现的专有名词、术语按对话里的写法：\n<对话>\n" + context.strip() + "\n</对话>"
     out = ""
-    async for m in query(prompt=POLISH_PROMPT + "\n<原话>\n" + text + "\n</原话>", options=opts):
+    async for m in query(prompt=prompt + "\n\n<原话>\n" + text + "\n</原话>", options=opts):
         if isinstance(m, AssistantMessage):
             for b in m.content:
                 if isinstance(b, TextBlock):

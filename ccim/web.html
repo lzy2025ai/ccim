@@ -2723,7 +2723,8 @@ async function fetchState(){
   }
   S = await api("/api/state");
   perfMark("state", S.hub ? "取整体状态（经总控）" : "取整体状态", performance.now() - t0);
-  afterState();
+  STALE = null;                          // 新的到了：先放开，afterState 里画出来的就是新的
+  afterState(); snapSoon();
   try { pocketWin()?.pkState(); } catch {}
 }
 function afterState(){
@@ -2748,6 +2749,54 @@ function afterState(){
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
 }
 function refreshSoon(){ if (EMBED) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(loadState, 400); }   // 右下角助理里：外面的页面刷新后会交过来
+
+// ================= 打开时先用上次的（#560） =================
+// 整体状态要经总控绕到家里那台取回来，网络慢时左边、中间一直是空的。每次取到就在这台浏览器存一份（上次开着的对话也存），
+// 下次打开先用它画出列表和对话（STALE），新的回来再原地换上。换上之前按钮、发送都不生效（staleGuard），只能切换、翻看。
+// 只管对话页（#/chats…），别的页面照旧等新的。退出、重新登录时清掉（hubserver 的登录页也清），换账号看不到上一个的
+const SNAP = "ccim.snap", SNAP_CHAT = "ccim.snapChat", SNAP_CHAT_MAX = 1500000;
+let STALE = null, snapT = null, snapChatSig = "", snapOff = false;
+function snapRead(){
+  try {
+    const s = JSON.parse(localStorage.getItem(SNAP) || "null");
+    if (!s || s.v !== 1 || !s.S || !Array.isArray(s.S.chats)) return null;
+    let chat = null; try { chat = JSON.parse(localStorage.getItem(SNAP_CHAT) || "null"); } catch {}
+    return {S: s.S, chat: chat && chat.id ? chat : null};
+  } catch { return null; }
+}
+function snapSoon(){ if (EMBED || DOC_ONLY || STALE) return; clearTimeout(snapT); snapT = setTimeout(snapWrite, 2000); }
+function snapWrite(){
+  clearTimeout(snapT); snapT = null;
+  if (EMBED || DOC_ONLY || STALE || snapOff || !S || !S.me) return;
+  try { localStorage.setItem(SNAP, JSON.stringify({v: 1, at: Date.now(), S})); } catch { snapClear(); return; }
+  const l = lastChat(), d = detail && l && l.id === detail.id ? detail : null;   // 只存下次打开会接着开的那个
+  const log = d && d.log || [], sig = d ? `${d.id}|${log.length}|${JSON.stringify(log[log.length - 1] || null).length}|${d.busy ? 1 : 0}|${d.title}` : "";
+  if (sig === snapChatSig) return;
+  snapChatSig = sig;
+  try {
+    const t = d && JSON.stringify(d);
+    t && t.length < SNAP_CHAT_MAX ? localStorage.setItem(SNAP_CHAT, t) : localStorage.removeItem(SNAP_CHAT);
+  } catch { try { localStorage.removeItem(SNAP_CHAT); } catch {} }
+}
+function snapClear(){ snapOff = true; clearTimeout(snapT); try { localStorage.removeItem(SNAP); localStorage.removeItem(SNAP_CHAT); } catch {} }
+addEventListener("pagehide", () => snapWrite());
+document.addEventListener("visibilitychange", () => { if (document.hidden) snapWrite(); });
+let staleTipAt = 0;
+function staleTip(){ if (Date.now() - staleTipAt > 2600) { staleTipAt = Date.now(); toast("正在更新，稍等一下"); } }
+// 换上新的之前：链接（切换对话、导航）和输入框照常，其他点按、右键菜单、回车发送都拦下
+function staleGuard(e){
+  if (!STALE) return;
+  if (e.type === "keydown") {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || !e.target.closest?.("#input, .composer textarea")) return;
+  } else if (e.type === "click") {
+    const el = e.target.closest?.("a[href], button, [onclick], input, textarea, label, summary, [role=button], [role=option], [role=menuitem]");
+    if (!el) return;
+    if (el.matches("a[href]") && !el.closest("button") && (el.closest(".rail") || !el.hasAttribute("onclick"))) return;
+    if (el.matches("textarea, input:not([type]), input[type=text], input[type=search]")) return;
+  }
+  e.preventDefault(); e.stopImmediatePropagation(); staleTip();
+}
+for (const t of ["click", "contextmenu", "keydown"]) document.addEventListener(t, staleGuard, true);
 
 // ================= 对话分页（#268） =================
 // 整体状态里只带「对话」列表最近 50 条和常驻的（在干活、等你处理、置顶、星标……）。更早的、已完成的按需取来放在 MORE.rows，
@@ -3357,6 +3406,14 @@ function renderChatEmpty(){
 let quietOpen = null;
 async function openChat(id){
   const quiet = quietOpen === id, t0 = performance.now(); quietOpen = null;
+  if (STALE) {                           // 刚打开、新的还没回来（#560）：上次存的就是它就先画出来，别的等新的回来再开
+    const d = STALE.chat;
+    if (d && d.id === id && current.view === "chats" && current.id === id) {
+      detail = d; chatRefs = []; rcptKey = id + "|"; toOff = null; chatRcpt = defaultRcpt();
+      drawChat();
+    } else $("#main").innerHTML = `<div class="loading">…</div>`;
+    return;
+  }
   if (!quiet) $("#main").innerHTML = `<div class="loading">…</div>`;
   const fresh = !detail || detail.id !== id;
   if (fresh) { chatRcpt = []; chatRefs = []; }
@@ -5280,7 +5337,7 @@ const schedTurn = c => !!c.sched_turn && c.attention !== "ask";
 const viewing = id => !!detail && detail.id === id && document.visibilityState === "visible"
   && ((current.view === "chats" && current.id === id) || (current.view === "agents" && current.sub === id) || schedOn(id) || opcOn(id));
 function seeOpen(){
-  if (!detail || !viewing(detail.id)) return;
+  if (STALE || !detail || !viewing(detail.id)) return;
   const c = chatById(detail.id);
   if (c && c.attention !== "ask" && (c.attention || c.unread)) markSeen(detail.id);
 }
@@ -7765,6 +7822,7 @@ async function saveOwner(){
   closeDialog(); renderAccounts();
 }
 async function logout(){
+  snapClear();
   await fetch("/auth/logout", {method: "POST", headers: {"X-CCIM": "1"}});
   location.href = "/";
 }
@@ -11415,7 +11473,24 @@ addEventListener("resize", () => listTip());
 (async () => {
   watchListScroll();
   try { if (localStorage.getItem("ccim.listOff") && !narrow()) document.querySelector(".app").classList.add("list-off"); } catch {}
-  try { await loadState(); } catch (e) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (!location.hash && !DOC_ONLY && !EMBED) history.replaceState(null, "", lastChat() && !narrow() ? "#/chats" : "#/chats/new");   // 上次开着的对话由 route 接着打开
+  const snap = !EMBED && !DOC_ONLY && /^#\/chats(\/|$)/.test(location.hash) ? snapRead() : null;   // 先用上次存的画出来（#560）
+  if (snap) {
+    try { S = snap.S; STALE = {chat: snap.chat}; busyBar(1); afterState(); route(); }
+    catch { STALE = null; busyBar(-1); snapClear(); snapOff = false; }
+  }
+  for (let i = 0; ; i++) {
+    try { await loadState(); break; }
+    catch (e) {
+      if (!STALE) { $("#main").innerHTML = `<div class="empty"><h2>连不上 ccim</h2><p>${esc(e.message)}</p></div>`; return; }
+      if (!i) toast("连不上 ccim，正在重试");   // 先留着上次的画面，过一会儿再取
+      await new Promise(r => setTimeout(r, Math.min(15000, 3000 * (i + 1))));
+    }
+  }
+  if (snap) {                            // 新的到了，原地换上：对话页不先变空、静静重开一次；列表已经跟着整体状态重画了
+    busyBar(-1);
+    if (current.view === "chats" && current.id && current.id !== "new") quietOpen = current.id;
+  }
   if (!EMBED) {                          // 右下角助理里嵌着的对话页：推送由外面的页面转过来（#294）
     connectEvents();
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSoon(); });   // 切回前台：后台时可能漏了推送

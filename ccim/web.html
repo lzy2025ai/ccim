@@ -2177,6 +2177,7 @@ const ICON = {
   pocketSm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5h7a5 5 0 0 1 5 5v2.5a5 5 0 0 1-5 5h-4.4l-3.3 2.6c-.4.3-.9 0-.9-.4v-2.5A5 5 0 0 1 3.5 12V9.5a5 5 0 0 1 5-5z"/><path d="M12 7.6Q12.5 10.25 15.15 10.75Q12.5 11.25 12 13.9Q11.5 11.25 8.85 10.75Q11.5 10.25 12 7.6z" fill="currentColor" stroke-width="1.1"/></svg>',
   compose:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5H7a2.5 2.5 0 0 0-2.5 2.5v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-5"/><path d="M17.6 3.9a1.8 1.8 0 0 1 2.5 2.5L13 13.5l-3.3.8.8-3.3z"/></svg>',
   collapse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
+  cpu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M10 10h4v4h-4zM9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   clip:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg>',
@@ -3594,7 +3595,7 @@ function canFork(i, r, src = "log"){
 }
 function userFiles(r){
   return r.files && r.files.length ? `<div class="files">${r.files.map(f => {
-    const src = f.path && fileUrl(detail.id, f.path);
+    const src = f.path ? fileUrl(detail.id, f.path) : f.url;   // 刚发、服务器那条还没到：用本地预览
     return src && isImg(f.name) ? `<a class="shot" href="${src}" target="_blank"><img src="${src}" alt="${esc(f.name)}"></a>`
       : src && isVideo(f.name) ? videoHtml(src, f.name)
       : src && isAudio(f.name) ? audioHtml(src, f.name)
@@ -4255,7 +4256,7 @@ async function sendChat(){
   $("#input").value = ""; saveDraft(); pendingFiles = []; saveFiles(); drawPending();
   if (detail.readonly) {                 // 接着别处的对话：转成网页里的新对话
     starting = true;
-    const src = detail, mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), sending: true, at: Date.now() / 1000};
+    const src = detail, mine = {type: "user", text: v, files: files.map(f => ({name: f.name, url: f.url})), sending: true, at: Date.now() / 1000};
     src.log.push(mine);                  // 新对话建好要一会儿：先把这条显示出来
     drawThread();
     const t = $("#thread"); if (t) t.scrollTop = t.scrollHeight;
@@ -4273,7 +4274,7 @@ async function sendChat(){
   }
   const refs = chatRefs, at = chatPeople, call = chatCall; chatRefs = []; chatPeople = []; chatCall = false; drawChatRcpt();
   const quiet = ((PV() || {}).quiet || detail.company) && !call;   // 多人群聊里没 @ Agent（#419）、公司大群里没 @ 人（#454）：只记下，Agent 不回答
-  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name})), refs, sending: true, at: Date.now() / 1000,
+  const mine = {type: "user", text: v, files: files.map(f => ({name: f.name, url: f.url})), refs, sending: true, at: Date.now() / 1000,
                 ...(PV() ? {person: {id: PV().me}} : {}), ...(at.length ? {at_people: at} : {})};
   detail.log.push(mine);                 // 先显示出来，服务器那条到了再换掉
   if (!detail.busy && !quiet) { detail.busy = true; detail.progress = {steps: [], text: "", guess: true}; }   // 还没开始干活，先显示思考中
@@ -5149,6 +5150,7 @@ function renderNewChat(){
   detail = null;
   if (!draft.machine || !machineOf(draft.machine)) draft.machine = S.me;
   if (sharedM(draft.machine) && !draft.dir) draft.dir = guestOf(draft.machine).root || "";   // 共享给我的电脑：默认在共享文件夹里
+  if (!basesOf(draft.machine).includes(draft.base)) { draft.base = "claude"; draft.model = draft.effort = ""; }
   ctxMachine = draft.machine;
   const d = draft, mi = (S.machine_info || {})[d.machine] || {}, px = d.base === "claude" ? "" : "codex_";
   const g = mi.global || S.global, dfl = mi.defaults || S.defaults;   // 按选的那台电脑自己的默认设置（服务器上打开时也是）
@@ -5158,6 +5160,7 @@ function renderNewChat(){
       <h2>新对话</h2>
       <div class="where-row">
         ${multi() ? `<button class="wchip" onclick="pickMachine(event)" title="在哪台电脑上干活">${ICON.monitor}<span>${esc((machineOf(d.machine) || {}).name || "")}</span>${ICON.down}</button>` : ""}
+        ${basesOf(d.machine).length > 1 ? `<button class="wchip" onclick="pickBase(event)" title="用哪个 Agent" aria-haspopup="listbox">${ICON.cpu}<span>${BASE[d.base]}</span>${ICON.down}</button>` : ""}
         <button class="wchip" onclick="pickDir(event)" title="工作目录">${ICON.folder}<span class="${d.dir ? "path" : ""}">${d.dir ? esc(dirLabel(d.dir, d.machine)) : "不选工作目录"}</span>${ICON.down}</button>
         ${d.base === "claude" && kbEnabled() ? `${(d.kbs || []).map(k => `<span class="wchip kbm">${ICON.kb}<span>${esc(kbName(k))}</span><button aria-label="取下" onclick="draft.kbs=draft.kbs.filter(x=>x!==${q(k)});renderNewChat()">${ICON.x}</button></span>`).join("")}
         <button class="wchip add" onclick="pickKbs(event,true)">${ICON.plus}<span>挂知识库</span></button>` : ""}
@@ -5170,7 +5173,6 @@ function renderNewChat(){
           <div class="bar"><div class="opts">
             <button class="icon-btn" aria-label="添加图片或文件" onclick="pickFiles(event)">${ICON.clip}</button>
             <input type="file" id="fileinput" multiple hidden onchange="addFiles(this.files);this.value=''">
-            <span class="seg mini">${basesOf(d.machine || S.me).map(b => `<button class="${d.base === b ? "on" : ""}" ${b === "codex" && !S.codex ? "disabled title='这台电脑上还没装 Codex'" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';renderNewChat()">${BASE[b]}</button>`).join("")}</span>
             ${d.base === "dsh" ? "" : `<button class="chip" onclick="draftPick(event,'model')">${esc(modelName(d.model || dm))}${d.model ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>
             <button class="chip" onclick="draftPick(event,'effort')">思考 ${esc(d.effort || de || "默认")}${d.effort ? "" : "<span class='dflt'>默认</span>"}${ICON.down}</button>`}
             <button class="chip" id="chip-at" onclick="chatAt(event)">@ Agent${ICON.down}</button></div>
@@ -5195,6 +5197,25 @@ function renderNewChat(){
 function draftPick(e, k){
   const opts = k === "model" ? modelOpts(draft.base, "跟随默认", draft.model) : effortOpts(draft.base, "跟随默认");
   pop(e, `<div class="sec">${k === "model" ? "模型" : "思考深度"}</div>` + optList(opts, draft[k], v => `draft.${k}=${q(v)};closePop();renderNewChat()`));
+}
+const BASE_DESC = {claude: "Anthropic 的编程 Agent", codex: "OpenAI 的编程 Agent，用你的 ChatGPT 额度", dsh: "用 DeepSeek 模型"};
+function pickBase(e){
+  const m = draft.machine || S.me, hasCodex = ((S.machine_info || {})[m] || {}).codex ?? S.codex;
+  const p = pop(e, `<div class="sec">用哪个 Agent</div>` + basesOf(m).map(b => {
+    const off = b === "codex" && !hasCodex;
+    return `<button role="option" aria-selected="${draft.base === b}" ${off ? "disabled" : ""} onclick="draft.base='${b}';draft.model=draft.effort='';closePop();renderNewChat()"><span><div>${BASE[b]}</div><div class="desc">${off ? "这台电脑上还没装" : BASE_DESC[b]}</div></span>${draft.base === b ? `<span class="ck">✓</span>` : ""}</button>`;
+  }).join(""), true);
+  popKeys(p);
+}
+function popKeys(p){   // 弹出列表能用键盘选：上下移动、回车选中（Esc 由全局关）
+  const bs = () => [...p.querySelectorAll("button:not([disabled])")];
+  (bs().find(b => b.getAttribute("aria-selected") === "true") || bs()[0])?.focus({focusVisible: false});
+  p.addEventListener("keydown", ev => {
+    if (!/Arrow(Up|Down)/.test(ev.key)) return;
+    ev.preventDefault();
+    const l = bs(), i = l.indexOf(document.activeElement);
+    l[(i + (ev.key === "ArrowDown" ? 1 : l.length - 1)) % l.length]?.focus();
+  });
 }
 function pickMachine(e){
   pop(e, `<div class="sec">在哪台电脑上</div>` + S.machines.map(m => `<button ${m.online ? "" : "disabled"} onclick="draft.machine=${q(m.id)};draft.dir='';draft.model='';closePop();renderNewChat()"><span><div>${esc(m.name)}${m.me ? "（这台）" : ""}</div>${m.online ? "" : `<div class="desc">离线</div>`}</span>${draft.machine === m.id ? `<span class="ck">✓</span>` : ""}</button>`).join(""), true);

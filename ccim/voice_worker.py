@@ -6,7 +6,8 @@
 
 依赖（sherpa-onnx、numpy）写在上面，uv 第一次跑时装进它自己的缓存，不进 ccim 的环境（体积大，大多数人用不到）。
 模型第一次用时下载。一行一个 JSON 和父进程说话：
-  收：{"id": ..., "path": 16kHz 单声道 int16 的裸 PCM 文件}
+  收：{"id": ..., "path": 16kHz 单声道 int16 的裸 PCM 文件}；边说边识别时多带 "sid"（同一次录音）和 "final"（最后一块），
+      只回这一块里说完的句子，没说完的留到下一块；{"drop": sid} 丢掉这次录音
   发：{"stage": "model", "pct": 0-100}（下载模型）、{"ready": true}、{"id": ..., "text": ...} 或 {"id": ..., "error": ...}
 """
 import json
@@ -100,35 +101,80 @@ def main():
     cfg.silero_vad.max_speech_duration = 20       # SenseVoice 一段不宜超过 30 秒
     cfg.sample_rate = RATE
     cfg.num_threads = 1
+    live = sherpa_onnx.VadModelConfig()          # 边说边识别：停顿短一点就断句，字出得勤
+    live.silero_vad.model = vad_model
+    live.silero_vad.threshold = 0.5
+    live.silero_vad.min_silence_duration = 0.3
+    live.silero_vad.min_speech_duration = 0.25
+    live.silero_vad.max_speech_duration = 15
+    live.sample_rate = RATE
+    live.num_threads = 1
     say(ready=True)
+
+    def decode(pieces):
+        streams = []
+        for p in pieces:
+            st = rec.create_stream()
+            st.accept_waveform(RATE, p)
+            streams.append(st)
+        if streams:
+            rec.decode_streams(streams)
+        return [s.result.text.strip() for s in streams if s.result.text.strip()]
+
+    def drain(vad, pieces):
+        while not vad.empty():
+            pieces.append(vad.front.samples)
+            vad.pop()
+
+    def feed(vad, pcm, rest):
+        """rest：上次没凑够一个窗口的尾巴。返回新的尾巴。"""
+        win = cfg.silero_vad.window_size
+        if len(rest):
+            pcm = np.concatenate([rest, pcm])
+        n = len(pcm) // win * win
+        for i in range(0, n, win):
+            vad.accept_waveform(pcm[i:i + win])
+        return pcm[n:]
+
+    sessions = {}      # 边说边识别（#556）：一次录音一个，各自的 VAD 和没凑够窗口的尾巴
 
     for line in sys.stdin:
         try:
             req = json.loads(line)
         except ValueError:
             continue
+        if req.get("drop"):
+            sessions.pop(req["drop"], None)
+            continue
         try:
             with open(req["path"], "rb") as f:
                 pcm = np.frombuffer(f.read(), dtype=np.int16).astype(np.float32) / 32768.0
+            sid = req.get("sid")
+            if sid:
+                if sid not in sessions:
+                    sessions[sid] = [sherpa_onnx.VoiceActivityDetector(live, buffer_size_in_seconds=60), np.zeros(0, np.float32)]
+                vad, rest = sessions[sid]
+                pieces = []
+                rest = feed(vad, pcm, rest)
+                drain(vad, pieces)
+                if req.get("final"):
+                    if len(rest):
+                        vad.accept_waveform(np.concatenate([rest, np.zeros(cfg.silero_vad.window_size - len(rest), np.float32)]))
+                    vad.flush()
+                    drain(vad, pieces)
+                    sessions.pop(sid, None)
+                else:
+                    sessions[sid][1] = rest
+                say(id=req.get("id"), text=join(decode(pieces)))
+                continue
             vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=max(30, len(pcm) // RATE + 10))
-            pieces, win = [], cfg.silero_vad.window_size
-            for i in range(0, len(pcm), win):
-                vad.accept_waveform(pcm[i:i + win])
-                while not vad.empty():
-                    pieces.append(vad.front.samples)
-                    vad.pop()
+            pieces = []
+            rest = feed(vad, pcm, np.zeros(0, np.float32))
+            if len(rest):
+                vad.accept_waveform(np.concatenate([rest, np.zeros(cfg.silero_vad.window_size - len(rest), np.float32)]))
             vad.flush()
-            while not vad.empty():
-                pieces.append(vad.front.samples)
-                vad.pop()
-            streams = []
-            for p in pieces:
-                st = rec.create_stream()
-                st.accept_waveform(RATE, p)
-                streams.append(st)
-            if streams:
-                rec.decode_streams(streams)
-            say(id=req.get("id"), text=join([s.result.text.strip() for s in streams if s.result.text.strip()]))
+            drain(vad, pieces)
+            say(id=req.get("id"), text=join(decode(pieces)))
         except Exception as e:
             say(id=req.get("id"), error=str(e))
 

@@ -8119,6 +8119,7 @@ async function devOverview(){
       ${v ? `<dt>ccim</dt><dd>${esc([v.kind === "dev" ? "开发版" : "", v.version, v.commit].filter(Boolean).join(" "))}</dd>` : ""}</dl></div>
     ${baseSect(basesInfo(mid))}
     ${permSect(d.perms, m.me)}
+    <div id="dev-remote"></div>
     <div class="sect"><h3>Agent</h3>${ags.length ? ags.map(a => `<a class="mem" href="#/agents/${encodeURIComponent(a.id)}" style="text-decoration:none;color:inherit">${seal(a, "sm", false)}
         <span class="t" style="flex:1;min-width:0"><span class="title">${esc(a.name)}</span><span class="sub">${BASE[a.base || "claude"]}</span></span>
         <span class="status ${a.busy ? "busy" : "on"}"><i></i>${a.busy ? esc(a.doing || "干活中") : "空闲"}</span></a>`).join("")
@@ -8128,6 +8129,32 @@ async function devOverview(){
         <span class="paths">${o.op === "rename" ? `${esc(devTilde(o.paths[0]))} → ${esc(o.paths[1].split("/").pop())}`
           : esc(o.paths.slice(0, 3).map(devTilde).join("、")) + (o.paths.length > 3 ? ` 等 ${o.paths.length} 项` : "")}</span></div>`).join("")}</div>`
       : `<p class="muted">在这里新建、改名、删除、清理的记录会列在这里。</p>`}</div>`;
+  devRemote();
+}
+// 别的电脑上的 Agent 在这台执行命令（#546）：开关 + 最近执行的
+async function devRemote(){
+  const mid = DEV.mid, m = machineOf(mid);
+  if (!m || m.shared || (S.machines || []).filter(x => !x.shared).length < 2) return;
+  let d;
+  try { d = await devApi("/api/remote"); } catch (e) { return; }   // 那台还是旧版本
+  if (devOn(mid) && $("#dev-remote")) $("#dev-remote").outerHTML = remoteSect(d);
+}
+function remoteSect(d){
+  const runs = (d.log || []).filter(r => r.kind === "exec");
+  return `<div class="sect" id="dev-remote"><h3>远程执行</h3>
+    <button class="sw-row mem" role="switch" aria-checked="${d.allow}" onclick="devRemoteSet(${!d.allow})" style="padding:8px 0;width:100%;text-align:left">
+      <span class="t" style="flex:1;min-width:0"><span class="title">允许其他电脑上的 Agent 在这台执行命令</span>
+        <span class="sub">打开后，你其他电脑上的 Agent 能在这台电脑上执行命令、取回文件</span></span>
+      <span class="sw${d.allow ? " on" : ""}"></span></button>
+    ${runs.length ? `<div class="ops" style="margin-top:8px">${runs.map(r => `<div class="op"><span class="when">${day(r.at)}</span>
+        <span class="what">${esc([r.from, r.by].filter(Boolean).join(" · ") || "其他电脑")}${r.killed ? `<span class="state-err"> · 超时停掉</span>` : r.code ? `<span class="state-err"> · 退出码 ${esc(r.code)}</span>` : ""}</span>
+        <span class="paths"><code>${esc(clip(r.command, 120))}</code></span></div>`).join("")}</div>` : ""}</div>`;
+}
+async function devRemoteSet(on){
+  const mid = DEV.mid;
+  if (on && !await confirmBox("允许远程执行", `打开后，你其他电脑上的 Agent 能在「${machineOf(mid).name}」上执行命令、读取和取回文件。`, "打开")) return;
+  const d = await act(() => devApi("/api/remote/allow", {on}), on ? "已打开" : "已关闭");
+  if (d && devOn(mid) && $("#dev-remote")) $("#dev-remote").outerHTML = remoteSect(d);
 }
 
 // ---- 文件 ----

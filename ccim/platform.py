@@ -27,6 +27,7 @@ from . import skills as skills_mod
 from . import board as board_mod
 from . import opc
 from . import space as space_mod
+from . import remote as remote_mod
 from . import diary as diary_mod
 from . import desk as desk_mod
 from .schedules import feed_hidden, is_quiet as schedules_quiet, listed
@@ -3103,7 +3104,7 @@ def _handler(pf):
             try:
                 body = fn() or {}
             except (Problem, console.Problem, projects_mod.Problem, schedules_mod.Problem, devices.Problem, skills_mod.Problem, opc.Problem, desk_mod.Problem, space_mod.Problem,
-                    ValueError) as e:
+                    remote_mod.Problem, ValueError) as e:
                 self._send(400, {"error": str(e)})
             except SystemExit as e:
                 self._send(400, {"error": str(e.code)})
@@ -3257,6 +3258,7 @@ def _handler(pf):
                 "/api/fs/ls": lambda: devices.ls(q.get("path") or "~", q.get("hidden") == "1"),
                 "/api/fs/scan": lambda: pf.cleaner.view(),
                 "/api/fs/perms": lambda: {"perms": devices.perms(fresh=True)},
+                "/api/remote": lambda: remote_mod.info(),
                 "/api/slash": lambda: {"skills": slash_skills(q, acct)},          # 输入 / 时列出的 Skill（#381）
                 "/api/models": lambda: models_now(),                             # 打开模型选择时取最新的（#499）
                 "/api/usage": lambda: {"text": pf.run(usage_report(q.get("dir") or "", q.get("base")), timeout=90)},   # 新对话页的 /usage
@@ -3439,6 +3441,8 @@ def _handler(pf):
                 "/api/channel/restart": lambda: console.restart(b("proc")),
                 "/api/channel/disconnect": lambda: console.disconnect(b("path"), b("kind"), b("proc")),
                 "/api/global": lambda: save_global(body),
+                "/api/remote/allow": lambda: remote_mod.set_allow(b("on")),   # 别的电脑能不能在这台执行命令（#546）
+                "/api/remote/exec": lambda: remote_mod.execute(body, self.headers),
                 "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
                 "/api/dev/check": lambda: pf._dev().check(b("prs") or []),
                 "/api/perf": lambda: (perf.web(b("items"), b("machine")), uselog.record(b("uses"), b("machine"))) and {},   # 功能使用跟着一起报（#533）

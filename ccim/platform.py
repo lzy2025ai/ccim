@@ -3465,6 +3465,7 @@ def _handler(pf):
                 "/api/global": lambda: save_global(body),
                 "/api/remote/allow": lambda: remote_mod.set_allow(b("on")),   # 别的电脑能不能在这台执行命令（#546）
                 "/api/remote/exec": lambda: remote_mod.execute(body, self.headers),
+                "/api/remote/job": lambda: remote_mod.job(body, self.headers),
                 "/api/dev/try": lambda: pf._dev().try_(str(b("what") or "main")),
                 "/api/dev/check": lambda: pf._dev().check(b("prs") or []),
                 "/api/perf": lambda: (perf.web(b("items"), b("machine")), uselog.record(b("uses"), b("machine"))) and {},   # 功能使用跟着一起报（#533）

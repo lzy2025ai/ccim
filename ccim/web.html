@@ -8230,7 +8230,9 @@ async function devRemote(){
   if (devOn(mid) && $("#dev-remote")) $("#dev-remote").outerHTML = remoteSect(d);
 }
 function remoteSect(d){
-  const runs = (d.log || []).filter(r => r.kind === "exec");
+  const runs = (d.log || []).filter(r => ["exec", "job", "upload", "job-stop"].includes(r.kind));
+  const what = r => r.kind === "upload" ? `上传 ${(r.paths || []).map(p => p.split("/").pop()).join("、")}`
+    : r.kind === "job-stop" ? `停掉后台任务 ${r.job}` : (r.kind === "job" ? "后台：" : "") + r.command;
   return `<div class="sect" id="dev-remote"><h3>远程执行</h3>
     <button class="sw-row mem" role="switch" aria-checked="${d.allow}" onclick="devRemoteSet(${!d.allow})" style="padding:8px 0;width:100%;text-align:left">
       <span class="t" style="flex:1;min-width:0"><span class="title">允许其他电脑上的 Agent 在这台执行命令</span>
@@ -8238,7 +8240,7 @@ function remoteSect(d){
       <span class="sw${d.allow ? " on" : ""}"></span></button>
     ${runs.length ? `<div class="ops" style="margin-top:8px">${runs.map(r => `<div class="op"><span class="when">${day(r.at)}</span>
         <span class="what">${esc([r.from, r.by].filter(Boolean).join(" · ") || "其他电脑")}${r.killed ? `<span class="state-err"> · 超时停掉</span>` : r.code ? `<span class="state-err"> · 退出码 ${esc(r.code)}</span>` : ""}</span>
-        <span class="paths"><code>${esc(clip(r.command, 120))}</code></span></div>`).join("")}</div>` : ""}</div>`;
+        <span class="paths"><code>${esc(clip(what(r), 120))}</code></span></div>`).join("")}</div>` : ""}</div>`;
 }
 async function devRemoteSet(on){
   const mid = DEV.mid;

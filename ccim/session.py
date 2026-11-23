@@ -1332,7 +1332,8 @@ def _agent_label(chat):
 
 
 def _remote_tools(chat, pf):
-    """在用户的另一台电脑上执行命令（#546）。不进免确认列表：和本机的 Bash 一样由权限判断决定要不要用户点头。"""
+    """在用户的另一台电脑上执行命令（#546）、上传文件和后台任务（#552）。
+    不进免确认列表：和本机的 Bash 一样由权限判断决定要不要用户点头。"""
     from . import remote
     try:
         names = "、".join(f"「{m['name']}」" for m in remote.targets(pf.peers))
@@ -1341,44 +1342,86 @@ def _remote_tools(chat, pf):
     if not names:                         # 只接了这一台电脑
         return []
 
+    async def call(m, path, body):
+        from .peers import Offline
+        body = dict(body, **{"from": pf.peers.me.get("name") or "", "by": _agent_label(chat)})
+        try:
+            status, _, data = await asyncio.to_thread(pf.peers.forward, m["id"], "POST", path,
+                                                      json.dumps(body).encode(), {"Content-Type": "application/json"})
+        except Offline:
+            return None, f"「{m['name']}」现在不在线，连不上。"
+        try:
+            r = json.loads(data or b"{}")
+        except ValueError:
+            r = {}
+        if status == 404:
+            return None, f"「{m['name']}」上的 ccim 版本较旧，还不能这样用。请用户在网页「设置 → 电脑」里升级那台电脑。"
+        if status != 200:
+            return None, r.get("error") or f"出错了（{status}）"
+        return r, None
+
+    def as_list(v):
+        return [str(x) for x in (v if isinstance(v, list) else [v] if v else [])]
+
     @tool("run_on_machine", "在用户的另一台电脑上执行一条 shell 命令，把输出原样拿回来；files 里写那台电脑上的文件路径，"
           "会一起取回本机（图片等可以直接用 Read 打开看）。用在要用另一台电脑上才有的东西时：那台登录的应用、装的命令行工具、"
           f"上面的文件。能用的电脑：{names}。命令不能交互（没有标准输入），默认最多跑 {remote.TIMEOUT} 秒，"
-          f"timeout 最大 {remote.MAX_TIMEOUT}。cwd 不写就是那台电脑的主目录。要在那台电脑的项目里改代码、长时间干活，"
+          f"timeout 最大 {remote.MAX_TIMEOUT}；更久的设 background 放到后台跑，再用 machine_job 查。"
+          "upload 写本机文件路径，执行命令前先传到那台电脑的 upload_to 文件夹（默认 cwd），同名的不覆盖，除非 overwrite；"
+          "只上传可以不写 command。cwd 不写就是那台电脑的主目录。要在那台电脑的项目里改代码、长时间干活，"
           "还是用 ask_agent 交给那台电脑上的 Agent。",
           {"type": "object", "properties": {
               "machine": {"type": "string", "description": "电脑名"},
               "command": {"type": "string", "description": "完整的 shell 命令"},
               "cwd": {"type": "string", "description": "在那台电脑上的工作目录，可以用 ~"},
               "timeout": {"type": "integer", "description": "最多跑多少秒"},
-              "files": {"type": "array", "items": {"type": "string"}, "description": "执行完要取回本机的文件（那台电脑上的路径，相对路径按 cwd 算）"}},
-           "required": ["machine", "command"]})
+              "files": {"type": "array", "items": {"type": "string"}, "description": "执行完要取回本机的文件（那台电脑上的路径，相对路径按 cwd 算）"},
+              "upload": {"type": "array", "items": {"type": "string"}, "description": "执行前要传到那台电脑上的本机文件"},
+              "upload_to": {"type": "string", "description": "上传到那台电脑上的哪个文件夹，默认 cwd"},
+              "overwrite": {"type": "boolean", "description": "那台电脑上有同名文件时覆盖"},
+              "background": {"type": "boolean", "description": "放到后台跑，马上返回任务编号"}},
+           "required": ["machine"]})
     async def run_on_machine(args):
-        from .peers import Offline
         m, why = remote.find(pf.peers, args.get("machine"))
         if not m:
             return _err(why)
-        files = args.get("files") or []
+        if not str(args.get("command") or "").strip() and not args.get("upload"):
+            return _err("command 是空的。")
+        try:
+            ups = await asyncio.to_thread(remote.pack, as_list(args.get("upload"))) if args.get("upload") else []
+        except (remote.Problem, OSError) as e:
+            return _err(str(e))
         body = {"command": args.get("command") or "", "cwd": args.get("cwd") or "", "timeout": args.get("timeout"),
-                "files": [str(f) for f in (files if isinstance(files, list) else [files])],
-                "from": pf.peers.me.get("name") or "", "by": _agent_label(chat)}
-        try:
-            status, _, data = await asyncio.to_thread(pf.peers.forward, m["id"], "POST", "/api/remote/exec",
-                                                      json.dumps(body).encode(), {"Content-Type": "application/json"})
-        except Offline:
-            return _err(f"「{m['name']}」现在不在线，连不上。")
-        try:
-            r = json.loads(data or b"{}")
-        except ValueError:
-            r = {}
-        if status == 404:
-            return _err(f"「{m['name']}」上的 ccim 版本较旧，还不能执行命令。请用户在网页「设置 → 电脑」里升级那台电脑。")
-        if status != 200:
-            return _err(r.get("error") or f"出错了（{status}）")
+                "files": as_list(args.get("files")), "upload": ups, "upload_to": args.get("upload_to") or "",
+                "overwrite": bool(args.get("overwrite")), "background": bool(args.get("background"))}
+        r, why = await call(m, "/api/remote/exec", body)
+        if why:
+            return _err(why)
+        if "job" in r:
+            return {"content": [{"type": "text", "text": remote.report_job(m["name"], r)}]}
         text = await asyncio.to_thread(remote.report, m["name"], r)
-        return {"content": [{"type": "text", "text": text}], **({} if r.get("code") == 0 else {"is_error": True})}
+        return {"content": [{"type": "text", "text": text}], **({} if r.get("code", 0) == 0 else {"is_error": True})}
 
-    return [run_on_machine]
+    @tool("machine_job", "查 run_on_machine 放到后台的任务：在跑还是跑完了、退出码、输出的最后一段；files 写那台电脑上的文件路径会取回本机；"
+          "stop 为 true 就停掉它。",
+          {"type": "object", "properties": {
+              "machine": {"type": "string", "description": "电脑名"},
+              "job": {"type": "string", "description": "任务编号"},
+              "stop": {"type": "boolean", "description": "停掉这个任务"},
+              "files": {"type": "array", "items": {"type": "string"}, "description": "要取回本机的文件（相对路径按任务的工作目录算）"}},
+           "required": ["machine", "job"]})
+    async def machine_job(args):
+        m, why = remote.find(pf.peers, args.get("machine"))
+        if not m:
+            return _err(why)
+        r, why = await call(m, "/api/remote/job", {"job": str(args.get("job") or "").strip(), "stop": bool(args.get("stop")),
+                                                   "files": as_list(args.get("files"))})
+        if why:
+            return _err(why)
+        text = await asyncio.to_thread(remote.report_job, m["name"], r)
+        return {"content": [{"type": "text", "text": text}]}
+
+    return [run_on_machine, machine_job]
 
 
 DIARY_TOOLS = ["mcp__ccim__diary_read", "mcp__ccim__diary_search"]   # 只读

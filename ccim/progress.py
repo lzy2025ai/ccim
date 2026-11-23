@@ -32,7 +32,11 @@ def describe_tool(name, inp):
     if name.startswith("mcp__ccim__run_as_admin"):
         return "用管理员权限执行：" + short(inp.get("command"), 60)
     if name.startswith("mcp__ccim__run_on_machine"):   # #546
-        return f"在「{inp.get('machine', '')}」上执行：" + short(inp.get("command"), 60)
+        if not inp.get("command"):
+            return f"传文件到「{inp.get('machine', '')}」：" + short("、".join(base(x) for x in inp.get("upload") or []), 60)
+        return f"在「{inp.get('machine', '')}」上{'后台' if inp.get('background') else ''}执行：" + short(inp.get("command"), 60)
+    if name.startswith("mcp__ccim__machine_job"):     # #552
+        return f"{'停掉' if inp.get('stop') else '查看'}「{inp.get('machine', '')}」上的后台任务 {inp.get('job', '')}"
     if name.startswith("mcp__ccim__ask_agent"):
         to = inp.get("to") or []
         return "请 " + "、".join("@" + str(x) for x in ([to] if isinstance(to, str) else to)) + " 帮忙：" + short(inp.get("text"), 40)
@@ -81,8 +85,13 @@ def describe_request(name, inp):
         return (f"用管理员权限（root）执行：{inp.get('reason')}\n" if inp.get("reason") else "用管理员权限（root）执行：\n") + \
             f"```\n{short(inp.get('command'), 1500)}\n```"
     if name.endswith("run_on_machine"):        # #546
-        files = inp.get("files") or []
-        return f"在「{inp.get('machine')}」上执行" + (f"（工作目录 `{inp.get('cwd')}`）" if inp.get("cwd") else "") + \
+        files, ups = inp.get("files") or [], inp.get("upload") or []
+        up = (f"把本机的 {'、'.join(map(str, ups))} 传到「{inp.get('machine')}」" + (f"的 `{inp.get('upload_to')}`" if inp.get("upload_to") else "")
+              + ("（覆盖同名文件）" if inp.get("overwrite") else "")) if ups else ""
+        if not inp.get("command"):
+            return up
+        up = up + "\n" if up else ""
+        return up + f"在「{inp.get('machine')}」上{'放到后台' if inp.get('background') else ''}执行" + (f"（工作目录 `{inp.get('cwd')}`）" if inp.get("cwd") else "") + \
             f"：\n```\n{short(inp.get('command'), 1500)}\n```" + (f"\n取回文件：{'、'.join(map(str, files))}" if files else "")
     if name.endswith("skill_delete"):
         return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"

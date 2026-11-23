@@ -9,7 +9,7 @@ Agent 调 run_on_machine：本机平台把请求经 peers.forward 交给那台�
 - 每次执行记一条到 remote-log.jsonl（哪台电脑、哪个 Agent、命令、退出码、多久），电脑页显示最近的。
 - 工具不进免确认列表：和本机的 Bash 一样由权限判断决定要不要用户点头。
 """
-import base64, json, logging, os, secrets, subprocess, threading, time
+import base64, json, logging, os, secrets, shutil, subprocess, threading, time
 
 from . import registry
 
@@ -133,7 +133,8 @@ def execute(body, headers):
     if not allowed():
         raise Problem("这台电脑没有打开「允许别的电脑执行命令」。请用户在网页「设置 → 电脑」里点开这台电脑，打开这个开关。")
     command = str(body.get("command") or "").strip()
-    if not command:
+    ups = body.get("upload") or []
+    if not command and not ups:
         raise Problem("command 是空的。")
     cwd = os.path.expanduser(str(body.get("cwd") or "~"))
     if not os.path.isdir(cwd):
@@ -143,6 +144,13 @@ def execute(body, headers):
     except (TypeError, ValueError):
         timeout = TIMEOUT
     who = {"from": str(body.get("from") or "")[:80], "by": str(body.get("by") or "")[:80]}
+    put = _put(ups, os.path.join(cwd, os.path.expanduser(str(body.get("upload_to") or ""))), bool(body.get("overwrite"))) if ups else []
+    if put:
+        _record(dict(who, kind="upload", paths=put))
+    if not command:
+        return {"uploaded": put, "cwd": cwd}
+    if body.get("background"):
+        return dict(_start_job(command, cwd, who), uploaded=put)
     start = time.time()
     p = subprocess.Popen([_shell(), "-lc", command], cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, start_new_session=True)
@@ -158,8 +166,140 @@ def execute(body, headers):
         out, err = p.communicate()
     took = round(time.time() - start, 1)
     _record(dict(who, kind="exec", command=command[:2000], cwd=cwd, code=p.returncode, killed=killed, took=took))
-    return {"code": p.returncode, "killed": killed, "timeout": timeout, "took": took, "cwd": cwd,
+    return {"code": p.returncode, "killed": killed, "timeout": timeout, "took": took, "cwd": cwd, "uploaded": put,
             "stdout": _tail(out), "stderr": _tail(err), "files": _files(body.get("files"), cwd)}
+
+
+def _put(ups, dest, overwrite):
+    """先把发来的文件写到这台电脑上（#552），返回写好的路径。有同名的、太大的整批不写，免得只写了一半。"""
+    if not isinstance(ups, list):
+        raise Problem("upload 要是文件列表。")
+    dest = os.path.realpath(dest)
+    if not os.path.isdir(dest):
+        raise Problem(f"这台电脑上没有这个文件夹：{dest}")
+    items, total = [], 0
+    for u in ups:
+        name = os.path.basename(str((u or {}).get("name") or ""))
+        if not name or name in (".", ".."):
+            raise Problem("上传的文件没有名字。")
+        try:
+            data = base64.b64decode((u or {}).get("data") or "", validate=True)
+        except ValueError:
+            raise Problem(f"{name} 的内容不对。")
+        total += len(data)
+        if len(data) > FILE_LIMIT or total > FILES_LIMIT:
+            raise Problem(f"上传的文件太大：一个最多 {FILE_LIMIT // 1024 // 1024} MB，一次合计最多 {FILES_LIMIT // 1024 // 1024} MB。")
+        path = os.path.join(dest, name)
+        if os.path.exists(path) and not overwrite:
+            raise Problem(f"那台电脑上已经有 {path}，没有上传。要覆盖就把 overwrite 设为 true。")
+        if os.path.isdir(path):
+            raise Problem(f"{path} 是个文件夹，没有上传。")
+        items.append((path, data))
+    for path, data in items:
+        tmp = path + ".ccim-up"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    return [p for p, _ in items]
+
+
+# ----- 后台任务（#552）：先返回任务编号，之后来查 -----
+
+JOB_KEEP = 50
+
+
+def _jobs():
+    return os.path.join(registry.HOME, "remote-jobs")
+
+
+def _job_dir(job):
+    job = str(job or "")
+    if not job or not all(c in "0123456789abcdef" for c in job):
+        raise Problem("没有这个任务。")
+    d = os.path.join(_jobs(), job)
+    if not os.path.isdir(d):
+        raise Problem("没有这个任务（可能是很早以前的，已经清掉了）。")
+    return d
+
+
+def _start_job(command, cwd, who):
+    root = _jobs()
+    os.makedirs(root, mode=0o700, exist_ok=True)
+    old = sorted((e for e in os.scandir(root) if e.is_dir()), key=lambda e: e.stat().st_mtime)
+    for e in old[:max(0, len(old) - JOB_KEEP + 1)]:
+        try:
+            shutil.rmtree(e.path)
+        except OSError:
+            pass
+    job = secrets.token_hex(4)
+    d = os.path.join(root, job)
+    os.makedirs(d, mode=0o700)
+    # 退出码由外面一层 sh 写到文件里：ccim 重启了任务照样跑完、查得到结果
+    wrap = '"$0" -lc "$1" > "$2/out.log" 2>&1; echo $? > "$2/code.tmp"; mv "$2/code.tmp" "$2/code"'
+    p = subprocess.Popen(["/bin/sh", "-c", wrap, _shell(), command, d], cwd=cwd, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    meta = dict(who, job=job, pid=p.pid, command=command[:2000], cwd=cwd, start=time.time())
+    with open(os.path.join(d, "meta.json"), "w") as f:
+        json.dump(meta, f, ensure_ascii=False)
+    _record(dict(who, kind="job", job=job, command=command[:2000], cwd=cwd))
+    threading.Thread(target=p.wait, daemon=True).start()      # 收掉子进程，不留僵尸
+    return {"job": job, "cwd": cwd}
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def job(body, headers):
+    """查后台任务：在跑还是跑完了、输出的最后一段、取回文件；stop 为真就停掉。"""
+    if not headers.get("X-From-Peer") or headers.get("X-Account"):
+        raise Problem("只接受你自己其他电脑上的 Agent。")
+    if not allowed():
+        raise Problem("这台电脑没有打开「允许别的电脑执行命令」。请用户在网页「设置 → 电脑」里点开这台电脑，打开这个开关。")
+    d = _job_dir(body.get("job"))
+    with open(os.path.join(d, "meta.json")) as f:
+        meta = json.load(f)
+    code_file = os.path.join(d, "code")
+    stopped = False
+    if body.get("stop") and not os.path.exists(code_file) and _alive(meta["pid"]):
+        try:
+            os.killpg(meta["pid"], 15)
+            stopped = True
+        except OSError:
+            pass
+        for _ in range(30):
+            if os.path.exists(code_file) or not _alive(meta["pid"]):
+                break
+            time.sleep(0.1)
+        _record({"kind": "job-stop", "job": meta["job"], "from": str(body.get("from") or "")[:80], "by": str(body.get("by") or "")[:80]})
+    code = None
+    try:
+        with open(code_file) as f:
+            code = int(f.read().strip() or "0")
+        end = os.path.getmtime(code_file)
+    except (OSError, ValueError):
+        end = None
+    running = code is None and _alive(meta["pid"])
+    try:
+        with open(os.path.join(d, "out.log"), "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - OUTPUT_LIMIT))
+            out = f.read()
+    except OSError:
+        out, size = b"", 0
+    text = out.decode(errors="replace")
+    if size > OUTPUT_LIMIT:
+        text = f"…（前面 {size - OUTPUT_LIMIT} 字节没显示）\n" + text
+    return {"job": meta["job"], "command": meta["command"], "cwd": meta["cwd"], "running": running, "code": code,
+            "stopped": stopped, "took": round((end or time.time()) - meta["start"], 1), "output": text,
+            "files": _files(body.get("files"), meta["cwd"])}
 
 
 # ----- 发起的一方（Agent 所在的电脑） -----
@@ -206,9 +346,49 @@ def save_files(files):
     return out
 
 
+def pack(paths):
+    """要上传的本机文件 → [{name, data}]（#552）。不对的抛 Problem。"""
+    out, total = [], 0
+    for raw in paths if isinstance(paths, list) else [paths]:
+        p = os.path.realpath(os.path.expanduser(str(raw)))
+        if not os.path.isfile(p):
+            raise Problem(f"本机没有这个文件：{p}")
+        size = os.path.getsize(p)
+        total += size
+        if size > FILE_LIMIT or total > FILES_LIMIT:
+            raise Problem(f"上传的文件太大：一个最多 {FILE_LIMIT // 1024 // 1024} MB，一次合计最多 {FILES_LIMIT // 1024 // 1024} MB。")
+        with open(p, "rb") as f:
+            out.append({"name": os.path.basename(p), "data": base64.b64encode(f.read()).decode()})
+    return out
+
+
+def _got(r):
+    got = save_files(r.get("files"))
+    return ["取回的文件（本机路径，可以直接打开）：\n" + "\n".join(
+        f"- {src} → {local}" if local else f"- {src}：{why}" for src, local, why in got)] if got else []
+
+
+def _uploaded(r):
+    return ["已上传到那台电脑：\n" + "\n".join(f"- {p}" for p in r["uploaded"])] if r.get("uploaded") else []
+
+
+def report_job(machine, r):
+    """后台任务的情况（#552）。"""
+    if "running" not in r:                    # 刚放到后台
+        return "\n\n".join(_uploaded(r) + [f"已在「{machine}」上放到后台跑，任务编号 {r['job']}，工作目录 {r.get('cwd')}。"
+                                            f"用 machine_job 查进度、看输出、取回文件。"])
+    state = ("在跑" if r["running"] else "已停掉" if r.get("stopped")
+             else f"跑完了，退出码 {r['code']}" if r.get("code") is not None else "已结束（没拿到退出码，可能被停掉了）")
+    lines = [f"「{machine}」上的任务 {r['job']}：{state}，用了 {r.get('took')} 秒\n命令：{r.get('command')}"]
+    lines.append("输出（标准输出和错误合在一起，只显示最后一段）：\n" + r["output"] if r.get("output") else "（还没有输出）")
+    return "\n\n".join(lines + _got(r))
+
+
 def report(machine, r):
     """给 Agent 看的结果。"""
-    lines = [f"在「{machine}」上执行完（{r.get('took')} 秒），" +
+    if "code" not in r:                       # 只上传、没执行
+        return "\n\n".join(_uploaded(r)) or "没有执行什么。"
+    lines = _uploaded(r) + [f"在「{machine}」上执行完（{r.get('took')} 秒），" +
              (f"超过 {r.get('timeout')} 秒没跑完，已停掉" if r.get("killed") else f"退出码 {r.get('code')}") + f"，工作目录 {r.get('cwd')}"]
     if r.get("stdout"):
         lines.append("标准输出：\n" + r["stdout"])
@@ -216,8 +396,4 @@ def report(machine, r):
         lines.append("标准错误：\n" + r["stderr"])
     if not r.get("stdout") and not r.get("stderr"):
         lines.append("（没有输出）")
-    got = save_files(r.get("files"))
-    if got:
-        lines.append("取回的文件（本机路径，可以直接打开）：\n" + "\n".join(
-            f"- {src} → {local}" if local else f"- {src}：{why}" for src, local, why in got))
-    return "\n\n".join(lines)
+    return "\n\n".join(lines + _got(r))

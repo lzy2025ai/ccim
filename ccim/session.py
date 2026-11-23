@@ -1312,11 +1312,73 @@ class Chat:
                 tools.append(_send_to_chat(chat, pf))   # 平台上的对话（私聊、群聊里被 @ 的、定时任务）：可以转交给同一个 Agent 的其他对话（#121）
             if _notify_kinds(chat):
                 tools.append(_notify_user(chat))      # Agent 接了飞书、微信：能主动给主人发一条（#463）
+            if pf and chat.chat_id in pf.chats() and not lent and not side and not chat._guest() \
+                    and not chat.b.entry.get("helper") and chat.agent == "claude" and getattr(pf, "peers", None):
+                tools += _remote_tools(chat, pf)     # 在用户的另一台电脑上执行命令、取回文件（#546）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
         else:                                 # 其他对话（不管哪个底座）：只能看平台 Skill，用户要求时把自己的某个 Skill 共享上去（#276）
             tools += _skill_tools(chat, full=False, sync=_can_sync(chat))
         return tools
+
+
+def _agent_label(chat):
+    from . import agents
+    aid = chat.b.entry.get("agent_id")
+    try:
+        return ((agents.get(aid) if aid else None) or {}).get("name") or os.path.basename(chat.b.path)
+    except Exception:
+        return os.path.basename(chat.b.path)
+
+
+def _remote_tools(chat, pf):
+    """在用户的另一台电脑上执行命令（#546）。不进免确认列表：和本机的 Bash 一样由权限判断决定要不要用户点头。"""
+    from . import remote
+    try:
+        names = "、".join(f"「{m['name']}」" for m in remote.targets(pf.peers))
+    except Exception:
+        names = ""
+    if not names:                         # 只接了这一台电脑
+        return []
+
+    @tool("run_on_machine", "在用户的另一台电脑上执行一条 shell 命令，把输出原样拿回来；files 里写那台电脑上的文件路径，"
+          "会一起取回本机（图片等可以直接用 Read 打开看）。用在要用另一台电脑上才有的东西时：那台登录的应用、装的命令行工具、"
+          f"上面的文件。能用的电脑：{names}。命令不能交互（没有标准输入），默认最多跑 {remote.TIMEOUT} 秒，"
+          f"timeout 最大 {remote.MAX_TIMEOUT}。cwd 不写就是那台电脑的主目录。要在那台电脑的项目里改代码、长时间干活，"
+          "还是用 ask_agent 交给那台电脑上的 Agent。",
+          {"type": "object", "properties": {
+              "machine": {"type": "string", "description": "电脑名"},
+              "command": {"type": "string", "description": "完整的 shell 命令"},
+              "cwd": {"type": "string", "description": "在那台电脑上的工作目录，可以用 ~"},
+              "timeout": {"type": "integer", "description": "最多跑多少秒"},
+              "files": {"type": "array", "items": {"type": "string"}, "description": "执行完要取回本机的文件（那台电脑上的路径，相对路径按 cwd 算）"}},
+           "required": ["machine", "command"]})
+    async def run_on_machine(args):
+        from .peers import Offline
+        m, why = remote.find(pf.peers, args.get("machine"))
+        if not m:
+            return _err(why)
+        files = args.get("files") or []
+        body = {"command": args.get("command") or "", "cwd": args.get("cwd") or "", "timeout": args.get("timeout"),
+                "files": [str(f) for f in (files if isinstance(files, list) else [files])],
+                "from": pf.peers.me.get("name") or "", "by": _agent_label(chat)}
+        try:
+            status, _, data = await asyncio.to_thread(pf.peers.forward, m["id"], "POST", "/api/remote/exec",
+                                                      json.dumps(body).encode(), {"Content-Type": "application/json"})
+        except Offline:
+            return _err(f"「{m['name']}」现在不在线，连不上。")
+        try:
+            r = json.loads(data or b"{}")
+        except ValueError:
+            r = {}
+        if status == 404:
+            return _err(f"「{m['name']}」上的 ccim 版本较旧，还不能执行命令。请用户在网页「设置 → 电脑」里升级那台电脑。")
+        if status != 200:
+            return _err(r.get("error") or f"出错了（{status}）")
+        text = await asyncio.to_thread(remote.report, m["name"], r)
+        return {"content": [{"type": "text", "text": text}], **({} if r.get("code") == 0 else {"is_error": True})}
+
+    return [run_on_machine]
 
 
 DIARY_TOOLS = ["mcp__ccim__diary_read", "mcp__ccim__diary_search"]   # 只读

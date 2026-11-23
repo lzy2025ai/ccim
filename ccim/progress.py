@@ -31,6 +31,8 @@ def describe_tool(name, inp):
         return None
     if name.startswith("mcp__ccim__run_as_admin"):
         return "用管理员权限执行：" + short(inp.get("command"), 60)
+    if name.startswith("mcp__ccim__run_on_machine"):   # #546
+        return f"在「{inp.get('machine', '')}」上执行：" + short(inp.get("command"), 60)
     if name.startswith("mcp__ccim__ask_agent"):
         to = inp.get("to") or []
         return "请 " + "、".join("@" + str(x) for x in ([to] if isinstance(to, str) else to)) + " 帮忙：" + short(inp.get("text"), 40)
@@ -78,6 +80,10 @@ def describe_request(name, inp):
     if name == "run_as_admin":                 # Linux 上用管理员权限执行（#522）
         return (f"用管理员权限（root）执行：{inp.get('reason')}\n" if inp.get("reason") else "用管理员权限（root）执行：\n") + \
             f"```\n{short(inp.get('command'), 1500)}\n```"
+    if name.endswith("run_on_machine"):        # #546
+        files = inp.get("files") or []
+        return f"在「{inp.get('machine')}」上执行" + (f"（工作目录 `{inp.get('cwd')}`）" if inp.get("cwd") else "") + \
+            f"：\n```\n{short(inp.get('command'), 1500)}\n```" + (f"\n取回文件：{'、'.join(map(str, files))}" if files else "")
     if name.endswith("skill_delete"):
         return f"删除平台 Skill「{inp.get('name')}」，所有电脑上都删掉"
     if name.endswith("share_skill_to_platform"):

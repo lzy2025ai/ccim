@@ -7942,7 +7942,7 @@ function drawSpNotes() {
   if (!SV.prefs) {
     $("#main").innerHTML = `<div class="sv-panel">${svEmpty(SV.prefsError || "正在读取笔记设置…",
       SV.prefsError ? '<button class="btn" onclick="svRetry()">再试一次</button>' : "")}</div>`;
-    if (!SV.prefsError && !SV.request) svPreferences().then(() => { if (svOn()) drawSpNotes(); });
+    if (!SV.prefsError) svPreferences().then(() => { if (svOn()) drawSpNotes(); });
     return;
   }
   const v = SV.prefs.recent[0];

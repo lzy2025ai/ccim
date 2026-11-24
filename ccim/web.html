@@ -937,6 +937,11 @@ a.org-n:hover{border-color:var(--qing);box-shadow:0 0 0 3px color-mix(in srgb,va
 .voice-rec i{width:8px;height:8px;border-radius:50%;background:var(--zhu);animation:voicePulse 1.2s ease-in-out infinite}
 .voice-rec:hover{filter:brightness(.97)}
 @keyframes voicePulse{50%{opacity:.35}}
+.voice-rec .wave{display:inline-flex;align-items:center;gap:2px;height:16px}
+.voice-rec .wave b{width:3px;height:3px;border-radius:2px;background:var(--zhu);transition:height .08s}
+.voice-seg{display:inline-flex;height:30px;padding:2px;border-radius:15px;background:var(--sunk)}
+.voice-seg button{border:0;background:none;padding:0 10px;border-radius:13px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.voice-seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .voice-undo{height:30px;padding:0 10px;border:0;border-radius:15px;background:var(--sunk);color:var(--ink-2);font-size:12.5px;white-space:nowrap;cursor:pointer}
 .voice-busy{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .ctx-ring{width:28px;height:32px;display:grid;place-items:center;border-radius:7px;flex:none;color:var(--qing)}
@@ -4907,13 +4912,17 @@ function micInner(target){
   const keep = `onmousedown="event.preventDefault()"`;
   if (v && v.on === "rec") {
     const t = Math.floor((Date.now() - v.t0) / 1000);
-    return `<button class="voice-rec" ${keep} aria-label="说完了" title="说完了（Esc 取消）" onclick="voiceStop(true)"><i></i>${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}</button>`
+    return (v.prep ? `<span class="voice-busy">${esc(v.prep)}</span>` : "")
+      + `<button class="voice-rec" ${keep} aria-label="说完了" title="说完了（Esc 取消）" onclick="voiceStop(true)"><span class="wave">${"<b></b>".repeat(5)}</span>${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}</button>`
       + `<button class="icon-btn" ${keep} aria-label="取消录音" title="取消" onclick="voiceCancel()">${ICON.x}</button>`;
   }
   if (v) return `<span class="voice-busy"><span class="spin"></span>${esc(v.note || "正在转成文字")}</span>`;
-  const undo = voiceUndo && voiceUndo.target === target
-    ? `<button class="voice-undo" ${keep} onclick="voiceRestore()">恢复原话</button>` : "";
-  return undo + `<button class="icon-btn" ${keep} aria-label="语音输入" title="语音输入" onclick="voiceStart(${q(target)})">${ICON.mic}</button>`;
+  const u = voiceUndo && voiceUndo.target === target ? voiceUndo : null;
+  const ctl = !u ? "" : u.polished === undefined
+    ? `<button class="voice-undo" ${keep} title="去掉口头禅、修正错字、加标点" onclick="voicePolishNow()">整理</button>`
+    : `<span class="voice-seg">${[["raw", "原话"], ["polished", "整理后"]].map(([k, l]) =>
+        `<button ${keep} class="${u.cur === k ? "on" : ""}" aria-pressed="${u.cur === k}" onclick="voiceSwap('${k}')">${l}</button>`).join("")}</span>`;
+  return ctl + `<button class="icon-btn" ${keep} aria-label="语音输入" title="语音输入" onclick="voiceStart(${q(target)})">${ICON.mic}</button>`;
 }
 function drawMic(){ document.querySelectorAll("[data-mic]").forEach(el => { el.innerHTML = micInner(el.dataset.mic); }); }
 const voiceHere = v => draftKeys.input === v.k && document.getElementById(v.target);   // 还在开始录音的那个输入框
@@ -4924,8 +4933,8 @@ function voicePut(v, text){
   if (!ta) {                                         // 切走了：草稿里已经有放过的那段（打字时存的），接着往后补
     if (!v.k) return false;
     const old = localStorage.getItem(DRAFT + v.k) || "";
-    const add = text.startsWith(v.shown) ? text.slice(v.shown.length) : (old && text ? "\n" : "") + text;
-    try { if (add) localStorage.setItem(DRAFT + v.k, old + add); } catch {}
+    const next = v.shown && old.endsWith(v.shown) ? old.slice(0, old.length - v.shown.length) + text : old + (old && text ? "\n" : "") + text;
+    try { if (next !== old) localStorage.setItem(DRAFT + v.k, next); } catch {}
     v.shown = text; v.away = true;
     return true;
   }
@@ -4964,7 +4973,7 @@ async function voiceStart(target){
   const lead = ta && at > 0 && !/\s$/.test(ta.value.slice(0, at)) && /[A-Za-z0-9]$/.test(ta.value.slice(0, at)) ? " " : "";
   VOICE = {on: "wait", target, ctx, machine: ctxMachine, k: draftKeys.input, note: "正在打开麦克风",
            sid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), seq: 0, queue: [], parts: [], buf: [], bufN: 0,
-           raw: "", lead, at, len: end - at, shown: ta ? ta.value.slice(at, end) : "", bad: false};
+           raw: "", part: "", levels: [], lead, at, len: end - at, shown: ta ? ta.value.slice(at, end) : "", bad: false};
   drawMic();
   fetch("/api/voice/prepare", {method: "POST", headers: {"X-CCIM": "1", ...remoteHeader(ctxMachine)}, body: "{}"}).catch(() => {});
   let stream;
@@ -4976,9 +4985,19 @@ async function voiceStart(target){
   if (VOICE.ctx !== ctx) { stream.getTracks().forEach(t => t.stop()); ctx.close(); return; }   // 等权限时取消了
   await ctx.resume().catch(() => {});
   const v = VOICE, src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
-  node.onaudioprocess = e => { const c = new Float32Array(e.inputBuffer.getChannelData(0)); v.buf.push(c); v.bufN += c.length; };
+  node.onaudioprocess = e => {
+    const c = new Float32Array(e.inputBuffer.getChannelData(0)); v.buf.push(c); v.bufN += c.length;
+    let sq = 0; for (let i = 0; i < c.length; i += 4) sq += c[i] * c[i];
+    v.levels.push(Math.min(1, Math.sqrt(sq / (c.length / 4)) * 6)); if (v.levels.length > 5) v.levels.shift();
+  };
   src.connect(node); node.connect(ctx.destination);
   Object.assign(v, {on: "rec", stream, src, node, t0: Date.now()});
+  const wave = () => {                          // 按钮上的波形跟着音量跳：一眼看出麦克风收到了声音（#578）
+    if (VOICE !== v || v.on !== "rec") return;
+    document.querySelectorAll(`[data-mic="${v.target}"] .wave b`).forEach((b, i) => { b.style.height = (3 + 13 * (v.levels[i] || 0)) + "px"; });
+    requestAnimationFrame(wave);
+  };
+  requestAnimationFrame(wave);
   const ph = ta && ta.placeholder;
   if (ta) {
     v.ph = ph; ta.placeholder = "正在听…";
@@ -5008,13 +5027,19 @@ async function voiceSend(v){
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || "识别失败");
       if (d.preparing) {
+        if (v.on === "rec") { v.prep = d.preparing.text || "正在准备语音识别"; drawMic(); }
         if (!c.final) { v.queue.shift(); continue; }          // 识别还没准备好：电脑上先存着，后面的块一起补上
         if (v.on === "busy") { v.note = d.preparing.text || "正在准备语音识别"; drawMic(); }
         continue;                                              // 最后一块：等它准备好
       }
       v.queue.shift();
+      if (v.prep) { v.prep = ""; drawMic(); }
       if (d.lost) v.bad = true;
-      if (d.text && !v.dropped) { v.raw = voiceJoin(v.raw, d.text); voicePut(v, v.lead + v.raw); }
+      if (d.text) v.raw = voiceJoin(v.raw, d.text);
+      // 这句还没说完（partial）也先放进去，断句后换成准确的（#578）；切走了的只放说完的
+      const part = voiceHere(v) && !c.final ? d.partial || "" : "";
+      if ((d.text || part || v.part) && !v.dropped) voicePut(v, v.lead + voiceJoin(v.raw, part));
+      v.part = part;
     } catch (e) {
       if (v.dropped) return;
       if (!c.final) { v.bad = true; await new Promise(r => setTimeout(r, 1000)); if (v.on === "rec") continue; }
@@ -5075,35 +5100,69 @@ async function voiceKeepAudio(v){   // 没转成文字：录音作为附件放�
   toast(v.raw ? "部分没转出来，录音也放进了附件" : "没转成文字，录音放进了附件，可以直接发出去");
   await addFiles([file], v.k, v.machine);
 }
+const voiceAuto = () => localStorage.getItem("ccim.voicePolish") !== "off";   // 说完自动整理（#578），记在这个浏览器里
+function voiceContext(){   // 当前对话最近几条，整理时用来认专有名词
+  const log = (detail && detail.log) || [];
+  return log.filter(r => (r.type === "user" || r.type === "answer") && r.text).slice(-6).map(r => r.text.slice(-600)).join("\n---\n");
+}
+const voiceLight = () => !!(PV() && (PV().people || []).some(x => x.state === "in"));   // 有真人在的群聊：只修错字
 async function voicePolish(v){
-  const raw = v.lead + v.raw;
   if (v.raw.length < 6 || v.gone) return;
-  v.note = "正在整理"; drawMic();
-  let text;
-  try {
-    const r = await fetch("/api/voice/polish", {method: "POST", headers: {"X-CCIM": "1", ...remoteHeader(v.machine)}, body: JSON.stringify({text: v.raw})});
-    const d = await r.json().catch(() => ({}));
-    if (r.ok) text = d.text;
-  } catch {}
-  if (!text || text === v.raw) return;
   const ta = voiceHere(v);
-  if (ta && ta.value.slice(v.at, v.at + v.len) !== v.shown) return;   // 整理的时候改过这段：不动
-  if (!ta) {
+  if (!voiceAuto()) {                                 // 不自动整理：放原话，旁边给个「整理」
+    if (ta) voiceUndo = {target: v.target, k: v.k, raw: v.lead + v.raw, at: v.at, cur: "raw", machine: v.machine, ctx: voiceContext(), light: voiceLight()};
+    return;
+  }
+  v.note = "正在整理"; drawMic();
+  const text = await voiceAsk(v.raw, v.machine, voiceContext(), voiceLight());
+  if (!text || text === v.raw) return;
+  const raw = v.lead + v.raw, now = voiceHere(v);
+  if (now && now.value.slice(v.at, v.at + v.len) !== v.shown) return;   // 整理的时候改过这段：不动
+  if (!now) {
     const old = v.away && localStorage.getItem(DRAFT + v.k) || "";
     if (old.endsWith(raw)) try { localStorage.setItem(DRAFT + v.k, old.slice(0, old.length - raw.length) + v.lead + text); } catch {}
     return;
   }
   voicePut(v, v.lead + text);
-  voiceUndo = {target: v.target, k: v.k, raw, text: v.lead + text, at: v.at};
-  setTimeout(() => { if (voiceUndo && voiceUndo.text === v.lead + text) { voiceUndo = null; drawMic(); } }, 20000);
+  voiceUndo = {target: v.target, k: v.k, raw, polished: v.lead + text, at: v.at, cur: "polished"};
 }
-function voiceRestore(){
-  const u = voiceUndo; voiceUndo = null; drawMic();
-  const ta = document.getElementById(u?.target); if (!u || !ta || draftKeys.input !== u.k) return;
-  const i = ta.value.slice(u.at, u.at + u.text.length) === u.text ? u.at : ta.value.indexOf(u.text);
-  if (i < 0) return toast("文字已经改过了");
-  ta.value = ta.value.slice(0, i) + u.raw + ta.value.slice(i + u.text.length);
-  ta.focus(); ta.setSelectionRange(i + u.raw.length, i + u.raw.length);
+async function voiceAsk(text, machine, context, light){
+  try {
+    const r = await fetch("/api/voice/polish", {method: "POST", headers: {"X-CCIM": "1", ...remoteHeader(machine)}, body: JSON.stringify({text, context, light})});
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) return d.text;
+  } catch {}
+  return "";
+}
+function voiceFind(u, ta){   // 输入框里现在那一版（原话或整理后）在哪，找不到返回 -1
+  const t = u[u.cur];
+  return ta.value.slice(u.at, u.at + t.length) === t ? u.at : ta.value.indexOf(t);
+}
+function voiceReplace(u, ta, i, text){
+  const old = u[u.cur];
+  ta.value = ta.value.slice(0, i) + text + ta.value.slice(i + old.length);
+  ta.focus(); ta.setSelectionRange(i + text.length, i + text.length);
+  u.at = i;
+}
+function voiceSwap(k){   // 原话 ⇄ 整理后
+  const u = voiceUndo, ta = document.getElementById(u?.target);
+  if (!u || u.cur === k || !ta || draftKeys.input !== u.k) return;
+  const i = voiceFind(u, ta);
+  if (i < 0) { voiceUndo = null; drawMic(); return toast("文字已经改过了"); }
+  voiceReplace(u, ta, i, u[k]); u.cur = k; drawMic();
+  ta.dispatchEvent(new Event("input", {bubbles: true}));
+}
+async function voicePolishNow(){   // 没开自动整理时，点「整理」
+  const u = voiceUndo; if (!u || u.busy) return;
+  u.busy = true; VOICE = {on: "busy", target: u.target, note: "正在整理"}; drawMic();
+  const lead = u.raw.match(/^\s*/)[0], raw = u.raw.slice(lead.length);
+  const text = await voiceAsk(raw, u.machine, u.ctx, u.light);
+  VOICE = {on: ""}; u.busy = false;
+  const ta = document.getElementById(u.target), i = ta && draftKeys.input === u.k ? voiceFind(u, ta) : -1;
+  if (voiceUndo !== u || i < 0) { voiceUndo = null; drawMic(); return; }
+  if (!text || text === raw) { voiceUndo = null; drawMic(); return toast("没有要改的"); }
+  u.polished = lead + text;
+  voiceReplace(u, ta, i, u.polished); u.cur = "polished"; drawMic();
   ta.dispatchEvent(new Event("input", {bubbles: true}));
 }
 function voiceConcat(parts){
@@ -5130,8 +5189,9 @@ function voicePcm(chunks, rate){
   return out.buffer;
 }
 addEventListener("keydown", e => { if (e.key === "Escape" && (VOICE.on === "rec" || VOICE.on === "wait") && !document.querySelector(".scrim")) { e.preventDefault(); e.stopImmediatePropagation(); voiceCancel(); } }, true);
-document.addEventListener("input", e => {    // 「恢复原话」：整理过的那段被改掉、发出去了就收起来
-  if (voiceUndo && e.target.id === voiceUndo.target && !e.target.value.includes(voiceUndo.text)) { voiceUndo = null; drawMic(); }
+document.addEventListener("input", e => {    // 「原话 / 整理后」：那段被改掉、发出去了就收起来
+  const u = voiceUndo;
+  if (u && !u.busy && e.target.id === u.target && !e.target.value.includes(u[u.cur])) { voiceUndo = null; drawMic(); }
 });
 addEventListener("hashchange", () => {
   if (VOICE.on === "wait") voiceCancel();
@@ -8685,8 +8745,14 @@ function renderChatSettings(){
       ${dyOn ? `<div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:220px">日记样式</div>
         <div class="seg" role="radiogroup">${DIARY_STYLES.map(([v, l]) => `<button role="radio" aria-checked="${dyStyle === v}" class="${dyStyle === v ? "on" : ""}" ${ro ? "disabled" : `onclick="setDiaryStyle('${v}')"`}>${l}</button>`).join("")}</div></div>` : ""}
       ${ro ? "" : `<div id="diary-where">${diaryWhere()}</div>`}
-    </div>${ro ? "" : sideSettings() + pocketSettings()}</div></div>`;
+    </div>${ro ? "" : sideSettings() + pocketSettings()}${voiceSettings()}</div></div>`;
   if (!ro) loadDiaryWhere();
+}
+function voiceSettings(){   // 语音输入说完后自动整理（#578），记在这个浏览器里
+  const on = voiceAuto();
+  return `<div class="sect"><h3>语音输入</h3>
+    <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px">说完后自动整理<div class="muted" style="font-size:12.5px">去掉口头禅、修正错字、加标点；关掉后可以在输入框旁点「整理」</div></div>
+      <div class="seg" role="radiogroup">${[[false, "关"], [true, "开"]].map(([v, l]) => `<button role="radio" aria-checked="${on === v}" class="${on === v ? "on" : ""}" onclick="localStorage.setItem('ccim.voicePolish','${v ? "on" : "off"}');renderChatSettings()">${l}</button>`).join("")}</div></div></div>`;
 }
 function sideSettings(){   // 侧边对话同时开着的标签最多几个（#476），存在 S.me 那台
   const n = sideMax();

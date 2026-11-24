@@ -40,7 +40,7 @@ GUEST_POST = {
     "/api/chat/side",
     "/api/pocket",
     "/api/space/todo/add", "/api/space/todo/set", "/api/space/todo/del", "/api/space/todo/restore", "/api/space/todo/chat",
-    "/api/space/note/save", "/api/space/note/del",
+    "/api/space/note/save", "/api/space/note/del", "/api/space/vault",
     "/api/ws/paths", "/api/ws/new", "/api/ws/rename", "/api/ws/move", "/api/ws/trash", "/api/ws/restore", "/api/ws/put",
 }
 

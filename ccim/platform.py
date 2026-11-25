@@ -590,6 +590,8 @@ class Platform:
         self.peer_runs = {}                   # 编号 → (子对话, 开始时刻)：问结果时带上这期间打开的应用（#337）
         self.background = set()
         self.works = set()                    # 侧边对话里派出去、还在做的（work 卡片的 id，#290）
+        self.inbox = {}                       # 交回主对话、还没轮到处理的结果（#586）：对话 → [(记录, 交给 Agent 的话, 层数)]
+        self.held = {}                        # 交回来但没自动处理的（来回太多层）：对话 → [交给 Agent 的话]，用户下次开口时带上
         from .projects import Projects
         from .schedules import Schedules
         from .mentions import Mentions
@@ -1397,6 +1399,8 @@ class Platform:
         if not m.get("mention_of"):           # 刚才 @ 的 Agent 的回答，原来的助手还没看过：带上；群聊说明改过也带上
             from . import groups
             text = groups.note_prefix(self, cid, groups.MAIN) + self.mentions.unseen(cid) + self._doc_edits(cid) + text if text else text
+        if text and self.held.get(cid):       # 交回来但没自动处理的（#586）
+            text = self.held_note(cid) + text
         if m.get("mention_of") and text:       # 群成员的子对话里直接说的：外层对话里还在 Word 开着的文档也要说（#515）
             text = self.doc_word_note(cid) + text
         if m.get("mention_of") and text:       # 群成员的子对话里用户直接说的（#409）：群里看不到，让它知道这部分只有它有
@@ -1851,39 +1855,52 @@ class Platform:
         where = "、".join(k for k in ("侧边对话", "分叉出去的对话") if k in kinds)
         return f"（平台自动附上的：用户在{where}里让别的会话动过这些，改之前先看一眼最新内容）\n" + "\n".join(parts) + "\n\n——\n\n"
 
-    def work(self, src, text, title=None):
-        """被 @ 的 Agent 要动手：新开一个它自己的对话去做。侧边对话里被 @ 的（#290）、群聊里被 @ 的成员（#359）都走这里。
-        卡片（type=work）记在 @ 它的那个对话里（侧边对话 / 群聊），做完由它在那里汇报（Mentions.report），文件附在汇报下面。
+    def work(self, src, text, title=None, agent=None, depth=1):
+        """新开一个对话去动手。被 @ 的 Agent（侧边对话里的 #290、群聊里的成员 #359），和主对话并行派活（#586）都走这里。
+        被 @ 的：卡片（type=work）记在 @ 它的那个对话里（侧边对话 / 群聊），做完由它在那里汇报（Mentions.report），文件附在汇报下面。
+        主对话：卡片记在主对话里，做完 hand_back 交回主对话，主对话的 Agent 自动接着处理。agent 是交给哪个 Agent（默认自己）。
         新对话的 dispatched_from 指主对话（侧边对话的主对话 / 群聊本身），同一个 Agent 时挂在它下面。返回 (新对话, 标题)。在主循环里调。"""
         from .session import Task
         sm = self.meta(src)
-        outer = sm.get("mention_of")          # @ 它的对话：卡片、汇报都在这里
-        od = self.chats().get(outer) or {}
-        aid = sm.get("agent")
-        side = bool(sm.get("side_at"))
-        of = od.get("side_of") if side else outer
-        if not outer or not od or not of or sm.get("remote_project") or not agents.get(aid) or (od.get("side_of") and not side):
-            raise Problem("这里不能新开对话去做。")
+        main = not sm.get("mention_of")
+        if main:                              # 主对话派活（#586）
+            outer = of = src
+            od = sm
+            side = False
+            aid = agent or sm.get("agent")
+            a = agents.get(aid) if aid else None
+            if not sm.get("agent") or sm.get("remote_project") or sm.get("dispatched_from") or not a or a.get("staff"):
+                raise Problem("这里不能新开对话去做。" if not a or not sm.get("agent") else "只能交给这台电脑上的 Agent。")
+        else:
+            outer = sm.get("mention_of")      # @ 它的对话：卡片、汇报都在这里
+            od = self.chats().get(outer) or {}
+            aid = sm.get("agent")
+            side = bool(sm.get("side_at"))
+            of = od.get("side_of") if side else outer
+            if not outer or not od or not of or sm.get("remote_project") or not agents.get(aid) or (od.get("side_of") and not side):
+                raise Problem("这里不能新开对话去做。")
         om = self.chats().get(of) or {}
         title = " ".join((title or text).split())[:30] or "新任务"
         cid = self.new_chat(agent=aid, title=title, account=od.get("account"),
                             parent=of if om.get("agent") == aid else None)
         chats = self.chats()
         chats[cid]["dispatched_from"] = of
-        if sm.get("cwd") and sm["cwd"] != agents.cwd(agents.get(aid)):   # 在主对话的目录里看的，就在那里做
-            chats[cid]["cwd"] = sm["cwd"]
+        cwd = sm.get("cwd") if aid == sm.get("agent") else None
+        if cwd and cwd != agents.cwd(agents.get(aid)):   # 在主对话的目录里看的，就在那里做
+            chats[cid]["cwd"] = cwd
         self.store.write(chats)
-        main = (self.chat_view(of).get("title") if of in self.chats() else None) or "另一个对话"
-        place = "侧边对话" if side else "群聊"
+        main_title = (self.chat_view(of).get("title") if of in self.chats() else None) or "另一个对话"
+        place = "这个对话" if main else "侧边对话" if side else "群聊"
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
                                                                "files": [], "from_chat": of, "dispatch": True}))
         wid = "k-" + uuid.uuid4().hex[:10]
-        card = {"type": "work", "id": wid, "chat": cid, "agent": aid, "title": title, "state": "working"}
+        card = {"type": "work", "id": wid, "chat": cid, "agent": aid, "title": title, "state": "working", **({"task": True} if main else {})}
         self.channel._emit(outer, self.channel.logs.append(outer, card))
-        head = (f"[用户在对话「{main}」的侧边对话里请你动手做这件事" if side else f"[你在群聊「{main}」里被 @，要动手做这件事") + \
-            f"，新开这个对话来做；做完把结果写清楚（做了什么、怎么验收），会发回{place}] "
+        head = (f"[对话「{main_title}」派你做这件事，新开这个对话来做；做完把结果写清楚（做了什么、怎么验收、要对方做什么），会自动交回那个对话] " if main
+                else (f"[用户在对话「{main_title}」的侧边对话里请你动手做这件事" if side else f"[你在群聊「{main_title}」里被 @，要动手做这件事") +
+                f"，新开这个对话来做；做完把结果写清楚（做了什么、怎么验收），会发回{place}] ")
         task = Task(head + text)
-        task.depth = 1
+        task.depth = depth if main else 1
         start = time.time()
         self._bridge(cid).chat(cid, "p2p").submit(task)
         self.works.add(wid)
@@ -1906,9 +1923,16 @@ class Platform:
             if outer not in self.chats():
                 return
             self.channel._emit(outer, self.channel.logs.append(outer, dict(card, state=state, done_at=time.time())))
-            # 卡片只管进度；结果由它自己回去汇报，之后接着问也接得上
             how = {"done": "做完了", "error": "出错了", "stopped": "被停下了"}.get(state, "没做完")
             att = "".join(f"\n- {f['name']}（{f['path']}）" for f in files)
+            if main:                          # 交回主对话（#586）：署名、能点过去，主对话的 Agent 接着处理
+                rec = {"type": "report", "chat": cid, "agent": aid, "title": title, "task": True, "state": state,
+                       "text": text[:20000], **({"files": files, "files_chat": cid} if files else {})}
+                name = (agents.get(aid) or {}).get("name") or "Agent"
+                self.hand_back(outer, rec, f"【任务「{title}」（{name}）{how}】那边最后的回答" + ("和发出的文件" if files else "") + "：\n\n"
+                               + (text[:8000] or "（没有回答）") + (f"\n\n发出的文件：{att}" if files else ""), task.depth)
+                return
+            # 卡片只管进度；结果由它自己回去汇报，之后接着问也接得上
             self.mentions.report(outer, aid, (
                 f"[你在{place}里新开的对话「{title}」{how}。下面是那边最后的回答" + ("和发出的文件" if files else "") +
                 f"。请在{place}里用你的口吻向用户汇报：结果是什么、改了什么、PR 或文件在哪、要用户做什么（验收、拍板）。"
@@ -1920,6 +1944,103 @@ class Platform:
         self.background.add(t)
         t.add_done_callback(self.background.discard)
         return cid, title
+
+    # ----- 交回主对话（#586） -----
+
+    HAND_BACK = ("[{what}。能自己判断的直接接着做（验收、合并、派下一件……），需要用户拍板的在回答里问清楚，然后停下来等用户回复。"
+                 "回答简短，不用复述全文；用户想看细节可以点进那个对话。]\n\n")
+
+    def hand_back(self, cid, rec, prompt, depth):
+        """派出去的任务（或别的对话用 from_chat 发来的话）交回对话 cid：记一条 type=report（署名、Markdown、能点过去），
+        对话的 Agent 跑一轮接着处理。它正在跑就排在这一轮后面；排着还没轮到时又到的，合成一轮（记录也在那一轮开始时才写，
+        排在它的回答前面）。depth 是这是第几层自动接力，超过 MAX_DEPTH 只记下不自动跑，等用户开口时带上，免得两边来回停不下来。
+        在主循环里调。"""
+        from .session import MAX_DEPTH, Task
+        if cid not in self.chats():
+            return False
+        rec = dict(rec, id=rec.get("id") or "t-" + uuid.uuid4().hex[:10])
+        if depth > MAX_DEPTH:
+            self.channel._emit(cid, self.channel.logs.append(cid, rec))
+            self.held.setdefault(cid, []).append(prompt)
+            self._touch(cid)
+            return True
+        pend = self.inbox.get(cid)
+        if pend and not pend["task"].future.done():   # 已经有一轮排着了，到时一起处理
+            pend["items"].append((rec, prompt, depth))
+            return True
+        task = Task("")
+        task.depth = depth
+        pend = self.inbox[cid] = {"task": task, "items": [(rec, prompt, depth)]}
+
+        def take():
+            if self.inbox.get(cid) is pend:
+                self.inbox.pop(cid)
+            items, pend["items"] = pend["items"], []
+            for r, _, _ in items:
+                self.channel._emit(cid, self.channel.logs.append(cid, r))
+            self._touch(cid)
+            return items
+
+        def on_start():
+            items = take()
+            if not items:
+                return None
+            what = ("派出去的任务交回了结果" if all(r.get("task") for r, _, _ in items) else "别的对话发来了消息") \
+                if len(items) == 1 else f"有 {len(items)} 件交回来了，一起处理"
+            t = Task(self.HAND_BACK.format(what=what) + "\n\n——\n\n".join(p for _, p, _ in items))
+            t.depth = max(d for _, _, d in items)
+            t.future = task.future
+            t.handed = True
+            return t
+
+        def dropped(_):                       # 排着时被停下了（/stop 清掉队列）：记录照样写上，等用户开口时带上
+            items = take() if pend["items"] else []
+            if items:
+                self.held.setdefault(cid, []).extend(p for _, p, _ in items)
+        task.on_start = on_start
+        task.future.add_done_callback(dropped)
+        self._bridge(cid).chat(cid, "p2p").submit(task)
+        return True
+
+    def _touch(self, cid):
+        chats = self.chats()
+        if cid in chats:
+            chats[cid]["last_active"] = registry.now()
+            self.store.write(chats)
+
+    def held_note(self, cid):
+        """交回来但没自动处理的：用户下次开口时带上（只带一次）。"""
+        items = self.held.pop(cid, [])
+        if not items:
+            return ""
+        return "（这期间别的对话交回来这些，还没处理过，和用户这次说的一起看）\n\n" + "\n\n——\n\n".join(items) + "\n\n——\n\n"
+
+    def message_from(self, src, cid, text, acct=None):
+        """/api/chat/send 带 from_chat（#586）：对话 src 里的 Agent 往对话 cid 发的话。显示成它署名的消息（不当成用户说的），
+        cid 的 Agent 接着处理（规则和任务交回一样）。src 要在这台电脑上、这个账号看得到。在主循环里调。"""
+        chats = self.chats()
+        sm, tm = chats.get(src), chats.get(cid)
+        if not sm or src == cid or sm.get("remote_project") or sm.get("helper"):
+            raise Problem("找不到发消息的那个对话，或者它不在这台电脑上。")
+        if not share.chat_filter(self, acct)(src, sm.get("agent")):
+            raise Problem("找不到发消息的那个对话，或者它不在这台电脑上。")
+        if not tm:
+            raise Problem("找不到这个对话。")
+        if not (text or "").strip():
+            raise Problem("消息是空的。")
+        if not self.channel.logs.read(cid) and not tm.get("dispatched_from"):   # 刚开、还没说过话的：算从那边派来的，挂在它下面
+            tm["dispatched_from"] = src
+            self.store.write(chats)
+        c = self._bridge(src).chats.get(src)
+        cur = (getattr(c, "current", None) or (None,))[0] if c else None
+        depth = getattr(cur, "depth", 0) + 1
+        is_task = sm.get("dispatched_from") == cid
+        title = (self.chat_view(src).get("title") if src in chats else None) or "另一个对话"
+        aid = sm.get("agent")
+        name = (agents.get(aid) or {}).get("name") if aid else None
+        rec = {"type": "report", "chat": src, "agent": aid, "title": title, "text": text.strip()[:20000], **({"task": True} if is_task else {})}
+        who = f"{'任务' if is_task else '对话'}「{title}」" + (f"（{name}）" if name else "")
+        return self.hand_back(cid, rec, f"【{who}发来】\n\n{text.strip()[:8000]}", depth)
 
     # ----- 对话之间转交（#121） -----
 
@@ -3470,7 +3591,7 @@ def _handler(pf):
                 "/api/chat/new": lambda: _new_reply(pf, pf.call(pf.new_chat, agent=b("agent"), temp=b("temp"), account=acct)),
                 "/api/appagent/bind": lambda: app_bind(b("app"), b("agent"), acct),
                 "/api/chat/send": lambda: send(pf, b("id"), b("text") or "", b("files") or [], b("ctx"), b("refs"), acct,
-                                               bool(b("call")), b("at") or []),
+                                               bool(b("call")), b("at") or [], b("from_chat")),
                 "/api/helper": lambda: {"id": pf.run(pf.helper_chat(b("kind"), bool(b("fresh")), acct))},
                 "/api/desk/reassign": lambda: {"card": pf.run(desk_mod.reassign(pf, b("desk") or "", b("card") or "",
                                                                                 b("agent") or None, b("chat") or None))},
@@ -3814,7 +3935,15 @@ def my_schedules(pf, acct):
     return [sid for sid, s in pf.schedules.all().items() if share.of_schedule(pf, dict(s, id=sid)) == acct]
 
 
-def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=()):
+def send(pf, cid, text, files, ctx=None, refs=None, acct=None, call=False, at=(), from_chat=None):
+    if from_chat:                             # 别的对话里的 Agent 发来的（#586）：署名显示，不当成用户说的
+        if not isinstance(from_chat, str):
+            raise Problem("from_chat 要写对话编号。")
+        if files:
+            raise Problem("带 from_chat 时只能发文字。")
+        check_message(pf, text, [])
+        pf.call(pf.message_from, from_chat, cid, text, acct)
+        return {"ok": True, "chat": cid}
     check_message(pf, text, files)
     d = diary_of(pf, cid, text, files, acct)
     if d:
@@ -3960,9 +4089,12 @@ def agent_view(pf, aid, detail=False):
 def _agent_chats(pf, aid):
     """Agent 页左边列表里它的网页对话。它当群主的群聊就是它自己的对话；只是成员的（含别的电脑上的群、侧边对话里被 @ 的）
     列它在里面的子对话（#409，取代 #359 的列群聊本身），标题用群名（自己改过名的用自己的），带 member。"""
-    rows = []
-    for cid, c in pf.chats().items():
+    rows, chats = [], pf.chats()
+    for cid, c in chats.items():
         if c.get("agent") != aid:
+            if c.get("dispatched_from") and (chats.get(c["dispatched_from"]) or {}).get("agent") == aid \
+                    and not (chats.get(c["dispatched_from"]) or {}).get("mention_of"):
+                rows.append(dict(pf.chat_view(cid), task_of=aid))   # 它派给别的 Agent 的任务对话（#586）：挂在派出的对话下面
             continue
         v = pf.chat_view(cid)
         if c.get("mention_of"):               # 子对话自己改过名的用自己的名字（#409 第二轮），没改过的用群名

@@ -546,6 +546,17 @@ class Chat:
                     await self._disconnect()
                 self.stopping = self.skipping = self.limited = False
                 self.outcome = None
+                if getattr(prompt, "on_start", None):   # 交回主对话的结果（#586）：轮到它时才把这期间到的几件拼成一轮
+                    try:
+                        nxt = prompt.on_start()
+                    except Exception:
+                        log.exception("[%s] 准备这一轮出错", self.chat_id[-6:])
+                        nxt = None
+                    if nxt is None:
+                        prompt.finish("stopped")
+                        await self._unreact(react)
+                        continue
+                    prompt = nxt
                 self.current = (prompt, reply_to)
                 self.b.caffeinate.acquire()
                 try:
@@ -1703,42 +1714,82 @@ def _ask_agent(chat, pf):
     return [platform_agents, ask_agent]
 
 
+MAX_WORKS = 5                                 # start_work 一轮最多新开几个对话（#586：主对话并行派活，以前是 2 个）
+
+
 def _can_work(chat, pf):
-    """本机上被 @ 的子对话（侧边对话里的、群聊里的）能用 start_work；别的电脑派来的不行（卡片要跨电脑更新，先不做）。"""
+    """能用 start_work 的：本机上被 @ 的子对话（侧边对话里的、群聊里的），和本机的主对话（#586）。
+    别的电脑派来的不行（卡片要跨电脑更新，先不做）；派出去的任务对话自己不能再派，免得一层套一层。"""
     if not pf or chat.b.entry.get("helper"):
         return False
     m = pf.chats().get(chat.chat_id) or {}
+    if _main_work(chat, pf):
+        return True
     outer = pf.chats().get(m.get("mention_of")) if m.get("mention_of") else None
     if not outer or m.get("remote_project") or not m.get("agent"):
         return False
     return bool(m.get("side_at")) == bool(outer.get("side_of")) and bool(m.get("side_at")) == bool(chat.b.entry.get("side_at"))
 
 
+def _main_work(chat, pf):
+    """本机的主对话（#586）：和 Agent 的私聊、它当群主的群聊；不是侧边对话、子对话、项目、任务对话，不是访客的。"""
+    m = pf.chats().get(chat.chat_id) or {}
+    if chat.chat_type != "p2p" or not m.get("agent") or chat.b.entry.get("side") or chat.b.entry.get("side_at"):
+        return False
+    if any(m.get(k) for k in ("mention_of", "side_of", "side_at", "remote_project", "project", "dispatched_from", "company", "staff")):
+        return False
+    return not (guest_of(chat.b) or chat.b.entry.get("lent") or chat._guest())
+
+
 def _start_work(chat, pf):
-    """被 @ 的 Agent 新开自己的对话去动手（侧边对话 #290、群聊 #359）。"""
+    """新开对话去动手：被 @ 的 Agent（侧边对话 #290、群聊 #359），主对话并行派活（#586）。"""
+    main = _main_work(chat, pf)
     side = bool(chat.b.entry.get("side_at"))
-    place = "侧边栏" if side else "群里"
-    when = ("这里只能看不能改，需要动手、或用户让你去做时用。" if side else
-            "要花时间动手的事（改代码、提 PR、跑长任务）用它，不占着群里；一两句能答完的直接在群里答。")
-    @tool("start_work", "新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。" + when +
-          "先在回答里用一句话说要新开对话去做，再调用。text 写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里；"
-          f"title 是新对话的标题，十几个字。{place}会有一张卡片，用户点进去能看进度；做完后结果会作为一条新消息交给你，由你在{place}向用户汇报。",
-          {"type": "object", "properties": {"text": {"type": "string", "description": "交代给新对话的话"},
-                                             "title": {"type": "string", "description": "新对话的标题"}},
-           "required": ["text"]})
+    place = "这个对话" if main else "侧边栏" if side else "群里"
+    if main:
+        desc = ("新开一个对话去做一件能独立做完的事（改代码、提 PR、跑长任务），可以一次派几件同时做。"
+                "这里会有一张卡片，用户点进去能看进度；那边做完后结果会自动交回这个对话，交给你接着处理（验收、合并、派下一件，或请用户拍板）。"
+                f"一轮最多派 {MAX_WORKS} 件。先在回答里用一句话说要派哪几件，再调用。text 写清楚来龙去脉、要做什么、在哪做（工作目录、分支）、"
+                "做完怎么算好、交回时要写清楚什么（比如 PR 编号、验收要点），新对话看不到这里；title 是新对话的标题，十几个字；"
+                "agent 是交给哪个 Agent（platform_agents 列出的名字），不写就是你自己。")
+    else:
+        when = ("这里只能看不能改，需要动手、或用户让你去做时用。" if side else
+                "要花时间动手的事（改代码、提 PR、跑长任务）用它，不占着群里；一两句能答完的直接在群里答。")
+        desc = ("新开一个你自己的对话去动手做事（改文件、提交、提 PR、跑长任务）。" + when +
+                "先在回答里用一句话说要新开对话去做，再调用。text 写清楚来龙去脉、要做什么、做完怎么算好，新对话看不到这里；"
+                f"title 是新对话的标题，十几个字。{place}会有一张卡片，用户点进去能看进度；做完后结果会作为一条新消息交给你，由你在{place}向用户汇报。")
+    props = {"text": {"type": "string", "description": "交代给新对话的话"},
+             "title": {"type": "string", "description": "新对话的标题"}}
+    if main:
+        props["agent"] = {"type": "string", "description": "交给哪个 Agent，不写就是你自己"}
+
+    @tool("start_work", desc, {"type": "object", "properties": props, "required": ["text"]})
     async def start_work(args):
         text = (args.get("text") or "").strip()
         if not text:
             return _err("text 要写。")
         t = chat.turn
-        if t and getattr(t, "works", 0) >= 2:
-            return _err("这一轮已经新开过对话了，先收尾。")
+        if t and getattr(t, "works", 0) >= MAX_WORKS:
+            return _err(f"这一轮已经新开了 {MAX_WORKS} 个对话，先收尾，等结果交回来再派。")
+        cur = (getattr(chat, "current", None) or (None,))[0]
+        depth = getattr(cur, "depth", 0)
+        if main and depth >= MAX_DEPTH:
+            return _err("这件事已经往下派过两轮了，不能再派。把现在的结果和要用户决定的事写在回答里，等用户回复。")
+        aid = None
+        if main and (args.get("agent") or "").strip():
+            n = args["agent"].strip().lstrip("@")
+            hit = [r for r in _visible_agents(pf, None) if n in (r[0], r[1])] if n not in SELF_NAMES else []
+            if n not in SELF_NAMES and not hit:
+                return _err(f"找不到「{n}」，用 platform_agents 看有哪些 Agent。")
+            aid = hit[0][0] if hit else None
         try:
-            cid, title = pf.work(chat.chat_id, text, args.get("title"))
+            cid, title = pf.work(chat.chat_id, text, args.get("title"), agent=aid, depth=depth + 1)
         except Exception as e:
             return _err(str(e))
         if t:
             t.works = getattr(t, "works", 0) + 1
+        if main:
+            return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，这里有它的卡片。做完后结果会自动交回这个对话，到时你接着处理；这一轮把派了哪几件简短告诉用户就好。"}]}
         return {"content": [{"type": "text", "text": f"已新开对话「{title}」去做，用户在{place}的卡片里能看到进度。做完后结果会交给你汇报，这一轮用一两句话收尾就好。"}]}
     return start_work
 

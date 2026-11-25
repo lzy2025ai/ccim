@@ -2726,7 +2726,11 @@ function afterState(){
   }
   if (current.view === "agents" && current.id && current.id !== "new" && agentSide && agentSide.id === current.id) {
     const aid = current.id;                // 300 毫秒后可能已经跳到别的对话（#/chats/<对话>），要记下现在是哪个 Agent
-    clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(aid), 300);   // 它的对话列表（含终端里的）单独拉
+    // 它的对话列表（含终端里的）单独拉。只在它的对话有变化、或上次拉过一分钟以上时拉（#584）：
+    // 以前每次整体状态回来都拉，几个 Agent 在干活时推送不断，开着的页面一多后台就算不过来
+    if (agentSig(aid) !== agentSide.sig || Date.now() - (agentSide.at || 0) > 60000) {
+      clearTimeout(window._asT); window._asT = setTimeout(() => fetchAgentSide(aid), 300);
+    }
   }
   drawKbNav();
   seeOpen(); renderList(); drawAttention();
@@ -7291,8 +7295,15 @@ async function saveAgentName(id){
 
 // ---- 进入 Agent：左边是它的小卡片和对话列表，右边是对话 ----
 let agentSide = null;             // {id, chats}
+// Agent 页要不要重拉的依据（#584）：整体状态里这个 Agent 和它的对话，变了的才算
+function agentSig(id){
+  const a = (S.agents || []).find(x => x.id === id) || {};
+  return JSON.stringify([a.busy, a.last_active, a.name, (S.chats || []).filter(c => c.agent === id)
+    .map(c => [c.id, c.title, c.busy, c.last_active, c.attention, c.unread, c.archived, c.pin, c.brief])]);
+}
 async function fetchAgentSide(id){
-  try { const a = await api(`/api/agent?id=${encodeURIComponent(id)}`); agentSide = {id, a, chats: a.chats || []}; }
+  const sig = agentSig(id), at = Date.now();
+  try { const a = await api(`/api/agent?id=${encodeURIComponent(id)}`); agentSide = {id, a, chats: a.chats || [], sig, at}; }
   catch (e) { agentSide = {id, error: e.message, chats: []}; }
   if (current.view === "agents" && current.id === id) renderAgentSide();
 }

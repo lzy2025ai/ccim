@@ -2671,11 +2671,7 @@ class Platform:
                              "title": t, "last_active": c.get("last_active"),
                              "busy": bool(c.get("busy")), "base": base, "external": True, "dir": a.get("dir")})
             if terminal and base == "claude":
-                try:
-                    from claude_agent_sdk import list_sessions
-                    sessions = list_sessions(directory=cwd, limit=40)
-                except Exception:
-                    sessions = []
+                sessions = _terminal_sessions(cwd)
                 start, shown = len(rows), 0
                 for x in sessions:
                     if x.session_id in mine:
@@ -3147,6 +3143,36 @@ def _uncursor(c):
     return at, cid
 
 
+_TERM = {}                                    # 工作目录 → (目录里会话文件的样子, 取的时刻, 结果)
+_TERM_LOCK = threading.Lock()
+TERM_TTL = 60
+
+
+def _terminal_sessions(cwd):
+    """这个目录在终端、桌面端开过的 Claude Code 对话（最近 40 个）。每次都把会话文件读一遍要零点几秒，
+    Agent 页又取得很勤（#584）：没有新会话就用上次的，最多一分钟重取一次。只看有没有新文件、不看修改时间：
+    网页对话在干活时它的会话文件每秒都在变，看修改时间就等于不缓存；终端对话的最近活跃时间因此最多晚一分钟。"""
+    try:
+        from claude_agent_sdk._internal.sessions import _canonicalize_path, _find_project_dir
+        d = _find_project_dir(_canonicalize_path(cwd))
+        sig = frozenset(e.name for e in os.scandir(d) if e.name.endswith(".jsonl")) if d else frozenset()
+    except Exception:
+        sig = None                            # 认不出文件夹：不用缓存
+    with _TERM_LOCK:
+        hit = _TERM.get(cwd)
+    if sig is not None and hit and hit[0] == sig and time.time() - hit[1] < TERM_TTL:
+        return hit[2]
+    try:
+        from claude_agent_sdk import list_sessions
+        out = list_sessions(directory=cwd, limit=40)
+    except Exception:
+        out = []
+    if sig is not None:
+        with _TERM_LOCK:
+            _TERM[cwd] = (sig, time.time(), out)
+    return out
+
+
 def _defaults(base, path):
     """不传参数时 Claude Code / Codex 自己会用的模型和思考深度（只用于显示）。"""
     if base == "codex":
@@ -3347,7 +3373,8 @@ def _handler(pf):
                 "/api/chats": lambda: pf.chat_page(acct, q.get("before") or None, q.get("archived") == "1", (q.get("q") or "").strip(),
                                                    q.get("groups") == "1"),
                 # 只读：在请求线程里算，不占主循环（#335）；一个个对话取视图要反复读 state.json，快照里只读一遍
-                "/api/board": lambda: _snapshot(lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None, acct)),
+                "/api/board": lambda: pf.shared.get(("board", acct), lambda: _snapshot(   # 几个页面差不多同时来要的只算一次（#584）
+                    lambda: board_mod.stats(pf, lambda cid: share.owner_map(pf).get(cid) == acct, acct is None, acct))),
                 "/api/board/day": lambda: _snapshot(lambda: board_mod.day(pf, q.get("d", ""), lambda cid: share.owner_map(pf).get(cid) == acct, acct is None, acct)),
                 # 复盘的 Agent 在别的电脑上时，从这台拉这几天的材料（#364）
                 "/api/board/material": lambda: _snapshot(lambda: {"material": board_mod.material(

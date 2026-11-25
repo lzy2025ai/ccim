@@ -99,48 +99,110 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-grp{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin:16px 0 8px}
 .sp-grp::after{content:"";flex:1;height:1px;background:var(--line)}
 /* 设备上的笔记文件树与实时预览 */
-.sv-panel{height:100%;min-height:0;display:grid;grid-template-columns:minmax(200px,255px) minmax(0,1fr);background:var(--panel)}
+.sv-panel{
+  --sv-sidebar:color-mix(in srgb,var(--paper) 44%,var(--panel));
+  --sv-desk:color-mix(in srgb,var(--paper) 76%,var(--panel));
+  --sv-hover:color-mix(in srgb,var(--panel) 52%,var(--sunk));
+  --sv-selected:color-mix(in srgb,var(--qing-soft) 88%,var(--panel));
+  height:100%;min-height:0;display:grid;grid-template-columns:minmax(212px,254px) minmax(0,1fr);background:var(--sv-desk);
+}
 .sv-panel:not(:has(.sv-left)){grid-template-columns:1fr}
-.sv-left{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--paper);border-right:1px solid var(--line)}
-.sv-vault{padding:12px 10px 8px}
-.sv-switch{width:100%;justify-content:space-between;text-align:left;min-height:43px}
-.sv-switch span{min-width:0;flex:1}
+.sv-left{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--sv-sidebar);border-right:1px solid var(--line)}
+.sv-vault{padding:16px 12px 12px}
+.sv-switch.btn{
+  width:100%;min-height:58px;gap:9px;padding:8px 9px;border:1px solid color-mix(in srgb,var(--qing) 15%,var(--line));
+  border-radius:12px;background:linear-gradient(120deg,var(--sv-selected),var(--panel) 85%);text-align:left;color:var(--ink);box-shadow:0 1px 2px #1d222b0a;
+}
+.sv-switch.btn:hover{border-color:var(--qing)}
+.sv-vault-icon,.sv-edit-icon{display:grid;place-items:center;flex:none;color:var(--qing);background:var(--qing-soft);border-radius:9px}
+.sv-vault-icon{width:34px;height:34px}
+.sv-vault-icon svg,.sv-edit-icon svg{width:18px;height:18px}
+.sv-vault-name,.sv-file-name{flex:1;min-width:0}
 .sv-switch b,.sv-switch small,.sv-file-name h1,.sv-file-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-switch b{font-size:14px;font-weight:680}
 .sv-switch small,.sv-file-name small{color:var(--muted);font-size:12px;font-weight:400}
-.sv-tools{display:flex;align-items:center;gap:4px;padding:0 10px 8px;flex-wrap:wrap}
+.sv-switch>.chev{color:var(--qing);flex:none;transform:rotate(90deg)}
+.sv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 12px 11px}
+.sv-tools .btn,.sv-tools .icon-btn{min-height:32px;justify-content:center;border-radius:8px}
+.sv-tools .btn{padding:4px 7px;white-space:nowrap;line-height:1.2}
+.sv-tools .icon-btn{flex:none;width:30px}
+.sv-tools .sv-new{flex:1}
+.sv-tools .sv-new svg{width:14px;height:14px}
+.sv-tools .sv-daily{background:transparent;border-color:transparent;color:var(--qing)}
+.sv-tools .sv-daily:hover{background:var(--sv-selected)}
 .sv-panel.no-device .sv-tools button:not(:last-child),.sv-panel.no-device .sv-search{display:none}
-.sv-search{margin:0 10px 5px}
-.sv-migration{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:4px 10px 8px;font-size:12px;color:var(--muted)}
-.sv-tree{flex:1;overflow:auto;padding-bottom:16px}
-.sv-row{display:flex;align-items:center;gap:2px;min-width:0;padding:2px 6px 2px min(calc(8px + var(--depth)*15px),40%);min-height:35px}
-.sv-row:hover{background:var(--sunk)} .sv-row.on{background:color-mix(in srgb,var(--qing) 11%,var(--panel))}
-.sv-entry{display:flex;align-items:center;gap:5px;flex:1;min-width:0;text-align:left;color:inherit;text-decoration:none;padding:4px}
+.sv-search.search{margin:0 12px 8px;border:1px solid var(--line);background:var(--panel);border-radius:9px}
+.sv-search:focus-within{border-color:var(--qing)}
+.sv-migration{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:4px 12px 8px;font-size:12px;color:var(--muted)}
+.sv-tree{flex:1;overflow:auto;padding:1px 7px 16px}
+.sv-row{display:flex;align-items:center;gap:2px;min-width:0;margin:2px 0;padding:0 4px 0 min(calc(7px + var(--depth)*15px),40%);min-height:34px;border-radius:8px}
+.sv-row:hover{background:var(--sv-hover)}
+.sv-row.on{color:var(--qing);font-weight:600}
+.sv-row[data-kind="note"].on{background:var(--sv-selected);box-shadow:inset 3px 0 var(--qing)}
+.sv-entry{display:flex;align-items:center;gap:6px;flex:1;min-width:0;align-self:stretch;text-align:left;color:inherit;text-decoration:none;padding:4px}
 .sv-entry>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sv-entry svg{width:15px;height:15px;flex:none;color:var(--muted)}
+.sv-row.on svg{color:var(--qing)}
 .sv-chevron,.sv-file{display:grid;place-items:center;flex:none}
+.sv-chevron svg{width:11px;height:11px}
 .sv-chevron.open{transform:rotate(90deg)}
-.sv-more{opacity:0;width:25px;height:26px} .sv-row:hover .sv-more,.sv-row:focus-within .sv-more{opacity:1}
+.sv-more.icon-btn{opacity:0;width:25px;height:26px;flex:none}
+.sv-row:hover .sv-more,.sv-row:focus-within .sv-more,.sv-row[data-kind="note"].on .sv-more{opacity:1}
 .sv-editor{display:flex;flex-direction:column;position:relative;min-width:0;min-height:0}
-.sv-edit-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 20px 8px;border-bottom:1px solid var(--line)}
-.sv-file-name{min-width:0} .sv-file-name h1{margin:0;font:600 20px/1.4 var(--song)}
-.sv-status{min-height:26px;padding:3px 20px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
-.sv-status[data-error="1"]{color:var(--zhu)}
-.sv-doc{flex:1;min-height:0} .sv-doc .live-ed{padding-top:10px}
+.sv-edit-head{background:var(--panel);border-bottom:1px solid var(--line)}
+.sv-edit-bar{display:flex;align-items:center;gap:10px;min-height:62px;padding:8px 18px}
+.sv-edit-icon{width:33px;height:33px}
+.sv-file-name h1{margin:0;font:650 16px/1.4 var(--sans)}
+.sv-file-name small{margin-top:2px}
+.sv-status{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;white-space:nowrap}
+.sv-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.sv-status[data-state="saved"]::before{background:var(--ok)}
+.sv-status[data-state="busy"]::before{background:var(--warn)}
+.sv-status[data-state="error"]{color:var(--bad)}
+.sv-status[data-state="error"]::before{background:var(--bad)}
+.sv-problem:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 18px 9px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--bad) 7%,var(--panel));color:var(--bad);font-size:12px}
+.sv-problem .btn{padding:3px 8px;font-size:12px}
+.sv-editor .sv-doc.doc-body{background:var(--sv-desk);flex:1;min-height:0}
+.sv-doc .live-ed{
+  width:min(calc(100% - 36px),760px);min-height:calc(100% - 36px);margin:16px auto 20px;
+  padding:clamp(22px,3vw,38px) clamp(22px,3.1vw,44px) 65px;border:1px solid var(--line);border-radius:14px;
+  background:var(--panel);box-shadow:0 2px 9px #1d222b0a;cursor:text;
+}
+.sv-doc .live-ed .h1{margin:0;font-weight:720}
+.sv-doc .live-ed .h2{font-size:1.35em;margin:.18em 0 .05em}
+.sv-doc .live-ed .ln:has(>br:only-child){line-height:.8;min-height:.8em}
+.sv-doc .live-ed .quote{padding:6px 12px;color:var(--ink-2);border-color:var(--qing-soft);border-radius:0 7px 7px 0;background:var(--sv-sidebar)}
+.sv-doc .live-ed .quote.on{border-color:var(--qing)}
+.sv-doc .live-ed .ln:not(.on) .bul:has(~.lv-task){display:none}
+.sv-doc .live-ed .ln:not(.on) .lv-task{
+  display:inline-block;position:relative;vertical-align:middle;width:14px;height:14px;margin:-1px 7px 0 0;
+  overflow:hidden;white-space:nowrap;color:transparent;border:1px solid var(--line-strong);border-radius:4px;
+}
+.sv-doc .live-ed .ln:not(.on) .lv-task.done{border-color:var(--ok);background:var(--ok)}
+.sv-doc .live-ed .ln:not(.on) .lv-task.done::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:7px;border:solid white;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
 .sv-empty{display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px;color:var(--muted);padding:23px 12px}
 .sv-panel:not(:has(.sv-left))>.sv-empty,.sv-editor>.sv-empty{margin:auto}
-.sv-suggest:not([hidden]){position:absolute;top:84px;right:16px;z-index:3;display:grid;width:min(300px,90%);padding:5px;background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow-pop)}
-.sv-suggest button{text-align:left;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sv-suggest button[aria-selected="true"]{background:var(--sunk)}
+.sv-suggest:not([hidden]){position:absolute;top:70px;right:16px;z-index:3;display:grid;width:min(300px,90%);padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 5px 16px #1d222b20}
+.sv-suggest button{text-align:left;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:6px}
+.sv-suggest button[aria-selected="true"]{background:var(--sv-selected)}
 .live-ed [data-sv-wiki]{cursor:pointer}
 .sv-doc img[hidden]{display:none}
-@media(hover:none){.sv-more{opacity:1}}
+@media(hover:none){.sv-more.icon-btn{opacity:1}}
 @media(max-width:760px){
   .sv-panel{display:flex;flex-direction:column}
   .sv-left,.sv-editor{flex:1;border-right:0}
   .sv-panel:not(.in-note) .sv-editor,.sv-panel.in-note .sv-left{display:none}
-  .sv-vault,.sv-edit-head{padding-left:52px;min-height:48px}
-  .sv-row{min-height:42px} .sv-more{width:34px;height:34px}
-  .sv-suggest:not([hidden]){top:74px}
+  .sv-vault{padding:12px 12px 12px 48px}
+  .sv-tools .btn,.sv-tools .icon-btn{min-height:40px}
+  .sv-tools .icon-btn{width:38px}
+  .sv-row{min-height:44px}
+  .sv-more.icon-btn{width:36px;height:36px}
+  .sv-edit-bar{padding:7px 12px 7px 48px;gap:6px;min-height:55px}
+  .sv-edit-icon{display:none}
+  .sv-status{font-size:11px}
+  .sv-problem:not([hidden]){margin-inline:12px}
+  .sv-doc .live-ed{width:100%;min-height:100%;margin:0;padding:22px 18px 88px;border:0;border-radius:0;box-shadow:none}
+  .sv-suggest:not([hidden]){top:60px}
 }
 .sp-empty{color:var(--muted);padding:40px 0;text-align:center}
 .sp-hit{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;cursor:pointer}
@@ -7965,11 +8027,16 @@ function drawSpNotes() {
   if (!$("#sv-panel") || $("#sv-panel").dataset.vault !== v.id) {
     $("#main").innerHTML = `<div class="sv-panel" id="sv-panel" data-vault="${esc(v.id)}">
       <aside class="sv-left" aria-label="笔记文件夹">
-        <header class="sv-vault"><button class="btn sv-switch" aria-label="切换笔记文件夹" onclick="svRecent(event)"><span><b>${esc(v.name)}</b><small>${esc(svMachineName(v))}</small></span>${ICON.chev}</button></header>
+        <header class="sv-vault">
+          <button class="btn sv-switch" aria-label="切换笔记文件夹" onclick="svRecent(event)">
+            <span class="sv-vault-icon" aria-hidden="true">${ICON.folder}</span>
+            <span class="sv-vault-name"><b>${esc(v.name)}</b><small>${esc(svMachineName(v))}</small></span>${ICON.chev}
+          </button>
+        </header>
         <div class="sv-tools">
-          <button class="icon-btn" title="新笔记" aria-label="新笔记" onclick="svNameDialog(false)">${ICON.plus}</button>
+          <button class="btn primary sv-new" onclick="svNameDialog(false)">${ICON.plus}新笔记</button>
           <button class="icon-btn" title="新文件夹" aria-label="新文件夹" onclick="svNameDialog(true)">${ICON.folder}</button>
-          <button class="btn" onclick="svDaily()">今日日记</button>
+          <button class="btn sv-daily" onclick="svDaily()">今日日记</button>
           <button class="btn" onclick="svRefresh(true)">刷新</button>
         </div>
         <label class="search sv-search">${ICON.search}<input aria-label="搜索笔记" placeholder="搜索笔记" value="${esc(SV.query)}" oninput="svSearch(this.value)"></label>
@@ -8011,7 +8078,7 @@ function svExpandPath(path, refresh = false) {
 }
 function svRow(row, depth, search = false) {
   const selected = row.dir ? SV.folder === row.path : svPath() === row.path;
-  return `<div class="sv-row ${selected ? "on" : ""}" style="--depth:${depth}">
+  return `<div class="sv-row ${selected ? "on" : ""}" data-kind="${row.dir ? "folder" : "note"}" style="--depth:${depth}">
     ${row.dir ? `<button class="sv-entry" aria-expanded="${SV.open.has(row.path)}" onclick="svToggle(${q(row.path)})">
       <span class="sv-chevron ${SV.open.has(row.path) ? "open" : ""}">${ICON.chev}</span>${ICON.folder}<span title="${esc(row.path)}">${esc(row.name)}</span></button>`
       : `<a class="sv-entry" href="${esc(svHash(row.path))}" ${selected ? 'aria-current="page"' : ""}><span class="sv-file">${SP_IC.note}</span><span title="${esc(row.path)}">${esc(search ? row.path.replace(/\.md$/i, "") : svTitle(row.path))}</span></a>`}
@@ -8140,17 +8207,22 @@ async function svRead(path, refresh = false) {
 function svDrawEditor(note) {
   const editor = $("#sv-editor");
   if (!editor || $("#sv-live")?._svNote === note) return;
-  editor.innerHTML = `<header class="sv-edit-head"><div class="sv-file-name"><h1>${esc(svTitle(note.path))}</h1>
-    <small title="${esc(note.path)}">${esc(note.path)}</small></div>
-    <button class="icon-btn" title="更多操作" aria-label="笔记更多操作" onclick="svMenu(event,${q(note.path)},false)">${ICON.more}</button>
-  </header><div class="sv-status" id="sv-status" role="status"></div>
+  editor.innerHTML = `<header class="sv-edit-head">
+    <div class="sv-edit-bar">
+      <span class="sv-edit-icon" aria-hidden="true">${SP_IC.note}</span>
+      <div class="sv-file-name"><h1>${esc(svTitle(note.path))}</h1><small title="${esc(note.path)}">${esc(note.path)}</small></div>
+      <span class="sv-status" id="sv-status" role="status"></span>
+      <button class="icon-btn" title="更多操作" aria-label="笔记更多操作" onclick="svMenu(event,${q(note.path)},false)">${ICON.more}</button>
+    </div>
+    <div class="sv-problem" id="sv-problem" hidden></div>
+  </header>
   <div class="doc-body sv-doc"><div id="sv-live" class="live-ed" contenteditable="true" spellcheck="false"
     autocapitalize="off" role="textbox" aria-label="编辑笔记" aria-multiline="true"></div></div><div class="sv-suggest" id="sv-suggest" hidden></div>`;
   const root = $("#sv-live");
   root._svNote = note;
   liveMount(root, {
     text: note.draft, onInput: text => { svEdit(note, text); queueMicrotask(() => svSuggest(root, note)); },
-    asset: svImage,
+    asset: svImage, checks: true,
     afterRender: () => svImages(root, note), wiki: true,
     onKey: e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); svFlush(note); } },
   });
@@ -8186,12 +8258,15 @@ function svDrawEditor(note) {
 function svStatus(note) {
   const el = $("#sv-status");
   if (!el || $("#sv-live")?._svNote !== note) return;
-  const state = note.conflict ? "文件已在别处修改。"
-    : note.error || (note.saving ? "正在保存…" : svDirty(note) ? "待保存" : "已保存");
-  el.dataset.error = note.error || note.conflict ? "1" : "";
-  el.innerHTML = `<span>${esc(state)}</span>${note.conflict
+  const problem = note.conflict ? "文件已在别处修改。" : note.error;
+  const state = note.conflict ? "保存冲突" : note.error ? "保存失败" : note.saving ? "正在保存…" : svDirty(note) ? "待保存" : "已保存";
+  if (el.textContent !== state) el.textContent = state;
+  el.dataset.state = problem ? "error" : state === "已保存" ? "saved" : "busy";
+  const details = $("#sv-problem");
+  details.hidden = !problem;
+  details.innerHTML = problem ? `<span>${esc(problem)}</span>${note.conflict
     ? '<button class="btn" onclick="svResolve(false)">重新读取</button><button class="btn" onclick="svResolve(true)">保留我的修改</button>'
-    : note.error ? '<button class="btn" onclick="svFlush(SV.note)">重试保存</button>' : ""}`;
+    : '<button class="btn" onclick="svFlush(SV.note)">重试保存</button>'}` : "";
 }
 function svEdit(note, text) {
   note.draft = text;
@@ -11523,8 +11598,9 @@ function lvLines(L, on, options){   // 每行的 html；on = [第一行, 最后�
     else if ((m = l.match(/^(\s{0,3}>\s?)(.*)$/))) { cls = "quote"; h = lvMk(m[1]) + lvInline(m[2], options); }
     else if ((m = l.match(/^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s+)?(.*)$/))) {
       cls = "li";
+      const task = options?.checks ? " lv-task" + (/\[[xX]\]/.test(m[4] || "") ? " done" : "") : "";
       h = esc(m[1]) + (/\d/.test(m[2]) ? `<span class="lm">${esc(m[2])}</span>` : `<span class="bul">${esc(m[2])}</span>`) + esc(m[3])
-        + (m[4] ? `<span class="lm">${esc(m[4])}</span>` : "") + lvInline(m[5], options);
+        + (m[4] ? `<span class="lm${task}">${esc(m[4])}</span>` : "") + lvInline(m[5], options);
     }
     else if (/^\s*\|.*\|\s*$/.test(l)) { cls = "tb"; h = esc(l); }
     else h = lvInline(l, options);

@@ -576,7 +576,8 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 @media (max-width:760px){.bgwhen,.bgnew-t{display:none}.glass-bed .bgrp{padding:10px 12px 4px}.bkids{padding-left:16px}.bkids>*::before,.bkids>:not(:last-child)::after{left:-16px}.brow.w.kid{grid-template-columns:minmax(0,1fr) auto auto}.brow.w.kid.picking{grid-template-columns:auto minmax(0,1fr) auto auto}}
 .glass-bed .brow.picked{border-color:color-mix(in srgb,var(--qing) 55%,transparent)}
 .bsec h2 .sp{flex:1}
-@media (max-width:760px){.waiting h2{flex-wrap:wrap;row-gap:6px}.waiting h2 .rtabs+.rtabs{margin-left:0}}
+.wviewbtn{display:inline-flex;align-items:center;gap:4px}
+.wviewbtn svg{width:13px;height:13px;color:var(--muted)}
 .bpickbar{display:flex;gap:6px}
 .bsec h2 .btn{font-size:12.5px;font-weight:400;padding:3px 10px}
 .bmain{min-width:0;display:flex;flex-direction:column}
@@ -5781,6 +5782,11 @@ let waitOrder = localStorage.getItem("ccim.waitOrder") === "old" ? "old" : "new"
 function setWaitOrder(k){ waitOrder = k; localStorage.setItem("ccim.waitOrder", k); renderBoard(true); }
 let waitView = localStorage.getItem("ccim.waitView") === "flat" ? "flat" : "agent";   // 「等你处理」按 Agent 分组还是逐条（#548），记在这台浏览器上
 function setWaitView(k){ waitView = k; localStorage.setItem("ccim.waitView", k); renderBoard(true); }
+function waitMenu(e){   // 显示方式和排序收进一个菜单，标题栏只留一个按钮
+  const row = (fn, label, desc, on) => `<button onclick="closePop();${fn}"><span><div>${esc(label)}</div>${desc ? `<div class="desc">${esc(desc)}</div>` : ""}</span>${on ? `<span class="ck">✓</span>` : ""}</button>`;
+  pop(e, `<div class="sec">显示</div>` + row("setWaitView('agent')", "按 Agent", "同一个 Agent 的对话收成一组", waitView === "agent") + row("setWaitView('flat')", "逐条", "一个对话一行", waitView === "flat")
+    + `<div class="sec">排序</div>` + row("setWaitOrder('new')", "最近回答", "", waitOrder === "new") + row("setWaitOrder('old')", "开得最久", "", waitOrder === "old"), true);
+}
 function startPick(){ BSEL = new Set(); boardReply = null; renderBoard(true); }
 function endPick(){ BSEL = null; renderBoard(true); }
 // 「等你处理」按 Agent 分组（#548）：等批准、出错停下的照旧单独在最上面；同一个 Agent 有两条以上的收成一组，
@@ -6324,7 +6330,7 @@ async function renderBoard(quick){
   const ids = JSON.stringify(wait.map(c => c.id)).replace(/"/g, "&quot;");
   const tool = !wait.length ? "" : BSEL
     ? `<span class="sp"></span><span class="bpickbar"><button class="btn" onclick="pickAll(${ids})">${BSEL.size === wait.length ? "全不选" : "全选"}</button><button class="btn" onclick="endPick()">取消</button><button class="btn primary" ${BSEL.size ? "" : "disabled"} onclick="finishOpen([...BSEL])">标为已完成${BSEL.size ? `（${BSEL.size}）` : ""}</button></span>`
-    : `<span class="sp"></span><span class="rtabs" role="tablist" aria-label="显示方式">${[["agent", "按 Agent"], ["flat", "逐条"]].map(([k, t]) => `<button role="tab" aria-selected="${waitView === k}" class="${waitView === k ? "on" : ""}" onclick="setWaitView('${k}')">${t}</button>`).join("")}</span><span class="rtabs" role="tablist" aria-label="排序">${[["new", "最近回答"], ["old", "开得最久"]].map(([k, t]) => `<button role="tab" aria-selected="${waitOrder === k}" class="${waitOrder === k ? "on" : ""}" onclick="setWaitOrder('${k}')">${t}</button>`).join("")}</span><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
+    : `<span class="sp"></span><button class="btn wviewbtn" onclick="waitMenu(event)">${waitView === "flat" ? "逐条" : "按 Agent"} · ${waitOrder === "old" ? "开得最久" : "最近回答"}${ICON.down}</button><button class="btn bpickbtn" onclick="startPick()">多选</button>`;
   $("#main").innerHTML = `<div class="board"><div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("board")}</div>
     <div class="bgrid"><div class="bleft">
       ${kpiHtml(st)}

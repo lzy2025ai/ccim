@@ -3700,7 +3700,7 @@ def _handler(pf):
                 "/api/schedule/reply": lambda: pf.call(pf.schedules.reply, b("id"), b("run"), b("text"), people.me(acct), b("quote"), b("to")),
                 "/api/schedule/hide": lambda: pf.call(pf.schedules.hide, b("id"), b("run"), b("on") is not False),
                 "/api/schedule/star": lambda: pf.call(pf.schedules.star, b("id"), b("run"), bool(b("on"))),
-                "/api/space/todo/add": lambda: space_mod.todo_add(acct, b("text"), b("src")),   # 个人空间（#542）
+                "/api/space/todo/add": lambda: space_mod.todo_add(acct, b("text"), b("src"), b("quote")),   # 个人空间（#542）
                 "/api/space/todo/set": lambda: space_mod.todo_set(acct, b("id"), b("done"), b("text")),
                 "/api/space/todo/del": lambda: space_mod.todo_del(acct, b("id")),
                 "/api/space/todo/restore": lambda: space_mod.todo_restore(acct, b("item")),

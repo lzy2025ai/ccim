@@ -240,6 +240,65 @@ a.sp-src:hover span.t{text-decoration:underline}
   .app.phone-main .sp-in > .sp-h{align-items:center}
 }
 .bmodes-h{display:flex;align-items:center;gap:6px}
+/* 任务面板的待办（#588）：来源 | 清单 | 选中那条 */
+.tdb{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--paper)}
+.tdb .bhead{flex:none;padding-bottom:18px}
+.td-wrap{flex:1;min-height:0;display:grid;grid-template-columns:230px minmax(0,1fr) minmax(300px,380px);border-top:1px solid var(--line)}
+.td-side{overflow:auto;padding:14px 10px;border-right:1px solid var(--line)}
+.td-f{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;border-radius:8px;font-size:13.5px;color:var(--ink-2);text-align:left;min-width:0}
+.td-f:hover{background:var(--sunk)}
+.td-f.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.td-f .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-f .n{font-size:12px;font-weight:400;color:var(--faint)}
+.td-f .seal{width:20px;height:20px;flex:none}
+.td-ic{width:20px;height:20px;border-radius:6px;background:var(--sunk);color:var(--muted);display:grid;place-items:center;flex:none}
+.td-ic svg{width:12px;height:12px}
+.td-sec{font-size:12px;color:var(--faint);padding:14px 10px 4px}
+.td-gap{height:18px}
+.td-list{overflow:auto;padding:14px 22px 40px}
+.td-add{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px;margin-bottom:10px;color:var(--faint)}
+.td-add:focus-within{border-color:var(--qing)}
+.td-add svg{width:15px;height:15px;flex:none}
+.td-add input{flex:1;border:0;background:none;outline:none;font:14px var(--sans);color:var(--ink);padding:9px 0}
+.td-it{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 10px;border-radius:9px;cursor:pointer;border-top:1px solid var(--line)}
+.td-add+.td-it,.td-it:first-child,.td-it.sel,.td-it.sel+.td-it,.td-det.in+.td-it{border-top-color:transparent}
+.td-it:hover{background:rgba(255,255,255,.6)}
+.td-it.sel{background:var(--qing-soft)}
+.td-it:focus-visible{outline:2px solid var(--qing);outline-offset:-2px}
+.td-it .tx{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-it .tm{font-size:12px;color:var(--faint);white-space:nowrap}
+.td-it .seal{width:20px;height:20px}
+.td-it.done .sp-ck{background:var(--qing);border-color:var(--qing)} .td-it.done .sp-ck svg{opacity:1}
+.td-it.done .tx{color:var(--faint);text-decoration:line-through}
+.td-empty{padding:40px 0;text-align:center;color:var(--faint);font-size:13.5px}
+.td-det{overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:22px 24px;display:flex;flex-direction:column;gap:14px}
+.td-title{font:600 19px/1.5 var(--song);margin:0;cursor:text;border-radius:6px;word-break:break-word}
+.td-title:hover{background:var(--paper)}
+.td-title textarea{width:100%;font:inherit;border:1px solid var(--qing);border-radius:6px;padding:4px 6px;resize:vertical;outline:none;background:var(--panel)}
+.td-from{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.td-from .seal{width:18px;height:18px;flex:none}
+.td-quote{background:var(--paper);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.7;color:var(--ink-2);white-space:pre-wrap;word-break:break-word}
+.td-quote .w{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);margin-bottom:4px;white-space:normal}
+.td-quote .seal{width:16px;height:16px}
+.td-btns{display:flex;gap:8px;flex-wrap:wrap}
+.td-none{padding:40px;color:var(--faint)}
+@media (max-width:760px){
+  .tdb .bhead{padding:14px 16px 10px}
+  .td-wrap{display:flex;flex-direction:column;border-top:0}
+  .td-side{flex:none;display:flex;gap:6px;overflow-x:auto;padding:0 16px 10px;border-right:0;scrollbar-width:none}
+  .td-side::-webkit-scrollbar{display:none}
+  .td-f{width:auto;flex:none;padding:5px 12px;border-radius:16px;background:var(--panel);border:1px solid var(--line);font-size:13px}
+  .td-f.on{border-color:var(--qing);color:var(--qing);box-shadow:none}
+  .td-f .seal,.td-f .td-ic{width:16px;height:16px}
+  .td-f .t{max-width:9em}
+  .td-list{flex:1;padding:4px 12px 40px}
+  .td-det.in{border:0;border-radius:0 0 10px 10px;background:var(--qing-soft);padding:2px 12px 14px 40px;margin-top:-4px;gap:10px}
+  .td-it.sel{border-radius:10px 10px 0 0;align-items:start}
+  .td-it.sel .tx{white-space:normal;font-weight:600}
+  .td-it .tx textarea{width:100%;font:inherit;border:1px solid var(--qing);border-radius:6px;padding:4px 6px;outline:none;background:var(--panel)}
+  .td-det.in .td-title{font-size:16px}
+  .td-det.in .td-quote{background:var(--panel)}
+}
 .bmodes a{padding:3px 12px;border-radius:6px;font-size:13px;color:var(--muted);text-decoration:none}
 .bmodes a.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .bmodes a:hover:not(.on){color:var(--ink)}
@@ -2381,7 +2440,7 @@ const USE_NAMES = {
   "schedules.feed": "定时页的动态", "schedules.task": "打开定时任务", "schedules.runs": "定时任务的运行记录", "schedules.edit": "新建或编辑定时任务",
   "board": "任务面板概览", "board.feed": "任务面板的动态", "board.day": "任务面板某一天", "board.desk": "总台",
   "agents": "AI 员工总览", "agents.agent": "打开某个 AI 员工", "agents.settings": "AI 员工设置", "agents.new": "新建 AI 员工",
-  "opc": "一人公司", "space": "个人空间", "space.todo": "个人空间的待办", "space.note": "个人空间的笔记",
+  "opc": "一人公司", "space": "个人空间", "board.todo": "任务面板的待办", "space.note": "个人空间的笔记",
   "act.todo": "回答转成待办", "act.chat_todo": "对话加到待办", "feed.todo": "动态加到待办", "kb": "知识库", "apps": "应用", "skills": "共享 Skill", "projects": "项目",
   "settings": "设置", "settings.dev": "开发页", "settings.machines": "电脑", "settings.accounts": "账号", "settings.chats": "对话设置", "settings.models": "模型",
   "act.send": "发消息", "act.voice": "语音输入", "act.fork": "分叉", "act.rewind": "退回", "act.side": "侧边对话", "act.ws": "工作区", "act.board_reply": "在任务面板里回复",
@@ -2393,7 +2452,7 @@ function useView(){                       // 当前页面算哪个功能；同�
   const v = current.view, id = current.id, sub = current.sub;
   const f = v === "chats" ? (id === "new" ? "chats.new" : id ? "chats.chat" : "chats")
     : v === "schedules" ? (!id || id === "feed" ? "schedules.feed" : id === "new" || id.startsWith("edit-") ? "schedules.edit" : sub === "runs" ? "schedules.runs" : "schedules.task")
-    : v === "board" ? (id === "feed" ? "board.feed" : id === "day" ? "board.day" : "board")
+    : v === "board" ? (id === "todo" ? "board.todo" : id === "day" ? "board.day" : "board")
     : v === "agents" ? (!id ? "agents" : id === "new" ? "agents.new" : sub === "settings" ? "agents.settings" : "agents.agent")
     : v === "settings" ? (USE_NAMES["settings." + id] ? "settings." + id : "settings")
     : v === "space" ? (USE_NAMES["space." + id] ? "space." + id : "space") : v;
@@ -3249,6 +3308,9 @@ function route(){
   if (/^#?\/?(chats\/?)?$/.test(location.hash)) { const to = restoreHash(); if (to) history.replaceState(null, "", to); }
   if (location.hash === "#/chats/new") forgetChat();
   if (/^#\/tower(\/|\?|$)/.test(location.hash)) history.replaceState(null, "", "#/board");   // 塔台拿掉了（#543）
+  if (/^#\/board\/(feed|lanes)(\?|$)/.test(location.hash)) history.replaceState(null, "", "#/schedules/feed");   // 任务面板的动态换成了待办（#588）
+  if (/^#\/space\/(todo|fav)(\?|$)/.test(location.hash)) history.replaceState(null, "", "#/board/todo");   // 待办挪到任务面板（#588）
+  if (/^#\/space\/?(\?|$)/.test(location.hash)) history.replaceState(null, "", "#/space/note");            // 个人空间只有笔记
   const [hpath, hq] = location.hash.split("?");
   const parts = hpath.slice(2).split("/");
   const prev = current;
@@ -3280,7 +3342,7 @@ function route(){
   if (current.id === "new" && current.view !== "chats" && machineTab !== "all" && (machineOf(machineTab) || {}).online) ctxMachine = machineTab;   // 新建：默认建在当前标签那台
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
-    || current.view === "skills" || current.view === "board" || current.view === "apps");
+    || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "space");
   document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());   // 定时页：动态在左、任务列表在右（#520）
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
@@ -3359,13 +3421,12 @@ function watchListScroll(){
   }).observe(list, {childList: true});
 }
 function renderList(){
-  if (current.view === "board" || current.view === "skills" || current.view === "apps") return;
+  if (current.view === "board" || current.view === "skills" || current.view === "apps" || current.view === "space") return;
   if (current.view === "kb") { if (current.id) renderKbList(); return; }
   if (current.view === "agents") { if (current.id && current.id !== "new") renderAgentSide(); else if (!current.id) renderAgentCards(true); }
   else if (current.view === "projects") { if (current.id) renderProjectList(); else renderProjectCards(true); }
   else if (current.view === "schedules") renderScheduleList();
   else if (current.view === "opc") renderOpcSide();
-  else if (current.view === "space") renderSpaceList();
   else if (current.view === "settings") renderSettingsList();
   else renderChatList();
 }
@@ -4562,7 +4623,7 @@ async function chatTodo(id, on){
   const d = await act(() => api("/api/space/todo/chat", {chat: id, on, src}, spM()));
   if (on) useMark("act.chat_todo");
   await spaceLoad();
-  if (on) spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+  if (on) spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/board/todo"; }]]);
   else spToast("待办已完成", [["撤销", () => Promise.all((d.ids || []).map(x => api("/api/space/todo/set", {id: x, done: false}, spM()))).then(() => spaceLoad())]]);
 }
 async function refreshLists(){
@@ -6157,7 +6218,7 @@ function finCard(st){   // 已完成（#369）：今天、近 7 天、近 30 天
 function feedBadge(){ const n = feedUnseen(); return `<span class="bm-n" ${n ? "" : "hidden"}>${n > 99 ? "99+" : n}</span>`; }
 function feedBadgeSync(){ document.querySelectorAll(".bmodes .bm-n").forEach(el => { const n = feedUnseen(); el.hidden = !n; el.textContent = n > 99 ? "99+" : n; }); }
 function boardModes(on){
-  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["feed", "动态", "#/board/feed"], ...(S.guest ? [] : [["desk", "总台", "#/board/desk"]])].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}${k === "feed" ? feedBadge() : k === "desk" ? `<span class="exp-tag">实验</span>` : ""}</a>`).join("")}</span>`;
+  return `<span class="rtabs bmodes" role="tablist" aria-label="看法">${[["board", "概览", "#/board"], ["todo", "待办", "#/board/todo"], ...(S.guest ? [] : [["desk", "总台", "#/board/desk"]])].map(([k, t, h]) => `<a role="tab" aria-selected="${on === k}" class="${on === k ? "on" : ""}" href="${h}">${t}${k === "desk" ? `<span class="exp-tag">实验</span>` : ""}</a>`).join("")}</span>`;
 }
 // ================= 总台（#543，实验）：一个固定的对话 + 右边「它手上的事」 =================
 // 对话是嵌着的对话页（?embed=desk，和右下角助理同一套），派活卡片、反问的候选在对话页里画（deskCard / choicesHtml）；
@@ -6331,11 +6392,10 @@ function deskPick(i, j){
   inp.value = keep; saveDraft();
 }
 async function renderBoard(quick){
-  if (current.view === "board" && current.id === "lanes") { history.replaceState(null, "", "#/board/feed"); current.id = "feed"; }   // 泳道拿掉了（#532）
   if (current.view === "board" && current.id === "day") return renderBoardDay(quick);
   if (!quick || !boardStats || Date.now() - boardStatsAt > 60000) { loadBoardStats().then(() => current.view === "board" && renderBoard(true)).catch(() => {}); }
   if (current.view !== "board") return;
-  if (current.id === "feed") return feedOn() ? undefined : renderScheduleFeed();   // 动态（#532）：自己管刷新，整体状态变了不重画
+  if (current.id === "todo") return renderBoardTodo();   // 待办（#588，取代了这里的动态，动态在「定时」页）
   if (current.id === "desk") return renderDesk();   // 总台（#543）：对话是嵌着的页面，右边一栏自己取
   const tops = withOpen().filter(c => onBoard(c) && !c.archived);
   // 等你批准、出错停下的总在最上面（#390）。默认「最近回答」：有新回答没看过的（红点）在前，
@@ -6375,6 +6435,116 @@ async function renderBoard(quick){
     boardReply.focus = false; nt.focus();
     const end = nt.value.length; nt.setSelectionRange(sel ? sel[0] : end, sel ? sel[1] : end);
   }
+}
+
+// ================= 任务面板的待办（#588）：左边按来源筛，中间清单，右边看选中那条；手机上来源是顶上一排，点一条就地展开 =================
+// 数据还是个人空间那份（SP.d，存在本机 S.me）
+const TD = {f: "all", sel: null, newText: ""};
+const tdOn = () => current.view === "board" && current.id === "todo";
+function tdKey(t){ const s = t.src || {}; return s.feed ? "feed:" + s.feed : s.chat ? (s.agent && agentOf(s.agent) ? "agent:" + s.agent : "chat:" + s.chat) : "self"; }
+function tdSources(open){
+  const m = new Map();
+  for (const t of open) {
+    const k = tdKey(t); if (k === "self") continue;
+    let g = m.get(k);
+    if (!g) { const s = t.src || {}, a = s.agent ? agentOf(s.agent) : null; g = {k, feed: !!s.feed, a, name: s.feed ? (s.name || "动态") : a ? a.name : (s.title || "对话"), n: 0, last: 0}; m.set(k, g); }
+    g.n++; g.last = Math.max(g.last, t.at || 0);
+  }
+  return [...m.values()].sort((x, y) => y.last - x.last);
+}
+const tdIc = a => a ? seal(a, "xs", false) : `<span class="td-ic">${ICON.chat}</span>`;
+function renderBoardTodo(){
+  const head = `<div class="bhead bmodes-h"><h1>任务面板</h1>${boardModes("todo")}</div>`;
+  if (!SP.d) {
+    $("#main").innerHTML = `<div class="tdb">${head}<div class="td-none">${SP.err ? spErr() : ""}</div></div>`;
+    if (!SP.err) spaceLoad(true);
+    return;
+  }
+  if (Date.now() - (SP.at || 0) > 30000 && !SP.loading) spaceLoad(true);   // 别处（另一个页面、别的电脑）加的也看得到
+  const had = document.activeElement && document.activeElement.id === "td-new";
+  const scr = $(".td-list") ? $(".td-list").scrollTop : 0;
+  const open = SP.d.todos.filter(t => !t.done), done = SP.d.todos.filter(t => t.done).sort((a, b) => (b.done_at || 0) - (a.done_at || 0));
+  const srcs = tdSources(open);
+  if (!["all", "self", "done"].includes(TD.f) && !srcs.some(g => g.k === TD.f)) TD.f = "all";
+  const list = TD.f === "done" ? done : TD.f === "all" ? open : open.filter(t => tdKey(t) === TD.f);
+  if (TD.sel && !list.some(t => t.id === TD.sel)) TD.sel = null;
+  if (!TD.sel && !narrow() && list.length) TD.sel = list[0].id;
+  const sel = list.find(t => t.id === TD.sel);
+  const fb = (k, label, n, ic = "") => `<button class="td-f ${TD.f === k ? "on" : ""}" aria-pressed="${TD.f === k}" onclick="tdFilter(${q(k)})">${ic}<span class="t">${esc(label)}</span><span class="n">${n || ""}</span></button>`;
+  const chats = srcs.filter(g => !g.feed), feeds = srcs.filter(g => g.feed);
+  const self = open.filter(t => tdKey(t) === "self").length;
+  const side = narrow()
+    ? [fb("all", "全部", open.length), self ? fb("self", "自己记的", self) : "", ...srcs.map(g => fb(g.k, g.name, g.n, tdIc(g.a))), done.length ? fb("done", "已完成", done.length) : ""].join("")
+    : fb("all", "全部", open.length) + fb("self", "自己记的", self)
+      + (chats.length ? `<div class="td-sec">从对话来的</div>` + chats.map(g => fb(g.k, g.name, g.n, tdIc(g.a))).join("") : "")
+      + (feeds.length ? `<div class="td-sec">从动态来的</div>` + feeds.map(g => fb(g.k, g.name, g.n, tdIc(g.a))).join("") : "")
+      + `<div class="td-gap"></div>` + fb("done", "已完成", done.length);
+  const add = TD.f === "done" ? "" : `<label class="td-add">${ICON.plus}<input id="td-new" placeholder="记一件要做的事" maxlength="500" value="${esc(TD.newText)}" oninput="TD.newText=this.value"
+      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();tdAdd()}"></label>`;
+  const rows = list.map(tdRow).join("") || `<div class="td-empty">${TD.f === "done" ? "还没有做完的" : "没有要做的"}</div>`;
+  $("#main").innerHTML = `<div class="tdb">${head}<div class="td-wrap">
+    <nav class="td-side" aria-label="按来源看">${side}</nav>
+    <div class="td-list">${add}${rows}</div>
+    ${narrow() ? "" : `<aside class="td-det">${sel ? tdDetail(sel) : ""}</aside>`}</div></div>`;
+  if (scr) $(".td-list").scrollTop = scr;
+  if (had) $("#td-new")?.focus();
+}
+function tdRow(t){
+  const s = t.src || {}, a = s.agent ? agentOf(s.agent) : null, on = TD.sel === t.id;
+  const tail = t.done ? `<span class="tm">${esc(spWhen(t.done_at))}</span>` : t.src ? tdIc(a) : `<span class="tm">自己记的</span>`;
+  return `<div class="td-it ${on ? "sel" : ""} ${t.done ? "done" : ""}" role="button" tabindex="0" aria-expanded="${on}" onclick="tdPick(${q(t.id)})" onkeydown="if(event.key==='Enter'&&event.target===this)tdPick(${q(t.id)})">
+    <button class="sp-ck" role="checkbox" aria-checked="${!!t.done}" aria-label="${t.done ? "改回没做完" : "做完了"}" onclick="event.stopPropagation();tdDone(${q(t.id)},${!t.done})">${ICON.check}</button>
+    <span class="tx">${esc(t.text)}</span>${tail}</div>${on && narrow() ? `<div class="td-det in">${tdDetail(t, true)}</div>` : ""}`;
+}
+function tdDetail(t, inline){   // inline：手机上展开在那一行下面，标题就是那一行，不再写一遍
+  const s = t.src || {}, a = s.agent ? agentOf(s.agent) : null, src = esc(JSON.stringify(s));
+  const from = s.feed ? `从「${s.name || "动态"}」的动态加的` : s.chat ? `从「${s.title || "对话"}」加的` : "自己记的";
+  const back = s.feed ? `<button class="btn primary" onclick="spGoFeed(event,${src})">回到动态</button>`
+    : s.chat ? `<button class="btn primary" onclick="spGoSrc(event,${src})">回到对话</button>` : "";
+  const who = a ? a.name : (s.name || s.title || "");
+  return `${inline ? "" : `<h2 class="td-title" tabindex="0" title="点一下修改" onclick="tdEdit(this,${q(t.id)})" onkeydown="if(event.key==='Enter'){event.preventDefault();this.click()}">${esc(t.text)}</h2>`}
+    <div class="td-from">${a ? seal(a, "xs", false) : ""}<span>${esc(from)} · ${esc(spWhen(t.at))}</span></div>
+    ${t.quote ? `<div class="td-quote">${who ? `<div class="w">${a ? seal(a, "xs", false) : ""}${esc(who)}</div>` : ""}${esc(t.quote)}</div>` : ""}
+    <div class="td-btns">${back}<button class="btn" onclick="tdDone(${q(t.id)},${!t.done})">${t.done ? "改回没做完" : "做完了"}</button>${inline ? `<button class="btn" onclick="tdEditRow(${q(t.id)})">修改</button>` : ""}<button class="btn" onclick="tdDel(${q(t.id)})">删除</button></div>`;
+}
+function tdEditRow(id){ const el = document.querySelector(".td-it.sel .tx"); if (el) tdEdit(el, id); }
+function tdFilter(k){ TD.f = k; TD.sel = null; renderBoardTodo(); }
+function tdPick(id){ TD.sel = narrow() && TD.sel === id ? null : id; renderBoardTodo(); }
+function tdSync(){ if (tdOn()) renderBoardTodo(); spChatsSync(); }
+async function tdAdd(){
+  const text = TD.newText.trim(); if (!text) return;
+  const d = await act(() => api("/api/space/todo/add", {text}, spM()));
+  TD.newText = ""; SP.d.todos.unshift(d.item);
+  if (TD.f !== "all" && TD.f !== "self") TD.f = "all";
+  TD.sel = d.item.id; tdSync(); $("#td-new")?.focus();
+}
+async function tdDone(id, done){
+  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
+  t.done = done; t.done_at = done ? Date.now() / 1000 : undefined; tdSync();
+  try { await api("/api/space/todo/set", {id, done}, spM()); } catch (e) { toast(e.message); spaceLoad(true); return; }
+  if (done) spToast("已完成", [["撤销", () => tdDone(id, false)]]);
+}
+function tdEdit(el, id){
+  const t = SP.d.todos.find(x => x.id === id); if (!t || el.querySelector("textarea")) return;
+  el.innerHTML = `<textarea maxlength="500" rows="2" aria-label="改待办"></textarea>`;
+  const inp = el.firstChild; inp.value = t.text; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  let fin = false;
+  const save = async keep => {
+    if (fin) return; fin = true;
+    const v = inp.value.trim();
+    if (!keep || !v || v === t.text) { renderBoardTodo(); return; }
+    t.text = v; renderBoardTodo();
+    try { await api("/api/space/todo/set", {id, text: v}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
+  };
+  inp.onclick = e => e.stopPropagation();
+  inp.onkeydown = e => { e.stopPropagation(); if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(true); } else if (e.key === "Escape") save(false); };
+  inp.onblur = () => save(true);
+}
+async function tdDel(id){
+  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
+  SP.d.todos = SP.d.todos.filter(x => x.id !== id); TD.sel = null; tdSync();
+  try { await api("/api/space/todo/del", {id}, spM()); } catch (e) { toast(e.message); spaceLoad(true); return; }
+  spToast("已删除", [["撤销", () => api("/api/space/todo/restore", {item: t}, spM()).then(() => spaceLoad(true))]]);
 }
 
 // ================= 平台 Skill（#101） =================
@@ -7738,22 +7908,20 @@ function renderAgentForm(){
 // ================= 个人空间（#542）：自己的待办、笔记 =================
 // 列表栏是分类（手机上是分类页），右边只显示当前这一类；数据在本机（S.me）那台存取。
 // 对话里 Agent 回答下面的「⋯」、动态的「⋯」、对话列表的菜单都能加到待办（#554）；SP.chats：有没做完的待办的对话，列表上画待办标识。
-const SP = {d: null, loading: null, q: "", doneOpen: false, newText: "", chats: new Set(), hits: [], searchPending: false};
+const SP = {d: null, loading: null, chats: new Set()};
 const SP_IC = {
   todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/></svg>',
 };
-const SP_CATS = [["todo", "待办", "var(--zhu)"], ["note", "笔记", "var(--qing)"]];
 const spM = () => S.me || null;
 const spErr = () => `${esc(SP.err)}<div style="margin-top:12px"><button class="btn" onclick="SP.err='';spaceLoad(true)">再试一次</button></div>`;
-const spCat = () => current.id === "note" ? "note" : current.id === "todo" || current.id === "fav" || !narrow() ? "todo" : null;   // 老的 #/space/fav 链接去待办
 const spOpenTodos = () => SP.d ? SP.d.todos.filter(t => !t.done) : [];
 const spMsgKey = r => r.type === "mention" ? r.id : (r.id || r.at);
-const spRedraw = () => { if (current.view === "space") { renderSpaceList(); renderSpace(); } };
+const spRedraw = () => { if (current.view === "space") renderSpace(); else if (tdOn()) renderBoardTodo(); };
 async function spaceLoad(draw){
   if (SP.loading) { if (draw) SP.loading.then(spRedraw); return SP.loading; }
   SP.loading = (async () => {
-    try { SP.d = await api0("/api/space?todos=1", undefined, spM()); SP.err = ""; } catch (e) { SP.err = e.message; }
+    try { SP.d = await api0("/api/space?todos=1", undefined, spM()); SP.err = ""; SP.at = Date.now(); } catch (e) { SP.err = e.message; }
     SP.loading = null;
     spChatsSync();
     if (draw) spRedraw();
@@ -7798,7 +7966,7 @@ function msgMoreBtn(src, i){
 const spRow = (src, i) => (src === "earlier" ? detail.earlier : src === "elsewhere" ? detail.elsewhere : detail.log)[i];
 function msgMore(e, src, i){
   const r = spRow(src, i); if (!r) return;
-  const items = [[SP_IC.todo, "转成待办", "放进个人空间的待办", `spTodoMsg(${q(src)},${i})`]];
+  const items = [[SP_IC.todo, "转成待办", "放进任务面板的待办", `spTodoMsg(${q(src)},${i})`]];
   if (!narrow()) return pop(e, items.map(([, l, , js]) => `<button onclick="closePop();${js}">${l}</button>`).join(""));
   e.stopPropagation();
   document.querySelector(".msheet")?.remove();
@@ -7814,81 +7982,13 @@ function spSrcOf(r){
 }
 async function spTodoMsg(src, i){
   const r = spRow(src, i); if (!r) return;
-  const d = await act(() => api("/api/space/todo/add", {text: spPlain(r.text, 80), src: spSrcOf(r)}, spM()));
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(r.text, 80), src: spSrcOf(r), quote: spPlain(r.text, 400, true)}, spM()));
   useMark("act.todo");
   spaceLoad();
-  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad(true))], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad(true))], ["去看看", () => { location.hash = "#/board/todo"; }]]);
 }
-// ---- 列表栏：分类 ----
-function renderSpaceList(){
-  if (!SP.d && !SP.err) spaceLoad(true);
-  if (!$("#sp-list")) $("#list").innerHTML = `<div class="list-head sp-head"><span class="sp-me" id="sp-me"></span><div><h1>个人空间</h1><div class="nm" id="sp-nm"></div></div></div>
-    <label class="search">${ICON.search}<input id="sp-q" placeholder="搜索待办、笔记" aria-label="搜索待办、笔记" value="${esc(SP.q)}" oninput="spSearch(this.value)"></label>
-    <div class="scroll" id="sp-list"></div>`;
-  const me = opcMe(); $("#sp-me").textContent = [...me][0]; $("#sp-nm").textContent = me;
-  $("#sp-list").innerHTML = narrow() ? spPhoneCats() : spCats();
-}
-function spCount(k){
-  const d = SP.d; if (!d) return "";
-  return k === "todo" ? spOpenTodos().length : "";
-}
-function spCats(){
-  const cat = SP.q ? null : spCat();
-  return SP_CATS.map(([k, n]) => `<a class="item sp-cat ${cat === k ? "on" : ""}" href="#/space/${k}" style="text-decoration:none;color:inherit" onclick="spClearQ()"><span class="ic">${SP_IC[k]}</span><span class="t"><span class="title">${n}</span></span><span class="n">${spCount(k)}</span></a>`).join("");
-}
-function spPhoneCats(){
-  if (SP.q) return `<div style="padding:0 10px">${spHits()}</div>`;
-  if (!SV.prefs && !SV.prefsError && !SV.request) svPreferences().then(() => { if (current.view === "space") renderSpaceList(); });
-  const t0 = spOpenTodos()[0];
-  const sub = {todo: t0 ? t0.text : SP.err || (SP.d ? "没有要做的" : "正在读取待办…"), note: SV.prefs?.recent[0]?.name || "文件夹笔记"};
-  const recent = spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]).sort((a, b) => b[2] - a[2]).slice(0, 6);
-  return `<div class="sp-group">${SP_CATS.map(([k, n, c]) => `<a class="sp-row" href="#/space/${k}"><span class="bx" style="background:${c}">${SP_IC[k]}</span>
-      <span class="t"><b>${n}</b><span class="sub">${esc(sub[k])}</span></span><span class="n">${spCount(k)}</span><span class="chev">${ICON.chev}</span></a>`).join("")}</div>
-    ${recent.length ? `<div class="sp-sec">最近加的</div><div class="sp-group">${recent.map(([k, t, at, h]) => `<a class="sp-row" href="${h}"><span class="ic">${SP_IC[k]}</span>
-      <span class="t"><b style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</b><span class="sub">${{todo: "待办", note: "笔记"}[k]} · ${spWhen(at)}</span></span></a>`).join("")}</div>` : ""}`;
-}
-// ---- 搜索：待办、笔记一起搜 ----
-let spSearchTimer;
-function spSearch(v){
-  SP.q = v.trim(); SP.hits = []; SP.searchError = ""; SP.searchPending = !!SP.q;
-  clearTimeout(spSearchTimer);
-  spDrawSearch();
-  if (!SP.q) return;
-  const term = SP.q;
-  spSearchTimer = setTimeout(async () => {
-    try {
-      if (!SV.prefs) await svPreferences();
-      const vault = SV.prefs?.recent[0];
-      const d = vault ? await svCall(vault, "search", {query: term}) : {entries: []};
-      if (SP.q === term) SP.hits = d.entries.map(row => ({...row, vault}));
-    } catch (e) { if (SP.q === term) SP.searchError = e.message; }
-    finally { if (SP.q === term) { SP.searchPending = false; spDrawSearch(); } }
-  }, 250);
-}
-function spDrawSearch(){
-  if (current.view !== "space") return;
-  $("#sp-list").innerHTML = narrow() ? spPhoneCats() : spCats();
-  if (!narrow()) renderSpace();
-}
-function spClearQ(){ if (!SP.q) return; SP.q = ""; const el = $("#sp-q"); if (el) el.value = ""; }
-function spHits(){
-  const k = SP.q.toLowerCase(), has = (...xs) => xs.some(x => (x || "").toLowerCase().includes(k)), d = SP.d;
-  const todos = (d?.todos || []).filter(t => has(t.text, (t.src || {}).title, (t.src || {}).name));
-  const row = (ic, t, sub, hash) => `<a class="sp-hit" href="${esc(hash)}" onclick="event.preventDefault();spGoHit(${q(hash)})"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="sub">${esc(sub)}</span></a>`;
-  const sec = (n, xs) => xs.length ? `<div class="sp-grp">${n} ${xs.length}</div>${xs.join("")}` : "";
-  const out = sec("待办", todos.map(t => row(SP_IC.todo, t.text, t.done ? "已完成" : spWhen(t.at), "#/space/todo")))
-    + sec("笔记", SP.hits.map(n => row(SP_IC.note, svTitle(n.path), svParent(n.path), svHash(n.path, n.vault))));
-  if (SP.searchError || SP.searchPending) return out + svEmpty(SP.searchError || "正在搜索笔记…");
-  return out || `<div class="sp-empty">没有找到「${esc(SP.q)}」</div>`;
-}
-function spGoHit(h){ if (h.startsWith("#/space/todo")) SP.doneOpen = true; spClearQ(); if (location.hash === h) { renderSpaceList(); renderSpace(); } else location.hash = h; }
 // ---- 右边 ----
-function renderSpace(){
-  if (spCat() === "note" && (!SP.q || narrow())) { drawSpNotes(); return; }
-  if (!SP.d && !SP.q) { $("#main").innerHTML = `<div class="sp-main">${SP.err ? `<div class="sp-empty">${spErr()}</div>` : ""}</div>`; if (!SP.err) spaceLoad(true); return; }
-  if (SP.q && !narrow()) { $("#main").innerHTML = `<div class="sp-main"><div class="sp-in"><div class="sp-h"><h1>搜索</h1></div>${spHits()}</div></div>`; return; }
-  drawSpTodo();
-}
+function renderSpace(){ drawSpNotes(); }   // 个人空间只有笔记（#588，待办挪到任务面板）
 function spSrc(src, fallback){
   if (src && src.feed) {                 // 动态里加的（#554）：点了回到动态里那一条
     const a = src.agent ? agentOf(src.agent) : null;
@@ -7912,57 +8012,6 @@ function spGoSrc(e, src){
   location.hash = "#/chats/" + encodeURIComponent(src.chat);
   return false;
 }
-// 待办
-function drawSpTodo(){
-  const had = document.activeElement && document.activeElement.id === "sp-new";
-  const open = spOpenTodos(), done = SP.d.todos.filter(t => t.done).sort((a, b) => (b.done_at || 0) - (a.done_at || 0));
-  $("#main").innerHTML = `<div class="sp-main"><div class="sp-in">
-    <div class="sp-h"><h1>待办</h1><span class="n">${open.length}</span></div>
-    <label class="sp-add">${ICON.plus}<input id="sp-new" placeholder="加一条待办" maxlength="500" value="${esc(SP.newText)}" oninput="SP.newText=this.value"
-      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();spTodoAdd()}"></label>
-    ${open.map(spTodoRow).join("") || `<div class="sp-empty">没有要做的</div>`}
-    ${done.length ? `<button class="sp-fold ${SP.doneOpen ? "open" : ""}" aria-expanded="${SP.doneOpen}" onclick="SP.doneOpen=!SP.doneOpen;drawSpTodo()">${ICON.chev}已完成 ${done.length}</button>${SP.doneOpen ? done.map(spTodoRow).join("") : ""}` : ""}
-  </div></div>`;
-  if (had) $("#sp-new").focus();
-}
-function spTodoRow(t){
-  return `<div class="sp-todo ${t.done ? "done" : ""}">
-    <button class="sp-ck" role="checkbox" aria-checked="${!!t.done}" aria-label="${t.done ? "改回没做完" : "做完了"}" onclick="spTodoDone(${q(t.id)},${!t.done})">${ICON.check}</button>
-    <div class="mid"><div class="tx" tabindex="0" onclick="spTodoEdit(this,${q(t.id)})" onkeydown="if(event.key==='Enter'){event.preventDefault();this.click()}">${esc(t.text)}</div>
-    ${t.src ? spSrc(t.src) : `<span class="sp-src self">自己记的</span>`}</div>
-    <button class="icon-btn del" aria-label="删除" title="删除" onclick="spTodoDel(${q(t.id)})">${ICON.x}</button></div>`;
-}
-async function spTodoAdd(){
-  const text = SP.newText.trim(); if (!text) return;
-  const d = await act(() => api("/api/space/todo/add", {text}, spM()));
-  SP.newText = ""; SP.d.todos.unshift(d.item); drawSpTodo(); renderSpaceList(); spChatsSync(); $("#sp-new")?.focus();
-}
-async function spTodoDone(id, done){
-  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
-  t.done = done; t.done_at = done ? Date.now() / 1000 : undefined; drawSpTodo(); renderSpaceList(); spChatsSync();
-  try { await api("/api/space/todo/set", {id, done}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
-}
-function spTodoEdit(el, id){
-  const t = SP.d.todos.find(x => x.id === id); if (!t || el.querySelector("input")) return;
-  el.innerHTML = `<input maxlength="500" aria-label="改待办">`;
-  const inp = el.firstChild; inp.value = t.text; inp.focus();
-  let done = false;
-  const save = async keep => {
-    if (done) return; done = true;
-    const v = inp.value.trim();
-    if (!keep || !v || v === t.text) { drawSpTodo(); return; }
-    t.text = v; drawSpTodo();
-    try { await api("/api/space/todo/set", {id, text: v}, spM()); } catch (e) { toast(e.message); spaceLoad(true); }
-  };
-  inp.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(true); } else if (e.key === "Escape") save(false); };
-  inp.onblur = () => save(true);
-}
-async function spTodoDel(id){
-  const t = SP.d.todos.find(x => x.id === id); if (!t) return;
-  SP.d.todos = SP.d.todos.filter(x => x.id !== id); drawSpTodo(); renderSpaceList(); spChatsSync();
-  try { await api("/api/space/todo/del", {id}, spM()); } catch (e) { toast(e.message); spaceLoad(true); return; }
-  spToast("已删除", [["撤销", () => api("/api/space/todo/restore", {item: t}, spM()).then(() => spaceLoad(true))]]);
-}
 // 笔记：左边列表，右边正文（手机上一层层点进去）
 // ---- 设备上的 Markdown 笔记（#555） ----
 const SV_API = "/api/space/vault";
@@ -7973,7 +8022,7 @@ const svName = path => path.split("/").pop();
 const svParent = path => path.split("/").slice(0, -1).join("/");
 const svTitle = path => svName(path).replace(/\.md$/i, "");
 const svKey = (v, p) => v.id + ":" + p;
-const svOn = () => current.view === "space" && current.id === "note" && !SP.q;
+const svOn = () => current.view === "space" && current.id === "note";
 const svHash = (path, v = SV.vault) => "#/space/note/" + encodeURIComponent(path) + "?vault=" + encodeURIComponent(v.id);
 const svRouteVault = () => new URLSearchParams(location.hash.split("?")[1]).get("vault");
 const svCall = (v, op, fields = {}) => api0(SV_API, {...fields, op, vault: v.id}, v.machine);
@@ -8040,7 +8089,6 @@ async function svSelect(args, keepRoute = false) {
   } finally {
     SV.changing = false;
     if (svOn()) drawSpNotes();
-    if (current.view === "space") renderSpaceList();
   }
 }
 function drawSpNotes() {
@@ -10156,10 +10204,10 @@ function feedMenu(e, rid){                // 「⋯」：去对话回复、加�
 async function feedTodo(rid){            // 加到个人空间的待办（#554）：内容取第一段，来源记这个任务的这次运行
   const p = FEED.posts.find(x => x.rid === rid); if (!p) return;
   const src = {feed: p.sid, run: rid, name: p.name || "", agent: p.agent || ""};
-  const d = await act(() => api("/api/space/todo/add", {text: spPlain(p.text, 80) || p.name || "动态", src}, spM()));
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(p.text, 80) || p.name || "动态", src, quote: spPlain(p.text, 400, true)}, spM()));
   useMark("feed.todo");
   spaceLoad();
-  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/space/todo"; }]]);
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/board/todo"; }]]);
 }
 async function feedHide(rid){
   const i = FEED.posts.findIndex(x => x.rid === rid); if (i < 0) return;

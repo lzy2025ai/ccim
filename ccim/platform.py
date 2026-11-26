@@ -3527,7 +3527,7 @@ def _handler(pf):
                 "/api/schedule": lambda: pf.call(pf.schedules.detail, q.get("id", "")),
                 "/api/schedule/list": lambda: {"schedules": [x for x in pf.call(pf.schedules.summary)
                                                              if share.of_schedule(pf, x) == acct]},   # ccim schedule list
-                "/api/schedule/feed": lambda: pf.call(pf.schedules.feed, my_schedules(pf, acct)),   # 动态（#520）
+                "/api/schedule/feed": lambda: pf.call(pf.schedules.feed, my_schedules(pf, acct), q.get("agent") or None),   # 动态（#520）
                 "/api/space": lambda: space_mod.view(acct, notes=q.get("todos") != "1"),   # 个人空间（#542）
                 vault.PREFS: lambda: vault.preferences(acct),
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},

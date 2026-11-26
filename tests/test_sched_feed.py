@@ -68,6 +68,11 @@ class FeedTests(unittest.TestCase):
         self.assertEqual([x["text"] for x in ps["b:2"]["replies"]], ["追问", "答"])   # 别的对话里只算在动态里追问的
         self.assertEqual(ps["b:2"]["agent"], "y")
         self.assertEqual([f["id"] for f in r["failing"]], ["b"])
+        # 只看一个 Agent（#589）：按发帖人筛，没跑成的提醒也只留它的
+        r = sc.feed(["a", "b"], "x")
+        self.assertEqual([p["rid"] for p in r["posts"]], ["a:1", "a:0"])
+        self.assertEqual(r["failing"], [])
+        self.assertEqual([p["rid"] for p in sc.feed(["a", "b"], "y")["posts"]], ["b:2"])
 
 
     def test_hide_and_at(self):

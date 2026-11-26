@@ -153,8 +153,10 @@ class SideMentionTests(unittest.TestCase):
         pf = self.pf
         main = self.group()
         from ccim.platform import Problem
+        cid, _ = pf.run(self._work(main, "改一下"))                          # 主对话（群主的群聊）也能派（#586）
+        self.assertEqual(pf.chats()[cid]["dispatched_from"], main)
         with self.assertRaises(Problem):
-            pf.run(self._work(main, "改一下"))
+            pf.run(self._work(cid, "再往下派"))                               # 派出去的任务对话不再往下派
         far = pf.mentions._ensure(main, self.helper, None, "写公众号")
         chats = pf.chats()
         chats[far]["remote_project"] = True                                    # 别的电脑派来的：先不做
@@ -283,10 +285,10 @@ class SideMentionTests(unittest.TestCase):
         side = pf.run(pf.side_chat(main))
         sat = pf.mentions._ensure(side, self.helper, None, "写公众号", side=True)
         def chat(cid):
-            return SimpleNamespace(chat_id=cid, b=SimpleNamespace(entry=self.real_bridge(cid).entry))
+            return SimpleNamespace(chat_id=cid, chat_type="p2p", b=SimpleNamespace(entry=self.real_bridge(cid).entry), _guest=lambda: None)
         self.assertTrue(session._can_work(chat(sub), pf))
         self.assertTrue(session._can_work(chat(sat), pf))
-        self.assertFalse(session._can_work(chat(main), pf))
+        self.assertTrue(session._can_work(chat(main), pf))                    # 主对话也能派（#586）
         self.assertFalse(session._can_work(chat(side), pf))
 
     def test_remote_agent_on_old_version(self):

@@ -694,6 +694,11 @@ a.kpi:hover{border-color:var(--line-strong);background:#FBFBF9}
 .kids>.node:first-child::before{top:-8px}
 .kids>.node:first-child::after{top:-8px;height:25px}   /* 第一条接到印章底下 */
 .kids .kids{margin-left:10px}
+.kfold{display:inline-flex;align-items:center;gap:1px;flex:none;height:20px;min-width:20px;padding:0 3px;border-radius:5px;color:var(--muted);font-size:11px}
+.kfold:hover{background:var(--sunk);color:var(--ink)}
+.kfold svg{width:12px;height:12px;transform:rotate(90deg);transition:transform .15s}
+.kfold:not(.open) svg{transform:none}
+.tag.task{background:color-mix(in srgb,var(--qing) 12%,transparent);color:var(--qing);flex:none}
 .item.child{padding:6px 10px;align-items:center}
 .item.child .title{font-weight:400;font-size:13.5px}
 .item{position:relative}
@@ -1687,6 +1692,11 @@ body.sd-dragging iframe{pointer-events:none}
 @media (max-width:760px){.sd-drag{display:none}.sd-x{visibility:visible}}
 .work-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-decoration:none;color:var(--ink)}
 .work-card:hover{border-color:var(--qing)}
+.rep-from{display:inline-flex;align-items:center;gap:2px;font-size:12px;color:var(--muted);text-decoration:none;min-width:0;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rep-from:hover{color:var(--qing)}
+.msg.report .answer{border-left:3px solid var(--line-strong);padding-left:12px}
+.rep-from svg{width:12px;height:12px;flex:none}
+.tag.bad,.work-card .bad{color:var(--bad)}
 .work-card .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .work-card .t b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .work-card .t span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
@@ -3410,8 +3420,24 @@ function markOf(c){
   const star = c.pin != null ? `<span class="mk star" title="置顶">${ICON.star}</span>` : "";   // 置顶就是星标（#347）
   return star + (SP.chats.has(c.id) ? `<span class="mk todo" title="待办">${SP_IC.todo}</span>` : "");
 }
+// 挂在下面的对话（分叉、派出去的任务）能收起来（#586），记在浏览器里
+const FOLD_KEY = "ccim.foldKids";
+let FOLDED = (() => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || "[]")); } catch { return new Set(); } })();
+function toggleKids(ev, id){
+  ev.preventDefault(); ev.stopPropagation();
+  FOLDED.has(id) ? FOLDED.delete(id) : FOLDED.add(id);
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify([...FOLDED].slice(-300))); } catch {}
+  renderList();
+}
+function foldBtn(c, kids){
+  const n = (kids[c.id] || []).length;
+  if (!n) return "";
+  const off = FOLDED.has(c.id);
+  return `<button class="kfold ${off ? "" : "open"}" aria-expanded="${!off}" aria-label="${off ? "展开" : "收起"}下面的 ${n} 个对话" title="${off ? "展开" : "收起"}" onclick="toggleKids(event,${q(c.id)})">${off ? `<span>${n}</span>` : ""}${ICON.chev}</button>`;
+}
+const taskTag = c => c.dispatched_from ? `<span class="tag task">任务</span>` : "";
 function nest(c, me, kids, child, inAgent, depth){
-  const ks = (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
+  const ks = FOLDED.has(c.id) ? [] : (kids[c.id] || []).sort((x, y) => (x.last_active < y.last_active ? 1 : -1));
   if (child && depth >= 2) return `<div class="node">${me}</div>` + ks.map(k => chatItem(k, kids, true, inAgent, depth)).join("");
   const tree = ks.length ? `<div class="kids">${ks.map(k => chatItem(k, kids, true, inAgent, depth + 1)).join("")}</div>` : "";
   return child ? `<div class="node">${me}${tree}</div>` : me + tree;
@@ -3443,7 +3469,7 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
   if (inAgent) {                            // Agent 页里：不要印章，链接留在 Agent 页
     const href = `#/agents/${encodeURIComponent(inAgent)}/${encodeURIComponent(c.id)}`;
     const me = `<a class="item child ${today} ${(agentSide && agentSide.on || current.sub) === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="${href}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})" ${c.brief ? `title="${esc(c.brief)}"` : ""}>${working(c) ? ANTS : ""}
-      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">${c.group && c.group.side ? "侧边对话" : "成员"}</span>` : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" && !c.member ? srcTag(c.source) : ""}${whenTag(c)}${moreBtn(c)}</a>`;
+      <span class="t">${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}<span class="title">${esc(c.title)}</span></span>${c.member ? `<span class="tag member">${c.group && c.group.side ? "侧边对话" : "成员"}</span>` : taskTag(c)}${c.task_of && c.agent ? seal(agentOf(c.agent) || {name: "?"}, "sm", false) : ""}${working(c) ? `<span class="working"><span class="spin"></span></span>` : ""}${(c.members || []).length ? `<span class="minis">${[c.agent, ...c.members].map(agentOf).filter(Boolean).slice(0, 4).map(x => seal(x, "sm", false)).join("")}</span>` : ""}${c.listed ? srcTag("定时") : c.review ? srcTag("复盘") : c.source && c.source !== "网页" && !c.member ? srcTag(c.source) : ""}${foldBtn(c, kids)}${whenTag(c)}${moreBtn(c)}</a>`;
     return nest(c, me, kids, child, inAgent, depth);
   }
   // @ 过其他 Agent 的对话：干完活后标题处换成最后回答的那个 Agent（#302）；干活时第二行已经写了是谁，还是标题
@@ -3454,9 +3480,9 @@ function chatItem(c, kids, child, inAgent, depth = 0){   // 最多缩进两层�
     : c.limit ? `<span class="working">${esc(c.limit.text)}</span>` : `<span>${esc(c.brief || c.agent_name || "临时对话")}</span>`;
   const me = child
     ? `<a class="item child ${today} ${current.id === c.id ? "on" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">
-        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
+        <span class="t">${markOf(c)}<span class="title">${esc(c.title)}</span></span>${taskTag(c)}${foldBtn(c, kids)}${working(c) ? `<span class="working"><span class="spin"></span></span>` : `${whenTag(c)}`}${moreBtn(c)}</a>`
     : `<a class="item ${today} ${current.id === c.id ? "on" : ""} ${c.attention ? "new" : ""} ${working(c) ? "work" : ""} ${c.stall ? "stall" : ""} ${c.attention === "err" && !working(c) ? "err" : ""}" href="#/chats/${encodeURIComponent(c.id)}" style="text-decoration:none;color:inherit" oncontextmenu="itemMenu(event,${q(c.id)})">${working(c) ? ANTS : ""}
-        ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${whenTag(c)}</span>
+        ${iconOf(c, a)}<span class="t2"><span class="r1"><span class="title${by ? " by" : ""}"${by ? ` title="${esc(c.title)}"` : ""}>${c.attention ? `<span class="udot"></span>` : ""}${markOf(c)}${by ? `${seal(by, "sm", false)}<span class="nm">${esc(by.name)}</span>` : esc(c.title)}</span>${foldBtn(c, kids)}${whenTag(c)}</span>
           <span class="r2"><span class="sub">${showTag(c) ? `<span class="newtag ${c.attention}">${c.invite ? "邀请你加入" : c.at_me ? "有人 @ 你" : c.attention === "ask" ? "等你批准" : c.attention === "err" ? "出错了" : "新回答"}</span>` : ""}${sub}</span><span class="item-tags">${mtag(c.machine)}${srcTag(c.listed ? "定时" : c.review ? "复盘" : c.pocket ? "挂件" : c.source === "网页" ? "" : c.source)}</span></span></span>${moreBtn(c)}</a>`;
   return nest(c, me, kids, child, inAgent, depth);
 }
@@ -3727,6 +3753,7 @@ function recHtml(r, i, src = "log"){
       ${userFiles(r)}
       ${r.text ? msgActs(src, i, r) : timeActs(r)}</div></div>${r.to && src === "log" ? mentionGroup(r.id) : ""}`;
   }
+  if (r.type === "report") return reportHtml(r);
   if (r.type === "mention") return r.report && src === "log" ? `<div class="msg">${mentionOne(r, i)}</div>` : "";   // 新开对话做完回来汇报的（#359），前面没有用户消息
   if (r.type === "work") return r.desk ? deskCard(r) : workCard(r, "msg", ctxMachine || S.me);
   if (r.type === "choices") return choicesHtml(r, i);
@@ -3810,7 +3837,7 @@ function threadOrder(log, from){
     if (r.by && (r.type === "user" || r.type === "mention")) { order.push(i); at = order.length; }
     else if (r.type === "user" && r.to && r.to.length || r.type === "mention" || r.type === "work") order.push(i);   // 成员新开对话去做的卡片（#359）跟着它的回答排
     else if (r.sub || r.type === "diary") order.push(i);   // 被 @ 的 Agent 发的文件、用户记的日记：按时间放在原位（#380）
-    else if (r.type === "user") { order.push(i); at = order.length; }
+    else if (r.type === "user" || r.type === "report") { order.push(i); at = order.length; }   // 交回的结果（#586）后面跟着处理它的回答
     else order.splice(at++, 0, i);
   }
   return {order, liveAt: at};
@@ -7417,6 +7444,14 @@ function backLink(){
   return t ? `<a class="back" href="${esc(t.hash)}" onclick="event.preventDefault();linkBack()" title="${esc(t.title || "返回")}">${ICON.left}<span class="back-t">${t.title ? esc(t.title) : "返回"}</span></a>`
     : `<a class="back" href="#/agents">${ICON.left}所有 Agent</a>`;
 }
+// 派出去的对话挂在派出它的对话下面（#179、#586）：按 dispatched_from 认，不看标题，改了名也还在；
+// 派给别的 Agent 的也挂；群里派的挂在它在群里的子对话下面（#359）。只在前端改 parent，不写进 meta
+function hangTasks(rows0){
+  const ids = new Set(rows0.map(c => c.id));
+  const subOf = new Map(rows0.filter(c => c.mention_of).map(c => [c.mention_of, c.id]));   // 群聊 → 它在里面的子对话
+  const home = c => ids.has(c.dispatched_from.id) ? c.dispatched_from.id : subOf.get(c.dispatched_from.id);
+  return rows0.map(c => c.dispatched_from && home(c) && home(c) !== c.id && (!c.parent || !ids.has(c.parent)) ? {...c, parent: home(c)} : c);
+}
 function renderAgentSide(){
   const id = current.id;
   if (!agentSide || agentSide.id !== id) { agentSide = {id, chats: []}; fetchAgentSide(id); }
@@ -7425,9 +7460,7 @@ function renderAgentSide(){
   // 它只是成员的群聊列它在里面的子对话（#409）；它从群里新开去做的对话挂在那个子对话下面
   const rows0 = agentSide.chats.filter(c => !c.project && !c.side_of && (!c.schedule || c.listed));
   const ids = new Set(rows0.map(c => c.id));
-  const subOf = new Map(rows0.filter(c => c.mention_of).map(c => [c.mention_of, c.id]));   // 群聊 → 它在里面的子对话
-  const home = c => ids.has(c.dispatched_from.id) ? c.dispatched_from.id : subOf.get(c.dispatched_from.id);
-  const rows = rows0.map(c => !c.parent && c.dispatched_from && home(c) ? {...c, parent: home(c)} : c);
+  const rows = hangTasks(rows0);
   // 打开的对话不在列表里（#371，刚开的、项目里的）：先插在列表里
   const d = current.sub && !ids.has(current.sub) && detail && detail.id === current.sub ? detail : null;
   agentSide.on = current.sub;
@@ -10768,13 +10801,24 @@ function sideEmpty(){   // 嵌在侧边栏里、还没说过话
   return `<div class="pk-empty"><h3>有疑问，或者要顺手做点事</h3><div class="pk-sugg">${["它现在在做什么，做到哪一步了", "刚才那条回答是什么意思", "照现在的做法，有什么要注意的"]
     .map(t => `<button onclick="pocketFill(${q(t)})"><span>${esc(t)}</span>${ICON.chev}</button>`).join("")}</div></div>`;
 }
-// 被 @ 的 Agent 新开对话去做的进度卡片：侧边对话（#290）、群聊（#359）共用
+// 新开对话去做的进度卡片：侧边对话（#290）、群聊（#359）、主对话派的任务（#586）共用
 function workCard(r, cls, mid){
   const a = agentOf(r.agent) || {name: "已删除的 Agent", base: "claude"};
-  const st = {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
-              error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"}[r.state] || "";
+  const st = (r.task ? {working: `<span class="spin"></span>进行中`, done: "已交付", error: `<span class="bad">出错了</span>`, stopped: "停下了", lost: "没做完（ccim 重启过）"}
+    : {working: `<span class="spin"></span>在「${esc(r.title)}」里处理中`, done: `在「${esc(r.title)}」里做完了`,
+       error: "出错了", stopped: "停下了", lost: "没做完（ccim 重启过）"})[r.state] || "";
   return `<div class="${cls}"><a class="work-card" href="#/chats/${encodeURIComponent(r.chat)}" onclick="ctxMachine=${q(mid)}">
       ${seal(a, "sm", false)}<span class="t"><b>${esc(a.name)} · ${esc(r.title)}</b><span>${st}</span></span>${ICON.chev}</a></div>`;
+}
+// 任务交回、别的对话里的 Agent 发来的（#586）：署名、按 Markdown 显示，点「来自任务」过去
+function reportHtml(r){
+  const a = agentOf(r.agent) || {name: r.agent ? "已删除的 Agent" : "临时对话", base: "claude"};
+  const c = chatById(r.chat), title = (c && c.title) || r.title || "";
+  const st = {error: "出错了", stopped: "停下了", lost: "没做完"}[r.state] || "";
+  const fs = r.files && r.files.length ? `<div class="work-out">${workFiles(r.files, r.files_chat || r.chat)}</div>` : "";
+  return `<div class="msg report"><div class="from-row">${r.agent ? avHov(a, seal(a, "sm", false)) : ""}<b>${esc(a.name)}</b>
+      <a class="rep-from" href="#/chats/${encodeURIComponent(r.chat)}">${r.task ? "来自任务：" : "来自对话："}${esc(title)}${ICON.chev}</a>${st ? `<span class="tag bad">${st}</span>` : ""}</div>
+    <div class="answer">${md(r.text || "")}</div>${fs}${timeActs(r)}</div>`;
 }
 function workFiles(fs, chat){
   return (fs || []).map(f => { const src = fileUrl(chat, f.path);

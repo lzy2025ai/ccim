@@ -58,6 +58,21 @@ class SharedTests(unittest.TestCase):
         self.assertEqual(first[0]["n"], 1)
         self.assertEqual(later["n"], 2)
 
+    def test_after_change_wait_and_share_one(self):
+        """#584：在算的那份过期了，之后陆续来的排在后面，合起来只再算一份，而且都是改动之后的。"""
+        first, later = [], []
+        t = threading.Thread(target=lambda: first.append(self.s.get("k", self.slow(0.4))))
+        t.start()
+        time.sleep(0.1)
+        self.s.changed()
+        ts = [threading.Thread(target=lambda: later.append(self.s.get("k", self.slow(0.2)))) for _ in range(8)]
+        for x in ts:
+            x.start()
+            time.sleep(0.01)
+        [x.join() for x in ts + [t]]
+        self.assertEqual(self.calls, 2)
+        self.assertEqual({o["n"] for o in later}, {2})
+
     def test_working_progress_does_not_invalidate(self):
         self.s.get("k", self.slow(0))
         self.s.changed({"type": "progress", "state": "working", "chat": "c"})

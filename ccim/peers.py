@@ -157,13 +157,16 @@ class Nonces:
 class Shared:
     """同时到的同一个请求只算一次、大家共用结果；刚算好的 TTL 秒内来的也直接用（#258）。
     几个页面收到同一条推送会差不多同时来要整体状态，各算各的就互相排队。
-    有改动（POST 做完、推了会改列表的推送）就作废，之后来的重新算；改动之前开始算的那份也不给之后来的用。"""
+    有改动（POST 做完、推了会改列表的推送）就作废，之后来的重新算；改动之前开始算的那份也不给之后来的用。
+    同一个键同一时间只算一份（#584）：在算的那份已经过期时，后到的排在它后面，等它算完由其中一个再算一份大家共用
+    ——只要是在自己到达之后才开始算的，就是新的。几个 Agent 同时干活时推送不断，以前每个请求各自重算，互相抢着算到几十秒。"""
     TTL = 3
 
     def __init__(self):
         self.lock = threading.Lock()
         self.gen = 0                          # 改动一次加一
-        self.slots = {}                       # 键 → {gen, at 开始算的时刻, done, val, err}
+        self.slots = {}                       # 键 → {gen 开始算时的改动次数, at 开始算的时刻, done, val, err}
+        self.turns = {}                       # 键 → 锁：同一个键同一时间只有一个在算
 
     def changed(self, ev=None):
         if ev and ev.get("type") == "progress" and ev.get("state") == "working":
@@ -173,14 +176,31 @@ class Shared:
         with self.lock:
             self.gen += 1
 
+    @staticmethod
+    def _wait(s):
+        s["done"].wait()
+        if s["err"] is not None:
+            raise s["err"]
+        return s["val"]
+
     def get(self, key, fn):
         with self.lock:
+            mine, t0 = self.gen, time.time()  # 到达时的改动次数和时刻：在这之后开始算的结果都能用
             s = self.slots.get(key)
-            mine = not (s and s["gen"] == self.gen and s["err"] is None
-                        and (not s["done"].is_set() or time.time() - s["at"] < self.TTL))
-            if mine:
+            if s and s["gen"] >= mine and s["err"] is None and (not s["done"].is_set() or time.time() - s["at"] < self.TTL):
+                hit = s
+            else:
+                hit = None
+                turn = self.turns.setdefault(key, threading.RLock())
+        if hit:
+            return self._wait(hit)
+        with turn:                            # 前面有一份在算（可能已过期）：等它算完
+            with self.lock:
+                s = self.slots.get(key)
+                if (s and s["gen"] >= mine and s["err"] is None and s["done"].is_set()
+                        and (s["at"] >= t0 or time.time() - s["at"] < self.TTL)):
+                    return s["val"]           # 排队时别人已经算好了一份新的
                 s = self.slots[key] = {"gen": self.gen, "at": time.time(), "done": threading.Event(), "val": None, "err": None}
-        if mine:
             try:
                 s["val"] = fn()
             except BaseException as e:
@@ -189,10 +209,6 @@ class Shared:
             finally:
                 s["done"].set()
             return s["val"]
-        s["done"].wait()
-        if s["err"] is not None:
-            raise s["err"]
-        return s["val"]
 
 
 # ---------- 执行本机接口 ----------

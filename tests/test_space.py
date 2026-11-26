@@ -78,6 +78,15 @@ class SpaceTests(unittest.TestCase):
         t = space.todo_add(None, "缺了运行", {"feed": "a"})["item"]
         self.assertNotIn("src", t)
 
+    def test_quote(self):
+        """加待办时带上那条回答的原话（#588），撤销删除时也留着；自己记的不存。"""
+        it = space.todo_add(None, "回客户", {"chat": "c1", "title": "批次", "agent": "a1"}, "原话" * 300)["item"]
+        self.assertEqual(len(it["quote"]), space.QUOTE_MAX)
+        space.todo_del(None, it["id"])
+        space.todo_restore(None, it)
+        self.assertEqual(space.view(None, notes=False)["todos"][0]["quote"], it["quote"])
+        self.assertNotIn("quote", space.todo_add(None, "自己的事", None, "不该存")["item"])
+
     def test_no_favs(self):
         os.makedirs(os.path.dirname(space._file(None)))
         with open(space._file(None), "w", encoding="utf-8") as f:

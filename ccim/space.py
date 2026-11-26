@@ -80,24 +80,30 @@ def view(acct, notes=True):
 
 # ---------- 待办 ----------
 
-def _add(d, text, src):
+def _add(d, text, src, quote=None):
     if len([t for t in d["todos"] if not t.get("done")]) >= MAX_TODO:
         raise Problem("待办太多了，先勾掉一些。")
     item = {"id": _id(), "text": text, "done": False, "at": time.time()}
     s = _src(src)
     if s:
         item["src"] = s
+        q = _text(quote, QUOTE_MAX)
+        if q:
+            item["quote"] = q             # 加的时候那条回答 / 动态的原话（#588），待办里看得到当时说了什么
     d["todos"].insert(0, item)
     return item
 
 
-def todo_add(acct, text, src=None):
+QUOTE_MAX = 400
+
+
+def todo_add(acct, text, src=None, quote=None):
     text = _text(text, 500)
     if not text:
         raise Problem("先写点什么。")
     with _lock:
         d = _read(acct)
-        item = _add(d, text, src)
+        item = _add(d, text, src, quote)
         _write(acct, d)
     return {"item": item}
 
@@ -171,6 +177,9 @@ def todo_restore(acct, item):
             s = _src(item.get("src"))
             if s:
                 keep["src"] = s
+                q = _text(item.get("quote"), QUOTE_MAX)
+                if q:
+                    keep["quote"] = q
             d["todos"].append(keep)
             d["todos"].sort(key=lambda x: -(x.get("at") or 0))
             _write(acct, d)

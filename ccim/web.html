@@ -98,22 +98,112 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-fold svg{width:14px;height:14px;transition:transform .15s} .sp-fold.open svg{transform:rotate(90deg)}
 .sp-grp{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin:16px 0 8px}
 .sp-grp::after{content:"";flex:1;height:1px;background:var(--line)}
-.sp-notes{display:grid;grid-template-columns:300px 1fr;height:100%;min-height:0}
-.sp-nlist{border-right:1px solid var(--line);overflow:auto;background:var(--paper)}
-.sp-nlist .sp-h{padding:20px 16px 0;align-items:center}
-.sp-nlist .sp-grp{margin:12px 16px 4px}
-.sp-note{display:block;padding:11px 16px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
-.sp-note:hover{background:var(--sunk)} .sp-note.on{background:color-mix(in srgb,var(--qing) 10%,var(--panel))}
-.sp-note b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sp-note .pv{display:flex;gap:8px;font-size:12px;color:var(--muted);margin-top:2px}
-.sp-note .pv span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.sp-note .pv span:first-child{color:var(--faint);flex:none}
-.sp-ed{overflow:auto;background:var(--panel);display:flex;flex-direction:column}
-.sp-ed-in{max-width:760px;width:100%;margin:0 auto;padding:22px 40px 60px;flex:1;display:flex;flex-direction:column}
-.sp-ed-top{display:flex;align-items:center;font-size:12px;color:var(--faint);margin-bottom:18px;min-height:30px}
-.sp-ed-top .icon-btn{margin-left:auto}
-.sp-ed .ti{font:600 26px/1.3 var(--song);border:0;outline:none;background:none;padding:0;margin-bottom:14px;color:var(--ink);width:100%}
-.sp-ed textarea{flex:1;min-height:360px;border:0;outline:none;resize:none;font:15px/1.85 var(--sans);color:var(--ink);background:none;padding:0}
+/* 设备上的笔记文件树与实时预览 */
+.sv-panel{
+  --sv-sidebar:color-mix(in srgb,var(--paper) 44%,var(--panel));
+  --sv-desk:color-mix(in srgb,var(--paper) 76%,var(--panel));
+  --sv-hover:color-mix(in srgb,var(--panel) 52%,var(--sunk));
+  --sv-selected:color-mix(in srgb,var(--qing-soft) 88%,var(--panel));
+  height:100%;min-height:0;display:grid;grid-template-columns:minmax(212px,254px) minmax(0,1fr);background:var(--sv-desk);
+}
+.sv-panel:not(:has(.sv-left)){grid-template-columns:1fr}
+.sv-left{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--sv-sidebar);border-right:1px solid var(--line)}
+.sv-vault{padding:16px 12px 12px}
+.sv-switch.btn{
+  width:100%;min-height:58px;gap:9px;padding:8px 9px;border:1px solid color-mix(in srgb,var(--qing) 15%,var(--line));
+  border-radius:12px;background:linear-gradient(120deg,var(--sv-selected),var(--panel) 85%);text-align:left;color:var(--ink);box-shadow:0 1px 2px #1d222b0a;
+}
+.sv-switch.btn:hover{border-color:var(--qing)}
+.sv-vault-icon,.sv-edit-icon{display:grid;place-items:center;flex:none;color:var(--qing);background:var(--qing-soft);border-radius:9px}
+.sv-vault-icon{width:34px;height:34px}
+.sv-vault-icon svg,.sv-edit-icon svg{width:18px;height:18px}
+.sv-vault-name,.sv-file-name{flex:1;min-width:0}
+.sv-switch b,.sv-switch small,.sv-file-name h1,.sv-file-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-switch b{font-size:14px;font-weight:680}
+.sv-switch small,.sv-file-name small{color:var(--muted);font-size:12px;font-weight:400}
+.sv-switch>.chev{color:var(--qing);flex:none;transform:rotate(90deg)}
+.sv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 12px 11px}
+.sv-tools .btn,.sv-tools .icon-btn{min-height:32px;justify-content:center;border-radius:8px}
+.sv-tools .btn{padding:4px 7px;white-space:nowrap;line-height:1.2}
+.sv-tools .icon-btn{flex:none;width:30px}
+.sv-tools .sv-new{flex:1}
+.sv-tools .sv-new svg{width:14px;height:14px}
+.sv-tools .sv-daily{background:transparent;border-color:transparent;color:var(--qing)}
+.sv-tools .sv-daily:hover{background:var(--sv-selected)}
+.sv-panel.no-device .sv-tools button:not(:last-child),.sv-panel.no-device .sv-search{display:none}
+.sv-search.search{margin:0 12px 8px;border:1px solid var(--line);background:var(--panel);border-radius:9px}
+.sv-search:focus-within{border-color:var(--qing)}
+.sv-migration{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:4px 12px 8px;font-size:12px;color:var(--muted)}
+.sv-tree{flex:1;overflow:auto;padding:1px 7px 16px}
+.sv-row{display:flex;align-items:center;gap:2px;min-width:0;margin:2px 0;padding:0 4px 0 min(calc(7px + var(--depth)*15px),40%);min-height:34px;border-radius:8px}
+.sv-row:hover{background:var(--sv-hover)}
+.sv-row.on{color:var(--qing);font-weight:600}
+.sv-row[data-kind="note"].on{background:var(--sv-selected);box-shadow:inset 3px 0 var(--qing)}
+.sv-entry{display:flex;align-items:center;gap:6px;flex:1;min-width:0;align-self:stretch;text-align:left;color:inherit;text-decoration:none;padding:4px}
+.sv-entry>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-entry svg{width:15px;height:15px;flex:none;color:var(--muted)}
+.sv-row.on svg{color:var(--qing)}
+.sv-chevron,.sv-file{display:grid;place-items:center;flex:none}
+.sv-chevron svg{width:11px;height:11px}
+.sv-chevron.open{transform:rotate(90deg)}
+.sv-more.icon-btn{opacity:0;width:25px;height:26px;flex:none}
+.sv-row:hover .sv-more,.sv-row:focus-within .sv-more,.sv-row[data-kind="note"].on .sv-more{opacity:1}
+.sv-editor{display:flex;flex-direction:column;position:relative;min-width:0;min-height:0}
+.sv-edit-head{background:var(--panel);border-bottom:1px solid var(--line)}
+.sv-edit-bar{display:flex;align-items:center;gap:10px;min-height:62px;padding:8px 18px}
+.sv-edit-icon{width:33px;height:33px}
+.sv-file-name h1{margin:0;font:650 16px/1.4 var(--sans)}
+.sv-file-name small{margin-top:2px}
+.sv-status{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;white-space:nowrap}
+.sv-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.sv-status[data-state="saved"]::before{background:var(--ok)}
+.sv-status[data-state="busy"]::before{background:var(--warn)}
+.sv-status[data-state="error"]{color:var(--bad)}
+.sv-status[data-state="error"]::before{background:var(--bad)}
+.sv-problem:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 18px 9px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--bad) 7%,var(--panel));color:var(--bad);font-size:12px}
+.sv-problem .btn{padding:3px 8px;font-size:12px}
+.sv-editor .sv-doc.doc-body{background:var(--sv-desk);flex:1;min-height:0}
+.sv-doc .live-ed{
+  width:min(calc(100% - 36px),760px);min-height:calc(100% - 36px);margin:16px auto 20px;
+  padding:clamp(22px,3vw,38px) clamp(22px,3.1vw,44px) 65px;border:1px solid var(--line);border-radius:14px;
+  background:var(--panel);box-shadow:0 2px 9px #1d222b0a;cursor:text;
+}
+.sv-doc .live-ed .h1{margin:0;font-weight:720}
+.sv-doc .live-ed .h2{font-size:1.35em;margin:.18em 0 .05em}
+.sv-doc .live-ed .ln:has(>br:only-child){line-height:.8;min-height:.8em}
+.sv-doc .live-ed .quote{padding:6px 12px;color:var(--ink-2);border-color:var(--qing-soft);border-radius:0 7px 7px 0;background:var(--sv-sidebar)}
+.sv-doc .live-ed .quote.on{border-color:var(--qing)}
+.sv-doc .live-ed .ln:not(.on) .bul:has(~.lv-task){display:none}
+.sv-doc .live-ed .ln:not(.on) .lv-task{
+  display:inline-block;position:relative;vertical-align:middle;width:14px;height:14px;margin:-1px 7px 0 0;
+  overflow:hidden;white-space:nowrap;color:transparent;border:1px solid var(--line-strong);border-radius:4px;
+}
+.sv-doc .live-ed .ln:not(.on) .lv-task.done{border-color:var(--ok);background:var(--ok)}
+.sv-doc .live-ed .ln:not(.on) .lv-task.done::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:7px;border:solid white;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.sv-empty{display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px;color:var(--muted);padding:23px 12px}
+.sv-panel:not(:has(.sv-left))>.sv-empty,.sv-editor>.sv-empty{margin:auto}
+.sv-suggest:not([hidden]){position:absolute;top:70px;right:16px;z-index:3;display:grid;width:min(300px,90%);padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 5px 16px #1d222b20}
+.sv-suggest button{text-align:left;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:6px}
+.sv-suggest button[aria-selected="true"]{background:var(--sv-selected)}
+.live-ed [data-sv-wiki]{cursor:pointer}
+.sv-doc img[hidden]{display:none}
+@media(hover:none){.sv-more.icon-btn{opacity:1}}
+@media(max-width:760px){
+  .sv-panel{display:flex;flex-direction:column}
+  .sv-left,.sv-editor{flex:1;border-right:0}
+  .sv-panel:not(.in-note) .sv-editor,.sv-panel.in-note .sv-left{display:none}
+  .sv-vault{padding:12px 12px 12px 48px}
+  .sv-tools .btn,.sv-tools .icon-btn{min-height:40px}
+  .sv-tools .icon-btn{width:38px}
+  .sv-row{min-height:44px}
+  .sv-more.icon-btn{width:36px;height:36px}
+  .sv-edit-bar{padding:7px 12px 7px 48px;gap:6px;min-height:55px}
+  .sv-edit-icon{display:none}
+  .sv-status{font-size:11px}
+  .sv-problem:not([hidden]){margin-inline:12px}
+  .sv-doc .live-ed{width:100%;min-height:100%;margin:0;padding:22px 18px 88px;border:0;border-radius:0;box-shadow:none}
+  .sv-suggest:not([hidden]){top:60px}
+}
 .sp-empty{color:var(--muted);padding:40px 0;text-align:center}
 .sp-hit{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;cursor:pointer}
 .sp-hit:hover{background:var(--sunk)}
@@ -144,13 +234,9 @@ a.sp-src:hover span.t{text-decoration:underline}
   .sp-todo .mid{flex-direction:column;align-items:stretch;gap:2px}
   .sp-todo .mid .sp-src{max-width:100%;font-size:12px}
   .sp-todo .mid .sp-src.self{display:none}
-  .sp-notes{display:block}
-  .sp-nlist{border-right:0;height:100%}
-  .sp-ed-in{padding:16px 18px 80px}
-  .sp-ed textarea{font-size:16px}
   .sp-add input,.sp-todo .tx input{font-size:16px}
   .toast.top{top:auto}
-  .app.phone-main .sp-in > .sp-h,.app.phone-main .sp-nlist .sp-h,.app.phone-main .sp-ed-top{padding-left:40px;min-height:36px}
+  .app.phone-main .sp-in > .sp-h{padding-left:40px;min-height:36px}
   .app.phone-main .sp-in > .sp-h{align-items:center}
 }
 .bmodes-h{display:flex;align-items:center;gap:6px}
@@ -2734,6 +2820,14 @@ function afterState(){
   }
   drawKbNav();
   seeOpen(); renderList(); drawAttention();
+  if (svOn() && SV.vault) {
+    const error = svUnavailable(SV.vault);
+    if (SV.deviceError !== error) {
+      SV.deviceError = error;
+      drawSpNotes();
+      if (!error) svRefresh();
+    }
+  }
   if (current.view === "board") renderBoard(true);
   const c = detail && chatById(detail.id);
   if (c && c.title !== detail.title) { detail.title = c.title; const n = document.querySelector(".chat-head .name"); if (n) n.textContent = c.title; }
@@ -7601,7 +7695,7 @@ function renderAgentForm(){
 // ================= 个人空间（#542）：自己的待办、笔记 =================
 // 列表栏是分类（手机上是分类页），右边只显示当前这一类；数据在本机（S.me）那台存取。
 // 对话里 Agent 回答下面的「⋯」、动态的「⋯」、对话列表的菜单都能加到待办（#554）；SP.chats：有没做完的待办的对话，列表上画待办标识。
-const SP = {d: null, loading: null, q: "", doneOpen: false, newText: "", chats: new Set(), noteT: null, noteDirty: null};
+const SP = {d: null, loading: null, q: "", doneOpen: false, newText: "", chats: new Set(), hits: [], searchPending: false};
 const SP_IC = {
   todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/></svg>',
@@ -7616,7 +7710,7 @@ const spRedraw = () => { if (current.view === "space") { renderSpaceList(); rend
 async function spaceLoad(draw){
   if (SP.loading) { if (draw) SP.loading.then(spRedraw); return SP.loading; }
   SP.loading = (async () => {
-    try { SP.d = await api0("/api/space", undefined, spM()); SP.err = ""; } catch (e) { SP.err = e.message; }
+    try { SP.d = await api0("/api/space?todos=1", undefined, spM()); SP.err = ""; } catch (e) { SP.err = e.message; }
     SP.loading = null;
     spChatsSync();
     if (draw) spRedraw();
@@ -7645,20 +7739,6 @@ function spWhen(sec){
   const y = new Date(now); y.setDate(now.getDate() - 1);
   if (d.toDateString() === y.toDateString()) return "昨天";
   return (d.getFullYear() === now.getFullYear() ? "" : d.getFullYear() + "年") + (d.getMonth() + 1) + "月" + d.getDate() + "日";
-}
-function spGroup(sec){
-  const d = new Date((sec || 0) * 1000), now = new Date();
-  if (d.toDateString() === now.toDateString()) return "今天";
-  return Date.now() / 1000 - sec < 7 * 86400 ? "本周" : "更早";
-}
-function spGrouped(list, at, today = true){
-  const out = [];
-  for (const x of list) {
-    let g = spGroup(at(x)); if (!today && g === "今天") g = "本周";
-    if (!out.length || out[out.length - 1][0] !== g) out.push([g, []]);
-    out[out.length - 1][1].push(x);
-  }
-  return out;
 }
 function spToast(text, acts){   // 带按钮的轻提示（撤销、去看看）
   document.querySelector(".toast.sp-t")?.remove();
@@ -7707,49 +7787,64 @@ function renderSpaceList(){
 }
 function spCount(k){
   const d = SP.d; if (!d) return "";
-  return k === "todo" ? spOpenTodos().length : d.notes.length;
+  return k === "todo" ? spOpenTodos().length : "";
 }
 function spCats(){
   const cat = SP.q ? null : spCat();
   return SP_CATS.map(([k, n]) => `<a class="item sp-cat ${cat === k ? "on" : ""}" href="#/space/${k}" style="text-decoration:none;color:inherit" onclick="spClearQ()"><span class="ic">${SP_IC[k]}</span><span class="t"><span class="title">${n}</span></span><span class="n">${spCount(k)}</span></a>`).join("");
 }
 function spPhoneCats(){
-  if (!SP.d) return `<div class="sp-empty">${SP.err ? spErr() : "…"}</div>`;
   if (SP.q) return `<div style="padding:0 10px">${spHits()}</div>`;
-  const d = SP.d, t0 = spOpenTodos()[0], n0 = d.notes[0];
-  const sub = {todo: t0 ? t0.text : "没有要做的", note: n0 ? spNoteTitle(n0) : "还没有笔记"};
-  const recent = [...spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]),
-                  ...d.notes.map(n => ["note", spNoteTitle(n), n.updated || n.at, `#/space/note/${encodeURIComponent(n.id)}`])].sort((a, b) => b[2] - a[2]).slice(0, 6);
+  if (!SV.prefs && !SV.prefsError && !SV.request) svPreferences().then(() => { if (current.view === "space") renderSpaceList(); });
+  const t0 = spOpenTodos()[0];
+  const sub = {todo: t0 ? t0.text : SP.err || (SP.d ? "没有要做的" : "正在读取待办…"), note: SV.prefs?.recent[0]?.name || "文件夹笔记"};
+  const recent = spOpenTodos().map(t => ["todo", t.text, t.at, "#/space/todo"]).sort((a, b) => b[2] - a[2]).slice(0, 6);
   return `<div class="sp-group">${SP_CATS.map(([k, n, c]) => `<a class="sp-row" href="#/space/${k}"><span class="bx" style="background:${c}">${SP_IC[k]}</span>
       <span class="t"><b>${n}</b><span class="sub">${esc(sub[k])}</span></span><span class="n">${spCount(k)}</span><span class="chev">${ICON.chev}</span></a>`).join("")}</div>
     ${recent.length ? `<div class="sp-sec">最近加的</div><div class="sp-group">${recent.map(([k, t, at, h]) => `<a class="sp-row" href="${h}"><span class="ic">${SP_IC[k]}</span>
       <span class="t"><b style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</b><span class="sub">${{todo: "待办", note: "笔记"}[k]} · ${spWhen(at)}</span></span></a>`).join("")}</div>` : ""}`;
 }
 // ---- 搜索：待办、笔记一起搜 ----
+let spSearchTimer;
 function spSearch(v){
-  SP.q = v.trim();
-  if (narrow()) { $("#sp-list").innerHTML = spPhoneCats(); return; }
-  $("#sp-list").innerHTML = spCats();
-  renderSpace();
+  SP.q = v.trim(); SP.hits = []; SP.searchError = ""; SP.searchPending = !!SP.q;
+  clearTimeout(spSearchTimer);
+  spDrawSearch();
+  if (!SP.q) return;
+  const term = SP.q;
+  spSearchTimer = setTimeout(async () => {
+    try {
+      if (!SV.prefs) await svPreferences();
+      const vault = SV.prefs?.recent[0];
+      const d = vault ? await svCall(vault, "search", {query: term}) : {entries: []};
+      if (SP.q === term) SP.hits = d.entries.map(row => ({...row, vault}));
+    } catch (e) { if (SP.q === term) SP.searchError = e.message; }
+    finally { if (SP.q === term) { SP.searchPending = false; spDrawSearch(); } }
+  }, 250);
+}
+function spDrawSearch(){
+  if (current.view !== "space") return;
+  $("#sp-list").innerHTML = narrow() ? spPhoneCats() : spCats();
+  if (!narrow()) renderSpace();
 }
 function spClearQ(){ if (!SP.q) return; SP.q = ""; const el = $("#sp-q"); if (el) el.value = ""; }
 function spHits(){
   const k = SP.q.toLowerCase(), has = (...xs) => xs.some(x => (x || "").toLowerCase().includes(k)), d = SP.d;
-  const todos = d.todos.filter(t => has(t.text, (t.src || {}).title, (t.src || {}).name)),
-        notes = d.notes.filter(n => has(n.title, n.body));
-  const row = (ic, t, sub, js) => `<div class="sp-hit" role="button" tabindex="0" onclick="${js}" onkeydown="if(event.key==='Enter')this.click()"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="sub">${esc(sub)}</span></div>`;
+  const todos = (d?.todos || []).filter(t => has(t.text, (t.src || {}).title, (t.src || {}).name));
+  const row = (ic, t, sub, hash) => `<a class="sp-hit" href="${esc(hash)}" onclick="event.preventDefault();spGoHit(${q(hash)})"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="sub">${esc(sub)}</span></a>`;
   const sec = (n, xs) => xs.length ? `<div class="sp-grp">${n} ${xs.length}</div>${xs.join("")}` : "";
-  const out = sec("待办", todos.map(t => row(SP_IC.todo, t.text, t.done ? "已完成" : spWhen(t.at), `spGoHit('#/space/todo')`)))
-    + sec("笔记", notes.map(n => row(SP_IC.note, spNoteTitle(n), spWhen(n.updated || n.at), `spGoHit('#/space/note/${encodeURIComponent(n.id)}')`)));
+  const out = sec("待办", todos.map(t => row(SP_IC.todo, t.text, t.done ? "已完成" : spWhen(t.at), "#/space/todo")))
+    + sec("笔记", SP.hits.map(n => row(SP_IC.note, svTitle(n.path), svParent(n.path), svHash(n.path, n.vault))));
+  if (SP.searchError || SP.searchPending) return out + svEmpty(SP.searchError || "正在搜索笔记…");
   return out || `<div class="sp-empty">没有找到「${esc(SP.q)}」</div>`;
 }
 function spGoHit(h){ if (h.startsWith("#/space/todo")) SP.doneOpen = true; spClearQ(); if (location.hash === h) { renderSpaceList(); renderSpace(); } else location.hash = h; }
 // ---- 右边 ----
 function renderSpace(){
-  if (!SP.d) { $("#main").innerHTML = `<div class="sp-main">${SP.err ? `<div class="sp-empty">${spErr()}</div>` : ""}</div>`; if (!SP.err) spaceLoad(true); return; }
+  if (spCat() === "note" && (!SP.q || narrow())) { drawSpNotes(); return; }
+  if (!SP.d && !SP.q) { $("#main").innerHTML = `<div class="sp-main">${SP.err ? `<div class="sp-empty">${spErr()}</div>` : ""}</div>`; if (!SP.err) spaceLoad(true); return; }
   if (SP.q && !narrow()) { $("#main").innerHTML = `<div class="sp-main"><div class="sp-in"><div class="sp-h"><h1>搜索</h1></div>${spHits()}</div></div>`; return; }
-  const cat = spCat();
-  if (cat === "note") drawSpNotes(); else drawSpTodo();
+  drawSpTodo();
 }
 function spSrc(src, fallback){
   if (src && src.feed) {                 // 动态里加的（#554）：点了回到动态里那一条
@@ -7826,72 +7921,622 @@ async function spTodoDel(id){
   spToast("已删除", [["撤销", () => api("/api/space/todo/restore", {item: t}, spM()).then(() => spaceLoad(true))]]);
 }
 // 笔记：左边列表，右边正文（手机上一层层点进去）
-const spNoteTitle = n => (n.title || "").trim() || spPlain(n.body, 30) || "新笔记";
-function drawSpNotes(){
-  spNoteFlush();
-  const notes = SP.d.notes, sel = current.sub || (!narrow() && notes[0] ? notes[0].id : null);
-  const n = sel ? notes.find(x => x.id === sel) : null;
-  const list = `<div class="sp-nlist"><div class="sp-h"><h1>笔记</h1><span class="n">${notes.length}</span><span class="r"><button class="btn" onclick="spNoteNew()">${ICON.plus}新笔记</button></span></div>
-    <div id="sp-nl">${spNoteList(sel)}</div></div>`;
-  const ed = n ? `<div class="sp-ed"><div class="sp-ed-in"><div class="sp-ed-top"><span id="sp-ed-at">${spWhen(n.updated || n.at)} 改过</span>
-      <button class="icon-btn" aria-label="更多" title="更多" onclick="spNoteMenu(event,${q(n.id)})">${ICON.more}</button></div>
-      <input class="ti" id="sp-ti" placeholder="标题" maxlength="200" value="${esc(n.title || "")}" oninput="spNoteEdit(${q(n.id)})">
-      <textarea id="sp-body" placeholder="写点什么…" oninput="spNoteEdit(${q(n.id)})" onblur="spNoteFlush()">${esc(n.body || "")}</textarea></div></div>`
-    : `<div class="sp-ed"><div class="sp-empty" style="margin:auto">${notes.length ? "笔记已经删掉了" : "还没有笔记"}</div></div>`;
-  $("#main").innerHTML = narrow() ? (sel ? `<div class="sp-notes">${ed}</div>` : `<div class="sp-notes">${list}</div>`) : `<div class="sp-notes">${list}${ed}</div>`;
+// ---- 设备上的 Markdown 笔记（#555） ----
+const SV_API = "/api/space/vault";
+const SV = {prefs: null, prefsError: "", request: null, vault: null, dirs: new Map(), open: new Set(),
+  folder: "", query: "", matches: null, treeError: "", note: null, notes: new Map(), read: "", noteError: "",
+  changing: false, treeRequests: new Map()};
+const svName = path => path.split("/").pop();
+const svParent = path => path.split("/").slice(0, -1).join("/");
+const svTitle = path => svName(path).replace(/\.md$/i, "");
+const svKey = (v, p) => v.id + ":" + p;
+const svOn = () => current.view === "space" && current.id === "note" && !SP.q;
+const svHash = (path, v = SV.vault) => "#/space/note/" + encodeURIComponent(path) + "?vault=" + encodeURIComponent(v.id);
+const svRouteVault = () => new URLSearchParams(location.hash.split("?")[1]).get("vault");
+const svCall = (v, op, fields = {}) => api0(SV_API, {...fields, op, vault: v.id}, v.machine);
+const svPath = () => {
+  const sub = current.sub || "";
+  return SV.prefs && SV.vault && SV.prefs.imported_into === SV.vault.id && Object.hasOwn(SV.prefs.aliases, sub)
+    ? SV.prefs.aliases[sub] : sub;
+};
+const svDirty = note => note && note.draft !== note.saved;
+
+function svPreferences() {
+  if (!SV.request) {
+    SV.request = api0(SV_API + "s", undefined, null).then(d => {
+      SV.prefs = d; SV.prefsError = "";
+    }).catch(e => { SV.prefsError = e.message; }).finally(() => { SV.request = null; });
+  }
+  return SV.request;
 }
-function spNoteList(sel){
-  const notes = SP.d.notes;
-  if (!notes.length) return `<div class="sp-empty">还没有笔记</div>`;
-  return spGrouped(notes, n => n.updated || n.at, false).map(([g, xs]) => `<div class="sp-grp">${g}</div>${xs.map(n => `<a class="sp-note ${n.id === sel ? "on" : ""}" href="#/space/note/${encodeURIComponent(n.id)}">
-    <b>${esc(spNoteTitle(n))}</b><span class="pv"><span>${spWhen(n.updated || n.at)}</span><span>${esc(spPlain(n.body, 80, true))}</span></span></a>`).join("")}`).join("");
+function svRetry() {
+  SV.prefsError = "";
+  if (svOn()) drawSpNotes();
 }
-function spNoteEdit(id){
-  const n = SP.d.notes.find(x => x.id === id); if (!n) return;
-  n.title = $("#sp-ti").value; n.body = $("#sp-body").value; n.updated = Date.now() / 1000;
-  SP.noteDirty = id; clearTimeout(SP.noteT); SP.noteT = setTimeout(spNoteFlush, 700);
+function svSetVault(v) {
+  if (SV.vault?.id === v?.id) return;
+  if (SV.note) svFlush(SV.note);
+  Object.assign(SV, {vault: v, dirs: new Map(), open: new Set(), folder: "", query: "", matches: null,
+    treeError: "", note: null, read: "", noteError: "", treeRequests: new Map()});
 }
-async function spNoteFlush(){
-  clearTimeout(SP.noteT);
-  const id = SP.noteDirty; if (!id) return;
-  SP.noteDirty = null;
-  const n = SP.d.notes.find(x => x.id === id); if (!n) return;
-  try { await api0("/api/space/note/save", {id, title: n.title, body: n.body}, spM()); }
-  catch (e) { toast(e.message); return; }
-  if (current.view === "space" && current.id === "note") {
-    SP.d.notes.sort((a, b) => (b.updated || b.at) - (a.updated || a.at));
-    const nl = $("#sp-nl"); if (nl) nl.innerHTML = spNoteList(id);
-    const at = $("#sp-ed-at"); if (at) at.textContent = spWhen(n.updated) + " 改过";
+function svMachineName(v) { return machineOf(v.machine)?.name || "原电脑"; }
+function svUnavailable(v) {
+  const machine = machineOf(v.machine);
+  return !machine ? "这台电脑已移除或已取消共享。" : !machine.online ? "「" + machine.name + "」现在离线，等它连上再试。" : "";
+}
+function svEmpty(text, controls = "") {
+  return `<div class="sv-empty"><span>${esc(text)}</span>${controls}</div>`;
+}
+function svRecent(e) {
+  pop(e, SV.prefs.recent.map(v => `<button onclick="closePop();svSelect({vault:${q(v.id)},machine:${q(v.machine)}})">
+    <span><div>${esc(v.name)}</div><div class="desc">${esc(svMachineName(v))} · ${esc(dirLabel(v.path, v.machine))}</div></span>
+    ${SV.vault.id === v.id ? '<span class="ck">✓</span>' : ""}</button>`).join("")
+    + '<button onclick="closePop();svPick()">选择其他文件夹…</button>');
+}
+function svPick() {
+  const machines = S.machines || [];
+  dialog("选择笔记文件夹", `<div class="dirs">${machines.map(m =>
+    `<button class="dir" ${m.online ? "" : "disabled"} onclick="closeDialog();svPickOn(${q(m.id)})">${ICON.folder}${esc(m.name)}${m.online ? "" : "（离线）"}</button>`
+  ).join("") || '<p class="muted">还没有电脑连上来。</p>'}</div>`);
+}
+function svPickOn(machine) {
+  browseDirs(machine, "", path => svSelect({machine, path}));
+}
+async function svSelect(args, keepRoute = false) {
+  if (SV.changing) return;
+  SV.changing = true;
+  try {
+    if (SV.note) svFlush(SV.note);
+    SV.prefs = await api(SV_API + "s/select", args, null);
+    if (SV.prefs.imported) toast(`已迁移 ${SV.prefs.imported} 篇旧笔记`);
+    else if (args.retry && SV.prefs.pending.length) toast(SV.prefs.pending[0].reason || "迁移还未完成。");
+    if (!keepRoute && svOn() && current.sub) location.hash = "#/space/note";
+  } catch (e) {
+    toast(e.message);
+    await svPreferences();
+  } finally {
+    SV.changing = false;
+    if (svOn()) drawSpNotes();
+    if (current.view === "space") renderSpaceList();
   }
 }
+function drawSpNotes() {
+  if (!SV.prefs) {
+    $("#main").innerHTML = `<div class="sv-panel">${svEmpty(SV.prefsError || "正在读取笔记设置…",
+      SV.prefsError ? '<button class="btn" onclick="svRetry()">再试一次</button>' : "")}</div>`;
+    if (!SV.prefsError) svPreferences().then(() => { if (svOn()) drawSpNotes(); });
+    return;
+  }
+  const v = SV.prefs.recent[0];
+  svSetVault(v);
+  if (!v) {
+    $("#main").innerHTML = `<div class="sv-panel">${svEmpty("选择一台电脑上的文件夹来存放笔记。",
+      '<button class="btn primary" onclick="svPick()">选择文件夹</button>')}</div>`;
+    return;
+  }
+  const requested = svRouteVault();
+  if (!requested || requested === v.id) SV.routeAttempt = null;
+  if (requested && requested !== v.id) {
+    const target = SV.prefs.recent.find(x => x.id === requested);
+    if (target && !SV.changing && SV.routeAttempt !== location.hash) {
+      SV.routeAttempt = location.hash;
+      svSelect({vault: target.id, machine: target.machine}, true);
+    }
+  }
+  const path = requested && requested !== v.id ? "" : svPath();
+  if (!$("#sv-panel") || $("#sv-panel").dataset.vault !== v.id) {
+    $("#main").innerHTML = `<div class="sv-panel" id="sv-panel" data-vault="${esc(v.id)}">
+      <aside class="sv-left" aria-label="笔记文件夹">
+        <header class="sv-vault">
+          <button class="btn sv-switch" aria-label="切换笔记文件夹" onclick="svRecent(event)">
+            <span class="sv-vault-icon" aria-hidden="true">${ICON.folder}</span>
+            <span class="sv-vault-name"><b>${esc(v.name)}</b><small>${esc(svMachineName(v))}</small></span>${ICON.chev}
+          </button>
+        </header>
+        <div class="sv-tools">
+          <button class="btn primary sv-new" onclick="svNameDialog(false)">${ICON.plus}新笔记</button>
+          <button class="icon-btn" title="新文件夹" aria-label="新文件夹" onclick="svNameDialog(true)">${ICON.folder}</button>
+          <button class="btn sv-daily" onclick="svDaily()">今日日记</button>
+          <button class="btn" onclick="svRefresh(true)">刷新</button>
+        </div>
+        <label class="search sv-search">${ICON.search}<input aria-label="搜索笔记" placeholder="搜索笔记" value="${esc(SV.query)}" oninput="svSearch(this.value)"></label>
+        <div id="sv-migration"></div><div class="sv-tree" id="sv-tree"></div>
+      </aside>
+      <section class="sv-editor" id="sv-editor" aria-label="笔记正文"></section>
+    </div>`;
+  }
+  const panel = $("#sv-panel");
+  const pending = SV.prefs.pending;
+  $("#sv-migration").innerHTML = pending.length ? `<div class="sv-migration"><span title="${esc(pending.map(p => p.reason).filter(Boolean).join("\n"))}">${pending.length} 台电脑的旧笔记待迁移</span>
+    <button class="btn" onclick="svSelect({retry:true},true)">继续迁移</button></div>` : "";
+  panel.classList.toggle("in-note", !!path);
+  panel.classList.toggle("no-device", !!svUnavailable(v));
+  if (requested && requested !== v.id) {
+    $("#sv-editor").innerHTML = svEmpty(SV.changing ? "正在切换文件夹…" : "找不到链接对应的笔记文件夹。");
+  } else if (!path) {
+    if (SV.note) svFlush(SV.note);
+    SV.note = null;
+    $("#sv-editor").innerHTML = svEmpty("从文件树打开一篇笔记。");
+  } else if (svUnavailable(v)) {
+    $("#sv-editor").innerHTML = svEmpty(svUnavailable(v));
+  } else if (SV.note?.path !== path || $("#sv-live")?._svNote !== SV.note) {
+    svRead(path);
+  }
+  if (path && !svUnavailable(v)) svExpandPath(path);
+  svDrawTree();
+  if (!SV.dirs.has("") && !SV.treeError && !svUnavailable(v)) svList("");
+}
+function svExpandPath(path, refresh = false) {
+  if (refresh) svList("", true);
+  const parts = path.split("/").slice(0, -1);
+  let folder = "";
+  for (const part of parts) {
+    folder = folder ? folder + "/" + part : part;
+    SV.open.add(folder);
+    if (refresh || !SV.dirs.has(folder)) svList(folder, refresh);
+  }
+}
+function svRow(row, depth, search = false) {
+  const selected = row.dir ? SV.folder === row.path : svPath() === row.path;
+  return `<div class="sv-row ${selected ? "on" : ""}" data-kind="${row.dir ? "folder" : "note"}" style="--depth:${depth}">
+    ${row.dir ? `<button class="sv-entry" aria-expanded="${SV.open.has(row.path)}" onclick="svToggle(${q(row.path)})">
+      <span class="sv-chevron ${SV.open.has(row.path) ? "open" : ""}">${ICON.chev}</span>${ICON.folder}<span title="${esc(row.path)}">${esc(row.name)}</span></button>`
+      : `<a class="sv-entry" href="${esc(svHash(row.path))}" ${selected ? 'aria-current="page"' : ""}><span class="sv-file">${SP_IC.note}</span><span title="${esc(row.path)}">${esc(search ? row.path.replace(/\.md$/i, "") : svTitle(row.path))}</span></a>`}
+    <button class="icon-btn sv-more" title="更多操作" aria-label="${esc(row.name)}的更多操作" onclick="svMenu(event,${q(row.path)},${row.dir})">${ICON.more}</button>
+  </div>`;
+}
+function svTree(folder = "", depth = 0) {
+  return (SV.dirs.get(folder) || []).map(row => svRow(row, depth) +
+    (row.dir && SV.open.has(row.path) ? svTree(row.path, depth + 1) : "")).join("");
+}
+function svDrawTree() {
+  const tree = $("#sv-tree");
+  if (!tree || !SV.vault) return;
+  const unavailable = svUnavailable(SV.vault);
+  if (unavailable || SV.treeError) {
+    tree.innerHTML = svEmpty(unavailable || SV.treeError, '<button class="btn" onclick="svRefresh(true)">再试一次</button>');
+  } else if (SV.query) {
+    const rows = SV.matches?.entries;
+    tree.innerHTML = rows ? (rows.map(row => svRow(row, 0, true)).join("") || svEmpty("没有匹配的笔记。"))
+      + (SV.matches.more ? svEmpty("结果超过 100 篇，请缩小搜索范围。") : "") : svEmpty("正在搜索…");
+  } else {
+    tree.innerHTML = svTree() || svEmpty(SV.dirs.has("") ? "这里还没有笔记。" : "正在读取文件夹…");
+  }
+}
+async function svList(folder, refresh = false) {
+  const v = SV.vault, requests = SV.treeRequests;
+  if (!v || !refresh && SV.dirs.has(folder)) return;
+  if (requests.has(folder)) {
+    if (refresh) requests.get(folder).refresh = true;
+    return;
+  }
+  const request = {refresh: false};
+  requests.set(folder, request);
+  try {
+    const d = await svCall(v, "list", {path: folder});
+    if (SV.vault === v) { SV.dirs.set(folder, d.entries); svDrawTree(); }
+  } catch (e) {
+    if (SV.vault !== v) return;
+    if (!folder) SV.treeError = e.message;
+    else if (SV.open.has(folder)) { SV.open.delete(folder); SV.dirs.delete(folder); if (!refresh) toast(e.message); }
+    svDrawTree();
+  } finally {
+    requests.delete(folder);
+    if (request.refresh && SV.vault === v) svList(folder, true);
+  }
+}
+function svToggle(path) {
+  if (SV.open.has(path)) {
+    SV.open.delete(path);
+    SV.folder = svParent(path);
+  } else {
+    SV.open.add(path);
+    SV.folder = path;
+    svList(path, true);
+  }
+  svDrawTree();
+}
+let svSearchTimer;
+function svSearch(query) {
+  SV.query = query.trim(); SV.matches = null; SV.treeError = "";
+  const input = $(".sv-search input");
+  if (input && input.value !== query) input.value = query;
+  clearTimeout(svSearchTimer);
+  svDrawTree();
+  if (!SV.query) { if (!SV.dirs.has("")) svList(""); return; }
+  const v = SV.vault, term = SV.query;
+  svSearchTimer = setTimeout(async () => {
+    try {
+      const d = await svCall(v, "search", {query: term});
+      if (SV.vault === v && SV.query === term) { SV.matches = d; svDrawTree(); }
+    } catch (e) {
+      if (SV.vault === v && SV.query === term) { SV.treeError = e.message; svDrawTree(); }
+    }
+  }, 250);
+}
+function svRefresh(manual = false) {
+  if (!svOn() || !SV.vault) return;
+  if (manual) refreshSoon();
+  if (svUnavailable(SV.vault)) { drawSpNotes(); return; }
+  SV.treeError = "";
+  svList("", true);
+  for (const folder of SV.open) svList(folder, true);
+  if (SV.query) svSearch(SV.query);
+  if (SV.note && svDirty(SV.note)) svFlush(SV.note);
+  else if (svPath()) svRead(svPath(), true);
+}
+function svGotNote(v, data) {
+  const note = {vault: v, path: data.path, saved: data.body.replace(/\r/g, ""), version: data.version,
+    draft: data.body.replace(/\r/g, ""), error: "", timer: null, saving: null, assets: new Map()};
+  for (const [key, old] of SV.notes) if (!svDirty(old) && !old.saving && !old.uploading) SV.notes.delete(key);
+  SV.notes.set(svKey(v, note.path), note);
+  return note;
+}
+async function svRead(path, refresh = false) {
+  const v = SV.vault, key = svKey(v, path), editor = $("#sv-editor");
+  if (!editor || SV.read === key) return;
+  const cached = SV.notes.get(key);
+  if (SV.note && SV.note !== cached) svFlush(SV.note);
+  if (cached && (svDirty(cached) || cached.uploading || !refresh && SV.note === cached)) {
+    SV.note = cached;
+    svDrawEditor(cached);
+    return;
+  }
+  SV.read = key;
+  if (!refresh || SV.note?.path !== path) {
+    SV.note = null;
+    editor.innerHTML = svEmpty("正在打开笔记…");
+  }
+  try {
+    const d = await svCall(v, "read", {path});
+    if (!svOn() || SV.vault !== v || svPath() !== path) return;
+    if (cached && svDirty(cached)) return;
+    if (refresh && cached?.version === d.version && $("#sv-live")) return;
+    SV.note = svGotNote(v, d);
+    SV.folder = svParent(path);
+    svDrawEditor(SV.note); svDrawTree();
+  } catch (e) {
+    if (svOn() && SV.vault === v && svPath() === path && !svDirty(SV.note)) {
+      SV.note = null;
+      $("#sv-editor").innerHTML = svEmpty(e.message, '<button class="btn" onclick="svRefresh(true)">再试一次</button>');
+    }
+  } finally {
+    if (SV.read === key) SV.read = "";
+  }
+}
+function svDrawEditor(note) {
+  const editor = $("#sv-editor");
+  if (!editor || $("#sv-live")?._svNote === note) return;
+  editor.innerHTML = `<header class="sv-edit-head">
+    <div class="sv-edit-bar">
+      <span class="sv-edit-icon" aria-hidden="true">${SP_IC.note}</span>
+      <div class="sv-file-name"><h1>${esc(svTitle(note.path))}</h1><small title="${esc(note.path)}">${esc(note.path)}</small></div>
+      <span class="sv-status" id="sv-status" role="status"></span>
+      <button class="icon-btn" title="更多操作" aria-label="笔记更多操作" onclick="svMenu(event,${q(note.path)},false)">${ICON.more}</button>
+    </div>
+    <div class="sv-problem" id="sv-problem" hidden></div>
+  </header>
+  <div class="doc-body sv-doc"><div id="sv-live" class="live-ed" contenteditable="true" spellcheck="false"
+    autocapitalize="off" role="textbox" aria-label="编辑笔记" aria-multiline="true"></div></div><div class="sv-suggest" id="sv-suggest" hidden></div>`;
+  const root = $("#sv-live");
+  root._svNote = note;
+  liveMount(root, {
+    text: note.draft, onInput: text => { svEdit(note, text); queueMicrotask(() => svSuggest(root, note)); },
+    asset: svImage, checks: true,
+    afterRender: () => svImages(root, note), wiki: true,
+    onKey: e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); svFlush(note); } },
+  });
+  root.addEventListener("blur", () => { svFlush(note); setTimeout(() => svHideSuggestions(root), 140); });
+  root.addEventListener("pointerdown", e => {
+    if (e.target.closest("[data-sv-wiki]")) e.preventDefault();
+  });
+  root.addEventListener("click", e => {
+    const link = e.target.closest("[data-sv-wiki]");
+    if (link) { e.preventDefault(); svFollow(note, link.dataset.svWiki); }
+  });
+  root.addEventListener("keyup", e => { if (e.key !== "Escape") svSuggest(root, note); });
+  root.addEventListener("compositionend", () => setTimeout(() => svSuggest(root, note)));
+  root.addEventListener("keydown", e => svSuggestionKey(e, root), true);
+  root.addEventListener("paste", e => {
+    const files = [...(e.clipboardData?.files || [])].filter(file => file.type.startsWith("image/"));
+    if (files.length) { e.preventDefault(); svAttach(root, note, files); }
+  });
+  root.addEventListener("dragover", e => {
+    if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }
+  });
+  root.addEventListener("drop", e => {
+    const files = [...(e.dataTransfer?.files || [])].filter(file => file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp|ico|tiff?|svg)$/i.test(file.name));
+    if (files.length) {
+      e.preventDefault(); root.focus();
+      const point = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+      if (point && root.contains(point.startContainer)) getSelection().setBaseAndExtent(point.startContainer, point.startOffset, point.startContainer, point.startOffset);
+      svAttach(root, note, files);
+    }
+  });
+  svStatus(note);
+}
+function svStatus(note) {
+  const el = $("#sv-status");
+  if (!el || $("#sv-live")?._svNote !== note) return;
+  const problem = note.conflict ? "文件已在别处修改。" : note.error;
+  const state = note.conflict ? "保存冲突" : note.error ? "保存失败" : note.saving ? "正在保存…" : svDirty(note) ? "待保存" : "已保存";
+  if (el.textContent !== state) el.textContent = state;
+  el.dataset.state = problem ? "error" : state === "已保存" ? "saved" : "busy";
+  const details = $("#sv-problem");
+  details.hidden = !problem;
+  details.innerHTML = problem ? `<span>${esc(problem)}</span>${note.conflict
+    ? '<button class="btn" onclick="svResolve(false)">重新读取</button><button class="btn" onclick="svResolve(true)">保留我的修改</button>'
+    : '<button class="btn" onclick="svFlush(SV.note)">重试保存</button>'}` : "";
+}
+function svEdit(note, text) {
+  note.draft = text;
+  clearTimeout(note.timer);
+  if (!note.conflict) note.timer = setTimeout(() => svFlush(note), 700);
+  svStatus(note);
+}
+async function svFlush(note) {
+  if (!note) return true;
+  clearTimeout(note.timer);
+  if (note.saving) return note.saving;
+  if (note.conflict) return false;
+  if (!svDirty(note)) { note.error = ""; svStatus(note); return true; }
+  note.error = "";
+  note.saving = (async () => {
+    while (svDirty(note)) {
+      const body = note.draft;
+      const d = await svCall(note.vault, "save", {path: note.path, body, version: note.version});
+      if (d.conflict) { note.conflict = true; return false; }
+      note.saved = body; note.version = d.version;
+    }
+    return true;
+  })().catch(e => { note.error = e.message; return false; }).finally(() => {
+    note.saving = null;
+    svStatus(note);
+  });
+  svStatus(note);
+  return note.saving;
+}
+async function svResolve(keep) {
+  const note = SV.note;
+  if (!note) return;
+  if (await confirmBox(keep ? "用我的修改替换文件？" : "重新读取文件？",
+    keep ? "这会覆盖其他地方刚保存的内容。" : "当前未保存的修改将被丢弃。", keep ? "保留我的修改" : "重新读取", "primary")) {
+    try {
+      const d = await svCall(note.vault, "read", {path: note.path});
+      note.conflict = false; note.error = ""; note.version = d.version; note.saved = d.body.replace(/\r/g, "");
+      if (keep) await svFlush(note);
+      else {
+        const restored = svGotNote(note.vault, d);
+        if (SV.note === note) { SV.note = restored; svDrawEditor(restored); }
+      }
+    } catch (e) { toast(e.message); }
+  }
+}
+async function svAction(v, op, fields) {
+  if (!v || svUnavailable(v)) { if (v) toast(svUnavailable(v)); return null; }
+  try { return await api(SV_API, {...fields, vault: v.id, op}, v.machine); }
+  catch (e) { toast(e.message); return null; }
+}
+function svOpen(v, path) {
+  if (SV.vault !== v || !svOn()) return;
+  svExpandPath(path, true);
+  const hash = svHash(path, v);
+  if (location.hash === hash) drawSpNotes(); else location.hash = hash;
+}
+function svMenu(e, path, directory) {
+  pop(e, `<button onclick="closePop();svNameDialog(${directory},${q(path)})">重命名</button>
+    <button class="danger-link" onclick="closePop();svTrash(${q(path)},${directory})">删除</button>`);
+}
+async function svFlushPath(v, path) {
+  const notes = [...SV.notes.values()].filter(n => n.vault === v && (n.path === path || n.path.startsWith(path + "/")));
+  if (notes.some(n => n.uploading)) { toast("图片正在写入，稍后再试。"); return false; }
+  const results = await Promise.all(notes.map(svFlush));
+  if (results.includes(false)) toast("请先保存这篇笔记。");
+  return !results.includes(false);
+}
+function svForget(v, path) {
+  for (const [key, n] of SV.notes) if (n.vault === v && (n.path === path || n.path.startsWith(path + "/"))) SV.notes.delete(key);
+  for (const folder of SV.open) if (folder === path || folder.startsWith(path + "/")) { SV.open.delete(folder); SV.dirs.delete(folder); }
+}
+function svNameDialog(directory, path = "") {
+  const v = SV.vault;
+  if (!v || svUnavailable(v)) return;
+  const folder = path ? svParent(path) : SV.folder;
+  const title = path ? "重命名" : directory ? "新文件夹" : "新笔记";
+  const value = path ? (directory ? svName(path) : svTitle(path)) : "";
+  dialog(title, `<form id="sv-name-form"><label>${directory ? "文件夹名称" : "笔记名称"}
+    <input id="sv-filename" class="in" required maxlength="200" value="${esc(value)}" autocomplete="off"></label>
+    <p class="muted">${esc(folder || v.name)}</p></form>`,
+    '<button class="btn" onclick="closeDialog()">取消</button><button class="btn primary" form="sv-name-form" type="submit">确定</button>');
+  const input = $("#sv-filename");
+  input.focus(); input.select();
+  $("#sv-name-form").onsubmit = async e => {
+    e.preventDefault();
+    if (e.currentTarget.dataset.busy) return;
+    const form = e.currentTarget; form.dataset.busy = "1";
+    try {
+      if (path && !await svFlushPath(v, path)) return;
+      const result = await svAction(v, path ? "rename" : "create", {path: path || folder, name: input.value, folder: directory});
+      if (!result) return;
+      if (form.isConnected) closeDialog();
+      if (SV.vault !== v) return;
+      const active = svPath();
+      if (path) svForget(v, path);
+      svList(folder, true);
+      if (SV.query) svSearch("");
+      if (!directory && (!path || active === path)) svOpen(v, result.path);
+      else if (path && active.startsWith(path + "/")) svOpen(v, result.path + active.slice(path.length));
+      else if (directory) { SV.open.add(result.path); SV.folder = result.path; svList(result.path, true); }
+    } finally { delete form.dataset.busy; }
+  };
+}
+async function svTrash(path, directory) {
+  const v = SV.vault;
+  if (!await confirmBox("移到废纸篓？", directory ? `「${svName(path)}」及其中的文件都会移到废纸篓。`
+    : `「${svName(path)}」将移到废纸篓。`, "移到废纸篓") || !await svFlushPath(v, path)) return;
+  if (!await svAction(v, "trash", {path}) || SV.vault !== v) return;
+  svForget(v, path);
+  const opened = svPath();
+  if (SV.folder === path || SV.folder.startsWith(path + "/")) SV.folder = svParent(path);
+  if (opened === path || opened.startsWith(path + "/")) location.hash = "#/space/note";
+  svList(svParent(path), true);
+  if (SV.query) svSearch(SV.query);
+}
+let svMoment;
+function svLoadMoment() {
+  if (window.moment) return Promise.resolve(window.moment);
+  if (!svMoment) svMoment = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/moment-2.30.1.js"; script.onload = () => resolve(window.moment);
+    script.onerror = () => { svMoment = null; script.remove(); reject(new Error("日期格式组件未能加载，请重试。")); };
+    document.head.append(script);
+  });
+  return svMoment;
+}
+async function svDaily() {
+  const v = SV.vault;
+  if (!v || svUnavailable(v)) return;
+  try {
+    const [moment, settings] = await Promise.all([svLoadMoment(), svCall(v, "daily")]);
+    const now = moment().locale(navigator.language);
+    const name = now.format(settings.format);
+    let d = await svCall(v, "daily_open", {name});
+    if (d.tokens) {
+      const values = Object.fromEntries(d.tokens.map(token => {
+        const [, kind, format] = token.match(/^\{\{\s*(date|time)(?::([^{}]+))?\s*\}\}$/);
+        return [token, now.format(format?.trim() || settings[kind])];
+      }));
+      d = await svCall(v, "daily_open", {name, values});
+      if (d.tokens) throw new Error("日记模板刚刚改变，请重试。");
+    }
+    svOpen(v, d.path);
+  } catch (e) { toast(e.message); }
+}
+async function svFollow(note, ref) {
+  const v = note.vault;
+  const d = await svAction(v, "link", {path: note.path, ref});
+  if (!d || SV.note !== note) return;
+  svOpen(v, d.path);
+}
+function svImage(ref, wiki, label) {
+  if (/^(https?:|data:image\/)/i.test(ref)) return `<img src="${esc(ref)}" alt="${esc(label)}" loading="lazy">`;
+  return `<img alt="${esc(label)}" data-sv-image="${esc(ref)}" data-wiki="${wiki ? "1" : ""}" hidden>`;
+}
+function svImages(root, note) {
+  for (const img of root.querySelectorAll("[data-sv-image]")) {
+    if (img.dataset.loaded) continue;
+    img.dataset.loaded = "1";
+    const ref = img.dataset.svImage, wiki = !!img.dataset.wiki, key = (wiki ? "wiki:" : "") + ref;
+    if (!note.assets.has(key)) {
+      note.assets.set(key, svCall(note.vault, "asset", {path: note.path, ref, wiki})
+        .then(d => `data:${d.type};base64,${d.data}`).catch(() => { note.assets.delete(key); return ""; }));
+    }
+    note.assets.get(key).then(src => { if (src && img.isConnected) { img.src = src; img.hidden = false; } });
+  }
+}
+function svFileData(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = () => reject(new Error("读不到这张图片。"));
+    r.readAsDataURL(file);
+  });
+}
+async function svAttach(root, note, files) {
+  const selection = lvSel(root), original = note.draft;
+  const links = [];
+  note.uploading = (note.uploading || 0) + 1;
+  try {
+    for (const file of files) {
+      try {
+        if (file.size > 10 * 1024 * 1024) throw new Error("图片不能超过 10 MB。");
+        const name = file.name || "图片-" + Date.now() + "." + (file.type.split("/")[1] || "png");
+        const data = await svFileData(file);
+        const d = await svCall(note.vault, "attach", {path: note.path, name, data});
+        const url = d.relative.split("/").map(part => encodeURIComponent(part).replace(/[()]/g, c => c === "(" ? "%28" : "%29")).join("/");
+        links.push("![](" + url + ")");
+      } catch (e) { toast(e.message); }
+    }
+    if (!links.length) return;
+    const open = $("#sv-live");
+    const editor = open?._svNote === note ? open : null;
+    const current = editor ? lvSel(editor) : null;
+    const text = note.draft, [a, b] = original === text && selection ? selection : current || [text.length, text.length];
+    const insert = (a && text[a - 1] !== "\n" ? "\n" : "") + links.join("\n") + (text[b] === "\n" ? "" : "\n");
+    const changed = text.slice(0, a) + insert + text.slice(b);
+    if (editor) lvCommit(editor, changed, a + insert.length, undefined, "paste");
+    else svEdit(note, changed);
+  } finally { note.uploading--; }
+}
+function svHideSuggestions(root) {
+  if ($("#sv-live") !== root) return;
+  const box = $("#sv-suggest"); if (box) box.hidden = true;
+  root._svSuggest = null;
+}
+function svSuggest(root, note) {
+  const [a, b] = lvSel(root) || [-1, -2];
+  const m = note.draft.slice(0, a).match(/(?<!!)\[\[([^\[\]\n|#]*)$/);
+  if (a !== b || !m || !root.isConnected) { svHideSuggestions(root); return; }
+  if (root._svSuggest?.a === a && root._svSuggest?.term === m[1]) return;
+  svHideSuggestions(root);
+  const s = {a, from: a - m[1].length - 2, term: m[1], rows: [], index: 0};
+  root._svSuggest = s;
+  clearTimeout(root._svSuggestT);
+  root._svSuggestT = setTimeout(async () => {
+    try {
+      const d = await svCall(note.vault, "suggest", {query: s.term});
+      if (root._svSuggest !== s || !root.isConnected || document.activeElement !== root) return;
+      s.rows = d.entries.slice(0, 8);
+      svDrawSuggestions(root);
+    } catch { svHideSuggestions(root); }
+  }, 120);
+}
+function svDrawSuggestions(root) {
+  const box = $("#sv-suggest"), s = root._svSuggest;
+  if (!s?.rows.length || !box) return;
+  box.hidden = false;
+  box.innerHTML = s.rows.map((row, i) => `<button role="option" aria-selected="${s.index === i}" onpointerdown="event.preventDefault()" onclick="svSuggestionPick(${i})">${esc(row.path.replace(/\.md$/i, ""))}</button>`).join("");
+  box.setAttribute("role", "listbox");
+  box.setAttribute("aria-label", "双链建议");
+}
+function svSuggestionKey(e, root) {
+  const s = root._svSuggest;
+  if (!s?.rows.length || $("#sv-suggest")?.hidden || e.isComposing) return;
+  if (!["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.key === "Escape") { svHideSuggestions(root); return; }
+  if (e.key === "Enter" || e.key === "Tab") { svSuggestionPick(s.index); return; }
+  s.index = (s.index + (e.key === "ArrowDown" ? 1 : -1) + s.rows.length) % s.rows.length; svDrawSuggestions(root);
+}
+function svSuggestionPick(i) {
+  const root = $("#sv-live"), s = root?._svSuggest, row = s?.rows[i];
+  if (!row) return;
+  const text = root._lv.value, link = "[[" + row.path.replace(/\.md$/i, "") + "]]";
+  const end = text.slice(s.a).startsWith("]]") ? s.a + 2 : s.a;
+  lvCommit(root, text.slice(0, s.from) + link + text.slice(end), s.from + link.length, undefined, "paste");
+  svHideSuggestions(root);
+}
 addEventListener("hashchange", () => {
-  if (SP.noteDirty) spNoteFlush();
-  const id = SP.fresh;                    // 新建了没写东西就走开：不留空笔记
-  if (!id || (current.view === "space" && current.sub === id)) return;
-  SP.fresh = null;
-  const n = SP.d && SP.d.notes.find(x => x.id === id);
-  if (!n || (n.title || "").trim() || (n.body || "").trim()) return;
-  SP.d.notes = SP.d.notes.filter(x => x.id !== id);
-  api0("/api/space/note/del", {id}, spM()).catch(() => {});
-  if (current.view === "space") { renderSpaceList(); if (current.id === "note") renderSpace(); }
+  if (SV.note && (!svOn() || svPath() !== SV.note.path)) svFlush(SV.note);
 });
-addEventListener("pagehide", () => { if (SP.noteDirty) spNoteFlush(); });
-async function spNoteNew(){
-  const d = await act(() => api("/api/space/note/save", {title: "", body: ""}, spM()));
-  SP.d.notes.unshift(d.item); SP.fresh = d.item.id; renderSpaceList();
-  location.hash = "#/space/note/" + encodeURIComponent(d.item.id);
-  setTimeout(() => $("#sp-ti")?.focus(), 50);
-}
-function spNoteMenu(e, id){
-  pop(e, `<button class="danger-link" onclick="closePop();spNoteDel(${q(id)})">删除这篇笔记</button>`);
-}
-async function spNoteDel(id){
-  if (!await confirmBox("删除这篇笔记？", "删除后找不回来。", "删除")) return;
-  if (SP.noteDirty === id) { clearTimeout(SP.noteT); SP.noteDirty = null; }
-  await act(() => api("/api/space/note/del", {id}, spM()));
-  SP.d.notes = SP.d.notes.filter(x => x.id !== id); renderSpaceList();
-  location.hash = "#/space/note";
-}
+addEventListener("focus", () => svRefresh());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { for (const note of SV.notes.values()) if (svDirty(note)) svFlush(note); }
+  else svRefresh();
+});
+addEventListener("beforeunload", e => {
+  if ([...SV.notes.values()].some(svDirty)) { e.preventDefault(); e.returnValue = ""; }
+});
+addEventListener("pagehide", () => {
+  for (const note of SV.notes.values()) {
+    if (!svDirty(note) || note.conflict || note.saving) continue;
+    const body = JSON.stringify({op: "save", vault: note.vault.id, path: note.path, body: note.draft, version: note.version});
+    if (new Blob([body]).size > 60000) continue;
+    fetch(SV_API, {method: "POST", body, keepalive: true, headers: {
+      "X-CCIM": "1", "Content-Type": "application/json", ...remoteHeader(note.vault.machine)},
+    }).catch(() => {});
+  }
+});
 
 function renderSettingsList(){
   const onChats = current.id === "chats", onAccounts = current.id === "accounts" && isOwner();
@@ -10907,28 +11552,39 @@ function drawDocBody(){
 // 输入一律拦下来自己改原文（beforeinput），再只重画变了的行；中文输入法的组字交给浏览器，组完再从页面读回原文
 const LV_RE = /(`+)([^`]+?)\1|!\[([^\]]*)\]\(([^)]*)\)|\[([^\]]+)\]\(([^)]*)\)|\*\*(?=\S)(.+?)\*\*|__(?=\S)(.+?)__|~~(?=\S)(.+?)~~|(?<![*\w\\])\*(?=[^\s*])(.+?)\*(?![\w*])|(https?:\/\/[^\s<>）)\]，。]+)|\\([\\`*_{}\[\]()#+\-.!|~<>])/g;
 const lvMk = t => t ? `<span class="lv-mk">${esc(t)}</span>` : "";
-function lvInline(s){
+function lvInline(s, options){
   let out = "", at = 0;
-  const re = new RegExp(LV_RE.source, "g");
+  const wiki = options?.wiki ? String.raw`|(!?)\[\[([^\[\]\n]+)\]\]` : "";
+  const re = new RegExp(LV_RE.source + wiki, "g");
   for (let m; (m = re.exec(s));){
     out += esc(s.slice(at, m.index)); at = m.index + m[0].length;
     if (m[1]) out += lvMk(m[1]) + `<code>${esc(m[2])}</code>` + lvMk(m[1]);
     else if (m[3] != null){
-      const u = m[4].trim().replace(/\s+["'][^"']*["']$/, "").replace(/^<|>$/g, ""), a = (DOC.d && DOC.d.assets) || {};
-      const src = a[u] || (/^(https?:|data:image\/)/i.test(u) ? u : "");
-      out += lvMk(m[0]) + (src ? `<span class="lv-img" contenteditable="false"><img src="${esc(src)}" alt="${esc(m[3])}"></span>` : "");
+      const u = m[4].trim().replace(/\s+["'][^"']*["']$/, "").replace(/^<|>$/g, "");
+      const img = options?.asset?.(u, false, m[3]) || "";
+      out += lvMk(m[0]) + (img ? `<span class="lv-img" contenteditable="false">${img}</span>` : "");
     }
-    else if (m[5]) out += lvMk("[") + `<span class="lk">${lvInline(m[5])}</span>` + lvMk(`](${m[6]})`);
-    else if (m[7]) out += lvMk("**") + `<b>${lvInline(m[7])}</b>` + lvMk("**");
-    else if (m[8]) out += lvMk("__") + `<b>${lvInline(m[8])}</b>` + lvMk("__");
-    else if (m[9]) out += lvMk("~~") + `<s>${lvInline(m[9])}</s>` + lvMk("~~");
-    else if (m[10]) out += lvMk("*") + `<i>${lvInline(m[10])}</i>` + lvMk("*");
+    else if (m[5]) out += lvMk("[") + `<span class="lk">${lvInline(m[5], options)}</span>` + lvMk(`](${m[6]})`);
+    else if (m[7]) out += lvMk("**") + `<b>${lvInline(m[7], options)}</b>` + lvMk("**");
+    else if (m[8]) out += lvMk("__") + `<b>${lvInline(m[8], options)}</b>` + lvMk("__");
+    else if (m[9]) out += lvMk("~~") + `<s>${lvInline(m[9], options)}</s>` + lvMk("~~");
+    else if (m[10]) out += lvMk("*") + `<i>${lvInline(m[10], options)}</i>` + lvMk("*");
     else if (m[11]) out += `<span class="lk">${esc(m[11])}</span>`;
-    else out += lvMk("\\") + esc(m[12]);
+    else if (m[12]) out += lvMk("\\") + esc(m[12]);
+    else {
+      const [ref, ...alias] = m[14].split("|"), caption = alias.join("|");
+      if (m[13]) {
+        const img = options.asset(ref, true, ref);
+        out += lvMk(m[0]) + (img ? `<span class="lv-img" contenteditable="false">${img}</span>` : "");
+      } else {
+        out += lvMk(alias.length ? "[[" + ref + "|" : "[[")
+          + `<span class="lk" data-sv-wiki="${esc(m[14])}">${esc(alias.length ? caption : ref)}</span>` + lvMk("]]");
+      }
+    }
   }
   return out + esc(s.slice(at));
 }
-function lvLines(L, on){   // 每行的 html；on = [第一行, 最后一行]，光标所在的行
+function lvLines(L, on, options){   // 每行的 html；on = [第一行, 最后一行]，光标所在的行
   const out = []; let fence = null;
   for (let i = 0; i < L.length; i++){
     const l = L[i]; let cls = "", h = "", m;
@@ -10937,16 +11593,17 @@ function lvLines(L, on){   // 每行的 html；on = [第一行, 最后一行]，
       else { cls = "code"; h = esc(l); }
     }
     else if ((m = l.match(/^\s{0,3}(```|~~~)/))) { fence = m[1]; cls = "code fence"; h = `<span class="fm">${esc(l)}</span>`; }
-    else if ((m = l.match(/^(\s{0,3}(#{1,6})\s+)(.*)$/))) { cls = "h" + m[2].length; h = lvMk(m[1]) + lvInline(m[3]); }
+    else if ((m = l.match(/^(\s{0,3}(#{1,6})\s+)(.*)$/))) { cls = "h" + m[2].length; h = lvMk(m[1]) + lvInline(m[3], options); }
     else if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l)) { cls = "hr"; h = lvMk(l); }
-    else if ((m = l.match(/^(\s{0,3}>\s?)(.*)$/))) { cls = "quote"; h = lvMk(m[1]) + lvInline(m[2]); }
+    else if ((m = l.match(/^(\s{0,3}>\s?)(.*)$/))) { cls = "quote"; h = lvMk(m[1]) + lvInline(m[2], options); }
     else if ((m = l.match(/^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s+)?(.*)$/))) {
       cls = "li";
+      const task = options?.checks ? " lv-task" + (/\[[xX]\]/.test(m[4] || "") ? " done" : "") : "";
       h = esc(m[1]) + (/\d/.test(m[2]) ? `<span class="lm">${esc(m[2])}</span>` : `<span class="bul">${esc(m[2])}</span>`) + esc(m[3])
-        + (m[4] ? `<span class="lm">${esc(m[4])}</span>` : "") + lvInline(m[5]);
+        + (m[4] ? `<span class="lm${task}">${esc(m[4])}</span>` : "") + lvInline(m[5], options);
     }
     else if (/^\s*\|.*\|\s*$/.test(l)) { cls = "tb"; h = esc(l); }
-    else h = lvInline(l);
+    else h = lvInline(l, options);
     out.push(`<div class="ln${cls ? " " + cls : ""}${on && i >= on[0] && i <= on[1] ? " on" : ""}">${h || "<br>"}</div>`);
   }
   return out;
@@ -11004,21 +11661,22 @@ function lvSetSel(root, a, b = a){
 function lvRender(root, sel){
   const lv = root._lv, on = sel ? [lvLineOf(lv.lines, sel[0])[0], lvLineOf(lv.lines, sel[1])[0]] : null;
   lv.on = on ? on.join("-") : "";
-  const hs = lvLines(lv.lines, on), kids = [...root.children];
+  const hs = lvLines(lv.lines, on, lv.options), kids = [...root.children];
   let a = 0; while (a < kids.length && a < hs.length && kids[a]._h === hs[a]) a++;
   let z = 0; while (z < kids.length - a && z < hs.length - a && kids[kids.length - 1 - z]._h === hs[hs.length - 1 - z]) z++;
   kids.slice(a, kids.length - z).forEach(k => k.remove());
   const t = document.createElement("template"); t.innerHTML = hs.slice(a, hs.length - z).join("");
   [...t.content.children].forEach((k, j) => k._h = hs[a + j]);
   root.insertBefore(t.content, kids[kids.length - z] && z ? kids[kids.length - z] : null);
+  lv.options.afterRender?.();
 }
 function lvCommit(root, text, a, b = a, kind){
-  const lv = root._lv, old = DOC.draft, now = Date.now();
+  const lv = root._lv, old = lv.value, now = Date.now();
   if (text !== old){
     const typing = kind === "type" && lv.last === "type" && now - lv.at < 1000;   // 连着打的字算一步撤销
     if (!typing) { lv.undo.push({text: old, sel: lv.sel || [a, a]}); if (lv.undo.length > 300) lv.undo.shift(); }
     lv.redo = []; lv.last = kind; lv.at = now;
-    DOC.draft = text; docInput({value: text});
+    lv.value = text; lv.options.onInput(text);
   }
   lv.lines = text.split("\n");
   lvRender(root, [a, b]); lvSetSel(root, a, b); lv.sel = [a, b];
@@ -11026,8 +11684,8 @@ function lvCommit(root, text, a, b = a, kind){
 function lvHistory(root, back){
   const lv = root._lv, from = back ? lv.undo : lv.redo, to = back ? lv.redo : lv.undo, x = from.pop();
   if (!x) return;
-  to.push({text: DOC.draft, sel: lvSel(root) || [0, 0]});
-  DOC.draft = x.text; docInput({value: x.text}); lv.last = "";
+  to.push({text: lv.value, sel: lvSel(root) || [0, 0]});
+  lv.value = x.text; lv.options.onInput(x.text); lv.last = "";
   lv.lines = x.text.split("\n"); lvRender(root, x.sel); lvSetSel(root, x.sel[0], x.sel[1]); lv.sel = x.sel;
 }
 function lvEnter(text, a, b){   // 回车：列表、引用自动续上；空的一项再回车就结束列表
@@ -11040,11 +11698,19 @@ function lvEnter(text, a, b){   // 回车：列表、引用自动续上；空的
   else if (m) pre = m[1];
   return [text.slice(0, a) + "\n" + pre + text.slice(b), a + 1 + pre.length];
 }
-function liveMount(){
-  const root = docRoot()?.querySelector("#doc-live");
+function liveMount(root = docRoot()?.querySelector("#doc-live"), options){
   if (!root || root._lv) return;
-  root._lv = {lines: DOC.draft.replace(/\r/g, "").split("\n"), undo: [], redo: [], sel: null, on: null};
-  if (DOC.draft.includes("\r")) DOC.draft = DOC.draft.replace(/\r/g, "");
+  if (!options) {
+    const doc = DOC;
+    doc.draft = doc.draft.replace(/\r/g, "");
+    options = {text: doc.draft, onInput: text => docInput({value: text}), onKey: docKey,
+      asset: (ref, wiki, label) => {
+        const src = doc.d?.assets?.[ref] || (/^(https?:|data:image\/)/i.test(ref) ? ref : "");
+        return src ? `<img src="${esc(src)}" alt="${esc(label)}">` : "";
+      }};
+  }
+  const value = options.text;
+  root._lv = {value, options, lines: value.split("\n"), undo: [], redo: [], sel: null, on: null};
   lvRender(root, null);
   let composing = false;
   const sync = () => {   // 浏览器自己改了页面（输入法组字等）：从页面读回原文
@@ -11058,7 +11724,7 @@ function liveMount(){
   };
   root.addEventListener("beforeinput", e => {
     if (composing || e.isComposing || e.inputType === "insertCompositionText" || !e.cancelable) return;
-    const t = e.inputType, text = DOC.draft;
+    const t = e.inputType, text = root._lv.value;
     let [a, b] = lvSel(root) || [0, 0];
     const tr = e.getTargetRanges ? e.getTargetRanges() : [];
     if (tr.length && (t.startsWith("delete") || t === "insertReplacementText")){
@@ -11090,18 +11756,18 @@ function liveMount(){
     if (mod && e.key === "y") { e.preventDefault(); return lvHistory(root, false); }
     if (mod && /^[bi]$/.test(e.key) && !composing){   // 加粗、斜体：给选中的字两边加符号
       e.preventDefault();
-      const [a, b] = lvSel(root) || [0, 0], w = e.key === "b" ? "**" : "*", text = DOC.draft;
+      const [a, b] = lvSel(root) || [0, 0], w = e.key === "b" ? "**" : "*", text = root._lv.value;
       return lvCommit(root, text.slice(0, a) + w + text.slice(a, b) + w + text.slice(b), a + w.length, b + w.length, "fmt");
     }
     if (e.key === "Tab" && !mod && !e.altKey && !composing){   // 列表里 Tab 缩进、Shift+Tab 退回
       e.preventDefault();
-      const [a, b] = lvSel(root) || [0, 0], text = DOC.draft, ls = text.lastIndexOf("\n", a - 1) + 1;
+      const [a, b] = lvSel(root) || [0, 0], text = root._lv.value, ls = text.lastIndexOf("\n", a - 1) + 1;
       if (!/^\s*([-*+]|\d+[.)])\s/.test(text.slice(ls))) return lvCommit(root, text.slice(0, a) + "    " + text.slice(b), a + 4, undefined, "type");
       if (!e.shiftKey) return lvCommit(root, text.slice(0, ls) + "  " + text.slice(ls), a + 2, b + 2, "fmt");
       const n = (text.slice(ls).match(/^ {1,2}/) || [""])[0].length;
       return lvCommit(root, text.slice(0, ls) + text.slice(ls + n), Math.max(ls, a - n), Math.max(ls, b - n), "fmt");
     }
-    docKey(e);
+    options.onKey?.(e);
   });
   root.addEventListener("click", e => { if (e.target.closest(".lv-img")) e.preventDefault(); });
   const onSel = () => {   // 光标换了行：那几行露出标记符号

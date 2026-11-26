@@ -19,7 +19,7 @@ import base64, hashlib, hmac, html, json, logging, os, queue, secrets, struct, t
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import registry
+from . import registry, vault
 from .peers import OWNER, PAGE_GLOBAL, Server
 
 log = logging.getLogger("ccim.hub")
@@ -683,6 +683,8 @@ def _handler(hub):
                 return self._send(403, {"error": "forbidden"})
             if u.path == "/api/state" and not (q.get("local") and self.headers.get("X-Machine")):   # 带 local 的是要某一台自己的（#140）
                 return self._send(200, hub.shared.get(("state", self.acct), lambda: hub.state(self.acct)))
+            if u.path == vault.PREFS:
+                return self._send(200, vault.preferences(self.acct))
             if u.path == "/api/accounts":
                 return self._send(200, hub.account_list()) if self.acct == OWNER and hub.accounts_on() \
                     else self._send(403, {"error": "forbidden"})
@@ -718,6 +720,15 @@ def _handler(hub):
             if not self._authed():
                 return self._send(401, {"error": "登录过期了，刷新页面重新登录。"})
             try:
+                if u.path == vault.SELECT:
+                    args = json.loads(body or b"{}")
+                    if not isinstance(args, dict):
+                        raise ValueError("请选择笔记文件夹。")
+                    return self._send(200, vault.select(self.acct, args, hub.peers.machines(self.acct), self._vault_call))
+                if u.path == vault.API:
+                    args = json.loads(body or b"{}")
+                    if not isinstance(args, dict) or args.get("op") in ("register", "import"):
+                        return self._send(403, {"error": "请从笔记页选择文件夹。"})
                 if u.path.startswith("/api/accounts"):
                     return self._accounts(u.path, body)
                 if u.path == "/api/peers/code":
@@ -791,6 +802,14 @@ def _handler(hub):
             if path == "/api/accounts/delete":
                 return self._send(200, hub.account_delete(b.get("id")))
             return self._send(404, {"error": "not found"})
+
+        def _vault_call(self, mid, method, path, body):
+            headers = {}
+            if hub.peers.guest_of(mid, self.acct):
+                if not self._guest_ready(mid):
+                    raise ValueError("共享的电脑版本较旧，请电脑的主人先升级。")
+                headers = hub.peers.guest_headers(self.acct, mid)
+            return hub.peers.forward(mid, method, path, body, headers)
 
         def _forward(self, body, q):
             mid = self._machine(q)

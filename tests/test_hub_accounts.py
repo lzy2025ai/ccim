@@ -11,7 +11,7 @@ from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 from urllib.parse import unquote
 
-from ccim import hubserver, peers, registry
+from ccim import hubserver, peers, registry, vault
 
 
 def code(secret, step=0):
@@ -60,6 +60,37 @@ class HubAccountTests(unittest.TestCase):
             c.close()
             return out
         return req
+
+    def test_vault_preferences_use_the_signed_in_account(self):
+        self.owner()
+        aid, _ = self.member("笔记用户")
+        self.add_node("test-node")
+        self.hub.peers.nodes["test-node"]["shares"] = {aid: {}}
+        self.hub.peers.seen["test-node"] = time.time()
+        self.hub.peers.guest_ok["test-node"] = True
+        req = self.serve(aid)
+        owner = self.serve(hubserver.OWNER)
+        shared = os.path.join(self.tmp.name, "shared")
+        os.mkdir(shared)
+
+        def forward(mid, method, path, body, headers):
+            self.assertEqual(mid, "test-node")
+            self.assertEqual(headers["X-Account"], aid)
+            if method == "GET":
+                self.assertEqual(path, "/api/space")
+                data = {"notes": []}
+            else:
+                self.assertEqual(path, vault.API)
+                data = vault.device(aid, os.path.realpath(shared), json.loads(body))
+            return 200, "application/json", json.dumps(data).encode()
+
+        with patch.object(self.hub.peers, "forward", side_effect=forward):
+            self.assertEqual(req("GET", vault.PREFS)[1]["recent"], [])
+            st, result = req("POST", vault.SELECT, body={"machine": "test-node", "path": shared})
+            self.assertEqual(st, 200)
+            self.assertEqual(req("GET", vault.PREFS)[1]["recent"], result["recent"])
+            self.assertEqual(owner("GET", vault.PREFS)[1]["recent"], [])
+            self.assertEqual(req("POST", vault.API, body={"op": "register", "path": shared})[0], 403)
 
     def test_old_single_account_migrates_to_owner(self):
         salt, h = hubserver.hash_password("old-password")

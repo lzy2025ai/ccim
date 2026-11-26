@@ -27,6 +27,7 @@ from . import skills as skills_mod
 from . import board as board_mod
 from . import opc
 from . import space as space_mod
+from . import vault
 from . import remote as remote_mod
 from . import diary as diary_mod
 from . import desk as desk_mod
@@ -41,6 +42,7 @@ OWNER = "web"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}    # 添加到主屏幕用（#17）
+STATIC["/moment-2.30.1.js"] = "text/javascript; charset=utf-8"
 STATIC.update({f"/avatars/{name}.webp": "image/webp" for name in agents.AVATARS})
 
 
@@ -3405,7 +3407,8 @@ def _handler(pf):
                 "/api/schedule/list": lambda: {"schedules": [x for x in pf.call(pf.schedules.summary)
                                                              if share.of_schedule(pf, x) == acct]},   # ccim schedule list
                 "/api/schedule/feed": lambda: pf.call(pf.schedules.feed, my_schedules(pf, acct)),   # 动态（#520）
-                "/api/space": lambda: space_mod.view(acct),   # 个人空间（#542）
+                "/api/space": lambda: space_mod.view(acct, notes=q.get("todos") != "1"),   # 个人空间（#542）
+                vault.PREFS: lambda: vault.preferences(acct),
                 "/api/logs": lambda: {"text": console.logs(q.get("proc", ""))},
                 "/api/recent": lambda: {"folders": console.recent_folders()},
                 "/api/job": lambda: (console.JOBS[q["id"]].view() if q.get("id") in console.JOBS else console._missing()),
@@ -3583,6 +3586,8 @@ def _handler(pf):
                 "/api/space/todo/chat": lambda: space_mod.todo_chat(acct, b("chat"), bool(b("on")), b("src")),   # 对话加到待办（#554）
                 "/api/space/note/save": lambda: space_mod.note_save(acct, b("id"), b("title"), b("body")),
                 "/api/space/note/del": lambda: space_mod.note_del(acct, b("id")),
+                vault.SELECT: lambda: vault.select(acct, body, pf.peers.machines(), pf.peers.forward),
+                vault.API: lambda: vault.device(acct, share.root(acct) if acct else None, body),
                 "/api/schedule/bring": lambda: pf.call(pf.schedules.bring, b("id"), b("run")),
                 "/api/schedule/seen_upto": lambda: pf.call(pf.schedules.seen_upto, b("items"), my_schedules(pf, acct)),
                 "/api/schedule/delete": lambda: pf.run(pf.schedules.delete(b("id"))),

@@ -70,11 +70,12 @@ def _text(t, n):
 
 # ---------- 读 ----------
 
-def view(acct):
+def view(acct, notes=True):
     """整个个人空间。"""
     d = _read(acct)
-    notes = sorted(d["notes"], key=lambda n: -(n.get("updated") or n.get("at") or 0))
-    return {"todos": d["todos"], "notes": notes}
+    if not notes:
+        return {"todos": d["todos"]}
+    return {"todos": d["todos"], "notes": sorted(d["notes"], key=lambda n: -(n.get("updated") or n.get("at") or 0))}
 
 
 # ---------- 待办 ----------

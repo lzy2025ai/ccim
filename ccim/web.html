@@ -1572,6 +1572,22 @@ html.embed .send{width:30px;height:30px;border-radius:50%}
 .feed-pill{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;background:var(--qing);color:#fff;border-radius:16px;padding:6px 14px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .feed-top{position:absolute;right:max(22px, calc(50% - 390px));bottom:22px;z-index:5;width:40px;height:40px;border-radius:50%;background:var(--panel);border:1px solid var(--line-strong);display:grid;place-items:center;color:var(--ink-2);box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .feed-pill[hidden],.feed-top[hidden]{display:none}
+/* 对话页右边的 Agent 动态（#589） */
+.afeed{position:fixed;top:0;right:0;bottom:0;z-index:18;width:min(480px,100vw);background:var(--paper);border-left:1px solid var(--line);box-shadow:-18px 0 40px -20px rgba(29,34,43,.35);display:flex;flex-direction:column;animation:afeedIn .18s ease-out}
+@keyframes afeedIn{from{transform:translateX(24px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.afeed{animation:none}}
+.afeed-h{flex:none;display:flex;align-items:center;gap:10px;padding:14px 14px 12px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.afeed-h b{font:600 16px var(--song);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.afeed-h .sp{flex:1}
+.afeed-h .btn{text-decoration:none;color:var(--ink-2)}
+.afeed-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.afeed .feed-head{padding:12px 18px 8px}
+.afeed .feed-top{right:18px}
+.afeed-btn{display:inline-flex;align-items:center;gap:5px}
+.afeed-btn svg{width:14px;height:14px}
+.afeed-btn.on{border-color:var(--qing);color:var(--qing)}
+.afeed-btn .bm-n{display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 4px;margin-left:2px;border-radius:8px;background:var(--bad);color:#fff;font-size:10.5px;font-weight:600;text-align:center}
+@media (max-width:760px){.afeed{width:100vw;border-left:0}.afeed-btn .afeed-t{display:none}.afeed-btn{padding:5px 8px}}
 @media (max-width:1100px){.feed-top{bottom:88px}}   /* 贴在动态那一栏右边；窄了贴边时让开右下角的浮动按钮 */
 @media (max-width:760px){.feed-top{bottom:88px;right:16px}}
 /* ---------- 总台（#543，实验）：左边是嵌着的总台对话，右边是它手上的事；手机上右边一栏收成顶上三个数字 ---------- */
@@ -3315,6 +3331,7 @@ function route(){
   const parts = hpath.slice(2).split("/");
   const prev = current;
   current = {view: parts[0] || "chats", id: parts[1] ? decodeURIComponent(parts[1]) : null, sub: parts[2] ? decodeURIComponent(parts[2]) : null, tab: parts[3] || null};
+  if (FEED_AG && (prev.view !== current.view || prev.id !== current.id || prev.sub !== current.sub)) closeAgentFeed();   // 换了页面，右边的动态收起（#589）
   if (current.view === "agents" && prev.view !== "agents") agentsVisit = booted && !agentsViaNav;   // 从别处的链接进来的
   agentsViaNav = false;
   if (current.view === "agents" && (!current.id || current.id === "new")) agentsVisit = false;      // 到了总览就是在「AI 员工」里逛了
@@ -4217,6 +4234,7 @@ function drawChat(){
       ${wsHead(c)}
       ${c.temp && !co && !notCreator() ? `<button class="btn" onclick="saveAsAgent()">保存为 Agent</button>` : ""}
       ${groupHead(c)}
+      ${a && !co && !st ? afeedBtn(a.id) : ""}
       <button class="icon-btn" id="toc-btn" hidden aria-label="章节" title="章节" onclick="tocBtn(event)">${ICON.list}</button>
       ${sideOk(c) ? `<button class="icon-btn" aria-label="更多" title="更多" onclick="headMenu(event)">${ICON.more}</button>` : ""}
     </div>
@@ -10054,9 +10072,10 @@ function renderScheduleList(){
       : `<p class="muted" style="padding:10px">还没有定时任务。</p>`}</div>`;
 }
 // ---- 动态（#520）：各任务跑出的结果按时间排成一条，像朋友圈；回复发回那次结果所在的对话 ----
+let FEED_AG = null;                    // 对话页右边只看这个 Agent 的动态（#589）
 let FEED = null;                       // {posts, failing, open:Set(rid 展开全文), ask:{rid: {i 回复第几条}}, wait:Set(chat 等回答), top 最上面那条}
 const feedUnseen = () => (S.schedules || []).filter(x => !x.machine || x.machine === S.me).reduce((n, x) => n + (+x.unseen || 0), 0);
-const feedPage = () => current.view === "schedules" && (!current.id || current.id === "feed") || current.view === "board" && current.id === "feed";   // 定时页、任务面板（#532）
+const feedPage = () => FEED_AG ? !!$("#afeed") : current.view === "schedules" && (!current.id || current.id === "feed") || current.view === "board" && current.id === "feed";   // 定时页、任务面板（#532）、对话页右边的（#589）
 const feedOn = () => feedPage() && !!$("#feed") && (current.view === "board") === !!$(".feed-bhead");   // 画着的是这一页的动态
 function feedSplit(text){                // 第一行当标题，后面的当正文
   const lines = String(text || "").replace(/\r/g, "").split("\n");
@@ -10074,23 +10093,23 @@ async function renderScheduleFeed(){
   sched = null;
   const live = feedOn();               // 已经开着（推送来了重取）：按眼前那条对齐；刚进来：回到上次看到的地方
   if (!live) {
-    $("#main").innerHTML = `${current.view === "board" ? `<div class="bhead bmodes-h feed-bhead"><h1>任务面板</h1>${boardModes("feed")}</div>` : ""}<div class="feed-wrap"><div class="feed" id="feed" onscroll="feedScroll()"><div class="feed-in"><div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">正在加载…</p></div></div>
+    (FEED_AG ? $("#afeed-body") : $("#main")).innerHTML = `${current.view === "board" && !FEED_AG ? `<div class="bhead bmodes-h feed-bhead"><h1>任务面板</h1>${boardModes("feed")}</div>` : ""}<div class="feed-wrap"><div class="feed" id="feed" onscroll="feedScroll()"><div class="feed-in"><div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">正在加载…</p></div></div>
       <button class="feed-pill" id="feed-pill" hidden onclick="useMark('feed.new_pill');feedToTop()"></button>
       <button class="feed-top" id="feed-top" hidden onclick="useMark('feed.top');feedToTop()" aria-label="回到顶部" title="回到顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>`;
   }
-  let d; try { d = await api("/api/schedule/feed"); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
+  let d; try { d = await api("/api/schedule/feed" + (FEED_AG ? "?agent=" + encodeURIComponent(FEED_AG) : "")); } catch (e) { if (feedOn()) $("#feed .feed-in").innerHTML = `<div class="feed-head"><h2>动态</h2></div><p class="muted" style="padding:0 22px">${esc(e.message)}</p>`; return; }
   if (!feedOn()) return;
   FEED = {open: new Set(), openRep: new Set(), ask: {}, at: {}, wait: new Set(), waitAt: {}, draft: {}, sent: new Set(), starOnly: false, ...(FEED || {}), posts: d.posts || [], failing: d.failing || []};
   FEED.wait.forEach(c => {             // 回复有了回答（那条动态下最后一句是 Agent 的），或等太久了：不再转圈
     const last = (FEED.posts.find(p => p.chat === c && (p.replies || []).length) || {replies: []}).replies.slice(-1)[0];
     if (last && last.who === "agent" || Date.now() - (FEED.waitAt[c] || 0) > 600000) FEED.wait.delete(c);
   });
-  drawFeed(live ? null : feedPos());
+  drawFeed(live || FEED_AG ? null : feedPos());
 }
 // 浏览位置（#520）：记着看到哪条、离那条的顶多远，和当时最上面那条（之后来的算「新动态」）
 function feedPos(){ try { return JSON.parse(localStorage.getItem("ccim.feedPos") || "null"); } catch { return null; } }
 function feedSavePos(){
-  const box = $("#feed"); if (!box || !FEED || FEED.starOnly) return;
+  const box = $("#feed"); if (!box || !FEED || FEED.starOnly || FEED_AG) return;   // 只看一个 Agent 的不记位置
   const a = feedAnchor(box);
   try { localStorage.setItem("ccim.feedPos", JSON.stringify({rid: a && a.rid, off: a ? a.off : 0, top: FEED.top || null})); } catch {}
 }
@@ -10112,11 +10131,11 @@ function drawFeed(pos){
   let day = "", body = "";
   for (const p of feedShown()) { const dd = feedDay(p.at); if (dd !== day) { day = dd; body += `<div class="feed-day">${esc(dd)}</div>`; } body += feedPost(p); }
   const has = (S.schedules || []).length;
-  box.innerHTML = `<div class="feed-in"><div class="feed-head">${current.view === "board" ? "" : "<h2>动态</h2>"}
+  box.innerHTML = `<div class="feed-in"><div class="feed-head">${current.view === "board" || FEED_AG ? "" : "<h2>动态</h2>"}
       <div class="feed-tabs" role="tablist"><button role="tab" aria-selected="${!FEED.starOnly}" class="${FEED.starOnly ? "" : "on"}" onclick="feedTab(false)">全部</button><button role="tab" aria-selected="${FEED.starOnly}" class="${FEED.starOnly ? "on" : ""}" onclick="feedTab(true)">收藏</button></div>
-      <a class="btn" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a></div>
+      ${FEED_AG ? "" : `<a class="btn" href="#/schedules/new" style="text-decoration:none">${ICON.plus}新建定时任务</a>`}</div>
     ${FEED.starOnly ? "" : FEED.failing.map(f => `<div class="feed-fail"><span>「${esc(f.name)}」上次没跑成</span><a href="#/schedules/${encodeURIComponent(f.id)}">去看看</a></div>`).join("")}
-    ${body || `<div class="empty"><p>${FEED.starOnly ? "还没有收藏的动态。" : has ? "定时任务跑出结果后，会一条条出现在这里。" : "让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。跑出的结果会一条条出现在这里。"}</p></div>`}</div>`;
+    ${body || `<div class="empty"><p>${FEED.starOnly ? "还没有收藏的动态。" : FEED_AG ? "它的定时任务跑出结果后，会一条条出现在这里。" : has ? "定时任务跑出结果后，会一条条出现在这里。" : "让 Agent 按时自己干活：每天早上汇总进展、每周五跑一遍测试、每月出一份复盘。跑出的结果会一条条出现在这里。"}</p></div>`}</div>`;
   const el = keep && keep.rid && !wasTop && box.querySelector(`.fpost[data-rid="${CSS.escape(keep.rid)}"]`);
   box.scrollTop = el ? box.scrollTop + el.getBoundingClientRect().top - box.getBoundingClientRect().top - (keep.off || 0) : wasTop || !pos ? (wasTop ? 0 : box.scrollTop) : 0;
   if (fr && act.tagName === "TEXTAREA") { const t = box.querySelector(`.fpost[data-rid="${CSS.escape(fr.dataset.rid)}"] textarea`); if (t) { t.focus(); t.selectionStart = t.selectionEnd = t.value.length; } }
@@ -10138,7 +10157,7 @@ function feedScroll(now){                 // 滚动：记位置；到了最上�
 }
 function feedSeen(){
   const box = $("#feed"); if (!box || !FEED || !feedOn()) return;
-  if (box.scrollTop < 40 && !FEED.starOnly && feedUnseen()) {        // 在最上面：都看到了（包括上次没跑成的）
+  if (box.scrollTop < 40 && !FEED.starOnly && !FEED_AG && feedUnseen()) {        // 在最上面：都看到了（包括上次没跑成的）
     (S.schedules || []).forEach(x => { if (!x.machine || x.machine === S.me) x.unseen = 0; });
     drawAttention(); renderList(); FEED.quiet = Date.now(); api("/api/schedule/seen_all", {}).catch(() => {}); return;
   }
@@ -10280,6 +10299,31 @@ async function feedSend(rid){
   catch (e) { toast(e.message); p.replies = before; FEED.wait.delete(p.chat); FEED.draft[rid] = text; FEED.ask[rid] = ask; FEED.at[rid] = to; drawFeed(); }
 }
 let feedTimer = 0;
+// 对话页的「动态」（#589）：右边滑出这个 Agent 的定时任务动态，回复、收藏、加到待办都和「定时」页那份一样（同一套 drawFeed，FEED_AG 管只看谁）
+const agentScheds = aid => (S.schedules || []).filter(x => { const t = x.target || {};
+  return (!x.machine || x.machine === S.me) && (t.kind === "agent" ? t.id === aid : t.kind === "group" && (t.agents || []).length ? t.agents[0] === aid : t.kind === "chat" ? (x.target_chat || {}).agent === aid : false); });
+function afeedBtn(aid){
+  const ss = agentScheds(aid); if (!ss.length) return "";
+  const n = ss.reduce((m, x) => m + (x.unseen || 0), 0);
+  return `<button class="btn afeed-btn ${FEED_AG === aid ? "on" : ""}" aria-label="动态" onclick="openAgentFeed(${q(aid)})">${ICON.clock}<span class="afeed-t">动态</span>${n ? `<span class="bm-n">${n > 99 ? "99+" : n}</span>` : ""}</button>`;
+}
+function openAgentFeed(aid){
+  if (FEED_AG === aid && $("#afeed")) return closeAgentFeed();
+  closeAgentFeed();
+  const a = agentOf(aid); FEED_AG = aid; FEED = null;
+  const el = document.createElement("aside"); el.id = "afeed"; el.className = "afeed"; el.setAttribute("aria-label", "动态");
+  el.innerHTML = `<div class="afeed-h">${a ? seal(a, "sm", false) : ""}<b>${esc(a ? a.name : "")}的动态</b><span class="sp"></span>
+    <a class="btn sm" href="#/schedules">定时任务</a><button class="icon-btn" aria-label="关闭" title="关闭" onclick="closeAgentFeed()">${ICON.x}</button></div><div class="afeed-body" id="afeed-body"></div>`;
+  document.body.append(el);
+  document.querySelector(".afeed-btn")?.classList.add("on");
+  renderScheduleFeed();
+}
+function closeAgentFeed(){
+  if (!FEED_AG && !$("#afeed")) return;
+  $("#afeed")?.remove(); FEED_AG = null; FEED = null;
+  document.querySelector(".afeed-btn")?.classList.remove("on");
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && FEED_AG && !document.querySelector(".dialog, .pop")) closeAgentFeed(); });
 function feedSoon(){ clearTimeout(feedTimer); feedTimer = setTimeout(() => { if (feedOn()) renderScheduleFeed(); }, 400); }
 function feedEvent(ev){                  // 跑出新结果、回复有了回答：重取一次（自己刚记的「看过」不算）
   if (!FEED || !feedOn()) return;

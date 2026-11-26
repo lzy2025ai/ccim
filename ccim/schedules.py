@@ -267,10 +267,13 @@ class Schedules:
                 n, last = n + 1, max(last, at)
         return n, last
 
-    def feed(self, sids):
+    def feed(self, sids, agent=None):
         """动态（#520）：这些定时任务最近跑出的结果，新的在前。没新情况的不算；每隔几分钟跑的一天合成一条（最近那次）。
-        出错的不当动态，最近一次出错的任务放在 failing。new：晚于上次看过。"""
+        出错的不当动态，最近一次出错的任务放在 failing。new：晚于上次看过。
+        agent：只要这个 Agent 发的（对话页的「动态」，#589），发帖人和动态里显示的一样按 _poster 算。"""
         data, chats, posts, failing = self.all(), self.pf.chats(), [], []
+        if agent:
+            sids = [sid for sid in sids if sid in data and self._poster(data[sid], chats) == agent]
         since = time.time() - FEED_DAYS * 86400
         for sid in sids:
             s = data.get(sid)

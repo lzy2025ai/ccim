@@ -28,7 +28,7 @@ IMAGES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": 
           "tif": "image/tiff", "tiff": "image/tiff", "svg": "image/svg+xml"}
 DEVICE_LOCK = threading.RLock()
 PREF_LOCKS = defaultdict(threading.Lock)
-DEVICE_WRITES = {"register", "import", "save", "create", "rename", "trash", "daily_open", "link", "attach"}
+DEVICE_WRITES = {"register", "import", "save", "create", "rename", "trash", "daily_open", "link", "attach", "append"}
 
 
 class Problem(ValueError):
@@ -362,6 +362,122 @@ def _daily_open(root, body):
 TEMPLATE = re.compile(r"\{\{\s*(title|date|time)(?::([^{}]+))?\s*\}\}")
 
 
+# ---------- 笔记流（#597）：日记拆成一条条，别的笔记算长文；顶上的输入框追加到今天的日记 ----------
+FEED_MAX = 300            # 最多看最近改过的多少个文件
+ENTRY_MAX = 4000          # 一条记录最多给多少字
+# 日记里一条的开头，和 ccim 的「记一下」（diary.py）同一种写法；Obsidian 里引用块包着的也认
+ENTRY_HEAD = re.compile(r"^>?\s*(?:## (\d{1,2}:\d{2})(?: · (.*))?|\*\*(\d{1,2}:\d{2})\*\*(?: · 来自 (.*))?)\s*$")
+ENTRY_LINK = re.compile(r"^\[(.*)\]\((\S+)\)$")
+DATE_TOKENS = {"YYYY": r"(?P<y>\d{4})", "MM": r"(?P<m>\d{2})", "DD": r"(?P<d>\d{2})",
+               "M": r"(?P<m>\d{1,2})", "D": r"(?P<d>\d{1,2})"}
+
+
+def _date_pattern(fmt):
+    """Obsidian 的日记文件名格式（moment 写法）→ 正则；认不出的格式退回 年-月-日。"""
+    out, i = "", 0
+    while i < len(fmt):
+        if fmt[i] == "[":
+            j = fmt.find("]", i)
+            if j < 0:
+                break
+            out += re.escape(fmt[i + 1:j]); i = j + 1; continue
+        tok = next((t for t in ("YYYY", "MM", "DD", "M", "D") if fmt.startswith(t, i)), None)
+        if tok:
+            if f"(?P<{tok[0].lower()}>" in out:
+                return None
+            out += DATE_TOKENS[tok]; i += len(tok); continue
+        if fmt[i].isascii() and fmt[i].isalpha():   # 认不出的日期写法（周几、季度等）
+            return None
+        out += re.escape(fmt[i]); i += 1
+    return re.compile(out + "$") if all(f"(?P<{k}>" in out for k in "ymd") else None
+
+
+def _entries(text):
+    """日记正文 → [{time, where, link, text}]。第一条开头之前写的算一条没有时间的。"""
+    out, cur = [], {"time": "", "where": "", "link": "", "lines": []}
+    for ln in text.replace("\r", "").split("\n"):
+        m = ENTRY_HEAD.match(ln)
+        if m:
+            out.append(cur)
+            where = (m.group(2) or m.group(4) or "").strip()
+            lk = ENTRY_LINK.match(where)
+            cur = {"time": m.group(1) or m.group(3), "where": lk.group(1).strip("「」") if lk else where,
+                   "link": lk.group(2) if lk else "", "lines": []}
+        else:
+            cur["lines"].append(ln)
+    out.append(cur)
+    rows = []
+    for e in out:
+        body = "\n".join(e.pop("lines")).strip()
+        if not body and not e["time"]:
+            continue
+        e["text"] = body[:ENTRY_MAX]
+        rows.append(e)
+    return rows
+
+
+def _plain(text, n):
+    t = re.sub(r"```.*?```", " ", text, flags=re.S)
+    t = re.sub(r"!\[[^\]]*\]\([^)]*\)|!\[\[[^\]]*\]\]", "", t)
+    t = re.sub(r"\[\[([^\]|]*\|)?([^\]]*)\]\]", r"\2", t)
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"^\s*(#{1,6}\s|[-*+]\s(\[.\]\s)?|\d+\.\s|>\s?)", "", t, flags=re.M)
+    t = re.sub(r"[*_`~]", "", t)
+    t = " ".join(t.split())
+    return t[:n]
+
+
+def _feed(root):
+    """最近改过的笔记：日记（文件名是日期的）拆成一条条记录，别的是长文（标题 + 摘要）。"""
+    pattern = _date_pattern(_daily(root)["format"]) or _date_pattern("YYYY-MM-DD")
+    files = []
+    for path in _files(root, lambda p: p.suffix.lower() == ".md"):
+        try:
+            files.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+    files.sort(key=lambda x: -x[0])
+    rows = []
+    for mtime, path in files[:FEED_MAX]:
+        try:
+            text = _read(path, NOTE_MAX).decode("utf-8-sig")
+        except (Problem, OSError, UnicodeError):
+            continue
+        rel = path.relative_to(root).as_posix()
+        m = pattern.match(path.stem) or _date_pattern("YYYY-MM-DD").match(path.stem)
+        if m:
+            rows.append({"path": rel, "kind": "daily", "mtime": mtime,
+                         "date": f"{int(m['y']):04d}-{int(m['m']):02d}-{int(m['d']):02d}", "entries": _entries(text)})
+            continue
+        head = re.search(r"^#\s+(.+)$", text, re.M)
+        body = text[head.end():] if head and not text[:head.start()].strip() else text
+        rows.append({"path": rel, "kind": "note", "mtime": mtime, "title": head.group(1).strip() if head else path.stem,
+                     "excerpt": _plain(body, 160), "chars": len(re.sub(r"\s", "", text))})
+    return {"items": rows, "more": len(files) > FEED_MAX}
+
+
+def _append(root, body):
+    """顶上的输入框记一笔（#597）：追加到今天的日记末尾，开头一行是时间，和「记一下」一样。"""
+    text = body.get("text")
+    when = body.get("time")
+    if not isinstance(text, str) or not text.strip():
+        raise Problem("先写点什么。")
+    if not isinstance(when, str) or not re.fullmatch(r"\d{1,2}:\d{2}", when):
+        raise Problem("时间无效。")
+    note = _daily_open(root, body)
+    if "tokens" in note:
+        return note
+    path = _note_path(root, note["path"])
+    old = _read(path, NOTE_MAX).decode("utf-8-sig")
+    block = f"**{when}**\n\n{text.strip()}\n"
+    sep = "" if not old.strip() else "\n" if old.endswith("\n") else "\n\n"
+    data = (old + sep + block).encode()
+    if len(data) > NOTE_MAX:
+        raise Problem("日记不能超过 4 MB。")
+    _write(path, data)
+    return _note(root, path)
+
+
 def _attach(root, body):
     note = _note_path(root, body.get("path"))
     if not note.is_file():
@@ -512,6 +628,10 @@ def device(acct, top, args):
             return _daily(root)
         if op == "daily_open":
             return _daily_open(root, args)
+        if op == "feed":
+            return _feed(root)
+        if op == "append":
+            return _append(root, args)
         if op == "link":
             _note_path(root, rel)
             ref = str(args.get("ref") or "").split("|", 1)[0].split("#", 1)[0].strip()

@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "esbuild entry.js --bundle --minify --format=iife --global-name=CM --legal-comments=none --outfile=../../ccim/static/codemirror-6.js"
+  },
+  "devDependencies": {
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.44.2",
+    "@codemirror/commands": "6.11.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/autocomplete": "6.20.4",
+    "@codemirror/search": "6.7.3",
+    "@lezer/markdown": "1.8.2",
+    "@lezer/highlight": "1.2.5",
+    "esbuild": "0.28.2"
+  }
+}

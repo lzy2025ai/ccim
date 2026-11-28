@@ -98,111 +98,125 @@ a.sp-src:hover span.t{text-decoration:underline}
 .sp-fold svg{width:14px;height:14px;transition:transform .15s} .sp-fold.open svg{transform:rotate(90deg)}
 .sp-grp{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin:16px 0 8px}
 .sp-grp::after{content:"";flex:1;height:1px;background:var(--line)}
-/* 设备上的笔记文件树与实时预览 */
-.sv-panel{
-  --sv-sidebar:color-mix(in srgb,var(--paper) 44%,var(--panel));
-  --sv-desk:color-mix(in srgb,var(--paper) 76%,var(--panel));
-  --sv-hover:color-mix(in srgb,var(--panel) 52%,var(--sunk));
-  --sv-selected:color-mix(in srgb,var(--qing-soft) 88%,var(--panel));
-  height:100%;min-height:0;display:grid;grid-template-columns:minmax(212px,254px) minmax(0,1fr);background:var(--sv-desk);
-}
-.sv-panel:not(:has(.sv-left)){grid-template-columns:1fr}
-.sv-left{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--sv-sidebar);border-right:1px solid var(--line)}
-.sv-vault{padding:16px 12px 12px}
-.sv-switch.btn{
-  width:100%;min-height:58px;gap:9px;padding:8px 9px;border:1px solid color-mix(in srgb,var(--qing) 15%,var(--line));
-  border-radius:12px;background:linear-gradient(120deg,var(--sv-selected),var(--panel) 85%);text-align:left;color:var(--ink);box-shadow:0 1px 2px #1d222b0a;
-}
-.sv-switch.btn:hover{border-color:var(--qing)}
-.sv-vault-icon,.sv-edit-icon{display:grid;place-items:center;flex:none;color:var(--qing);background:var(--qing-soft);border-radius:9px}
-.sv-vault-icon{width:34px;height:34px}
-.sv-vault-icon svg,.sv-edit-icon svg{width:18px;height:18px}
-.sv-vault-name,.sv-file-name{flex:1;min-width:0}
-.sv-switch b,.sv-switch small,.sv-file-name h1,.sv-file-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sv-switch b{font-size:14px;font-weight:680}
-.sv-switch small,.sv-file-name small{color:var(--muted);font-size:12px;font-weight:400}
-.sv-switch>.chev{color:var(--qing);flex:none;transform:rotate(90deg)}
-.sv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 12px 11px}
-.sv-tools .btn,.sv-tools .icon-btn{min-height:32px;justify-content:center;border-radius:8px}
-.sv-tools .btn{padding:4px 7px;white-space:nowrap;line-height:1.2}
-.sv-tools .icon-btn{flex:none;width:30px}
-.sv-tools .sv-new{flex:1}
-.sv-tools .sv-new svg{width:14px;height:14px}
-.sv-tools .sv-daily{background:transparent;border-color:transparent;color:var(--qing)}
-.sv-tools .sv-daily:hover{background:var(--sv-selected)}
-.sv-panel.no-device .sv-tools button:not(:last-child),.sv-panel.no-device .sv-search{display:none}
-.sv-search.search{margin:0 12px 8px;border:1px solid var(--line);background:var(--panel);border-radius:9px}
-.sv-search:focus-within{border-color:var(--qing)}
-.sv-migration{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:4px 12px 8px;font-size:12px;color:var(--muted)}
-.sv-tree{flex:1;overflow:auto;padding:1px 7px 16px}
-.sv-row{display:flex;align-items:center;gap:2px;min-width:0;margin:2px 0;padding:0 4px 0 min(calc(7px + var(--depth)*15px),40%);min-height:34px;border-radius:8px}
-.sv-row:hover{background:var(--sv-hover)}
-.sv-row.on{color:var(--qing);font-weight:600}
-.sv-row[data-kind="note"].on{background:var(--sv-selected);box-shadow:inset 3px 0 var(--qing)}
-.sv-entry{display:flex;align-items:center;gap:6px;flex:1;min-width:0;align-self:stretch;text-align:left;color:inherit;text-decoration:none;padding:4px}
-.sv-entry>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sv-entry svg{width:15px;height:15px;flex:none;color:var(--muted)}
-.sv-row.on svg{color:var(--qing)}
-.sv-chevron,.sv-file{display:grid;place-items:center;flex:none}
-.sv-chevron svg{width:11px;height:11px}
-.sv-chevron.open{transform:rotate(90deg)}
-.sv-more.icon-btn{opacity:0;width:25px;height:26px;flex:none}
-.sv-row:hover .sv-more,.sv-row:focus-within .sv-more,.sv-row[data-kind="note"].on .sv-more{opacity:1}
-.sv-editor{display:flex;flex-direction:column;position:relative;min-width:0;min-height:0}
-.sv-edit-head{background:var(--panel);border-bottom:1px solid var(--line)}
-.sv-edit-bar{display:flex;align-items:center;gap:10px;min-height:62px;padding:8px 18px}
-.sv-edit-icon{width:33px;height:33px}
-.sv-file-name h1{margin:0;font:650 16px/1.4 var(--sans)}
-.sv-file-name small{margin-top:2px}
+/* 笔记（#597）：分类 | 记一笔 + 记录和长文 | 写作页 */
+.nt{height:100%;min-height:0;display:grid;grid-template-columns:200px minmax(320px,400px) minmax(0,1fr);background:var(--paper)}
+.nt>.sv-empty{grid-column:1/-1;margin:auto}
+.nt-side{display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;padding:14px 10px;background:#E9EBE6;border-right:1px solid var(--line)}
+.nt-vault{display:flex;align-items:center;gap:8px;padding:6px 8px 12px;text-align:left;border-radius:8px;min-width:0}
+.nt-vault:hover{background:rgba(255,255,255,.6)}
+.nt-vault .ic{color:var(--qing);display:grid}.nt-vault .ic svg{width:17px;height:17px}
+.nt-vault>span:nth-child(2){flex:1;min-width:0}
+.nt-vault b,.nt-vault small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-vault b{font-size:14px}.nt-vault small{font-size:11.5px;color:var(--faint)}
+.nt-vault>svg{width:13px;height:13px;color:var(--faint);flex:none}
+.nt-cat{display:flex;align-items:center;gap:9px;width:100%;padding:6px 10px;border-radius:7px;color:var(--ink-2);font-size:13.5px;text-align:left}
+.nt-cat:hover{background:rgba(255,255,255,.55)}
+.nt-cat .d{width:6px;height:6px;border-radius:50%;background:var(--line-strong);margin:0 4px;flex:none}
+.nt-cat .n{margin-left:auto;color:var(--faint);font-size:12px}
+.nt-cat.on{background:var(--panel);color:var(--ink);font-weight:600}.nt-cat.on .d{background:var(--qing)}
+.nt-sec{font-size:12px;color:var(--faint);padding:14px 10px 4px}
+.nt-list{display:flex;flex-direction:column;min-height:0;background:#F6F7F4;border-right:1px solid var(--line)}
+.nt-lh{display:flex;align-items:center;gap:8px;padding:14px 14px 10px}
+.nt-lh h2{font:600 17px var(--sans);margin:0;white-space:nowrap}.nt-lh .sp{flex:1}
+.nt-q{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:0 9px;color:var(--faint);width:150px}
+.nt-q:focus-within{border-color:var(--qing)}
+.nt-q svg{width:13px;height:13px;flex:none}.nt-q input{border:0;outline:0;background:none;font:13px var(--sans);color:var(--ink);padding:5px 0;width:100%}
+.nt-plus{width:30px;height:30px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);display:grid;place-items:center;color:var(--ink-2);flex:none}
+.nt-plus svg{width:15px;height:15px}.nt-plus:hover{border-color:var(--qing);color:var(--qing)}
+.nt-comp{margin:0 12px 10px;background:var(--panel);border:1.5px solid var(--line-strong);border-radius:12px;padding:8px 12px 7px;transition:border-color .15s}
+.nt-comp:focus-within{border-color:var(--qing);box-shadow:0 6px 18px -12px rgba(43,76,111,.5)}
+.nt-comp-ed{min-height:44px;max-height:40vh;overflow:auto}
+.nt-tb{display:flex;align-items:center;gap:4px;border-top:1px solid var(--line);padding-top:6px;margin-top:4px;color:var(--muted);font-size:12.5px}
+.nt-tb>button:not(.btn){padding:2px 6px;border-radius:6px}.nt-tb>button:not(.btn):hover{background:var(--sunk);color:var(--ink)}
+.nt-tb .sp{flex:1}.nt-tb .k{font-size:11px;color:var(--faint);margin-right:6px}
+.nt-items{flex:1;min-height:0;overflow:auto;padding:0 0 40px}
+.nt-day{font-size:12px;color:var(--faint);padding:12px 16px 6px}
+.nt-memo{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;margin:0 12px 8px;padding:9px 34px 10px 14px;cursor:pointer}
+.nt-memo:hover{border-color:var(--line-strong)}
+.nt-memo.on{border-color:var(--qing);box-shadow:inset 3px 0 0 var(--qing)}
+.nt-memo .h{font-size:11.5px;color:var(--faint);margin-bottom:1px}
+.nt-more.icon-btn{position:absolute;top:6px;right:6px;width:24px;height:22px;opacity:0}.nt-memo:hover .nt-more,.nt-memo.on .nt-more{opacity:1}
+.nt-memo .tx{font-size:14px;line-height:1.7;max-height:13.6em;overflow:hidden;word-break:break-word}
+.nt-memo .tx p{margin:0 0 .4em}.nt-memo .tx p:last-child{margin:0}
+.nt-memo .tx h1,.nt-memo .tx h2,.nt-memo .tx h3{font-size:15px;margin:.2em 0}
+.nt-memo .tx ul,.nt-memo .tx ol{margin:.2em 0;padding-left:1.3em}
+.nt-imgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.nt-imgs img{max-width:120px;max-height:120px;border-radius:6px;object-fit:cover}.nt-imgs img[hidden]{display:none}
+.nt-from{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--qing);background:var(--qing-soft);border-radius:6px;padding:1px 7px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-from a{color:inherit;text-decoration:none}
+.nt-long{display:block;margin:0 12px 8px;padding:10px 14px;border-radius:10px;border:1px solid transparent;color:inherit;text-decoration:none}
+.nt-long:hover{background:rgba(255,255,255,.7)}
+.nt-long b{display:block;font:700 15.5px/1.45 var(--song)}
+.nt-long p{margin:2px 0 0;font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.6}
+.nt-long .t{display:block;font-size:11.5px;color:var(--faint);margin-top:4px}
+.nt-long.on{background:var(--panel);border-color:var(--qing);box-shadow:inset 3px 0 0 var(--qing)}
+.nt-ed{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel)}
+.nt-ed>.sv-empty{margin:auto}
+.nt-eb{display:flex;align-items:center;gap:12px;padding:10px 20px;font-size:12.5px;color:var(--faint);flex:none}
+.nt-eb .crumb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nt-eb .sp{flex:1}
+.nt-obs{color:var(--muted);text-decoration:none;white-space:nowrap}.nt-obs:hover{color:var(--qing)}
+.nt-doc{flex:1;min-height:0;overflow:auto;cursor:text}
+.nt-paper{max-width:720px;margin:0 auto;padding:18px 44px 120px}
+.nt-h{display:block;width:100%;border:0;outline:0;background:none;padding:0;margin:0 0 6px;font:700 30px/1.35 var(--song);color:var(--ink)}
+.nt-h::placeholder{color:var(--faint)}
+.nt-meta{font-size:12.5px;color:var(--faint);margin-bottom:18px}
+.sv-migration{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;font-size:12px;color:var(--muted)}
 .sv-status{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;white-space:nowrap}
 .sv-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--faint)}
 .sv-status[data-state="saved"]::before{background:var(--ok)}
 .sv-status[data-state="busy"]::before{background:var(--warn)}
 .sv-status[data-state="error"]{color:var(--bad)}
 .sv-status[data-state="error"]::before{background:var(--bad)}
-.sv-problem:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 18px 9px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--bad) 7%,var(--panel));color:var(--bad);font-size:12px}
+.sv-problem:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 20px 9px;padding:6px 8px;border-radius:8px;background:#FBEAE7;color:var(--bad);font-size:12.5px}
 .sv-problem .btn{padding:3px 8px;font-size:12px}
-.sv-editor .sv-doc.doc-body{background:var(--sv-desk);flex:1;min-height:0}
-.sv-doc .live-ed{
-  width:min(calc(100% - 36px),760px);min-height:calc(100% - 36px);margin:16px auto 20px;
-  padding:clamp(22px,3vw,38px) clamp(22px,3.1vw,44px) 65px;border:1px solid var(--line);border-radius:14px;
-  background:var(--panel);box-shadow:0 2px 9px #1d222b0a;cursor:text;
-}
-.sv-doc .live-ed .h1{margin:0;font-weight:720}
-.sv-doc .live-ed .h2{font-size:1.35em;margin:.18em 0 .05em}
-.sv-doc .live-ed .ln:has(>br:only-child){line-height:.8;min-height:.8em}
-.sv-doc .live-ed .quote{padding:6px 12px;color:var(--ink-2);border-color:var(--qing-soft);border-radius:0 7px 7px 0;background:var(--sv-sidebar)}
-.sv-doc .live-ed .quote.on{border-color:var(--qing)}
-.sv-doc .live-ed .ln:not(.on) .bul:has(~.lv-task){display:none}
-.sv-doc .live-ed .ln:not(.on) .lv-task{
-  display:inline-block;position:relative;vertical-align:middle;width:14px;height:14px;margin:-1px 7px 0 0;
-  overflow:hidden;white-space:nowrap;color:transparent;border:1px solid var(--line-strong);border-radius:4px;
-}
-.sv-doc .live-ed .ln:not(.on) .lv-task.done{border-color:var(--ok);background:var(--ok)}
-.sv-doc .live-ed .ln:not(.on) .lv-task.done::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:7px;border:solid white;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
-.sv-empty{display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px;color:var(--muted);padding:23px 12px}
-.sv-panel:not(:has(.sv-left))>.sv-empty,.sv-editor>.sv-empty{margin:auto}
-.sv-suggest:not([hidden]){position:absolute;top:70px;right:16px;z-index:3;display:grid;width:min(300px,90%);padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 5px 16px #1d222b20}
-.sv-suggest button{text-align:left;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:6px}
-.sv-suggest button[aria-selected="true"]{background:var(--sv-selected)}
-.live-ed [data-sv-wiki]{cursor:pointer}
-.sv-doc img[hidden]{display:none}
-@media(hover:none){.sv-more.icon-btn{opacity:1}}
+.sv-empty{display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px;color:var(--muted);padding:30px 20px;font-size:13.5px}
+/* CodeMirror：像一张纸，不是代码编辑器 */
+.nt-cm .cm-editor,.nt-comp-ed .cm-editor{background:none;font:16px/1.85 var(--sans);color:var(--ink)}
+.nt-comp-ed .cm-editor{font-size:14.5px;line-height:1.7}
+.cm-editor.cm-focused{outline:0}
+.cm-editor .cm-scroller{font-family:inherit;line-height:inherit;overflow:visible}
+.cm-editor .cm-content{padding:0;caret-color:var(--qing)}
+.cm-editor .cm-line{padding:0}
+.cm-editor .cm-cursor{border-left:1.6px solid var(--qing)}
+.cm-editor .cm-selectionBackground,.cm-editor.cm-focused .cm-selectionBackground{background:#CFDCEA!important}
+.cm-editor .cm-placeholder{color:var(--faint)}
+.cm-h{font-weight:700;color:var(--ink)}
+.cm-h1{font-size:1.6em;line-height:1.45;padding-top:.35em!important}.cm-h2{font-size:1.35em;line-height:1.5;padding-top:.3em!important}
+.cm-h3{font-size:1.15em;padding-top:.2em!important}
+.cm-h .cm-meta{color:var(--faint);font-weight:400}
+.cm-quote{border-left:3px solid var(--line-strong);padding-left:14px!important;color:var(--ink-2)}
+.cm-codeblock{font:13.5px/1.7 var(--mono);background:var(--sunk);padding:0 14px!important}
+.cm-code{font-family:var(--mono);font-size:.88em;background:var(--sunk);border-radius:4px;padding:1px 4px;color:#B5303A}
+.cm-codeblock .cm-code{background:none;padding:0;color:inherit}
+.cm-meta,.cm-url{color:var(--faint)}
+.cm-link,.cm-linktext{color:var(--qing);text-decoration:underline;text-decoration-color:var(--qing-soft);text-underline-offset:3px}
+.cm-wiki{color:var(--qing);cursor:pointer;border-bottom:1px solid var(--qing-soft)}
+.cm-bul{color:var(--muted);display:inline-block;width:1em;text-align:center}
+.cm-task{display:inline-block;width:15px;height:15px;margin:0 6px -2px 0;border:1.5px solid var(--line-strong);border-radius:4px;cursor:pointer;position:relative;vertical-align:baseline}
+.cm-task.on{background:var(--qing);border-color:var(--qing)}
+.cm-task.on::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:7px;border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.cm-done{color:var(--faint);text-decoration:line-through}
+.cm-img{display:block;margin:6px 0}.cm-img img{max-width:100%;max-height:420px;border-radius:8px}.cm-img img:not([src]){display:none}
+.cm-hr{display:block;height:1px;background:var(--line-strong);margin:12px 0}
+.cm-tooltip.cm-tooltip-autocomplete{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 10px 28px -10px rgba(0,0,0,.25);overflow:hidden}
+.cm-tooltip-autocomplete>ul{font:13.5px var(--sans)!important;max-height:260px!important}
+.cm-tooltip-autocomplete>ul>li{padding:6px 12px!important}
+.cm-tooltip-autocomplete>ul>li[aria-selected]{background:var(--qing-soft)!important;color:var(--ink)!important}
 @media(max-width:760px){
-  .sv-panel{display:flex;flex-direction:column}
-  .sv-left,.sv-editor{flex:1;border-right:0}
-  .sv-panel:not(.in-note) .sv-editor,.sv-panel.in-note .sv-left{display:none}
-  .sv-vault{padding:12px 12px 12px 48px}
-  .sv-tools .btn,.sv-tools .icon-btn{min-height:40px}
-  .sv-tools .icon-btn{width:38px}
-  .sv-row{min-height:44px}
-  .sv-more.icon-btn{width:36px;height:36px}
-  .sv-edit-bar{padding:7px 12px 7px 48px;gap:6px;min-height:55px}
-  .sv-edit-icon{display:none}
-  .sv-status{font-size:11px}
-  .sv-problem:not([hidden]){margin-inline:12px}
-  .sv-doc .live-ed{width:100%;min-height:100%;margin:0;padding:22px 18px 88px;border:0;border-radius:0;box-shadow:none}
-  .sv-suggest:not([hidden]){top:60px}
+  .nt{display:block;position:relative}
+  .nt-side{display:none}
+  .nt-list{height:100%;border:0;background:var(--paper)}
+  .nt.in-note .nt-list,.nt:not(.in-note) .nt-ed{display:none}
+  .nt-ed{height:100%}
+  .nt-lh{padding:14px 12px 8px 14px}.nt-lh h2{font:700 24px var(--song)}
+  .nt-q{width:110px}
+  .nt-items{padding-bottom:190px}
+  .nt-comp{position:fixed;left:10px;right:10px;bottom:calc(72px + env(safe-area-inset-bottom));margin:0;z-index:6;box-shadow:0 8px 24px -10px rgba(0,0,0,.25)}
+  .nt-comp-ed{min-height:24px;max-height:30vh}
+  .nt-eb{padding:10px 12px 10px 48px}
+  .nt-paper{padding:12px 18px 120px}
+  .nt-h{font-size:25px}
+  .nt-more.icon-btn{opacity:1}
+  .nt-long{background:var(--panel);border-color:var(--line)}
 }
 .sp-empty{color:var(--muted);padding:40px 0;text-align:center}
 .sp-hit{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;cursor:pointer}
@@ -1902,6 +1916,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   .pback{display:grid;place-items:center;position:fixed;top:calc(8px + env(safe-area-inset-top));left:6px;z-index:11;width:36px;height:36px;border-radius:10px;color:var(--ink)}
   .pback svg{width:22px;height:22px}
   .app:not(.phone-main) .pback,.app.cards .pback{display:none}
+  .app.cards.space-note .pback{display:grid}   /* 个人空间没有列表栏，打开一篇笔记时也要能回到笔记列表 */
   .app.phone-main .chat-head,.app.phone-main .agent-top,.app.phone-main .d-head,.app.phone-main .feed-head{padding-left:48px}
   .chat-head{padding:8px 12px;gap:8px;flex-wrap:wrap}
   .chat-head{flex-wrap:nowrap}
@@ -3360,7 +3375,8 @@ function route(){
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
     || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "space");
-  document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());   // 定时页：动态在左、任务列表在右（#520）
+  document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());
+  document.querySelector(".app").classList.toggle("space-note", current.view === "space" && current.id === "note" && !!current.sub);   // 定时页：动态在左、任务列表在右（#520）
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();
@@ -8109,9 +8125,346 @@ async function svSelect(args, keepRoute = false) {
     if (svOn()) drawSpNotes();
   }
 }
+// ---- 笔记页（#597）：左边分类，中间「记一笔」+ 按日期排的记录和长文，右边写作页。编辑器是 CodeMirror 6（static/codemirror-6.js） ----
+// 日记（文件名是日期的）按开头的时间拆成一条条记录，显示成卡片；别的笔记是长文。数据来自那台电脑的 feed（最近改过的 300 个文件）
+const NT = {feed: null, err: "", loading: null, at: 0, cat: "all", q: "", comp: null, timer: 0};
+const NT_CATS = [["all", "全部"], ["memo", "随手记"], ["long", "长文"], ["chat", "来自对话"]];
+let cmLoading = null;
+function cmLoad(){
+  if (window.CM) return Promise.resolve(window.CM);
+  if (!cmLoading) cmLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script"); s.src = "/codemirror-6.js";
+    s.onload = () => resolve(window.CM);
+    s.onerror = () => { cmLoading = null; s.remove(); reject(new Error("编辑器没加载出来，刷新再试。")); };
+    document.head.append(s);
+  });
+  return cmLoading;
+}
+async function ntLoad(force){
+  const v = SV.vault; if (!v || svUnavailable(v)) return;
+  if (NT.loading) return NT.loading;
+  if (!force && NT.feed && NT.feed.vault === v.id && Date.now() - NT.at < 15000) return;
+  NT.loading = svCall(v, "feed").then(d => { if (SV.vault === v) { NT.feed = {vault: v.id, ...d}; NT.err = ""; NT.at = Date.now(); } })
+    .catch(e => { if (SV.vault === v) NT.err = e.message; })
+    .finally(() => { NT.loading = null; if (svOn()) ntDrawList(); });
+  return NT.loading;
+}
+function ntItems(){
+  const out = [];
+  for (const it of NT.feed?.items || []) {
+    if (it.kind === "daily") it.entries.forEach((e, i) => out.push({type: "memo", path: it.path, date: it.date, idx: i, ...e, key: it.path + "#" + i}));
+    else out.push({type: "note", path: it.path, title: it.title, excerpt: it.excerpt, chars: it.chars, mtime: it.mtime,
+      date: new Date(it.mtime * 1000).toLocaleDateString("sv-SE"), key: it.path});
+  }
+  const t = x => x.type === "memo" ? (x.time || "").padStart(5, "0") : new Date(x.mtime * 1000).toTimeString().slice(0, 5);
+  return out.sort((a, b) => b.date.localeCompare(a.date) || t(b).localeCompare(t(a)));
+}
+function ntFolders(){
+  const set = new Map();
+  for (const it of NT.feed?.items || []) { const top = it.path.includes("/") ? it.path.split("/")[0] : ""; if (top) set.set(top, (set.get(top) || 0) + 1); }
+  return [...set].sort((a, b) => a[0].localeCompare(b[0]));
+}
+function ntShown(){
+  const q = NT.q.toLowerCase(), c = NT.cat;
+  return ntItems().filter(x => (c === "all" || c === "memo" && x.type === "memo" && !x.where && !x.link || c === "long" && x.type === "note"
+      || c === "chat" && x.type === "memo" && (x.where || x.link) || c.startsWith("dir:") && x.path.startsWith(c.slice(4) + "/"))
+    && (!q || [x.text, x.where, x.title, x.excerpt, x.path].some(s => (s || "").toLowerCase().includes(q))));
+}
+function ntCount(c){ const keep = NT.cat; NT.cat = c; const q = NT.q; NT.q = ""; const n = ntShown().length; NT.cat = keep; NT.q = q; return n; }
+const ntDay = d => { const today = new Date().toLocaleDateString("sv-SE"), y = new Date(Date.now() - 864e5).toLocaleDateString("sv-SE");
+  return (d === today ? "今天 · " : d === y ? "昨天 · " : "") + dayLabel(d); };
+const ntImgRe = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]|!\[[^\]]*\]\((?:<([^>]+)>|([^)\s]+))\)/g;
+function ntMemo(x){
+  const imgs = [...(x.text || "").matchAll(ntImgRe)].map(m => ({ref: m[1] || m[2] || m[3], wiki: !!m[1]}));
+  const text = (x.text || "").replace(ntImgRe, "").replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, "$2").trim();
+  const on = svPath() === x.path && NT.sel === x.key;
+  return `<div class="nt-memo ${on ? "on" : ""}" data-key="${esc(x.key)}" onclick="ntOpenMemo(event,${q(x.key)})">
+    <button class="icon-btn nt-more" aria-label="更多" title="更多" onclick="event.stopPropagation();ntMemoMenu(event,${q(x.key)})">${ICON.more}</button>
+    ${x.time ? `<div class="h">${esc(x.time)}</div>` : ""}
+    ${text ? `<div class="tx md">${md(text)}</div>` : ""}
+    ${imgs.length ? `<div class="nt-imgs">${imgs.map(m => `<img alt="" data-nt-img="${esc(m.ref)}" data-wiki="${m.wiki ? 1 : ""}" data-note="${esc(x.path)}" hidden>`).join("")}</div>` : ""}
+    ${x.where || x.link ? `<span class="nt-from">${x.link ? `<a href="${esc(x.link)}" onclick="event.stopPropagation()">来自「${esc(x.where || "原对话")}」</a>` : `来自 ${esc(x.where)}`}</span>` : ""}</div>`;
+}
+function ntNote(x){
+  const on = svPath() === x.path;
+  return `<a class="nt-long ${on ? "on" : ""}" href="${esc(svHash(x.path))}"><b>${esc(x.title)}</b>${x.excerpt ? `<p>${esc(x.excerpt)}</p>` : ""}
+    <span class="t">${esc(svParent(x.path) ? svParent(x.path) + " · " : "")}${x.chars} 字</span></a>`;
+}
+function ntDrawList(){
+  const box = $("#nt-items"); if (!box) return;
+  ntDrawSide();
+  const v = SV.vault, bad = v && svUnavailable(v);
+  if (bad || NT.err) { box.innerHTML = svEmpty(bad || NT.err, '<button class="btn" onclick="ntLoad(true)">再试一次</button>'); return; }
+  if (!NT.feed) { box.innerHTML = svEmpty("正在读取笔记…"); ntLoad(); return; }
+  const rows = ntShown();
+  let day = "", html = "";
+  for (const x of rows) { if (x.date !== day) { day = x.date; html += `<div class="nt-day">${esc(ntDay(day))}</div>`; } html += x.type === "memo" ? ntMemo(x) : ntNote(x); }
+  const keep = box.scrollTop;
+  box.innerHTML = html || svEmpty(NT.q ? `没有找到「${NT.q}」` : NT.cat === "long" ? "还没有长文，点右上角 ＋ 新建。" : "在上面记一笔试试。");
+  box.scrollTop = keep;
+  ntImages(box);
+}
+function ntDrawSide(){
+  const el = $("#nt-cats"); if (!el) return;
+  const dirs = ntFolders();
+  el.innerHTML = NT_CATS.map(([k, n]) => `<button class="nt-cat ${NT.cat === k ? "on" : ""}" onclick="ntCat(${q(k)})"><span class="d"></span>${n}<span class="n">${NT.feed ? ntCount(k) : ""}</span></button>`).join("")
+    + (dirs.length ? `<div class="nt-sec">文件夹</div>` + dirs.map(([d, n]) => `<button class="nt-cat ${NT.cat === "dir:" + d ? "on" : ""}" onclick="ntCat(${q("dir:" + d)})"><span class="d"></span>${esc(d)}<span class="n">${n}</span></button>`).join("") : "");
+  const h = $("#nt-title"); if (h) h.textContent = NT.cat.startsWith("dir:") ? NT.cat.slice(4) : (NT_CATS.find(c => c[0] === NT.cat) || [0, "全部"])[1];
+}
+function ntCat(k){ NT.cat = k; ntDrawList(); $("#nt-items")?.scrollTo(0, 0); }
+let ntQT;
+function ntSearch(v){ clearTimeout(ntQT); ntQT = setTimeout(() => { NT.q = v.trim(); ntDrawList(); }, 120); }
+function ntImages(box){
+  for (const img of box.querySelectorAll("[data-nt-img]")) {
+    if (img.dataset.loaded) continue; img.dataset.loaded = "1";
+    const ref = img.dataset.ntImg;
+    if (/^(https?:|data:image\/)/i.test(ref)) { img.src = ref; img.hidden = false; continue; }
+    svCall(SV.vault, "asset", {path: img.dataset.note, ref, wiki: !!img.dataset.wiki})
+      .then(d => { img.src = `data:${d.type};base64,${d.data}`; img.hidden = false; }).catch(() => img.remove());
+  }
+}
+function ntFind(key){ return ntItems().find(x => x.key === key); }
+function ntOpenMemo(e, key){
+  if (e.target.closest("a")) return;
+  const x = ntFind(key); if (!x) return;
+  NT.sel = key; NT.jump = x;
+  const h = svHash(x.path);
+  if (location.hash === h) { ntJump(); ntDrawList(); } else location.hash = h;
+}
+function ntJump(){   // 打开日记时停在点的那一条
+  const x = NT.jump, view = $("#sv-live")?._cm; if (!x || !view || view._path !== x.path) return;
+  NT.jump = null;
+  if (!x.time) return;
+  const pre = ntFind(x.path + "#0"), k = x.idx - (pre && !pre.time ? 1 : 0);   // 第一条开头之前写的不算一个开头
+  const heads = [], doc = view.state.doc;
+  for (let n = 1; n <= doc.lines; n++) { const ln = doc.line(n); if (/^>?\s*(\*\*\d{1,2}:\d{2}\*\*|## \d{1,2}:\d{2})/.test(ln.text)) heads.push(ln.from); }
+  const pos = heads[k]; if (pos === undefined) return;
+  view.dispatch({selection: {anchor: pos}, effects: CM.EditorView.scrollIntoView(pos, {y: "start", yMargin: 40})});
+}
+function ntMemoMenu(e, key){
+  const x = ntFind(key); if (!x) return;
+  pop(e, `<button onclick="closePop();ntOpenMemo({target:document.body},${q(key)})">在日记里编辑</button>
+    <button onclick="closePop();ntMemoTodo(${q(key)})">加到待办</button>
+    <button onclick="closePop();ntMemoCopy(${q(key)})">复制</button>`);
+}
+async function ntMemoTodo(key){
+  const x = ntFind(key); if (!x) return;
+  const d = await act(() => api("/api/space/todo/add", {text: spPlain(x.text, 80) || "笔记", quote: spPlain(x.text, 400, true)}, spM()));
+  spaceLoad();
+  spToast("已加到待办", [["撤销", () => api("/api/space/todo/del", {id: d.item.id}, spM()).then(() => spaceLoad())], ["去看看", () => { location.hash = "#/board/todo"; }]]);
+}
+function ntMemoCopy(key){ const x = ntFind(key); if (x) navigator.clipboard.writeText(x.text || "").then(() => toast("已复制")).catch(() => toast("没能复制")); }
+function ntPlus(e){
+  pop(e, `<button onclick="closePop();ntNewNote()">新长文</button><button onclick="closePop();svDaily()">今天的日记</button>
+    <button onclick="closePop();svNameDialog(true)">新文件夹</button>${narrow() ? `<div class="sec">笔记文件夹</div><button onclick="closePop();svRecent(event)">切换文件夹…</button>` : ""}`, true);
+}
+async function ntNewNote(){   // 新长文：先建「未命名」，打开后标题选中，直接打字改名
+  const v = SV.vault; if (!v || svUnavailable(v)) return;
+  const folder = NT.cat.startsWith("dir:") ? NT.cat.slice(4) : "";
+  for (let i = 1; i < 30; i++) {
+    try { const r = await svCall(v, "create", {path: folder, name: i === 1 ? "未命名" : "未命名 " + i});
+      NT.cat = NT.cat.startsWith("dir:") ? NT.cat : "all"; ntLoad(true); svOpen(v, r.path); return; }
+    catch (e) { if (!/同名/.test(e.message)) { toast(e.message); return; } }
+  }
+}
+// 「记一笔」：追加到今天的日记（文件名、文件夹、模板按 Obsidian 的日记设置）
+async function svDailyArgs(){
+  const v = SV.vault;
+  const [moment, settings] = await Promise.all([svLoadMoment(), svCall(v, "daily")]);
+  const now = moment().locale(navigator.language);
+  return {now, settings, name: now.format(settings.format)};
+}
+async function svDailyCall(op, extra = {}){
+  const v = SV.vault, {now, settings, name} = await svDailyArgs();
+  let d = await svCall(v, op, {name, ...extra});
+  if (d.tokens) {
+    const values = Object.fromEntries(d.tokens.map(token => {
+      const [, kind, format] = token.match(/^\{\{\s*(date|time)(?::([^{}]+))?\s*\}\}$/);
+      return [token, now.format(format?.trim() || settings[kind])];
+    }));
+    d = await svCall(v, op, {name, values, ...extra});
+    if (d.tokens) throw new Error("日记模板刚刚改变，请重试。");
+  }
+  return d;
+}
+async function ntSubmit(){
+  const view = NT.comp, v = SV.vault; if (!view || !v || NT.sending) return;
+  const text = view.state.doc.toString().trim(); if (!text) return;
+  NT.sending = true; $("#nt-send")?.setAttribute("disabled", "");
+  try {
+    const now = new Date(), time = now.toTimeString().slice(0, 5);
+    const d = await svDailyCall("append", {text, time});
+    view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: ""}});
+    try { localStorage.removeItem("ccim.ntDraft"); } catch {}
+    const cached = SV.notes.get(svKey(v, d.path));
+    if (cached && !svDirty(cached)) { SV.notes.delete(svKey(v, d.path)); if (SV.note === cached) { SV.note = null; svRead(d.path); } }
+    if (NT.cat !== "all" && NT.cat !== "memo") NT.cat = "all";
+    await ntLoad(true);
+    $("#nt-items")?.scrollTo({top: 0});
+  } catch (e) { toast(e.message); }
+  finally { NT.sending = false; $("#nt-send")?.removeAttribute("disabled"); }
+}
+function ntCompMount(){
+  const el = $("#nt-comp-ed"); if (!el || el._cm) return;
+  cmLoad().then(() => {
+    if (!el.isConnected || el._cm) return;
+    let draft = ""; try { draft = localStorage.getItem("ccim.ntDraft") || ""; } catch {}
+    NT.comp = el._cm = cmMount(el, {doc: draft, placeholder: "记一笔…", compact: true,
+      onChange: t => { try { localStorage.setItem("ccim.ntDraft", t); } catch {} },
+      onSubmit: ntSubmit, onImages: files => ntCompImages(files)});
+  }).catch(e => { el.textContent = e.message; });
+}
+async function ntCompImages(files){
+  const view = NT.comp; if (!view) return;
+  try {
+    const d = await svDailyCall("daily_open");
+    for (const file of files) {
+      const link = await svUpload(d.path, file); if (!link) continue;
+      const at = view.state.selection.main.head, pre = at && view.state.doc.sliceString(at - 1, at) !== "\n" ? "\n" : "";
+      view.dispatch({changes: {from: at, insert: pre + link + "\n"}, selection: {anchor: at + pre.length + link.length + 1}});
+    }
+  } catch (e) { toast(e.message); }
+}
+function ntCompKey(kind){
+  const view = NT.comp; if (!view) return;
+  const at = view.state.selection.main, line = view.state.doc.lineAt(at.head);
+  if (kind === "img") { const f = $("#nt-file"); f.value = ""; f.click(); return; }
+  if (kind === "wiki") { view.dispatch({changes: {from: at.from, to: at.to, insert: "[["}, selection: {anchor: at.from + 2}}); view.focus(); CM.startCompletion(view); return; }
+  const mark = kind === "list" ? "- " : "- [ ] ";
+  if (!line.text.startsWith(mark)) view.dispatch({changes: {from: line.from, insert: mark}, selection: {anchor: at.head + mark.length}});
+  view.focus();
+}
+
+// ---- CodeMirror 6 的实时预览（#597）：标记符号只在光标所在的行露出来，其余行显示排好的样子，和 Obsidian 的 Live Preview 一样 ----
+function cmLive(opts){
+  const C = CM, D = C.Decoration;
+  class Bullet extends C.WidgetType { toDOM(){ const s = document.createElement("span"); s.className = "cm-bul"; s.textContent = "•"; return s; } eq(){ return true; } }
+  class Check extends C.WidgetType {
+    constructor(on, pos){ super(); this.on = on; this.pos = pos; }
+    eq(o){ return o.on === this.on && o.pos === this.pos; }
+    toDOM(view){ const b = document.createElement("span"); b.className = "cm-task" + (this.on ? " on" : ""); b.setAttribute("role", "checkbox"); b.setAttribute("aria-checked", this.on);
+      b.onmousedown = e => { e.preventDefault(); view.dispatch({changes: {from: this.pos + 1, to: this.pos + 2, insert: this.on ? " " : "x"}}); }; return b; }
+    ignoreEvent(){ return false; }
+  }
+  class Img extends C.WidgetType {
+    constructor(ref, wiki){ super(); this.ref = ref; this.wiki = wiki; }
+    eq(o){ return o.ref === this.ref && o.wiki === this.wiki; }
+    toDOM(){ const w = document.createElement("span"); w.className = "cm-img"; const img = document.createElement("img"); img.alt = "";
+      if (/^(https?:|data:image\/)/i.test(this.ref)) img.src = this.ref; else if (opts.image) opts.image(this.ref, this.wiki, img);
+      w.append(img); return w; }
+  }
+  class Hr extends C.WidgetType { toDOM(){ const s = document.createElement("span"); s.className = "cm-hr"; return s; } eq(){ return true; } }
+  const hide = D.replace({});
+  function build(view){
+    const {state} = view, sel = state.selection, deco = [], lines = new Map();
+    const active = new Set();
+    for (const r of sel.ranges) { const a = state.doc.lineAt(r.from).number, b = state.doc.lineAt(r.to).number; for (let n = a; n <= b; n++) active.add(n); }
+    const on = pos => active.has(state.doc.lineAt(pos).number);
+    const lineCls = (pos, cls) => { const l = state.doc.lineAt(pos); lines.set(l.from, ((lines.get(l.from) || "") + " " + cls).trim()); };
+    const add = (from, to, d) => { if (to > from || d.spec.widget) deco.push(d.range(from, to)); };
+    for (const {from, to} of view.visibleRanges) {
+      C.syntaxTree(state).iterate({from, to, enter: n => {
+        const t = n.name;
+        if (/^ATXHeading(\d)$/.test(t)) lineCls(n.from, "cm-h cm-h" + t.slice(-1));
+        else if (t === "Blockquote") { for (let p = n.from; p <= n.to;) { const l = state.doc.lineAt(p); lineCls(l.from, "cm-quote"); p = l.to + 1; } }
+        else if (t === "FencedCode") { for (let p = n.from; p <= n.to;) { const l = state.doc.lineAt(p); lineCls(l.from, "cm-codeblock"); p = l.to + 1; } return false; }
+        else if (t === "HeaderMark" && !on(n.from)) { const end = state.doc.sliceString(n.to, n.to + 1) === " " ? n.to + 1 : n.to; add(n.from, end, hide); }
+        else if ((t === "EmphasisMark" || t === "CodeMark" || t === "StrikethroughMark") && !on(n.from)) add(n.from, n.to, hide);
+        else if (t === "QuoteMark" && !on(n.from)) { const end = state.doc.sliceString(n.to, n.to + 1) === " " ? n.to + 1 : n.to; add(n.from, end, hide); }
+        else if (t === "ListMark" && !on(n.from) && /^[-*+]$/.test(state.doc.sliceString(n.from, n.to))) {
+          const next = state.doc.sliceString(n.to + 1, n.to + 4);
+          if (/^\[[ xX]\]$/.test(next)) add(n.from, n.to + 1, hide); else add(n.from, n.to, D.replace({widget: new Bullet()}));
+        }
+        else if (t === "TaskMarker" && !on(n.from)) add(n.from, n.to, D.replace({widget: new Check(/x/i.test(state.doc.sliceString(n.from, n.to)), n.from)}));
+        else if (t === "Task") { if (/^\[[xX]\]/.test(state.doc.sliceString(n.from, n.from + 3))) add(n.from + 3, n.to, D.mark({class: "cm-done"})); }
+        else if (t === "HorizontalRule" && !on(n.from)) add(n.from, n.to, D.replace({widget: new Hr()}));
+        else if (t === "Link" && !on(n.from)) {
+          const marks = []; let url = null;
+          n.node.cursor().iterate(c => { if (c.name === "LinkMark") marks.push([c.from, c.to]); if (c.name === "URL") url = [c.from, c.to]; });
+          if (marks.length >= 2) { add(marks[0][0], marks[0][1], hide); add(marks[1][0], n.to, hide);
+            add(marks[0][1], marks[1][0], D.mark({class: "cm-link", attributes: {"data-href": url ? state.doc.sliceString(url[0], url[1]) : ""}})); }
+          return false;
+        }
+        else if (t === "Image") {
+          const src = /\]\((?:<([^>]+)>|([^)\s]+))/.exec(state.doc.sliceString(n.from, n.to));
+          if (src && !on(n.from)) add(n.from, n.to, D.replace({widget: new Img(src[1] || src[2], false)}));
+          return false;
+        }
+        else if (t === "URL" && !on(n.from)) add(n.from, n.to, D.mark({class: "cm-link", attributes: {"data-href": state.doc.sliceString(n.from, n.to)}}));
+      }});
+      // 双链 [[名字|别名]]、![[图片]]：Markdown 语法树里没有，自己找
+      const text = state.doc.sliceString(from, to), re = /(!?)\[\[([^\[\]\n|]+)(\|[^\[\]\n]*)?\]\]/g;
+      for (let m; (m = re.exec(text));) {
+        const a = from + m.index, b = a + m[0].length;
+        if (m[1]) { if (!on(a)) add(a, b, D.replace({widget: new Img(m[2], true)})); continue; }
+        if (on(a)) { add(a, b, D.mark({class: "cm-wiki", attributes: {"data-wiki": m[2]}})); continue; }
+        const shown = m[3] ? [a + 2 + m[2].length + 1, b - 2] : [a + 2, b - 2];
+        add(a, shown[0], hide); add(shown[0], shown[1], D.mark({class: "cm-wiki", attributes: {"data-wiki": m[2]}})); add(shown[1], b, hide);
+      }
+    }
+    for (const [pos, cls] of lines) deco.push(D.line({class: cls}).range(pos));
+    return D.set(deco, true);
+  }
+  return C.ViewPlugin.fromClass(class {
+    constructor(view){ this.decorations = build(view); }
+    update(u){ if (u.docChanged || u.selectionSet || u.viewportChanged || C.syntaxTree(u.startState) !== C.syntaxTree(u.state)) this.decorations = build(u.view); }
+  }, {decorations: v => v.decorations, eventHandlers: {
+    mousedown(e){
+      const w = e.target.closest(".cm-wiki"), l = e.target.closest(".cm-link");
+      if (w && opts.wiki && !e.shiftKey) { e.preventDefault(); opts.wiki(w.dataset.wiki); return true; }
+      if (l && (e.metaKey || e.ctrlKey) && l.dataset.href) { e.preventDefault(); window.open(l.dataset.href, "_blank", "noopener"); return true; }
+    },
+  }});
+}
+function cmWrap(view, mark){   // ⌘B / ⌘I：选中的字两边加上（或去掉）标记
+  const r = view.state.selection.main, s = view.state.sliceDoc(r.from, r.to), n = mark.length;
+  if (s.startsWith(mark) && s.endsWith(mark) && s.length >= 2 * n) view.dispatch({changes: {from: r.from, to: r.to, insert: s.slice(n, -n)}, selection: {anchor: r.from, head: r.to - 2 * n}});
+  else view.dispatch({changes: [{from: r.from, insert: mark}, {from: r.to, insert: mark}], selection: r.empty ? {anchor: r.from + n} : {anchor: r.from + n, head: r.to + n}});
+  return true;
+}
+function cmMount(el, o){
+  const C = CM;
+  const exts = [
+    C.history(), C.drawSelection(), C.dropCursor(), C.EditorView.lineWrapping, C.indentOnInput(),
+    new C.LanguageSupport(C.markdownLanguage),
+    C.syntaxHighlighting(C.HighlightStyle.define([
+      {tag: C.tags.strong, fontWeight: "700"}, {tag: C.tags.emphasis, fontStyle: "italic"}, {tag: C.tags.strikethrough, textDecoration: "line-through"},
+      {tag: C.tags.monospace, class: "cm-code"}, {tag: C.tags.link, class: "cm-linktext"}, {tag: C.tags.url, class: "cm-url"},
+      {tag: C.tags.processingInstruction, class: "cm-meta"}, {tag: C.tags.meta, class: "cm-meta"}, {tag: C.tags.quote, class: "cm-quotetext"},
+    ])),
+    cmLive({wiki: o.wiki, image: o.image}),
+    C.Prec.high(C.keymap.of([
+      ...(o.onSubmit ? [{key: "Mod-Enter", run: () => { o.onSubmit(); return true; }}] : []),
+      {key: "Mod-s", run: () => { o.onSave?.(); return true; }},
+      {key: "Mod-b", run: v => cmWrap(v, "**")}, {key: "Mod-i", run: v => cmWrap(v, "*")},
+      ...C.markdownKeymap,
+    ])),
+    C.keymap.of([...C.completionKeymap, ...C.defaultKeymap, ...C.historyKeymap, ...C.searchKeymap, C.indentWithTab]),
+    C.EditorView.updateListener.of(u => { if (u.docChanged) o.onChange?.(u.state.doc.toString()); }),
+    C.EditorView.contentAttributes.of({spellcheck: "false", autocapitalize: "off", "aria-label": o.label || "编辑笔记"}),
+    C.EditorView.domEventHandlers({
+      paste(e){ const fs = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/")); if (fs.length && o.onImages) { e.preventDefault(); o.onImages(fs); return true; } },
+      drop(e, view){ const fs = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i.test(f.name));
+        if (fs.length && o.onImages) { e.preventDefault(); const p = view.posAtCoords({x: e.clientX, y: e.clientY}); if (p != null) view.dispatch({selection: {anchor: p}}); o.onImages(fs); return true; } },
+      blur(){ o.onBlur?.(); },
+    }),
+  ];
+  if (o.placeholder) exts.push(C.placeholder(o.placeholder));
+  if (o.suggest) exts.push(C.autocompletion({override: [async ctx => {
+    const m = ctx.matchBefore(/(?<!!)\[\[[^\[\]\n|#]*$/); if (!m) return null;
+    const term = m.text.slice(2);
+    let rows = []; try { rows = await o.suggest(term); } catch { return null; }
+    return {from: m.from + 2, filter: false, options: rows.map(p => { const name = p.replace(/\.md$/i, "");
+      return {label: name, apply: (view, c, from, to) => { const close = view.state.sliceDoc(to, to + 2) === "]]"; view.dispatch({changes: {from, to: close ? to + 2 : to, insert: name + "]]"}, selection: {anchor: from + name.length + 2}}); }}; })};
+  }], icons: false}));
+  const view = new C.EditorView({parent: el, state: C.EditorState.create({doc: o.doc || "", extensions: exts})});
+  if (o.compact) el.classList.add("cm-compact");
+  return view;
+}
+
 function drawSpNotes() {
   if (!SV.prefs) {
-    $("#main").innerHTML = `<div class="sv-panel">${svEmpty(SV.prefsError || "正在读取笔记设置…",
+    $("#main").innerHTML = `<div class="nt">${svEmpty(SV.prefsError || "正在读取笔记设置…",
       SV.prefsError ? '<button class="btn" onclick="svRetry()">再试一次</button>' : "")}</div>`;
     if (!SV.prefsError) svPreferences().then(() => { if (svOn()) drawSpNotes(); });
     return;
@@ -8119,7 +8472,7 @@ function drawSpNotes() {
   const v = SV.prefs.recent[0];
   svSetVault(v);
   if (!v) {
-    $("#main").innerHTML = `<div class="sv-panel">${svEmpty("选择一台电脑上的文件夹来存放笔记。",
+    $("#main").innerHTML = `<div class="nt">${svEmpty("选择一台电脑上的文件夹来存放笔记，可以直接选 Obsidian 仓库。",
       '<button class="btn primary" onclick="svPick()">选择文件夹</button>')}</div>`;
     return;
   }
@@ -8132,147 +8485,65 @@ function drawSpNotes() {
       svSelect({vault: target.id, machine: target.machine}, true);
     }
   }
-  const path = requested && requested !== v.id ? "" : svPath();
-  if (!$("#sv-panel") || $("#sv-panel").dataset.vault !== v.id) {
-    $("#main").innerHTML = `<div class="sv-panel" id="sv-panel" data-vault="${esc(v.id)}">
-      <aside class="sv-left" aria-label="笔记文件夹">
-        <header class="sv-vault">
-          <button class="btn sv-switch" aria-label="切换笔记文件夹" onclick="svRecent(event)">
-            <span class="sv-vault-icon" aria-hidden="true">${ICON.folder}</span>
-            <span class="sv-vault-name"><b>${esc(v.name)}</b><small>${esc(svMachineName(v))}</small></span>${ICON.chev}
-          </button>
-        </header>
-        <div class="sv-tools">
-          <button class="btn primary sv-new" onclick="svNameDialog(false)">${ICON.plus}新笔记</button>
-          <button class="icon-btn" title="新文件夹" aria-label="新文件夹" onclick="svNameDialog(true)">${ICON.folder}</button>
-          <button class="btn sv-daily" onclick="svDaily()">今日日记</button>
-          <button class="btn" onclick="svRefresh(true)">刷新</button>
-        </div>
-        <label class="search sv-search">${ICON.search}<input aria-label="搜索笔记" placeholder="搜索笔记" value="${esc(SV.query)}" oninput="svSearch(this.value)"></label>
-        <div id="sv-migration"></div><div class="sv-tree" id="sv-tree"></div>
-      </aside>
-      <section class="sv-editor" id="sv-editor" aria-label="笔记正文"></section>
-    </div>`;
+  if (NT.feed && NT.feed.vault !== v.id) { NT.feed = null; NT.err = ""; }
+  let path = requested && requested !== v.id ? "" : svPath();
+  if (!path && !narrow() && NT.feed) {      // 电脑上进来就打开最近那篇，右边不空着
+    const first = ntItems()[0];
+    if (first) { history.replaceState(null, "", svHash(first.path)); current.sub = first.path; path = first.path; if (first.type === "memo") NT.sel = first.key; }
   }
-  const panel = $("#sv-panel");
+  if (!$("#nt") || $("#nt").dataset.vault !== v.id) {
+    $("#main").innerHTML = `<div class="nt" id="nt" data-vault="${esc(v.id)}">
+      <aside class="nt-side" aria-label="分类">
+        <button class="nt-vault" onclick="svRecent(event)" title="切换笔记文件夹"><span class="ic">${ICON.folder}</span><span><b>${esc(v.name)}</b><small>${esc(svMachineName(v))}</small></span>${ICON.down}</button>
+        <div id="nt-cats"></div><div id="sv-migration"></div>
+      </aside>
+      <section class="nt-list" aria-label="笔记">
+        <div class="nt-lh"><h2 id="nt-title">全部</h2><span class="sp"></span>
+          <label class="nt-q">${ICON.search}<input id="nt-q" placeholder="搜索" aria-label="搜索笔记" value="${esc(NT.q)}" oninput="ntSearch(this.value)"></label>
+          <button class="nt-plus" aria-label="新建" title="新建" onclick="ntPlus(event)">${ICON.plus}</button></div>
+        <div class="nt-comp"><div id="nt-comp-ed" class="nt-comp-ed"></div>
+          <div class="nt-tb"><button onclick="ntCompKey('list')">• 列表</button><button onclick="ntCompKey('task')">☐ 待办</button><button onclick="ntCompKey('img')">图片</button><button onclick="ntCompKey('wiki')">[[</button>
+            <span class="sp"></span><span class="k">⌘↵</span><button class="btn primary sm" id="nt-send" onclick="ntSubmit()">记下</button></div>
+          <input type="file" id="nt-file" accept="image/*" multiple hidden onchange="ntCompImages([...this.files])"></div>
+        <div class="nt-items" id="nt-items"></div>
+      </section>
+      <section class="nt-ed" id="sv-editor" aria-label="笔记正文"></section>
+    </div>`;
+    ntCompMount();
+  }
   const pending = SV.prefs.pending;
   $("#sv-migration").innerHTML = pending.length ? `<div class="sv-migration"><span title="${esc(pending.map(p => p.reason).filter(Boolean).join("\n"))}">${pending.length} 台电脑的旧笔记待迁移</span>
     <button class="btn" onclick="svSelect({retry:true},true)">继续迁移</button></div>` : "";
-  panel.classList.toggle("in-note", !!path);
-  panel.classList.toggle("no-device", !!svUnavailable(v));
+  $("#nt").classList.toggle("in-note", !!path);
   if (requested && requested !== v.id) {
     $("#sv-editor").innerHTML = svEmpty(SV.changing ? "正在切换文件夹…" : "找不到链接对应的笔记文件夹。");
   } else if (!path) {
     if (SV.note) svFlush(SV.note);
     SV.note = null;
-    $("#sv-editor").innerHTML = svEmpty("从文件树打开一篇笔记。");
+    $("#sv-editor").innerHTML = svEmpty(NT.feed ? "在左边记一笔，或者点 ＋ 新建一篇长文。" : "");
   } else if (svUnavailable(v)) {
     $("#sv-editor").innerHTML = svEmpty(svUnavailable(v));
   } else if (SV.note?.path !== path || $("#sv-live")?._svNote !== SV.note) {
     svRead(path);
-  }
-  if (path && !svUnavailable(v)) svExpandPath(path);
-  svDrawTree();
-  if (!SV.dirs.has("") && !SV.treeError && !svUnavailable(v)) svList("");
+  } else ntJump();
+  ntDrawList();
+  if (!NT.feed || Date.now() - NT.at > 15000) ntLoad().then(() => { if (svOn() && !svPath() && !narrow() && ntItems()[0]) drawSpNotes(); });
 }
-function svExpandPath(path, refresh = false) {
-  if (refresh) svList("", true);
-  const parts = path.split("/").slice(0, -1);
-  let folder = "";
-  for (const part of parts) {
-    folder = folder ? folder + "/" + part : part;
-    SV.open.add(folder);
-    if (refresh || !SV.dirs.has(folder)) svList(folder, refresh);
-  }
-}
-function svRow(row, depth, search = false) {
-  const selected = row.dir ? SV.folder === row.path : svPath() === row.path;
-  return `<div class="sv-row ${selected ? "on" : ""}" data-kind="${row.dir ? "folder" : "note"}" style="--depth:${depth}">
-    ${row.dir ? `<button class="sv-entry" aria-expanded="${SV.open.has(row.path)}" onclick="svToggle(${q(row.path)})">
-      <span class="sv-chevron ${SV.open.has(row.path) ? "open" : ""}">${ICON.chev}</span>${ICON.folder}<span title="${esc(row.path)}">${esc(row.name)}</span></button>`
-      : `<a class="sv-entry" href="${esc(svHash(row.path))}" ${selected ? 'aria-current="page"' : ""}><span class="sv-file">${SP_IC.note}</span><span title="${esc(row.path)}">${esc(search ? row.path.replace(/\.md$/i, "") : svTitle(row.path))}</span></a>`}
-    <button class="icon-btn sv-more" title="更多操作" aria-label="${esc(row.name)}的更多操作" onclick="svMenu(event,${q(row.path)},${row.dir})">${ICON.more}</button>
-  </div>`;
-}
-function svTree(folder = "", depth = 0) {
-  return (SV.dirs.get(folder) || []).map(row => svRow(row, depth) +
-    (row.dir && SV.open.has(row.path) ? svTree(row.path, depth + 1) : "")).join("");
-}
-function svDrawTree() {
-  const tree = $("#sv-tree");
-  if (!tree || !SV.vault) return;
-  const unavailable = svUnavailable(SV.vault);
-  if (unavailable || SV.treeError) {
-    tree.innerHTML = svEmpty(unavailable || SV.treeError, '<button class="btn" onclick="svRefresh(true)">再试一次</button>');
-  } else if (SV.query) {
-    const rows = SV.matches?.entries;
-    tree.innerHTML = rows ? (rows.map(row => svRow(row, 0, true)).join("") || svEmpty("没有匹配的笔记。"))
-      + (SV.matches.more ? svEmpty("结果超过 100 篇，请缩小搜索范围。") : "") : svEmpty("正在搜索…");
-  } else {
-    tree.innerHTML = svTree() || svEmpty(SV.dirs.has("") ? "这里还没有笔记。" : "正在读取文件夹…");
-  }
-}
-async function svList(folder, refresh = false) {
-  const v = SV.vault, requests = SV.treeRequests;
-  if (!v || !refresh && SV.dirs.has(folder)) return;
-  if (requests.has(folder)) {
-    if (refresh) requests.get(folder).refresh = true;
-    return;
-  }
-  const request = {refresh: false};
-  requests.set(folder, request);
-  try {
-    const d = await svCall(v, "list", {path: folder});
-    if (SV.vault === v) { SV.dirs.set(folder, d.entries); svDrawTree(); }
-  } catch (e) {
-    if (SV.vault !== v) return;
-    if (!folder) SV.treeError = e.message;
-    else if (SV.open.has(folder)) { SV.open.delete(folder); SV.dirs.delete(folder); if (!refresh) toast(e.message); }
-    svDrawTree();
-  } finally {
-    requests.delete(folder);
-    if (request.refresh && SV.vault === v) svList(folder, true);
-  }
-}
-function svToggle(path) {
-  if (SV.open.has(path)) {
-    SV.open.delete(path);
-    SV.folder = svParent(path);
-  } else {
-    SV.open.add(path);
-    SV.folder = path;
-    svList(path, true);
-  }
-  svDrawTree();
-}
-let svSearchTimer;
-function svSearch(query) {
-  SV.query = query.trim(); SV.matches = null; SV.treeError = "";
-  const input = $(".sv-search input");
-  if (input && input.value !== query) input.value = query;
-  clearTimeout(svSearchTimer);
-  svDrawTree();
-  if (!SV.query) { if (!SV.dirs.has("")) svList(""); return; }
-  const v = SV.vault, term = SV.query;
-  svSearchTimer = setTimeout(async () => {
-    try {
-      const d = await svCall(v, "search", {query: term});
-      if (SV.vault === v && SV.query === term) { SV.matches = d; svDrawTree(); }
-    } catch (e) {
-      if (SV.vault === v && SV.query === term) { SV.treeError = e.message; svDrawTree(); }
-    }
-  }, 250);
-}
+// 文件树拿掉了（#597）：原来刷新文件树的地方改成重取笔记流
+function svList(){ ntLoad(true); }
+function svExpandPath(){}
+function svDrawTree(){ ntDrawList(); }
 function svRefresh(manual = false) {
   if (!svOn() || !SV.vault) return;
-  if (manual) refreshSoon();
   if (svUnavailable(SV.vault)) { drawSpNotes(); return; }
-  SV.treeError = "";
-  svList("", true);
-  for (const folder of SV.open) svList(folder, true);
-  if (SV.query) svSearch(SV.query);
+  ntLoad(true);
   if (SV.note && svDirty(SV.note)) svFlush(SV.note);
   else if (svPath()) svRead(svPath(), true);
+}
+setInterval(() => { if (svOn() && !document.hidden) svRefresh(); }, 30000);   // 在 Obsidian、Finder 里改的，过一会儿自己出来
+const svDaySet = path => { const it = (NT.feed?.items || []).find(x => x.path === path); return it && it.kind === "daily" ? it.date : ""; };
+function svObsidian(note){   // 在 Obsidian 里打开：obsidian://open 按仓库名（文件夹名）和文件找
+  return `obsidian://open?vault=${encodeURIComponent(note.vault.name)}&file=${encodeURIComponent(note.path.replace(/\.md$/i, ""))}`;
 }
 function svGotNote(v, data) {
   const note = {vault: v, path: data.path, saved: data.body.replace(/\r/g, ""), version: data.version,
@@ -8316,53 +8587,82 @@ async function svRead(path, refresh = false) {
 function svDrawEditor(note) {
   const editor = $("#sv-editor");
   if (!editor || $("#sv-live")?._svNote === note) return;
-  editor.innerHTML = `<header class="sv-edit-head">
-    <div class="sv-edit-bar">
-      <span class="sv-edit-icon" aria-hidden="true">${SP_IC.note}</span>
-      <div class="sv-file-name"><h1>${esc(svTitle(note.path))}</h1><small title="${esc(note.path)}">${esc(note.path)}</small></div>
+  const day = svDaySet(note.path) || (/(\d{4})-(\d{2})-(\d{2})/.exec(svTitle(note.path)) || [""])[0];
+  editor.innerHTML = `<header class="nt-eb">
+      <span class="crumb">${esc(svParent(note.path) || note.vault.name)}</span><span class="sp"></span>
       <span class="sv-status" id="sv-status" role="status"></span>
-      <button class="icon-btn" title="更多操作" aria-label="笔记更多操作" onclick="svMenu(event,${q(note.path)},false)">${ICON.more}</button>
-    </div>
+      ${narrow() ? "" : `<a class="nt-obs" href="${esc(svObsidian(note))}">在 Obsidian 打开</a>`}
+      <button class="icon-btn" title="更多操作" aria-label="笔记更多操作" onclick="svNoteMenu(event)">${ICON.more}</button>
+    </header>
     <div class="sv-problem" id="sv-problem" hidden></div>
-  </header>
-  <div class="doc-body sv-doc"><div id="sv-live" class="live-ed" contenteditable="true" spellcheck="false"
-    autocapitalize="off" role="textbox" aria-label="编辑笔记" aria-multiline="true"></div></div><div class="sv-suggest" id="sv-suggest" hidden></div>`;
+    <div class="nt-doc"><div class="nt-paper">
+      ${day ? `<h1 class="nt-h">${esc(dayLabel(day))}</h1>` : `<input class="nt-h" id="nt-name" value="${esc(svTitle(note.path))}" aria-label="标题" maxlength="200"
+        onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();this.blur()}else if(event.key==='Escape'){this.value=svTitle(SV.note.path);this.blur()}" onblur="svRenameInline(this)">`}
+      <div class="nt-meta" id="nt-meta"></div>
+      <div id="sv-live" class="nt-cm"></div></div></div>`;
   const root = $("#sv-live");
   root._svNote = note;
-  liveMount(root, {
-    text: note.draft, onInput: text => { svEdit(note, text); queueMicrotask(() => svSuggest(root, note)); },
-    asset: svImage, checks: true,
-    afterRender: () => svImages(root, note), wiki: true,
-    onKey: e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); svFlush(note); } },
-  });
-  root.addEventListener("blur", () => { svFlush(note); setTimeout(() => svHideSuggestions(root), 140); });
-  root.addEventListener("pointerdown", e => {
-    if (e.target.closest("[data-sv-wiki]")) e.preventDefault();
-  });
-  root.addEventListener("click", e => {
-    const link = e.target.closest("[data-sv-wiki]");
-    if (link) { e.preventDefault(); svFollow(note, link.dataset.svWiki); }
-  });
-  root.addEventListener("keyup", e => { if (e.key !== "Escape") svSuggest(root, note); });
-  root.addEventListener("compositionend", () => setTimeout(() => svSuggest(root, note)));
-  root.addEventListener("keydown", e => svSuggestionKey(e, root), true);
-  root.addEventListener("paste", e => {
-    const files = [...(e.clipboardData?.files || [])].filter(file => file.type.startsWith("image/"));
-    if (files.length) { e.preventDefault(); svAttach(root, note, files); }
-  });
-  root.addEventListener("dragover", e => {
-    if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }
-  });
-  root.addEventListener("drop", e => {
-    const files = [...(e.dataTransfer?.files || [])].filter(file => file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp|ico|tiff?|svg)$/i.test(file.name));
-    if (files.length) {
-      e.preventDefault(); root.focus();
-      const point = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-      if (point && root.contains(point.startContainer)) getSelection().setBaseAndExtent(point.startContainer, point.startOffset, point.startContainer, point.startOffset);
-      svAttach(root, note, files);
-    }
-  });
+  cmLoad().then(() => {
+    if (!root.isConnected || root._cm) return;
+    const view = root._cm = cmMount(root, {doc: note.draft, suggest: async term => (await svCall(note.vault, "suggest", {query: term})).entries.slice(0, 8).map(r => r.path),
+      onChange: t => { svEdit(note, t); ntMeta(note); }, onSave: () => svFlush(note), onBlur: () => svFlush(note),
+      wiki: ref => svFollow(note, ref), image: (ref, wiki, img) => svAsset(note, ref, wiki).then(src => { if (src) img.src = src; }),
+      onImages: files => svAttach(note, files)});
+    view._path = note.path;
+    ntMeta(note);
+    if (NT.jump) ntJump();
+    else if (!day && !note.draft.trim()) $("#nt-name")?.select();
+  }).catch(e => { root.innerHTML = svEmpty(e.message); });
   svStatus(note);
+}
+function ntMeta(note){
+  const el = $("#nt-meta"); if (!el) return;
+  const n = note.draft.replace(/\s/g, "").length;
+  el.textContent = `${n} 字`;
+}
+async function svRenameInline(input){
+  const note = SV.note; if (!note) return;
+  const name = input.value.trim();
+  if (!name || name === svTitle(note.path)) { input.value = svTitle(note.path); return; }
+  const v = note.vault;
+  if (!await svFlushPath(v, note.path)) { input.value = svTitle(note.path); return; }
+  const r = await svAction(v, "rename", {path: note.path, name});
+  if (!r) { input.value = svTitle(note.path); return; }
+  svForget(v, note.path); SV.note = null;
+  ntLoad(true);
+  location.hash = svHash(r.path, v);
+}
+function svNoteMenu(e){
+  const note = SV.note; if (!note) return;
+  pop(e, `${narrow() ? `<a href="${esc(svObsidian(note))}" onclick="closePop()">在 Obsidian 打开</a>` : ""}
+    ${svDaySet(note.path) ? "" : `<button onclick="closePop();$('#nt-name')?.focus()">重命名</button>`}
+    <button class="danger-link" onclick="closePop();svTrash(${q(note.path)},false)">移到废纸篓</button>`);
+}
+function svAsset(note, ref, wiki){
+  const key = (wiki ? "wiki:" : "") + ref;
+  if (!note.assets.has(key)) note.assets.set(key, svCall(note.vault, "asset", {path: note.path, ref, wiki})
+    .then(d => `data:${d.type};base64,${d.data}`).catch(() => { note.assets.delete(key); return ""; }));
+  return note.assets.get(key);
+}
+async function svUpload(path, file){   // 图片存进附件文件夹（照 Obsidian 的附件设置），返回正文里的写法
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error("图片不能超过 10 MB。");
+    const name = file.name || "图片-" + Date.now() + "." + (file.type.split("/")[1] || "png");
+    const d = await svCall(SV.vault, "attach", {path, name, data: await svFileData(file)});
+    return "![](" + d.relative.split("/").map(part => encodeURIComponent(part).replace(/[()]/g, c => c === "(" ? "%28" : "%29")).join("/") + ")";
+  } catch (e) { toast(e.message); return ""; }
+}
+async function svAttach(note, files){
+  note.uploading = (note.uploading || 0) + 1;
+  try {
+    for (const file of files) {
+      const link = await svUpload(note.path, file); if (!link) continue;
+      const view = $("#sv-live")?._svNote === note ? $("#sv-live")._cm : null;
+      if (view) { const at = view.state.selection.main.head, pre = at && view.state.doc.sliceString(at - 1, at) !== "\n" ? "\n" : "";
+        view.dispatch({changes: {from: at, insert: pre + link + "\n"}, selection: {anchor: at + pre.length + link.length + 1}}); }
+      else svEdit(note, note.draft + "\n" + link + "\n");
+    }
+  } finally { note.uploading--; }
 }
 function svStatus(note) {
   const el = $("#sv-status");
@@ -8472,7 +8772,6 @@ function svNameDialog(directory, path = "") {
       const active = svPath();
       if (path) svForget(v, path);
       svList(folder, true);
-      if (SV.query) svSearch("");
       if (!directory && (!path || active === path)) svOpen(v, result.path);
       else if (path && active.startsWith(path + "/")) svOpen(v, result.path + active.slice(path.length));
       else if (directory) { SV.open.add(result.path); SV.folder = result.path; svList(result.path, true); }
@@ -8489,7 +8788,6 @@ async function svTrash(path, directory) {
   if (SV.folder === path || SV.folder.startsWith(path + "/")) SV.folder = svParent(path);
   if (opened === path || opened.startsWith(path + "/")) location.hash = "#/space/note";
   svList(svParent(path), true);
-  if (SV.query) svSearch(SV.query);
 }
 let svMoment;
 function svLoadMoment() {
@@ -8505,43 +8803,13 @@ function svLoadMoment() {
 async function svDaily() {
   const v = SV.vault;
   if (!v || svUnavailable(v)) return;
-  try {
-    const [moment, settings] = await Promise.all([svLoadMoment(), svCall(v, "daily")]);
-    const now = moment().locale(navigator.language);
-    const name = now.format(settings.format);
-    let d = await svCall(v, "daily_open", {name});
-    if (d.tokens) {
-      const values = Object.fromEntries(d.tokens.map(token => {
-        const [, kind, format] = token.match(/^\{\{\s*(date|time)(?::([^{}]+))?\s*\}\}$/);
-        return [token, now.format(format?.trim() || settings[kind])];
-      }));
-      d = await svCall(v, "daily_open", {name, values});
-      if (d.tokens) throw new Error("日记模板刚刚改变，请重试。");
-    }
-    svOpen(v, d.path);
-  } catch (e) { toast(e.message); }
+  try { const d = await svDailyCall("daily_open"); svOpen(v, d.path); } catch (e) { toast(e.message); }
 }
 async function svFollow(note, ref) {
   const v = note.vault;
   const d = await svAction(v, "link", {path: note.path, ref});
   if (!d || SV.note !== note) return;
   svOpen(v, d.path);
-}
-function svImage(ref, wiki, label) {
-  if (/^(https?:|data:image\/)/i.test(ref)) return `<img src="${esc(ref)}" alt="${esc(label)}" loading="lazy">`;
-  return `<img alt="${esc(label)}" data-sv-image="${esc(ref)}" data-wiki="${wiki ? "1" : ""}" hidden>`;
-}
-function svImages(root, note) {
-  for (const img of root.querySelectorAll("[data-sv-image]")) {
-    if (img.dataset.loaded) continue;
-    img.dataset.loaded = "1";
-    const ref = img.dataset.svImage, wiki = !!img.dataset.wiki, key = (wiki ? "wiki:" : "") + ref;
-    if (!note.assets.has(key)) {
-      note.assets.set(key, svCall(note.vault, "asset", {path: note.path, ref, wiki})
-        .then(d => `data:${d.type};base64,${d.data}`).catch(() => { note.assets.delete(key); return ""; }));
-    }
-    note.assets.get(key).then(src => { if (src && img.isConnected) { img.src = src; img.hidden = false; } });
-  }
 }
 function svFileData(file) {
   return new Promise((resolve, reject) => {
@@ -8550,80 +8818,6 @@ function svFileData(file) {
     r.onerror = () => reject(new Error("读不到这张图片。"));
     r.readAsDataURL(file);
   });
-}
-async function svAttach(root, note, files) {
-  const selection = lvSel(root), original = note.draft;
-  const links = [];
-  note.uploading = (note.uploading || 0) + 1;
-  try {
-    for (const file of files) {
-      try {
-        if (file.size > 10 * 1024 * 1024) throw new Error("图片不能超过 10 MB。");
-        const name = file.name || "图片-" + Date.now() + "." + (file.type.split("/")[1] || "png");
-        const data = await svFileData(file);
-        const d = await svCall(note.vault, "attach", {path: note.path, name, data});
-        const url = d.relative.split("/").map(part => encodeURIComponent(part).replace(/[()]/g, c => c === "(" ? "%28" : "%29")).join("/");
-        links.push("![](" + url + ")");
-      } catch (e) { toast(e.message); }
-    }
-    if (!links.length) return;
-    const open = $("#sv-live");
-    const editor = open?._svNote === note ? open : null;
-    const current = editor ? lvSel(editor) : null;
-    const text = note.draft, [a, b] = original === text && selection ? selection : current || [text.length, text.length];
-    const insert = (a && text[a - 1] !== "\n" ? "\n" : "") + links.join("\n") + (text[b] === "\n" ? "" : "\n");
-    const changed = text.slice(0, a) + insert + text.slice(b);
-    if (editor) lvCommit(editor, changed, a + insert.length, undefined, "paste");
-    else svEdit(note, changed);
-  } finally { note.uploading--; }
-}
-function svHideSuggestions(root) {
-  if ($("#sv-live") !== root) return;
-  const box = $("#sv-suggest"); if (box) box.hidden = true;
-  root._svSuggest = null;
-}
-function svSuggest(root, note) {
-  const [a, b] = lvSel(root) || [-1, -2];
-  const m = note.draft.slice(0, a).match(/(?<!!)\[\[([^\[\]\n|#]*)$/);
-  if (a !== b || !m || !root.isConnected) { svHideSuggestions(root); return; }
-  if (root._svSuggest?.a === a && root._svSuggest?.term === m[1]) return;
-  svHideSuggestions(root);
-  const s = {a, from: a - m[1].length - 2, term: m[1], rows: [], index: 0};
-  root._svSuggest = s;
-  clearTimeout(root._svSuggestT);
-  root._svSuggestT = setTimeout(async () => {
-    try {
-      const d = await svCall(note.vault, "suggest", {query: s.term});
-      if (root._svSuggest !== s || !root.isConnected || document.activeElement !== root) return;
-      s.rows = d.entries.slice(0, 8);
-      svDrawSuggestions(root);
-    } catch { svHideSuggestions(root); }
-  }, 120);
-}
-function svDrawSuggestions(root) {
-  const box = $("#sv-suggest"), s = root._svSuggest;
-  if (!s?.rows.length || !box) return;
-  box.hidden = false;
-  box.innerHTML = s.rows.map((row, i) => `<button role="option" aria-selected="${s.index === i}" onpointerdown="event.preventDefault()" onclick="svSuggestionPick(${i})">${esc(row.path.replace(/\.md$/i, ""))}</button>`).join("");
-  box.setAttribute("role", "listbox");
-  box.setAttribute("aria-label", "双链建议");
-}
-function svSuggestionKey(e, root) {
-  const s = root._svSuggest;
-  if (!s?.rows.length || $("#sv-suggest")?.hidden || e.isComposing) return;
-  if (!["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)) return;
-  e.preventDefault(); e.stopImmediatePropagation();
-  if (e.key === "Escape") { svHideSuggestions(root); return; }
-  if (e.key === "Enter" || e.key === "Tab") { svSuggestionPick(s.index); return; }
-  s.index = (s.index + (e.key === "ArrowDown" ? 1 : -1) + s.rows.length) % s.rows.length; svDrawSuggestions(root);
-}
-function svSuggestionPick(i) {
-  const root = $("#sv-live"), s = root?._svSuggest, row = s?.rows[i];
-  if (!row) return;
-  const text = root._lv.value, link = "[[" + row.path.replace(/\.md$/i, "") + "]]";
-  const end = text.slice(s.a).startsWith("]]") ? s.a + 2 : s.a;
-  lvCommit(root, text.slice(0, s.from) + link + text.slice(end), s.from + link.length, undefined, "paste");
-  svHideSuggestions(root);
 }
 addEventListener("hashchange", () => {
   if (SV.note && (!svOn() || svPath() !== SV.note.path)) svFlush(SV.note);

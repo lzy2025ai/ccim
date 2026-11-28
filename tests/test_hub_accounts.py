@@ -169,6 +169,40 @@ class HubAccountTests(unittest.TestCase):
         st, _ = login({"name": "admin", "password": "owner-password"})
         self.assertEqual(st, 401)
 
+    def test_resume_with_device(self):
+        """浏览器丢了 cookie（#603）：网页本地存的设备令牌能直接登回去；退出、改密码后不行。"""
+        osec = self.owner()
+        self.serve(hubserver.OWNER)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), hubserver._handler(self.hub))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+        def post(path, body, cookie=""):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+            c.request("POST", path, body=json.dumps(body).encode(),
+                      headers={"X-CCIM": "1", "Host": "127.0.0.1", "Content-Type": "application/json", "Cookie": cookie})
+            r = c.getresponse()
+            out = r.status, json.loads(r.read() or b"{}"), r.headers.get_all("Set-Cookie") or []
+            c.close()
+            return out
+        st, d, _ = post("/auth/login", {"name": "admin", "password": "owner-password", "code": code(osec, 1), "remember": True})
+        self.assertEqual(st, 200)
+        dev = d["device"]
+        st, _, cookies = post("/auth/resume", {"device": dev})            # 没有任何 cookie 也能登回去
+        self.assertEqual(st, 200)
+        hub_ck = next(x for x in cookies if x.startswith("ccim_hub=")).split(";")[0]
+        self.assertTrue(self.hub.session_ok(hub_ck.split("=", 1)[1]))
+        st, _, _ = post("/auth/login", {"name": "admin", "password": "owner-password", "device": dev})   # 不用动态码
+        self.assertEqual(st, 200)
+        self.assertEqual(post("/auth/resume", {"device": "nope"})[0], 401)
+        self.assertEqual(post("/auth/resume", {})[0], 401)
+        post("/auth/logout", {"device": dev}, hub_ck)                      # 主动退出：这台设备作废
+        self.assertEqual(post("/auth/resume", {"device": dev})[0], 401)
+        dev = self.hub.remember_device(hubserver.OWNER)
+        self.hub.account_save(hubserver.OWNER, {"password": "owner-password-2"})
+        self.assertEqual(post("/auth/resume", {"device": dev})[0], 401)   # 改了密码
+
     def test_disable_expire_and_reset(self):
         self.owner()
         aid, pw = self.member("朋友")

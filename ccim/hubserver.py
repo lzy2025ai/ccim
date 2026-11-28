@@ -280,6 +280,26 @@ class Hub:
         _save("devices.json", d)
         return tok
 
+    def resume(self, ip, tok):
+        """凭记住这台设备的令牌直接登录（#603）：有的手机浏览器退出后丢了 cookie，网页本地存的那份令牌还在。
+        和动态码一样，改密码、停用、取消记住时作废；令牌不续期，到 DEVICE_DAYS 就要重新登录。"""
+        if self.locked(ip):
+            raise PermissionError("错的次数太多了，等一刻钟再试。")
+        v = _load("devices.json", {}).get(hashlib.sha256((tok or "").encode()).hexdigest()) if tok else None
+        aid = (v or {}).get("acct")
+        if not v or v.get("exp", 0) <= time.time() or not self.active(self.account(aid)) \
+                or (aid != OWNER and not self.accounts_on()):
+            if tok:
+                self.failed(ip)
+            raise LookupError("需要重新登录。")
+        return self.new_session(aid)
+
+    def forget_device(self, tok):
+        if tok:
+            d = _load("devices.json", {})
+            if d.pop(hashlib.sha256(tok.encode()).hexdigest(), None):
+                _save("devices.json", d)
+
     def device_ok(self, tok, aid):
         if not tok:
             return False
@@ -541,16 +561,25 @@ LOGIN_BODY = """<h1>ccim</h1><p>登录后使用你的 Agent。</p>
 <div id="cb" hidden><label for="code">手机验证器上的 6 位动态码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
 <label class="ck"><input id="rem" type="checkbox" checked><span>记住这台设备，90 天内登录不用再输动态码</span></label></div>
 <button>登录</button><div class="err" id="err"></div></form>"""
-LOGIN_SCRIPT = """(nmbox.hidden ? pw : nm).focus();
+LOGIN_SCRIPT = """const DEV = "ccim.dev";   // 记住这台设备的令牌，cookie 被浏览器丢了也能登回去（#603）
+const devGet = () => { try { return localStorage.getItem(DEV) || ""; } catch { return ""; } };
+(async () => { const dev = devGet(); if (!dev) return;
+  const box = document.querySelector(".box"); box.style.visibility = "hidden";
+  const r = await fetch("/auth/resume", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
+    body: JSON.stringify({device: dev})}).catch(() => null);
+  if (r && r.ok) { location.reload(); return; }
+  if (r && r.status === 401) try { localStorage.removeItem(DEV); } catch {}
+  box.style.visibility = ""; })();
+(nmbox.hidden ? pw : nm).focus();
 const btn = document.querySelector("#f button");
 document.getElementById("f").onsubmit = async e => { e.preventDefault();
   if (btn.disabled) return;
   btn.disabled = true;
   const r = await fetch("/auth/login", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"},
-    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked})}).catch(() => null);
+    body: JSON.stringify({name: nm.value, password: pw.value, code: code.value, remember: rem.checked, device: devGet()})}).catch(() => null);
   const d = r ? await r.json().catch(() => ({})) : {error: "连不上服务器，稍后再试"};
   // 登录页就在 / 上时跳到同一个地址，有的手机浏览器不重新加载（带 # 时按规范也不加载），停在登录页（#460）
-  if (r && r.ok) { try { localStorage.removeItem("ccim.snap"); localStorage.removeItem("ccim.snapChat"); } catch {}   // 上一个账号存的（#560）
+  if (r && r.ok) { try { localStorage.removeItem("ccim.snap"); localStorage.removeItem("ccim.snapChat"); if (d.device) localStorage.setItem(DEV, d.device); } catch {}   // 上一个账号存的（#560）
     if (location.pathname === "/") location.reload(); else location.assign("/" + location.hash); return; }
   btn.disabled = false;
   if (d.need_code) { cb.hidden = false; err.textContent = ""; code.focus(); return; }
@@ -759,7 +788,8 @@ def _handler(hub):
             try:
                 if path == "/auth/login":
                     try:
-                        tok = hub.login(self._ip(), b.get("name"), b.get("password"), b.get("code"), self._cookie("ccim_dev"))
+                        tok = hub.login(self._ip(), b.get("name"), b.get("password"), b.get("code"),
+                                        self._cookie("ccim_dev") or b.get("device"))   # cookie 丢了用网页本地存的（#603）
                     except NeedCode as e:
                         return self._send(401, {"error": str(e), "need_code": True})
                     extra = self._set_cookie(tok)
@@ -768,9 +798,18 @@ def _handler(hub):
                         secure = "; Secure" if self._https() else ""
                         extra = {"Set-Cookie": [extra["Set-Cookie"], f"ccim_dev={dev}; Path=/auth; HttpOnly; SameSite=Strict; "
                                                 f"Max-Age={DEVICE_DAYS * 86400}{secure}"]}
+                        return self._send(200, {"device": dev}, extra=extra)   # 网页本地再存一份（#603）
                     return self._send(200, {}, extra=extra)
+                if path == "/auth/resume":
+                    try:
+                        tok = hub.resume(self._ip(), b.get("device"))
+                    except LookupError as e:                 # 令牌用不了了：网页清掉本地那份，显示登录表单
+                        return self._send(401, {"error": str(e)})
+                    return self._send(200, {}, extra=self._set_cookie(tok))
                 if path == "/auth/logout":
                     hub.logout(self._cookie())
+                    hub.forget_device(self._cookie("ccim_dev"))   # 主动退出：这台设备不再自动登录、不再免动态码（#603）
+                    hub.forget_device(b.get("device"))
                     return self._send(200, {}, extra=self._set_cookie("", 0))
                 if path == "/auth/setup/begin":
                     return self._send(200, hub.setup_begin(b.get("token")))

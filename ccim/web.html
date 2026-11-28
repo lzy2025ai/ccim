@@ -8804,7 +8804,8 @@ async function saveOwner(){
 }
 async function logout(){
   snapClear();
-  await fetch("/auth/logout", {method: "POST", headers: {"X-CCIM": "1"}});
+  let device = ""; try { device = localStorage.getItem("ccim.dev") || ""; localStorage.removeItem("ccim.dev"); } catch {}   // 记住这台设备的那份（#603）
+  await fetch("/auth/logout", {method: "POST", headers: {"X-CCIM": "1", "Content-Type": "application/json"}, body: JSON.stringify({device})});
   location.href = "/";
 }
 function renderMachines(){

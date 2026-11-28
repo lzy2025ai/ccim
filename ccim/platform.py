@@ -43,6 +43,7 @@ PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.html")
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/apple-touch-icon.png": "image/png",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}    # 添加到主屏幕用（#17）
 STATIC["/moment-2.30.1.js"] = "text/javascript; charset=utf-8"
+STATIC["/codemirror-6.js"] = "text/javascript; charset=utf-8"   # 笔记的编辑器（#597），源头和版本见 deploy/codemirror
 STATIC.update({f"/avatars/{name}.webp": "image/webp" for name in agents.AVATARS})
 
 

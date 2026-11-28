@@ -117,3 +117,38 @@ class VaultTests(unittest.TestCase):
                          sorted(["现有文件", "first 的原有正文", "second 的原有正文"]))
         with patch.object(registry, "HOME", str(homes["first"])):
             self.assertEqual(space.view(None, notes=False)["todos"][0]["text"], "first 的待办")
+
+
+class FeedTests(VaultTests):
+    """笔记流（#597）：日记按开头的时间拆成一条条，别的笔记是长文；输入框记的追加到今天的日记。"""
+
+    def test_feed_splits_daily_and_notes(self):
+        (self.root / "2026-11-21.md").write_text(
+            "开头随便写的\n\n**00:47** · 来自 [「动态流」](https://x/#/chats/a)\n\n凌晨三点\n\n>**00:50** · 来自 群聊\n\n顶级\n", "utf-8")
+        (self.root / "想法.md").write_text("# GPT 发布\n\n一直以来**反复**横跳 [[链接|别名]]\n", "utf-8")
+        items = {x["path"]: x for x in self.call("feed")["items"]}
+        day = items["2026-11-21.md"]
+        self.assertEqual((day["kind"], day["date"]), ("daily", "2026-11-21"))
+        self.assertEqual([(e["time"], e["where"], e["link"], e["text"]) for e in day["entries"]],
+                         [("", "", "", "开头随便写的"), ("00:47", "动态流", "https://x/#/chats/a", "凌晨三点"), ("00:50", "群聊", "", "顶级")])
+        note = items["想法.md"]
+        self.assertEqual((note["kind"], note["title"], note["excerpt"]), ("note", "GPT 发布", "一直以来反复横跳 别名"))
+
+    def test_daily_format_from_obsidian(self):
+        (self.root / ".obsidian").mkdir()
+        (self.root / ".obsidian" / "daily-notes.json").write_text('{"format": "YYYY年M月D日", "folder": "日记"}', "utf-8")
+        (self.root / "日记").mkdir()
+        (self.root / "日记" / "2026年1月5日.md").write_text("**09:00**\n\n早\n", "utf-8")
+        item = self.call("feed")["items"][0]
+        self.assertEqual((item["kind"], item["date"]), ("daily", "2026-01-05"))
+
+    def test_append_to_today(self):
+        (self.root / ".obsidian").mkdir()
+        (self.root / ".obsidian" / "daily-notes.json").write_text('{"folder": "diary"}', "utf-8")
+        first = self.call("append", name="2026-11-28", text=" 想清楚了 ", time="10:52")
+        self.assertEqual(first["path"], "diary/2026-11-28.md")
+        self.call("append", name="2026-11-28", text="第二条", time="11:00")
+        self.assertEqual((self.root / "diary" / "2026-11-28.md").read_text("utf-8"),
+                         "**10:52**\n\n想清楚了\n\n**11:00**\n\n第二条\n")
+        with self.assertRaises(vault.Problem):
+            self.call("append", name="2026-11-28", text="  ", time="11:00")

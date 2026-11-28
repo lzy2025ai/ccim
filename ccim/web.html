@@ -1902,6 +1902,7 @@ textarea.block-src{display:block;width:100%;margin:0 0 1.1em;padding:10px 12px;b
   .pback{display:grid;place-items:center;position:fixed;top:calc(8px + env(safe-area-inset-top));left:6px;z-index:11;width:36px;height:36px;border-radius:10px;color:var(--ink)}
   .pback svg{width:22px;height:22px}
   .app:not(.phone-main) .pback,.app.cards .pback{display:none}
+  .app.cards.space-note .pback{display:grid}   /* 个人空间没有列表栏，打开一篇笔记时也要能回到笔记列表 */
   .app.phone-main .chat-head,.app.phone-main .agent-top,.app.phone-main .d-head,.app.phone-main .feed-head{padding-left:48px}
   .chat-head{padding:8px 12px;gap:8px;flex-wrap:wrap}
   .chat-head{flex-wrap:nowrap}
@@ -3360,7 +3361,8 @@ function route(){
   // Agent、项目没选中具体哪个时是卡片总览，不要中间那一列
   document.querySelector(".app").classList.toggle("cards", (current.view === "agents" || current.view === "projects" || current.view === "kb") && (!current.id || current.id === "new")
     || current.view === "skills" || current.view === "board" || current.view === "apps" || current.view === "space");
-  document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());   // 定时页：动态在左、任务列表在右（#520）
+  document.querySelector(".app").classList.toggle("sched-right", current.view === "schedules" && !narrow());
+  document.querySelector(".app").classList.toggle("space-note", current.view === "space" && current.id === "note" && !!current.sub);   // 定时页：动态在左、任务列表在右（#520）
   if (narrow()) document.querySelector(".app").classList.toggle("phone-main", phoneMain());   // 手机：一屏一个
   else if (portrait()) document.querySelector(".app").classList.toggle("list-off", !!current.id && current.id !== "new");   // iPad 竖屏：打开了就收起列表，左上角能再展开
   listTip();

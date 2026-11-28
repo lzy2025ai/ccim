@@ -280,6 +280,7 @@ class WebChannel(Channel):
         self.bg_of = {}                       # 对话 → 一轮结束后还在跑的后台任务（#271）
         self.done_steps = {}                  # 对话 → 刚做完那一轮的步骤，接下来的回答带上它
         self.card_chat = {}                   # 卡片 id → 对话
+        self.card_group = {}                  # 卡片 id → 也放了一份的群聊（#601）
         self.secrets = {}                     # 等用户输密码的卡片 id → (对话, future)
         self.turn_t0 = {}                     # 对话 → 这一轮开始的时刻（找 AI 这一轮改了哪些文件，#206）
         self.user_saved = {}                  # (对话, 文件) → 用户在网页里保存后的修改时间，不算 AI 改的
@@ -379,12 +380,27 @@ class WebChannel(Channel):
         mid = "card-" + uuid.uuid4().hex[:10]
         self.card_chat[mid] = chat_id
         self._emit(chat_id, self.logs.append(chat_id, {"type": "card", "id": mid, **card}))
+        # 群里 @ 它的那一轮弹的确认卡片（#601）：群聊看不到子对话，群里也放一份，不然只能等到超时；
+        # 群里还有别的真人时不放，和管理员权限卡片一样
+        of = self.group_turn(chat_id)
+        if of and not people.visible_map(self.platform).get(of):
+            self.card_group[mid] = of
+            self._emit(of, self.logs.append(of, {"type": "card", "id": mid, **card, "sub": chat_id}))
         return mid
 
     async def update_card(self, message_id, card):
         chat = self.card_chat.get(message_id)
         if chat:
             self._emit(chat, self.logs.append(chat, {"type": "card", "id": message_id, **card}))
+        of = self.card_group.get(message_id)
+        if of:
+            self._emit(of, self.logs.append(of, {"type": "card", "id": message_id, **card, "sub": chat}))
+
+    def card_owner(self, cid, mid):
+        """在群聊里点子对话放进来的卡片（#601）：交给发卡片的子对话处理。"""
+        if self.card_group.get(mid) == cid and self.card_chat.get(mid):
+            return self.card_chat[mid]
+        return cid
 
     async def delete_message(self, message_id):
         pass
@@ -2163,6 +2179,7 @@ class Platform:
         return bool(c and await c.stop()) or hit
 
     async def action(self, cid, mid, value):
+        cid = self.channel.card_owner(cid, mid)
         b = self._bridge(cid)
         card, toast = await b.on_action(CardAction(chat_id=cid, message_id=mid, operator_id=OWNER, value=value or {}))
         if card:

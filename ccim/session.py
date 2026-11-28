@@ -1351,7 +1351,7 @@ class Chat:
             if _notify_kinds(chat):
                 tools.append(_notify_user(chat))      # Agent 接了飞书、微信：能主动给主人发一条（#463）
             if pf and chat.chat_id in pf.chats() and not lent and not side and not chat._guest() \
-                    and not chat.b.entry.get("helper") and chat.agent == "claude" and getattr(pf, "peers", None):
+                    and not chat.b.entry.get("helper") and getattr(pf, "peers", None):
                 tools += _remote_tools(chat, pf)     # 在用户的另一台电脑上执行命令、取回文件（#546）
         if chat.b.entry.get("helper") == "skills":   # Skill 页的助手（#116）
             tools += _skill_tools(chat)
@@ -1658,6 +1658,8 @@ def _ask_agent(chat, pf):
         me = m.get("agent")
         rows = _visible_agents(pf, acct)
         names = {}
+        # 被 @ 进别的电脑上的群聊的成员（#593）：群不在这台，找群里的人要转回群所在的电脑去 @
+        far = m.get("mention_machine") if m.get("remote_project") and m.get("mention_of") else None
         self_too = False
         boss = None                           # 群里被 @ 的成员找本群的主 Agent：在群里 @ 它，交给它接着做（#488）
         for n in to:
@@ -1665,6 +1667,8 @@ def _ask_agent(chat, pf):
             hit = [r for r in rows if n in (r[0], r[1])]
             if n in SELF_NAMES or (hit and hit[0][0] == me):
                 self_too = True
+            elif far and hit and hit[0][3]:   # 群的主 Agent 是谁由那台电脑认
+                names[hit[0][0]] = hit[0][1]
             elif hit and hit[0][0] == (pf.chats().get(m.get("mention_of")) or {}).get("agent"):
                 if pf.mentions.asked_by(chat.chat_id, cur) == hit[0][0]:   # 主 Agent 正等着这一轮的回答，再起一轮就重复了
                     return _err(f"这件事就是{hit[0][1]}交给你的，它在等你的回答：要对它说的直接写在回答里，答完它就收到了。")
@@ -1683,7 +1687,9 @@ def _ask_agent(chat, pf):
             if boss:                          # 不等：主 Agent 可能正忙，或者在等别人
                 pf.to_main(chat.chat_id, text, depth + 1)
                 jobs.append((boss[1], None))
-            if names:
+            if names and far:
+                jobs += await _ask_far(pf, far, m["mention_of"], me, list(names), text, depth + 1)
+            elif names:
                 outer = m.get("mention_of") or chat.chat_id   # 被 @ 的成员找人：在外层群聊里 @
                 r = await pf.mentions.send(outer, text, list(names), by=me or ASSISTANT, depth=depth + 1)
                 for rid in r["rids"]:
@@ -2104,6 +2110,48 @@ def _app_tools(chat, pf):
         return text(f"已在用户的对话右侧打开「{a['name']}」。")
 
     return [t_list, t_query, t_save, t_del, app_open]
+
+
+async def _ask_far(pf, machine, group, me, to, text, depth):
+    """在别的电脑上的群聊里替这个成员 @ 别人（#593）：交给群所在的电脑去 @，返回 [(名字, future 或 None)]，
+    future 轮询那台电脑，结果是 (state, 回答)；None 是交给了群的主 Agent，不等。"""
+    from .peers import Offline
+    hdr = {"Content-Type": "application/json"}
+
+    def post(path, body):
+        status, _, data = pf.peers.forward(machine, "POST", path, json.dumps(body).encode(), hdr)
+        try:
+            r = json.loads(data or b"{}")
+        except ValueError:
+            r = {}
+        return status, r
+
+    try:
+        status, r = await asyncio.to_thread(post, "/api/peer/ask", {"chat": group, "by": me, "to": to, "text": text,
+                                                                     "depth": depth})
+    except Offline:
+        raise RuntimeError("群聊所在的电脑现在不在线，连不上。")
+    if status == 404:
+        raise RuntimeError("群聊所在的电脑上 ccim 版本较旧，还不能这样找人。请用户在网页「设置 → 电脑」里升级那台电脑。")
+    if status != 200:
+        raise RuntimeError(r.get("error") or f"出错了（{status}）")
+
+    async def poll(rid):
+        deadline = time.time() + 12 * 3600
+        while time.time() < deadline:
+            await asyncio.sleep(4)
+            try:
+                status, x = await asyncio.to_thread(post, "/api/peer/ask_result", {"rid": rid})
+            except Offline:
+                continue
+            if status != 200:
+                return "lost", "群聊所在的电脑重启过，没等到回答。"
+            if x.get("done"):
+                return x.get("state") or "done", x.get("text") or ""
+        return "error", "等了太久没有回答。"
+    jobs = [(r["main"], None)] if r.get("main") else []
+    jobs += [(name, asyncio.ensure_future(poll(rid))) for rid, name in r.get("rids") or []]
+    return jobs
 
 
 def _deliver_later(pf, cid, name, f):

@@ -2744,7 +2744,10 @@ class Platform:
         paths = (chats.get(cid) or {}).pop("doc_edits", None)
         if paths:
             self.store.write(chats)
-        return ("（我直接改过这些文件，以现在的内容为准：" + "、".join(paths) + "）\n\n" if paths else "") + self.doc_word_note(cid)
+        # 写「用户」不写「我」：群聊里这句排在其他 Agent 的回答后面，写「我」会被当成那个 Agent 改的（#598）
+        return ("（用户自己改过这些文件，以现在的内容为准：" + "、".join(paths) + "。要再改它们就在现在的文件上改；"
+                "用脚本、模板重新生成会盖掉用户的修改，确实要重新生成，先把用户改的地方合进去）\n\n" if paths else "") + \
+            self.doc_word_note(cid)
 
     def _doc_scope(self, cid):
         """这个对话和它的外层（群成员的子对话、侧边对话）：文档在外层打开，成员在自己的子对话里干活（#515）。"""

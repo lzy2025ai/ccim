@@ -25,7 +25,10 @@ class DocOpenTests(base.SideMentionTests):                           # 只借它
         os.utime(path, (1, 1))
         vs = pf.doc_view(cid, path)["versions"]                      # 打开面板就看得到这一版
         self.assertEqual([(v["by"], v["via"]) for v in vs], [("agent", None), ("me", "word")])
-        self.assertIn(path, pf._doc_edits(cid))
+        note = pf._doc_edits(cid)
+        self.assertIn(path, note)
+        self.assertIn("用户自己改过", note)               # 群里排在别的 Agent 回答后面，不写「我」（#598）
+        self.assertIn("重新生成", note)
         self.assertEqual(pf._doc_edits(cid), "")                     # 说过一次就不再说
         self.assertIn("v1", open(pf.doc_versions(cid, path)[0]["snap"]).read())   # 改之前的还在
 

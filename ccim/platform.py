@@ -588,6 +588,7 @@ class Platform:
         self.bridges = {}                     # Agent 编号或 temp:<对话> → Bridge
         self.peer_results = {}                # 别的电脑派来的活：编号 → 结果（还没做完是 None）
         self.peer_runs = {}                   # 编号 → (子对话, 开始时刻)：问结果时带上这期间打开的应用（#337）
+        self.ask_done = {}                    # 别的电脑上的群成员 ask_agent 找的人答完了：编号 → 结果（#593）
         self.background = set()
         self.works = set()                    # 侧边对话里派出去、还在做的（work 卡片的 id，#290）
         self.inbox = {}                       # 交回主对话、还没轮到处理的结果（#586）：对话 → [(记录, 交给 Agent 的话, 层数)]
@@ -2118,10 +2119,12 @@ class Platform:
     def to_main(self, sub, text, depth):
         """群里被 @ 的成员把一件事交给本群的主 Agent（ask_agent 找主 Agent，#488）：群里记成它 @ 主 Agent 的一句话，
         主 Agent 跑一轮处理，回答在群里。不等它答完（主 Agent 可能正忙）。depth 是这一轮算第几层派出来的。在主循环里调。"""
+        sm = self.meta(sub)
+        return self._to_main(sm["mention_of"], sm.get("agent"), text, depth)
+
+    def _to_main(self, cid, aid, text, depth):
         from . import groups
         from .session import Task
-        sm = self.meta(sub)
-        cid, aid = sm["mention_of"], sm.get("agent")
         main = (self.chats().get(cid) or {}).get("agent")
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "id": "u-" + uuid.uuid4().hex[:10], "text": text,
                                                                "files": [], "to": [main], "by": aid}))
@@ -3167,7 +3170,7 @@ class Platform:
         chat = b.chat(cid, "p2p")
         self.channel._emit(cid, self.channel.logs.append(cid, {"type": "user", "text": shown or prompt, "files": [],
                                                                 **({"from_chat": of} if kind == "mention" else {})}))
-        task = Task(prompt)
+        task = Task(self._far_note(of_machine) + prompt if kind == "mention" and not side else prompt)
         task.depth = int(depth or 0)
         if kind == "mention":
             task.group = of
@@ -3191,6 +3194,59 @@ class Platform:
         self.background.add(t)
         t.add_done_callback(self.background.discard)
         return {"token": token}
+
+    def _far_note(self, mid):
+        """群聊在别的电脑上（#593）：告诉被 @ 的成员群在哪台、它在哪台，群里说到的文件多半不在它这台上。"""
+        if not mid or mid == self.peers.me["id"]:
+            return ""
+        there = next((x["name"] for x in self.peers.machines() if x["id"] == mid), "") or "另一台电脑"
+        return (f"（这个群聊在「{there}」上，你在「{self.peers.me.get('name') or '这台电脑'}」上。群里说到的文件、路径，"
+                f"群里其他 Agent 做出来的东西，一般在「{there}」上，不在你这台：要用的话用 run_on_machine 到「{there}」上取，"
+                f"或者用 ask_agent 请群里的 Agent 给你）\n\n")
+
+    async def peer_ask(self, cid, by, to, text, depth=0):
+        """别的电脑上的群成员 by 用 ask_agent 找人（#593）：在这台电脑上的群聊 cid 里替它 @ 对方；找的是群的主 Agent 就交给主 Agent
+        （和本机成员一样不等）。回 {"rids": [[编号, 名字]], "main": 主 Agent 的名字}，各人的回答用 peer_ask_result 来问。"""
+        from . import groups
+        m = self.chats().get(cid)
+        if not m or not m.get("agent") or by not in groups.members(m):
+            raise Problem("找不到这个群聊，或者你已经不在这个群里了。")
+        text = str(text or "").strip()
+        if not text:
+            raise Problem("text 是空的。")
+        main = m["agent"]
+        to = [a for a in dict.fromkeys(to or []) if a and a != by]
+        out = {"rids": [], "main": ""}
+        if main in to:
+            mine = [r for r, (c, a, _) in list(self.mentions.where.items())
+                    if c == cid and a == by and r in self.mentions.running and self.mentions.asker.get(r) == main]
+            name = self.mentions._agent_name(main)
+            if mine:                          # 主 Agent 正等着它这一轮的回答，再起一轮就重复了
+                raise Problem(f"这件事就是{name}交给你的，它在等你的回答：要对它说的直接写在回答里，答完它就收到了。")
+            self._to_main(cid, by, text, depth)
+            out["main"] = name
+            to.remove(main)
+        if to:
+            r = await self.mentions.send(cid, text, to, by=by, depth=depth)
+            out["rids"] = [[rid, self.mentions._agent_name(rid.split(":", 1)[1])] for rid in r["rids"]]
+        return out
+
+    def peer_ask_result(self, rid):
+        """peer_ask 里 @ 的那个人答完没有：{done, state, text}。"""
+        if rid in self.ask_done:
+            return self.ask_done[rid]
+        f = self.mentions.waiters.get(rid)
+        if f is None:
+            raise Problem("unknown")
+        if not f.done():
+            return {"done": False}
+        self.mentions.waiters.pop(rid, None)
+        u = f.result() if not f.cancelled() else {"state": "stopped"}
+        r = {"done": True, "state": {"ok": "done"}.get(u.get("state"), u.get("state")), "text": u.get("text") or ""}
+        self.ask_done[rid] = r                # 回给那边的这次没送到，再来问还在
+        while len(self.ask_done) > 200:
+            self.ask_done.pop(next(iter(self.ask_done)))
+        return r
 
     def peer_result(self, token):
         if token not in self.peer_results:
@@ -3673,6 +3729,9 @@ def _handler(pf):
                 "/api/chat/members": lambda: set_members(pf, b("id"), b("add") or [], b("remove") or []),
                 "/api/chat/note": lambda: pf.call(groups_mod.set_note, pf, b("id"), b("text") or ""),
                 "/api/peer/result": lambda: pf.call(pf.peer_result, b("token") or ""),
+                "/api/peer/ask": lambda: owner_peer(self.headers, lambda: pf.run(pf.peer_ask(
+                    b("chat"), b("by"), b("to") or [], b("text"), int(b("depth") or 0)))),
+                "/api/peer/ask_result": lambda: owner_peer(self.headers, lambda: pf.call(pf.peer_ask_result, str(b("rid") or ""))),
                 "/api/agent/pin": lambda: (agents.update(b("id"), pinned=bool(b("on"))), {})[1],
                 "/api/chat/mention": lambda: mention(pf, b("id"), b("text") or "", b("to") or [], b("files") or [], acct,
                                                      b("at") or []),
@@ -3929,6 +3988,13 @@ def sides_of(pf, cid, detail=False, acct=None):
         except Problem:
             pass
     return r
+
+
+def owner_peer(headers, fn):
+    """只接主人自己的别的电脑转来的（#593）。"""
+    if not headers.get("X-From-Peer") or headers.get("X-Account"):
+        raise Problem("只接受主人自己的电脑转来的请求。")
+    return fn()
 
 
 def my_schedules(pf, acct):
